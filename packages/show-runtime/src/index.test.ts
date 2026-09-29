@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { evaluateCues, loopBeat, trackDeck } from "./index.js";
+import { clockHealth, evaluateCues, loopBeat, trackDeck } from "./index.js";
 import { makeDeck } from "@autolight/simulator";
 import type { ShowPlan } from "@autolight/contracts";
 
@@ -29,5 +29,11 @@ describe("show-runtime", () => {
     const scratch = trackDeck(10, makeDeck({ playRate: -1 }), (s) => s);
     expect(scratch.scratchHold).toBe(true);
     expect(scratch.beat).toBe(10);
+  });
+  it("degrades clock in stages, never cuts out", () => {
+    expect(clockHealth(0)).toBe("live");
+    expect(clockHealth(200)).toBe("extrapolating");
+    expect(clockHealth(1000)).toBe("holding");
+    expect(clockHealth(5000)).toBe("degraded");
   });
 });

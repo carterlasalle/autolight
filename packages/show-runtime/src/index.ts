@@ -51,9 +51,18 @@ export function trackDeck(
   if (jumped) return { beat: observed, scratchHold: false, seeked: true };
   return { beat: observed, scratchHold: false, seeked: false };
 }
-
 export function cursorBeat(state: CursorState): number {
   return state.beat;
+}
+
+// Fault-degraded clock (§105): 0-500ms extrapolate, 500ms-2s hold look,
+// beyond → timing-degraded (adaptive clock). Never cut to black on one drop.
+export type ClockHealth = "live" | "extrapolating" | "holding" | "degraded";
+
+export function clockHealth(msSinceLastUpdate: number): ClockHealth {
+  if (msSinceLastUpdate <= 500) return msSinceLastUpdate <= 0 ? "live" : "extrapolating";
+  if (msSinceLastUpdate <= 2000) return "holding";
+  return "degraded";
 }
 
 export { estimatePosition };
