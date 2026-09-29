@@ -133,6 +133,11 @@ __metadata:
 "@autolight/show-runtime@workspace:packages/show-runtime":
   version: 0.0.0-use.local
   resolution: "@autolight/show-runtime@workspace:packages/show-runtime"
+  dependencies:
+    "@autolight/contracts": "npm:^0.1.0"
+    "@autolight/dj-core": "npm:^0.1.0"
+    "@autolight/simulator": "npm:^0.1.0"
+    vitest: "npm:^3.1.0"
   languageName: unknown
   linkType: soft
 

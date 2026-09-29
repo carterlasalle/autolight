@@ -9,5 +9,13 @@
     "test": "vitest run --passWithNoTests",
     "lint": "tsc --noEmit -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@autolight/contracts": "^0.1.0",
+    "@autolight/dj-core": "^0.1.0",
+    "@autolight/simulator": "^0.1.0"
+  },
+  "devDependencies": {
+    "vitest": "^3.1.0"
   }
 }

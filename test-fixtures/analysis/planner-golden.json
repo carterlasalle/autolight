@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "plannerVersion": "0.1.0",
+  "trackId": "golden-ref",
+  "styleId": "club",
+  "seed": "a1e36381",
+  "cues": [
+    {
+      "type": "build-ramp",
+      "startBeat": 32,
+      "durationBeats": 32,
+      "intensity": 0.6,
+      "target": "ALL",
+      "priority": 50
+    },
+    {
+      "type": "white-hit",
+      "startBeat": 64,
+      "durationBeats": 0.25,
+      "intensity": 1,
+      "target": "ALL",
+      "priority": 100
+    }
+  ]
+}

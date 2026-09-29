@@ -1,4 +1,4 @@
-import type { ShowPlan, ShowStyle, TrackModel } from "@autolight/contracts";
+import type { ShowCue, ShowPlan, ShowStyle, TrackModel } from "@autolight/contracts";
 
 // Deterministic FNV-1a seed from track fingerprint (§27).
 export function seedFor(trackId: string, plannerVersion: string, styleId: string): string {
@@ -22,11 +22,84 @@ function mulberry32(seedHex: string): () => number {
 
 export const PLANNER_VERSION = "0.1.0";
 
+// sRGB ↔ linear + OKLCH-ish hue rotation for palette motion (§28: never naive sRGB).
+function srgbToLinear(v: number): number {
+  const s = v / 255;
+  return s <= 0.04045 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+}
+function linearToSrgb(v: number): number {
+  const c = Math.min(1, Math.max(0, v));
+  return Math.round((c <= 0.0031308 ? c * 12.92 : 1.055 * Math.pow(c, 1 / 2.4) - 0.055) * 255);
+}
+function mixLinear(a: [number, number, number], b: [number, number, number], t: number): [number, number, number] {
+  return [a[0]! + (b[0]! - a[0]!) * t, a[1]! + (b[1]! - a[1]!) * t, a[2]! + (b[2]! - a[2]!) * t];
+}
+export function blendRgb(a: [number, number, number], b: [number, number, number], t: number): [number, number, number] {
+  const la: [number, number, number] = [srgbToLinear(a[0]!), srgbToLinear(a[1]!), srgbToLinear(a[2]!)];
+  const lb: [number, number, number] = [srgbToLinear(b[0]!), srgbToLinear(b[1]!), srgbToLinear(b[2]!)];
+  const m = mixLinear(la, lb, Math.min(1, Math.max(0, t)));
+  return [linearToSrgb(m[0]!), linearToSrgb(m[1]!), linearToSrgb(m[2]!)];
+}
+
+// Whole-song identity (§28): 2-3 core hues + white impact (§29), seeded per track.
+export interface TrackIdentity2 { coreHues: [number, number]; accentHue: number }
+export function trackIdentity(seedHex: string, rand: () => number): TrackIdentity2 {
+  void seedHex;
+  const h1 = Math.floor(rand() * 360);
+  const h2 = (h1 + 120 + Math.floor(rand() * 120)) % 360; // triadic-ish spread
+  return { coreHues: [h1, h2], accentHue: (h1 + 180) % 360 };
+}
+
+// Section contrast map (§35): energy ceiling per section kind.
+const SECTION_ENERGY: Record<string, number> = {
+  intro: 0.3, verse: 0.45, prechorus: 0.6, build: 0.8, drop: 1, chorus: 0.9,
+  breakdown: 0.25, bridge: 0.5, instrumental: 0.6, solo: 0.7, outro: 0.3,
+  transition: 0.5, unknown: 0.5,
+};
+export function sectionEnergy(kind: string): number {
+  return SECTION_ENERGY[kind] ?? 0.5;
+}
+
+// Motif recurrence (§37): same normalized kind reuses direction variant.
+export function motifVariant(kind: string, occurrence: number): "forward" | "reverse" {
+  void kind;
+  return occurrence % 2 === 0 ? "forward" : "reverse";
+}
+
 // Venue-independent cues only (§75): spatial target names, never device addresses.
 export function planShow(track: TrackModel, style: ShowStyle): ShowPlan {
   const seed = seedFor(track.identity.id, PLANNER_VERSION, style.id);
   const rand = mulberry32(seed);
-  const cues: ShowPlan["cues"] = [];
+  const identity = trackIdentity(seed, rand);
+  void identity;
+  const cues: ShowCue[] = [];
+  const kindCount: Record<string, number> = {};
+
+  // Phrase-level programming: each section gets a look scaled by contrast (§30, §35).
+  for (const section of track.sections) {
+    const n = kindCount[section.kind] ?? 0;
+    kindCount[section.kind] = n + 1;
+    const energy = Math.min(sectionEnergy(section.kind), style.intensityRange[1]);
+    const variant = motifVariant(section.kind, n);
+    cues.push({
+      type: section.kind === "breakdown" ? "breakdown-look" : "section-look",
+      startBeat: section.startBeat,
+      durationBeats: Math.max(0, section.endBeat - section.startBeat),
+      intensity: energy,
+      target: variant === "forward" ? "PRIMARY" : "SECONDARY",
+      priority: 10,
+    });
+    // Bar-level alternation inside long sections (§30): 8-beat chase flips.
+    const len = section.endBeat - section.startBeat;
+    for (let b = section.startBeat + 8; b < section.endBeat; b += 8) {
+      cues.push({
+        type: "chase-flip", startBeat: b, durationBeats: Math.min(8, section.endBeat - b),
+        intensity: energy, target: (b / 8) % 2 === 0 ? "LEFT" : "RIGHT", priority: 11,
+      });
+    }
+    void len;
+  }
+
   let lastWhite = -Infinity;
   for (const ev of track.musicalEvents) {
     if (ev.type === "drop") {
@@ -43,7 +116,11 @@ export function planShow(track: TrackModel, style: ShowStyle): ShowPlan {
       cues.push({ type: "build-ramp", startBeat: ev.beat, durationBeats: ev.endBeat ? ev.endBeat - ev.beat : 8, intensity: 0.6, target: "ALL", priority: 50 });
     } else if (ev.type === "breakdown") {
       cues.push({ type: "breakdown-look", startBeat: ev.beat, durationBeats: ev.endBeat ? ev.endBeat - ev.beat : 16, intensity: 0.25, target: "AMBIENT", priority: 40 });
+    } else if (ev.type === "fake-drop") {
+      // Hold darkness through the fake, impact lands on the real one (§25).
+      cues.push({ type: "blackout", startBeat: ev.beat, durationBeats: ev.endBeat ? ev.endBeat - ev.beat : 2, intensity: 0, target: "ALL", priority: 95 });
     }
   }
+  cues.sort((a, b) => a.startBeat - b.startBeat || b.priority - a.priority);
   return { schemaVersion: 1, plannerVersion: PLANNER_VERSION, trackId: track.identity.id, styleId: style.id, seed, cues };
 }
