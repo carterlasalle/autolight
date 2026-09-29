@@ -35,8 +35,8 @@ def test_normalize():
     assert normalize_section("Intro 2") == "intro"
 
 
-def test_beat_grid_bpm_scaling():
-    grid = beat_grid_from_pqtz([1, 2], [14200.0, 14200.0], [50.0, 473.0])
+def test_beat_grid_units():
+    grid = beat_grid_from_pqtz([1, 2], [142.0, 142.0], [0.05, 0.473])
     assert grid[0]["bpm"] == 142.0
     assert grid[0]["beatInBar"] == 1
     assert grid[1]["sourceTimeMs"] == 473.0

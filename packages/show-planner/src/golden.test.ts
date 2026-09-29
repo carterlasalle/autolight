@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { planShow, PLANNER_VERSION } from "@autolight/show-planner";
+import { planShow, PLANNER_VERSION } from "./index.js";
 import type { TrackModel } from "@autolight/contracts";
 
 const dir = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "test-fixtures", "analysis");

@@ -8,11 +8,11 @@ describe("rekordbox-library", () => {
   it("keeps native id + path", () => {
     expect(rowToIdentity({ rekordboxId: "42", filePath: "/m/t.mp3" }).canonicalPath).toBe("/m/t.mp3");
   });
-  it("scales PQTZ tempo to BPM", () => {
-    expect(toNativeBeat({ index: 0, beatInBar: 1, sourceTimeMs: 50, bpm: 14200 }).bpm).toBe(142);
+  it("scales PQTZ seconds to ms, BPM as-is", () => {
+    expect(toNativeBeat({ index: 0, beatInBar: 1, sourceTimeMs: 0.05, bpm: 142 }).sourceTimeMs).toBe(50);
   });
   it("rejects bad bar position", () => {
-    expect(() => toNativeBeat({ index: 0, beatInBar: 5, sourceTimeMs: 0, bpm: 12800 })).toThrow(RangeError);
+    expect(() => toNativeBeat({ index: 0, beatInBar: 5, sourceTimeMs: 0, bpm: 128 })).toThrow(RangeError);
   });
   it("expands high-mood variants", () => {
     expect(highPhraseLabel(2, 0, 0, 0)).toBe("Up 1");

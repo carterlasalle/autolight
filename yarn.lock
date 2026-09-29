@@ -100,7 +100,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@autolight/renderer@workspace:packages/renderer":
+"@autolight/renderer@npm:^0.1.0, @autolight/renderer@workspace:packages/renderer":
   version: 0.0.0-use.local
   resolution: "@autolight/renderer@workspace:packages/renderer"
   dependencies:
@@ -125,12 +125,15 @@ __metadata:
   dependencies:
     "@autolight/contracts": "npm:^0.1.0"
     "@autolight/dj-core": "npm:^0.1.0"
+    "@autolight/renderer": "npm:^0.1.0"
+    "@autolight/show-planner": "npm:^0.1.0"
     "@autolight/simulator": "npm:^0.1.0"
+    "@autolight/storage": "npm:^0.1.0"
     vitest: "npm:^3.1.0"
   languageName: unknown
   linkType: soft
 
-"@autolight/show-planner@workspace:packages/show-planner":
+"@autolight/show-planner@npm:^0.1.0, @autolight/show-planner@workspace:packages/show-planner":
   version: 0.0.0-use.local
   resolution: "@autolight/show-planner@workspace:packages/show-planner"
   dependencies:
@@ -159,7 +162,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@autolight/storage@workspace:packages/storage":
+"@autolight/storage@npm:^0.1.0, @autolight/storage@workspace:packages/storage":
   version: 0.0.0-use.local
   resolution: "@autolight/storage@workspace:packages/storage"
   dependencies:

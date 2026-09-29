@@ -59,11 +59,14 @@ def normalize_section(label: str) -> str:
     return _NORMALIZE.get(label.split()[0].lower(), "unknown")
 
 
-def beat_grid_from_pqtz(beats_in_bar, bpms, times_ms):
-    """PQTZ arrays → canonical NativeBeat list (§5.1)."""
+def beat_grid_from_pqtz(beats_in_bar, bpms, times_seconds):
+    """PQTZ arrays → canonical NativeBeat list (§5.1).
+
+    pyrekordbox already scales: tempo→BPM, time→seconds.
+    """
     return [
-        {"index": i, "beatInBar": int(b), "sourceTimeMs": float(t), "bpm": float(bpm) / 100.0}
-        for i, (b, bpm, t) in enumerate(zip(beats_in_bar, bpms, times_ms))
+        {"index": i, "beatInBar": int(b), "sourceTimeMs": float(t) * 1000.0, "bpm": float(bpm)}
+        for i, (b, bpm, t) in enumerate(zip(beats_in_bar, bpms, times_seconds))
     ]
 
 

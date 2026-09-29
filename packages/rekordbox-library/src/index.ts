@@ -24,11 +24,11 @@ export function anlzPaths(analysisDataPath: string): { dat: string; ext: string;
   return { dat: `${base}ANLZ0000.DAT`, ext: `${base}ANLZ0000.EXT`, ex2: `${base}ANLZ0000.2EX` };
 }
 
-// PQTZ beat → canonical grid entry (§5.1). Throws on invalid bar position.
-// PQTZ tempo is BPM×100 per ANLZ spec; scale to BPM here.
+// PQTZ beat → canonical grid entry (§5.1). pyrekordbox-scaled inputs:
+// BPM as-is, seconds→ms here. Throws on invalid bar position.
 export function toNativeBeat(raw: { index: number; beatInBar: number; sourceTimeMs: number; bpm: number }): { index: number; beatInBar: 1 | 2 | 3 | 4; sourceTimeMs: number; bpm: number } {
   if (![1, 2, 3, 4].includes(raw.beatInBar)) throw new RangeError(`beatInBar=${raw.beatInBar}, expected 1-4`);
-  return { index: raw.index, beatInBar: raw.beatInBar as 1 | 2 | 3 | 4, sourceTimeMs: raw.sourceTimeMs, bpm: raw.bpm / 100 };
+  return { index: raw.index, beatInBar: raw.beatInBar as 1 | 2 | 3 | 4, sourceTimeMs: raw.sourceTimeMs * 1000, bpm: raw.bpm };
 }
 
 // PSSI phrase labels per mood (ANLZ reference, §5.2). Raw retained by caller.

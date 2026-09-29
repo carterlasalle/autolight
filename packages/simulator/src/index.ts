@@ -13,9 +13,9 @@ export function makeDeck(over: Partial<DeckState> = {}): DeckState {
   };
 }
 
-export function makeFixture(id: string, segmentCount: number, x0 = 0, x1 = 1): Fixture {
+export function makeFixture(id: string, segmentCount: number, x0 = 0, x1 = 1, groups: string[] = []): Fixture {
   return {
-    id, adapter: "govee", sku: "SIM", hardwareId: id,
+    id, adapter: "govee", sku: "SIM", hardwareId: id, groups,
     cells: Array.from({ length: segmentCount }, (_, i) => ({
       index: i,
       position: { x: segmentCount === 1 ? x0 : x0 + ((x1 - x0) * i) / (segmentCount - 1), y: 0 },

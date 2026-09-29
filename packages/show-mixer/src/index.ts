@@ -37,3 +37,26 @@ export function introductionStage(weight: number): "silent" | "palette" | "rhyth
 export function isExclusive(type: string): boolean {
   return EXCLUSIVE[type] === true;
 }
+
+// Track load fast path (§138): cached TrackModel → cached ShowPlan → deck.
+// No ML in this path; missing plan compiles from cached features by caller.
+export interface LoadedDeck {
+  trackJson: string | null;
+  planJson: string | null;
+}
+
+export function loadFastPath(
+  store: {
+    loadArtifact(trackId: string, analyzerVersion: string, fingerprint: string): string | null;
+    loadShowPlan(trackId: string, styleId: string, plannerVersion: string): string | null;
+  },
+  trackId: string,
+  analyzerVersion: string,
+  fingerprint: string,
+  styleId: string,
+  plannerVersion: string,
+): LoadedDeck {
+  const trackJson = store.loadArtifact(trackId, analyzerVersion, fingerprint);
+  if (!trackJson) return { trackJson: null, planJson: null };
+  return { trackJson, planJson: store.loadShowPlan(trackId, styleId, plannerVersion) };
+}

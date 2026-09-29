@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { TrackIdentity } from "@autolight/contracts";
-import { impactOwner, baseWeights, translateBlackout, introductionStage, isExclusive } from "./index.js";
+import { impactOwner, baseWeights, translateBlackout, introductionStage, isExclusive, loadFastPath } from "./index.js";
 import { makeDeck } from "@autolight/simulator";
 
 const trackA = { id: "a", sourceIds: {} } satisfies TrackIdentity;
