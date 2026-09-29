@@ -58,3 +58,29 @@ export function soak(frames: number, gate: (i: number) => "send" | "drop" | "off
   }
   return { sent, dropped, offline, maxPending };
 }
+
+// Full-performance scenario (§125, §150 normal night): 4h of deck states with
+// load → play → crossfade → loop → seek → drop handoff. Deterministic, no I/O.
+export function* performanceScenario(opts: { fps?: number; hours?: number } = {}): Generator<DeckState> {
+  const fps = opts.fps ?? 60;
+  const total = Math.floor(fps * 3600 * (opts.hours ?? 4));
+  for (let i = 0; i < total; i++) {
+    const t = i / fps;
+    const half = Math.floor(t / 60) % 2; // swap lead deck every minute
+    const bar = Math.floor(t / 2) % 64;
+    const inLoop = bar >= 32 && bar < 40;
+    yield makeDeck({
+      deckId: half === 0 ? 1 : 2,
+      track: { id: half === 0 ? "track-a" : "track-b", sourceIds: {} },
+      playheadSeconds: t % 1800,
+      playRate: 1,
+      effectiveBpm: 128,
+      loop: inLoop
+        ? { active: true, startSeconds: t - 4, endSeconds: t, beatLength: 8 }
+        : { active: false, startSeconds: null, endSeconds: null, beatLength: null },
+      channelFader: half === 0 ? 1 : 0.6,
+      crossfader: half === 0 ? 0.2 : 0.8,
+      receivedAtNs: BigInt(i) * 1_000_000_000n / BigInt(fps),
+    });
+  }
+}
