@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   encodeFrame, blackoutPayload, whiteHitPayload, latencyBeats,
   qualificationKey, needsRequalification, LatestStream, DeviceManager,
+  type ToolkitStreamFactory,
 } from "./index.js";
 
 describe("govee", () => {
@@ -46,5 +47,14 @@ describe("govee", () => {
     expect(m.get("h")!.health).toBe("offline");
     m.discover({ hardwareId: "h", sku: "H6076", firmwareVersion: "1", ip: "10.0.0.2" }, dev.fps);
     expect(m.get("h")!.health).toBe("online");
+  });
+  it("toolkit factory satisfies the SegmentStream seam", async () => {
+    const factory: ToolkitStreamFactory = {
+      openStream: async (_ip, _zones) => new LatestStream(() => {}),
+    };
+    const stream = await factory.openStream("10.0.0.2", 14);
+    stream.setAll(new Uint8Array([1, 2, 3]));
+    stream.close();
+    expect(true).toBe(true);
   });
 });

@@ -67,6 +67,13 @@ export interface SegmentStream {
   close(): void;
 }
 
+// Toolkit transport seam (§44-45): the pinned govee-toolkit fork owns the
+// SegmentStream behind this interface. LatestStream below is the no-hardware
+// fallback + test double with identical newest-state-wins semantics.
+export interface ToolkitStreamFactory {
+  openStream(deviceIp: string, zones: number): Promise<SegmentStream>;
+}
+
 // Newest-state-wins stream: setAll coalesces, flush takes latest (§51).
 // Transport owns delivery; show loop owns desired state (§149).
 export class LatestStream implements SegmentStream {
