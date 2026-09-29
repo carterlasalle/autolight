@@ -2,11 +2,25 @@ import type { Fixture, FixtureCalibration } from "@autolight/contracts";
 export type { Fixture, FixtureCalibration };
 export const DEFAULT_GROUPS = ["ALL","LEFT","RIGHT","CENTER","BACK","FRONT","VERTICALS","HORIZONTALS","PRIMARY","SECONDARY","ACCENT","AMBIENT"] as const;
 
-export function globalCellOrder(fixtures: Fixture[]): { fixtureId: string; cellIndex: number }[] {
+export interface OrderedCell { fixtureId: string; cellIndex: number }
+export function globalCellOrder(fixtures: Fixture[]): OrderedCell[] {
   return fixtures
     .flatMap((f) => f.cells.map((c) => ({ fixtureId: f.id, cellIndex: c.index, x: c.position.x, y: c.position.y ?? 0 })))
     .sort((a, b) => a.x - b.x || a.y - b.y)
     .map(({ fixtureId, cellIndex }) => ({ fixtureId, cellIndex }));
+}
+
+// Semantic target → cells (§41, §75): group names route to fixture groups,
+// LEFT/RIGHT/CENTER split venue thirds, SIDE comes from mixer translation.
+export function resolveTarget(fixtures: Fixture[], target: string): FixtureCellRef[] {
+  if (target === "ALL") return globalCellOrder(fixtures);
+  const order = globalCellOrder(fixtures);
+  if (target === "LEFT") return order.filter((_, i) => i < Math.ceil(order.length / 3));
+  if (target === "RIGHT") return order.filter((_, i) => i >= order.length - Math.ceil(order.length / 3));
+  if (target === "CENTER") return order.filter((_, i) => i >= Math.ceil(order.length / 3) && i < order.length - Math.ceil(order.length / 3));
+  return fixtures
+    .filter((f) => (f.groups ?? []).includes(target))
+    .flatMap((f) => f.cells.map((c) => ({ fixtureId: f.id, cellIndex: c.index })));
 }
 
 export interface FixtureCellRef { fixtureId: string; cellIndex: number }

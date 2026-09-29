@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { globalCellOrder, applyOrientation, selectResolution, emptyQualification, qualificationComplete } from "./index.js";
+import { globalCellOrder, applyOrientation, selectResolution, resolveTarget, emptyQualification, qualificationComplete } from "./index.js";
 import type { Fixture } from "@autolight/contracts";
 
 const mk = (id: string, xs: number[]): Fixture => ({
@@ -25,5 +25,13 @@ describe("venue", () => {
     expect(qualificationComplete(q)).toBe(false);
     for (const k of Object.keys(q.passed) as (keyof typeof q.passed)[]) q.passed[k] = true;
     expect(qualificationComplete(q)).toBe(true);
+  });
+  it("resolves semantic targets", () => {
+    const left = { ...mk("left", [0.1]), groups: ["PRIMARY"] };
+    const right = { ...mk("right", [0.9]), groups: ["SECONDARY"] };
+    expect(resolveTarget([left, right], "ALL")).toHaveLength(2);
+    expect(resolveTarget([left, right], "LEFT").map((c) => c.fixtureId)).toEqual(["left"]);
+    expect(resolveTarget([left, right], "PRIMARY").map((c) => c.fixtureId)).toEqual(["left"]);
+    expect(resolveTarget([left, right], "NOPE")).toEqual([]);
   });
 });

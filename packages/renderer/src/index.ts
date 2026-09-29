@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import type { Fixture, ShowPlan } from "@autolight/contracts";
-import { globalCellOrder } from "@autolight/venue";
+import type { Fixture, ShowCue, ShowPlan } from "@autolight/contracts";
+import { globalCellOrder, resolveTarget, type OrderedCell } from "@autolight/venue";
 
 // Logical frame at arbitrary beat (§58: random-access state function).
 // Blackout = RGB 0,0,0, never power-off (§47). Linear-light intensity scale (§49).
@@ -9,26 +9,61 @@ function linearScale(v: number, intensity: number): number {
   return Math.round(Math.pow(Math.max(0, Math.min(1, lin)), 1 / 2.2) * 255);
 }
 
+// Primitive-aware body (§31): each cue type paints its target cells with its
+// own spatial shape. Venue targets route via resolveTarget; the top-priority
+// cue wins per cell, so breakdowns mute chases beneath them.
+function paintCue(
+  cue: ShowCue,
+  beat: number,
+  fixtures: Fixture[],
+  lit: Map<string, number>,
+  orderIndex: Map<string, number>,
+  orderLen: number,
+): void {
+  const cells = resolveTarget(fixtures, cue.target);
+  const progress = cue.durationBeats > 0 ? (beat - cue.startBeat) / cue.durationBeats : 0;
+  for (const cell of cells) {
+    const key = `${cell.fixtureId}:${cell.cellIndex}`;
+    const idx = orderIndex.get(key) ?? 0;
+    let level = cue.intensity;
+    if (cue.type === "blackout") level = 0;
+    else if (cue.type === "dip") level = cue.intensity * 0.25;
+    else if (cue.type === "breakdown-look") level = cue.intensity * 0.6;
+    else if (cue.type === "build-ramp") level = cue.intensity * Math.min(1, progress + 0.2);
+    else if (cue.type === "chase-flip" || cue.type === "impact" || cue.type === "white-hit") {
+      const phase = (beat - cue.startBeat + idx / Math.max(1, orderLen)) % 1;
+      level = cue.intensity * (phase < 0.5 ? 1 : 0.15);
+    }
+    lit.set(key, Math.max(lit.get(key) ?? 0, Math.min(1, level)));
+  }
+}
+
 export function renderFrame(plan: ShowPlan, beat: number, fixtures: Fixture[]): Map<string, Uint8Array> {
   const out = new Map<string, Uint8Array>();
   for (const f of fixtures) out.set(f.id, new Uint8Array(f.cells.length * 3));
-  const active = plan.cues.filter((c) => beat >= c.startBeat && beat < c.startBeat + c.durationBeats);
-  const blackout = active.some((c) => c.type === "blackout");
-  const order = globalCellOrder(fixtures);
-  active.sort((a, b) => b.priority - a.priority);
-  const top = active[0];
-  for (const [i, cell] of order.entries()) {
+  const active = plan.cues
+    .filter((c) => beat >= c.startBeat && beat < c.startBeat + c.durationBeats)
+    .sort((a, b) => b.priority - a.priority);
+  if (active.some((c) => c.type === "blackout" && c.target === "ALL")) {
+    return out; // full-room blackout wins over everything (§66 lets mixer narrow it first)
+  }
+  const order: OrderedCell[] = globalCellOrder(fixtures);
+  const orderIndex = new Map<string, number>(order.map((c, i) => [`${c.fixtureId}:${c.cellIndex}`, i]));
+  const lit = new Map<string, number>();
+  for (const cue of [...active].reverse()) paintCue(cue, beat, fixtures, lit, orderIndex, order.length);
+  const seedHue = active.length ? Math.floor(active[0]!.startBeat) * 13 : 0;
+  const entries: [number, OrderedCell][] = [...order.entries()];
+  for (const [i, cell] of entries) {
     const fix = fixtures.find((f) => f.id === cell.fixtureId)!;
     const buf = out.get(fix.id)!;
-    let r = 0, g = 0, b = 0;
-    if (!blackout && top) {
-      // ponytail: single-hue placeholder body; full primitive library per §31 lands with planner phases
-      const hue = (i * 47 + Math.floor(top.startBeat) * 13) % 360;
-      [r, g, b] = hsv2rgb(hue, 0.9, 1);
-      const k = linearScale(255, top.intensity) / 255;
-      r = Math.round(r * k); g = Math.round(g * k); b = Math.round(b * k);
-    }
-    buf[cell.cellIndex * 3] = r; buf[cell.cellIndex * 3 + 1] = g; buf[cell.cellIndex * 3 + 2] = b;
+    const level = lit.get(`${cell.fixtureId}:${cell.cellIndex}`) ?? 0;
+    if (level <= 0) continue;
+    const hue = (i * 47 + seedHue) % 360;
+    const [r, g, b] = hsv2rgb(hue, 0.9, 1);
+    const k = linearScale(255, level) / 255;
+    buf[cell.cellIndex * 3] = Math.round(r * k);
+    buf[cell.cellIndex * 3 + 1] = Math.round(g * k);
+    buf[cell.cellIndex * 3 + 2] = Math.round(b * k);
   }
   return out;
 }

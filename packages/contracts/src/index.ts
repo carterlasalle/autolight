@@ -204,8 +204,10 @@ export const fixtureSchema = z.object({
   hardwareId: z.string(),
   cells: z.array(fixtureCellSchema),
   calibration: fixtureCalibrationSchema.nullable(),
+  groups: z.array(z.string()).optional(),
 });
 export type Fixture = z.infer<typeof fixtureSchema>;
+export type FixtureInput = z.input<typeof fixtureSchema>;
 
 export interface DJLiveProvider {
   readonly id: string;
