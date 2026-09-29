@@ -2707,7 +2707,15 @@ Example:
 | DB | `packages/db/` | Persistence | `packages/db/AGENTS.md` |
 -->
 
-TBD.
+| Area | Path | Purpose |
+| --- | --- | --- |
+| Desktop | `apps/desktop/` | Electron main + React UI |
+| Contracts | `packages/contracts/` | Zod schemas: DeckState, TrackModel, ShowPlan, Fixture |
+| DJ core | `packages/dj-core/` | Estimator, seek detect, audible weight |
+| Planner | `packages/show-planner/` | Deterministic cue compiler |
+| Renderer | `packages/renderer/` | Logical frames + golden hash |
+| Govee | `packages/govee/` | LAN frame codec + coalescer |
+| Analysis | `analysis/` | uv Python worker |
 
 ---
 
@@ -2718,7 +2726,8 @@ TBD.
 ### Install
 
 ```sh
-TBD
+yarn install
+(cd analysis && uv sync)
 ```
 
 ### Develop
@@ -2730,7 +2739,8 @@ TBD
 ### Focused test
 
 ```sh
-TBD
+(cd packages/contracts && yarn run test)
+(cd analysis && uv run pytest -q)
 ```
 
 ### Full test
@@ -2760,7 +2770,7 @@ TBD
 ### Full validation / Definition-of-Done command
 
 ```sh
-TBD
+yarn run verify:phase1
 ```
 
 ---
@@ -2776,8 +2786,8 @@ Python package manager: uv
 Node: current project-supported LTS
 JS package manager: Yarn
 -->
-
-TBD.
+Node v22.22.2, Yarn 4.9.2 (node-modules linker), Python 3.14.7 via uv.
+Root scripts use `node scripts/each.mjs` (yarn foreach run form broken here).
 
 ---
 
