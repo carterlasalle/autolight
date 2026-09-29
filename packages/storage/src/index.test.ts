@@ -19,4 +19,13 @@ describe("storage", () => {
     expect(s.loadShowPlan("t1", "club", "0.2.0")).toBeNull();
     s.close();
   });
+  it("persists calibration and venues", () => {
+    const s = new Store();
+    s.saveCalibration("hw1", "H6076", "1.0", JSON.stringify({ segmentCount: 14 }));
+    expect(s.loadCalibration("hw1")?.firmware).toBe("1.0");
+    expect(s.loadCalibration("missing")).toBeNull();
+    s.saveVenue("home", "Home", JSON.stringify({ fixtures: [] }));
+    expect(s.loadVenue("home")).toBe(JSON.stringify({ fixtures: [] }));
+    s.close();
+  });
 });

@@ -24,6 +24,11 @@ describe("renderer", () => {
     expect(frameHash(renderFrame(plan, 257, [mkFixture("f1", null)]))).toBe(
       frameHash(renderFrame(plan, 257, [mkFixture("f1", null)])));
   });
+  it("matches committed golden frame (§127)", () => {
+    // Drop impact at 257: hue(0*47 + 257*13 % 360 = 101°), full intensity.
+    const f = renderFrame(plan, 257, [mkFixture("f1", null)]);
+    expect(frameHash(f)).toBe("9325e8c61ab5a6c7");
+  });
   it("compensates slow fixtures by sampling ahead", () => {
     expect(latencyBeats(500, 120)).toBeCloseTo(1);
     // Slow fixture at beat 256.5 samples 257.5 (impact), fast stays blackout.

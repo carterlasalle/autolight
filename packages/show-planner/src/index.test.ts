@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { planShow, blendRgb, sectionEnergy, motifVariant } from "./index.js";
+import { planShow, blendRgb, sectionEnergy, motifVariant, validatePlan, evaluatePlan } from "./index.js";
 import type { TrackModel, ShowStyle } from "@autolight/contracts";
 
 const track = {
@@ -53,5 +53,22 @@ describe("planner", () => {
     expect(sectionEnergy("breakdown")).toBeLessThan(sectionEnergy("drop"));
     expect(motifVariant("chorus", 0)).toBe("forward");
     expect(motifVariant("chorus", 1)).toBe("reverse");
+  });
+  it("passes invariants on generated plan", () => {
+    expect(validatePlan(planShow(track, style), 200)).toEqual([]);
+  });
+  it("flags overlapping exclusives and out-of-range cues", () => {
+    const bad = planShow(track, style);
+    bad.cues.push({ type: "blackout", startBeat: 120, durationBeats: 4, intensity: 0, target: "ALL", priority: 95 });
+    bad.cues.push({ type: "impact", startBeat: 9999, durationBeats: 1, intensity: 1, target: "ALL", priority: 90 });
+    const problems = validatePlan(bad, 200);
+    expect(problems.some((p) => p.includes("overlapping exclusive"))).toBe(true);
+    expect(problems.some((p) => p.includes("out-of-range"))).toBe(true);
+  });
+  it("evaluates plan diagnostics", () => {
+    const d = evaluatePlan(planShow(track, style));
+    expect(d.whiteHits).toBe(1);
+    expect(d.blackoutBeats).toBeGreaterThan(0);
+    expect(d.meanIntensity).toBeGreaterThan(0);
   });
 });

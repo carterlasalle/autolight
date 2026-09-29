@@ -41,6 +41,27 @@ export class Store {
     return row?.plan_json ?? null;
   }
 
+  // Calibration keyed by hardware ID (§52); firmware change → caller flags
+  // REQUALIFICATION REQUIRED, row stays until fresh qualification lands.
+  saveCalibration(hardwareId: string, sku: string, firmware: string, calibrationJson: string): void {
+    this.db.prepare("INSERT OR REPLACE INTO devices (hardware_id, sku, firmware, calibration_json) VALUES (?, ?, ?, ?)").run(hardwareId, sku, firmware, calibrationJson);
+  }
+
+  loadCalibration(hardwareId: string): { sku: string; firmware: string; calibrationJson: string | null } | null {
+    const row = this.db.prepare("SELECT sku, firmware, calibration_json FROM devices WHERE hardware_id = ?").get(hardwareId) as { sku: string; firmware: string; calibration_json: string | null } | undefined;
+    if (!row) return null;
+    return { sku: row.sku, firmware: row.firmware, calibrationJson: row.calibration_json };
+  }
+
+  saveVenue(id: string, name: string, layoutJson: string): void {
+    this.db.prepare("INSERT OR REPLACE INTO venues (id, name, layout_json) VALUES (?, ?, ?)").run(id, name, layoutJson);
+  }
+
+  loadVenue(id: string): string | null {
+    const row = this.db.prepare("SELECT layout_json FROM venues WHERE id = ?").get(id) as { layout_json: string } | undefined;
+    return row?.layout_json ?? null;
+  }
+
   close(): void {
     this.db.close();
   }

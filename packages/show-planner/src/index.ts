@@ -124,3 +124,34 @@ export function planShow(track: TrackModel, style: ShowStyle): ShowPlan {
   cues.sort((a, b) => a.startBeat - b.startBeat || b.priority - a.priority);
   return { schemaVersion: 1, plannerVersion: PLANNER_VERSION, trackId: track.identity.id, styleId: style.id, seed, cues };
 }
+
+// Show quality invariants (§114): reject pathological generations.
+export function validatePlan(plan: ShowPlan, durationBeats: number): string[] {
+  const problems: string[] = [];
+  const exclusives = plan.cues.filter((c) => c.type === "blackout" || c.type === "white-hit").sort((a, b) => a.startBeat - b.startBeat);
+  for (let i = 1; i < exclusives.length; i++) {
+    const prev = exclusives[i - 1]!;
+    const cur = exclusives[i]!;
+    if (cur.startBeat < prev.startBeat + prev.durationBeats) problems.push(`overlapping exclusive ${prev.type}@${prev.startBeat} vs ${cur.type}@${cur.startBeat}`);
+  }
+  for (const c of plan.cues) {
+    if (c.durationBeats < 0) problems.push(`negative duration ${c.type}@${c.startBeat}`);
+    if (c.startBeat < 0 || c.startBeat > durationBeats) problems.push(`out-of-range ${c.type}@${c.startBeat}`);
+  }
+  const paletteChanges = plan.cues.filter((c) => c.type === "section-look").length;
+  if (paletteChanges > durationBeats) problems.push(`palette change every beat (${paletteChanges})`);
+  return problems;
+}
+
+// Quantitative diagnostics (§115): describe the generation, never score it.
+export function evaluatePlan(plan: ShowPlan): { cueCount: number; blackoutBeats: number; whiteHits: number; strobeBeats: number; meanIntensity: number } {
+  const at = (t: string): ShowCue[] => plan.cues.filter((c) => c.type === t);
+  const beats = (cs: ShowCue[]): number => cs.reduce((n, c) => n + c.durationBeats, 0);
+  return {
+    cueCount: plan.cues.length,
+    blackoutBeats: beats(at("blackout")),
+    whiteHits: at("white-hit").length,
+    strobeBeats: beats(at("strobe")),
+    meanIntensity: plan.cues.length ? plan.cues.reduce((n, c) => n + c.intensity, 0) / plan.cues.length : 0,
+  };
+}
