@@ -38,6 +38,40 @@ export function isExclusive(type: string): boolean {
   return EXCLUSIVE[type] === true;
 }
 
+// Two-deck mix-down (§62-67): winning deck by audible weight × impact strength
+// owns exclusive cues; base cues scale by blend weight; a deck still in
+// "palette" introduction contributes looks only, rhythm/impacts stay muted.
+export interface DeckMix {
+  state: DeckState;
+  beat: number;
+  cues: ShowCue[];
+  impactStrength: number;
+}
+
+export interface MixResult { owner: "a" | "b" | null; cues: ShowCue[] }
+export function mixDown(a: DeckMix, b: DeckMix): MixResult {
+  const owner = impactOwner(
+    { state: a.state, strength: a.impactStrength },
+    { state: b.state, strength: b.impactStrength },
+  );
+  const w = baseWeights(a.state, b.state);
+  const scale = (cues: ShowCue[], weight: number, stage: string): ShowCue[] =>
+    weight <= 0 || stage === "silent" ? [] : cues
+      .filter((c) => stage === "impacts" || !isExclusive(c.type))
+      .filter((c) => stage !== "palette" || c.priority <= 11)
+      .map((c) => ({ ...c, intensity: c.intensity * weight }));
+  const stageA = introductionStage(audibleWeight(a.state));
+  const stageB = introductionStage(audibleWeight(b.state));
+  const cuesA = scale(a.cues, w.a, stageA).map((c) =>
+    c.type === "blackout" ? translateBlackout(c, audibleWeight(b.state)) : c);
+  const cuesB = scale(b.cues, w.b, stageB).map((c) =>
+    c.type === "blackout" ? translateBlackout(c, audibleWeight(a.state)) : c);
+  // Exclusive cues survive only on the owner (§65: never blend two strobes).
+  const keep = (cues: ShowCue[], side: "a" | "b"): ShowCue[] =>
+    owner === null || owner === side ? cues : cues.filter((c) => !isExclusive(c.type));
+  return { owner, cues: [...keep(cuesA, "a"), ...keep(cuesB, "b")] };
+}
+
 // Track load fast path (§138): cached TrackModel → cached ShowPlan → deck.
 // No ML in this path; missing plan compiles from cached features by caller.
 export interface LoadedDeck {

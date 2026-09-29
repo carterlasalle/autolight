@@ -7,7 +7,7 @@ import { planShow, validatePlan, BUILT_IN_STYLES } from "@autolight/show-planner
 import { renderFrame, frameHash } from "@autolight/renderer";
 import { makeFixture } from "@autolight/simulator";
 import { Store } from "@autolight/storage";
-import { loadFastPath, impactOwner } from "./index.js";
+import { loadFastPath, impactOwner, mixDown, type MixResult } from "./index.js";
 import { makeDeck } from "@autolight/simulator";
 
 const dir = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "test-fixtures", "analysis");
@@ -50,6 +50,27 @@ describe("pipeline", () => {
     const b = makeDeck({ deckId: 2, channelFader: 1, crossfader: 1, track: { id: "real-track-1", sourceIds: {} } });
     expect(impactOwner({ state: a, strength: 0.4 }, { state: b, strength: 0.9 })).toBe("b");
     const frames = renderFrame(plan, 120, [groupedFixture("left", 0, ["PRIMARY"]), groupedFixture("right", 1, ["SECONDARY"])]);
+    expect([...frames.get("left")!].some((v) => v > 0)).toBe(true);
+  });
+  it("moves ownership across a crossfade (§62-67)", () => {
+    const track = trackModelSchema.parse(JSON.parse(readFileSync(join(dir, "real-track-1.trackmodel.json"), "utf8")));
+    const style = showStyleSchema.parse(BUILT_IN_STYLES.club);
+    const planB = planShow(track, style);
+    const planA = { ...planB, trackId: "old", cues: planB.cues.map((c) => ({ ...c, startBeat: c.startBeat })) };
+    const beat = 120;
+    const at = (xa: number, xb: number): MixResult => mixDown(
+      { state: makeDeck({ deckId: 1, channelFader: 1, crossfader: xa, track: { id: "old", sourceIds: {} } }), beat, cues: planA.cues.filter((c) => beat >= c.startBeat && beat < c.startBeat + c.durationBeats), impactStrength: 0.5 },
+      { state: makeDeck({ deckId: 2, channelFader: 1, crossfader: xb, track: { id: "real-track-1", sourceIds: {} } }), beat, cues: planB.cues.filter((c) => beat >= c.startBeat && beat < c.startBeat + c.durationBeats), impactStrength: 0.9 },
+    );
+    // A full left: A owns, B silent. Full right: B owns with scaled cues.
+    expect(at(1, 0).owner).toBe("a");
+    const right = at(0, 1);
+    expect(right.owner).toBe("b");
+    expect(right.cues.length).toBeGreaterThan(0);
+    expect(right.cues.every((c) => c.intensity <= 1)).toBe(true);
+    // Rendered mixed cues light the rig (section-look targets PRIMARY → left).
+    const mixedPlan = { ...planB, cues: right.cues };
+    const frames = renderFrame(mixedPlan, beat, [groupedFixture("left", 0, ["PRIMARY"]), groupedFixture("right", 1, ["SECONDARY"])]);
     expect([...frames.get("left")!].some((v) => v > 0)).toBe(true);
   });
 });
