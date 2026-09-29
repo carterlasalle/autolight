@@ -8,6 +8,9 @@ __metadata:
 "@autolight/analysis-client@workspace:packages/analysis-client":
   version: 0.0.0-use.local
   resolution: "@autolight/analysis-client@workspace:packages/analysis-client"
+  dependencies:
+    "@types/node": "npm:^22.0.0"
+    vitest: "npm:^3.1.0"
   languageName: unknown
   linkType: soft
 
@@ -47,6 +50,8 @@ __metadata:
 "@autolight/diagnostics@workspace:packages/diagnostics":
   version: 0.0.0-use.local
   resolution: "@autolight/diagnostics@workspace:packages/diagnostics"
+  dependencies:
+    vitest: "npm:^3.1.0"
   languageName: unknown
   linkType: soft
 
@@ -71,6 +76,8 @@ __metadata:
 "@autolight/reactive-audio@workspace:packages/reactive-audio":
   version: 0.0.0-use.local
   resolution: "@autolight/reactive-audio@workspace:packages/reactive-audio"
+  dependencies:
+    vitest: "npm:^3.1.0"
   languageName: unknown
   linkType: soft
 
@@ -153,12 +160,18 @@ __metadata:
 "@autolight/storage@workspace:packages/storage":
   version: 0.0.0-use.local
   resolution: "@autolight/storage@workspace:packages/storage"
+  dependencies:
+    "@types/node": "npm:^22.0.0"
+    vitest: "npm:^3.1.0"
   languageName: unknown
   linkType: soft
 
 "@autolight/track-model@workspace:packages/track-model":
   version: 0.0.0-use.local
   resolution: "@autolight/track-model@workspace:packages/track-model"
+  dependencies:
+    "@autolight/contracts": "npm:^0.1.0"
+    vitest: "npm:^3.1.0"
   languageName: unknown
   linkType: soft
 
@@ -653,6 +666,15 @@ __metadata:
   dependencies:
     undici-types: "npm:~6.21.0"
   checksum: 10c0/9bcec3b5295bdd77ff0b44a528a69f7e22028c347507ba2c69be47ec84e30299f45043b222e9c86c510e138c9c53b2419dd5cd34920602a4a5a381c288075318
+  languageName: node
+  linkType: hard
+
+"@types/node@npm:^22.0.0":
+  version: 22.20.4
+  resolution: "@types/node@npm:22.20.4"
+  dependencies:
+    undici-types: "npm:~6.21.0"
+  checksum: 10c0/3a17e19f7b7b7a6d6c695ef8b0a34b70f84829a1539f57d338487bc3b51ddd4ca86ffbcbcc4f1307a41de83d02c1b7dfbb16e8cb6a9c3a8360b4306ccf9ead2d
   languageName: node
   linkType: hard
 

@@ -44,3 +44,19 @@ export function frameHash(frames: Map<string, Uint8Array>): string {
   for (const [id, buf] of [...frames].sort(([a], [b]) => (a < b ? -1 : 1))) { h.update(id); h.update(buf); }
   return h.digest("hex").slice(0, 16);
 }
+
+// Per-fixture latency compensation (§55): slower fixtures sample the plan
+// earlier so visible impacts land together.
+export function latencyBeats(latencyMs: number, bpm: number): number {
+  if (!(bpm > 0)) return 0;
+  return (Math.max(0, latencyMs) / 1000) * (bpm / 60);
+}
+
+export function renderWithLatency(plan: ShowPlan, beat: number, fixtures: Fixture[], bpm: number): Map<string, Uint8Array> {
+  const out = new Map<string, Uint8Array>();
+  for (const f of fixtures) {
+    const offset = latencyBeats(f.calibration?.expectedLatencyMs ?? 0, bpm);
+    for (const [id, buf] of renderFrame(plan, beat + offset, [f])) out.set(id, buf);
+  }
+  return out;
+}
