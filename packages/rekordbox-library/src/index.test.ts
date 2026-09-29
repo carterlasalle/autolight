@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { anlzPaths, rowToIdentity, toNativeBeat } from "./index.js";
+import { anlzPaths, rowToIdentity, toNativeBeat, highPhraseLabel, phraseLabel, normalizeSection } from "./index.js";
 
 describe("rekordbox-library", () => {
   it("resolves ANLZ siblings", () => {
@@ -8,7 +8,20 @@ describe("rekordbox-library", () => {
   it("keeps native id + path", () => {
     expect(rowToIdentity({ rekordboxId: "42", filePath: "/m/t.mp3" }).canonicalPath).toBe("/m/t.mp3");
   });
+  it("scales PQTZ tempo to BPM", () => {
+    expect(toNativeBeat({ index: 0, beatInBar: 1, sourceTimeMs: 50, bpm: 14200 }).bpm).toBe(142);
+  });
   it("rejects bad bar position", () => {
-    expect(() => toNativeBeat({ index: 0, beatInBar: 5, sourceTimeMs: 0, bpm: 128 })).toThrow(RangeError);
+    expect(() => toNativeBeat({ index: 0, beatInBar: 5, sourceTimeMs: 0, bpm: 12800 })).toThrow(RangeError);
+  });
+  it("expands high-mood variants", () => {
+    expect(highPhraseLabel(2, 0, 0, 0)).toBe("Up 1");
+    expect(highPhraseLabel(2, 0, 0, 1)).toBe("Up 2");
+    expect(highPhraseLabel(2, 0, 1, 0)).toBe("Up 3");
+    expect(phraseLabel(2, 8)).toBe("Bridge");
+  });
+  it("normalizes sections", () => {
+    expect(normalizeSection("Up 1")).toBe("build");
+    expect(normalizeSection("Verse 3")).toBe("verse");
   });
 });
