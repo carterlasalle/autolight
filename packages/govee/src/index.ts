@@ -20,3 +20,66 @@ export class FrameCoalescer {
   push(frame: Uint8Array): void { this.pending = frame; }
   take(): Uint8Array | null { const f = this.pending; this.pending = null; return f; }
 }
+
+export interface DeviceIdentity {
+  hardwareId: string;
+  sku: string;
+  firmwareVersion: string;
+  ip: string | null;
+}
+
+// Calibration key: hardware ID + SKU + firmware (§52).
+export function qualificationKey(id: DeviceIdentity): string {
+  return `${id.hardwareId}+${id.sku}+${id.firmwareVersion}`;
+}
+
+export function needsRequalification(savedFirmware: string, currentFirmware: string): boolean {
+  return savedFirmware !== currentFirmware;
+}
+
+// Blackout = RGB 0,0,0, never power-off (§47).
+export function blackoutPayload(segmentCount: number): Uint8Array {
+  return new Uint8Array(Math.max(0, segmentCount) * 3);
+}
+
+// Linear-light channel scale (§49). Shared with renderer math.
+export function scaleChannel(v: number, intensity: number, gamma = 2.2): number {
+  const lin = Math.pow(Math.min(255, Math.max(0, v)) / 255, gamma) * Math.min(1, Math.max(0, intensity));
+  return Math.round(Math.pow(lin, 1 / gamma) * 255);
+}
+
+// White hits = RGB(255,255,255) scaled, never CCT mode (§48).
+export function whiteHitPayload(segmentCount: number, intensity: number): Uint8Array {
+  const out = new Uint8Array(Math.max(0, segmentCount) * 3);
+  const w = scaleChannel(255, intensity);
+  for (let i = 0; i < segmentCount; i++) { out[i * 3] = w; out[i * 3 + 1] = w; out[i * 3 + 2] = w; }
+  return out;
+}
+
+// Latency offset in beats for per-fixture early send (§55).
+export function latencyBeats(latencyMs: number, bpm: number): number {
+  if (!(bpm > 0)) return 0;
+  return (Math.max(0, latencyMs) / 1000) * (bpm / 60);
+}
+
+export interface SegmentStream {
+  setAll(frame: Uint8Array): void;
+  close(): void;
+}
+
+// Newest-state-wins stream: setAll coalesces, flush takes latest (§51).
+// Transport owns delivery; show loop owns desired state (§149).
+export class LatestStream implements SegmentStream {
+  private coalescer = new FrameCoalescer();
+  private closed = false;
+  constructor(private readonly sender: (frame: Uint8Array) => void) {}
+  setAll(frame: Uint8Array): void {
+    if (this.closed) return;
+    this.coalescer.push(frame);
+  }
+  flush(): void {
+    const f = this.coalescer.take();
+    if (f) this.sender(f);
+  }
+  close(): void { this.closed = true; }
+}

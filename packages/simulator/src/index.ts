@@ -1,6 +1,5 @@
-import type { DeckState } from "@autolight/contracts";
+import type { DeckState, Fixture } from "@autolight/contracts";
 
-// Deterministic deck-event generator for replay/soak tests (§104, §128).
 export function* replay(events: DeckState[]): Generator<DeckState> {
   for (const e of events) yield e;
 }
@@ -12,4 +11,30 @@ export function makeDeck(over: Partial<DeckState> = {}): DeckState {
     loop: { active: false, startSeconds: null, endSeconds: null, beatLength: null },
     channelFader: 1, crossfader: 1, master: true, receivedAtNs: 0n, ...over,
   };
+}
+
+export function makeFixture(id: string, segmentCount: number, x0 = 0, x1 = 1): Fixture {
+  return {
+    id, adapter: "govee", sku: "SIM", hardwareId: id,
+    cells: Array.from({ length: segmentCount }, (_, i) => ({
+      index: i,
+      position: { x: segmentCount === 1 ? x0 : x0 + ((x1 - x0) * i) / (segmentCount - 1), y: 0 },
+      order: i,
+      tags: [],
+    })),
+    calibration: {
+      segmentCount, maxStableFps: 30, expectedLatencyMs: 25, armSettleMs: 50,
+      orientation: "forward", gamma: 2.2, brightnessCeiling: 1, firmwareVersion: "sim-1",
+    },
+  };
+}
+
+export interface FaultSpec { dropEvery?: number; disconnectAt?: number; reconnectAt?: number }
+
+// Deterministic frame gate: drops / disconnect windows, no randomness (§104).
+export function gateFrame(frameIndex: number, spec: FaultSpec): "send" | "drop" | "offline" {
+  if (spec.disconnectAt !== undefined && frameIndex >= spec.disconnectAt &&
+      (spec.reconnectAt === undefined || frameIndex < spec.reconnectAt)) return "offline";
+  if (spec.dropEvery !== undefined && spec.dropEvery > 0 && frameIndex % spec.dropEvery === 0) return "drop";
+  return "send";
 }

@@ -24,6 +24,8 @@ __metadata:
 "@autolight/controller-flx4@workspace:packages/controller-flx4":
   version: 0.0.0-use.local
   resolution: "@autolight/controller-flx4@workspace:packages/controller-flx4"
+  dependencies:
+    vitest: "npm:^3.1.0"
   languageName: unknown
   linkType: soft
 
@@ -75,6 +77,8 @@ __metadata:
 "@autolight/rekordbox-library@workspace:packages/rekordbox-library":
   version: 0.0.0-use.local
   resolution: "@autolight/rekordbox-library@workspace:packages/rekordbox-library"
+  dependencies:
+    vitest: "npm:^3.1.0"
   languageName: unknown
   linkType: soft
 
@@ -97,6 +101,8 @@ __metadata:
 "@autolight/serato@workspace:packages/serato":
   version: 0.0.0-use.local
   resolution: "@autolight/serato@workspace:packages/serato"
+  dependencies:
+    vitest: "npm:^3.1.0"
   languageName: unknown
   linkType: soft
 
