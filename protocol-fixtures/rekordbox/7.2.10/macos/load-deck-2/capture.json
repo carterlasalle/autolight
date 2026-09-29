@@ -1,0 +1,33 @@
+{
+  "rekordboxVersion": "7.2.10.0333",
+  "platform": "macos",
+  "capture": "",
+  "action": "load-deck-2",
+  "expectedEvents": [
+    {
+      "source": "rekordbox",
+      "deckId": 2,
+      "track": {
+        "id": "rb:231828222",
+        "sourceIds": {
+          "rekordboxId": "231828222"
+        },
+        "title": "Homecoming (feat. Chris Martin)",
+        "artist": "Kanye West"
+      },
+      "playing": false,
+      "playheadSeconds": 0.0,
+      "playRate": 1.0,
+      "effectiveBpm": 173.98,
+      "loop": {
+        "active": false,
+        "startSeconds": null,
+        "endSeconds": null,
+        "beatLength": null
+      },
+      "channelFader": null,
+      "crossfader": null,
+      "master": null
+    }
+  ]
+}

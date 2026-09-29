@@ -85,9 +85,27 @@ export function remoteToDeckState(msg: SeratoRemoteDeck, receivedAtNs: bigint): 
   };
 }
 
-// GEOB beatgrid stub (§3.1 disk side): tempo regions → NativeBeat anchors.
-// Full tag parsing lands with the Serato file reader; shape is fixed now.
+// Serato BeatGrid GEOB (§3.1 disk side): version byte 0x01, u32 BE reserved,
+// u8 marker count, then per marker: f32 BE position (seconds) + f32 BE BPM.
+// Verified live against ScratchBeat4 (85 BPM @ 0.046s) + ScratchBeat5 (88 BPM).
+// Throws on bad magic/version so corrupt tags fail loudly, never silently.
 export interface SeratoTempoRegion { startSeconds: number; bpm: number; beatInBar: 1 | 2 | 3 | 4 }
+export function parseBeatGrid(payload: Uint8Array): SeratoTempoRegion[] {
+  const v = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
+  if (payload.length < 6) throw new Error(`beatgrid too short: ${payload.length}`);
+  if (payload[0] !== 0x01) throw new Error(`beatgrid version=${payload[0]}, expected 1`);
+  const count = payload[5]!;
+  if (payload.length < 6 + count * 8) throw new Error(`beatgrid truncated: need ${6 + count * 8}, got ${payload.length}`);
+  const out: SeratoTempoRegion[] = [];
+  for (let i = 0; i < count; i++) {
+    out.push({
+      startSeconds: v.getFloat32(6 + i * 8, false),
+      bpm: v.getFloat32(10 + i * 8, false),
+      beatInBar: 1,
+    });
+  }
+  return out;
+}
 export function tempoRegionsToBeats(regions: SeratoTempoRegion[]): { index: number; beatInBar: 1 | 2 | 3 | 4; sourceTimeMs: number; bpm: number }[] {
   const out: { index: number; beatInBar: 1 | 2 | 3 | 4; sourceTimeMs: number; bpm: number }[] = [];
   regions.forEach((r, ri) => {

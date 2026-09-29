@@ -92,31 +92,63 @@ def phrases_from_pssi(mood: int, bank: int, end_beat: int, entries) -> list[dict
 
 
 def extract_anlz(anlz_dir: str | Path) -> dict:
-    """Parse DAT+EXT+2EX sibling set into grid/phrases/cues/waveforms."""
+    """Parse DAT+EXT+2EX sibling set into grid/phrases/cues/waveforms.
+
+    DAT (grid+cues) is mandatory; EXT (PSSI phrases) and 2EX (3-band/vocal)
+    degrade gracefully — some firmware writes variants pyrekordbox can't
+    parse yet (ConstError). Missing phrases → STRUCTURED grid-only model.
+    """
     from pyrekordbox.anlz.file import AnlzFile  # optional dep
 
     root = Path(anlz_dir)
     dat = AnlzFile.parse_file(root / "ANLZ0000.DAT")
-    ext = AnlzFile.parse_file(root / "ANLZ0000.EXT")
-    ex2 = AnlzFile.parse_file(root / "ANLZ0000.2EX")
+    try:
+        ext = AnlzFile.parse_file(root / "ANLZ0000.EXT")
+    except Exception:
+        ext = None
+    try:
+        ex2 = AnlzFile.parse_file(root / "ANLZ0000.2EX")
+    except Exception:
+        ex2 = None
 
     pqtz = dat.getall("PQTZ")[0]
     grid = beat_grid_from_pqtz(pqtz[0], pqtz[1], pqtz[2])
 
-    pssi = ext.getall("PSSI")[0]
-    phrases = phrases_from_pssi(int(pssi.mood), int(pssi.bank), int(pssi.end_beat), list(pssi.entries))
+    phrases: list[dict] = []
+    if ext is not None:
+        try:
+            pssi = ext.getall("PSSI")[0]
+            phrases = phrases_from_pssi(int(pssi.mood), int(pssi.bank), int(pssi.end_beat), list(pssi.entries))
+        except Exception:
+            phrases = []
 
     cues: list[dict] = []
-    for tag in ("PCO2", "PCOB"):
-        for section in ext.getall(tag):
-            for entry in getattr(section, "entries", []):
-                cues.append({
-                    "source": tag,
-                    "hotcue": int(getattr(entry, "hot_cue", 0)),
-                    "timeMs": int(getattr(entry, "time", 0)),
-                    "loopTimeMs": int(getattr(entry, "loop_time", -1)),
-                    "comment": str(getattr(entry, "comment", "") or ""),
-                })
+    if ext is not None:
+        for tag in ("PCO2", "PCOB"):
+            try:
+                sections = ext.getall(tag)
+            except Exception:
+                continue
+            for section in sections:
+                for entry in getattr(section, "entries", []):
+                    cues.append({
+                        "source": tag,
+                        "hotcue": int(getattr(entry, "hot_cue", 0)),
+                        "timeMs": int(getattr(entry, "time", 0)),
+                        "loopTimeMs": int(getattr(entry, "loop_time", -1)),
+                        "comment": str(getattr(entry, "comment", "") or ""),
+                    })
+
+    def _has(tag: str) -> bool:
+        for src in (ext, ex2):
+            if src is None:
+                continue
+            try:
+                if src.getall(tag):
+                    return True
+            except Exception:
+                continue
+        return False
 
     ppth = dat.getall("PPTH")
     return {
@@ -125,7 +157,7 @@ def extract_anlz(anlz_dir: str | Path) -> dict:
         "cues": cues,
         "path": str(ppth[0]) if ppth else None,
         "hasWaveform": bool(dat.getall("PWAV")),
-        "hasColorWaveform": bool(ext.getall("PWV4")),
-        "has3Band": bool(ex2.getall("PWV6") and ex2.getall("PWV7")),
-        "hasVocals": bool(ex2.getall("PWVC")),
+        "hasColorWaveform": _has("PWV4"),
+        "has3Band": _has("PWV6") and _has("PWV7"),
+        "hasVocals": _has("PWVC"),
     }

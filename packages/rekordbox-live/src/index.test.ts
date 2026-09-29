@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync, readdirSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { parseFixture, replayFixture, isSupported, unverifiedWarning } from "./index.js";
 
 const base: Record<string, unknown> = {
@@ -34,5 +37,16 @@ describe("rekordbox-live", () => {
     expect(isSupported(def, "7.2.19", "windows")).toBe(false);
     expect(isSupported(def, "7.3.0", "macos")).toBe(false);
     expect(unverifiedWarning("7.3.0")).toContain("UNVERIFIED");
+  });
+  it("replays live 7.2.10 captures (§9.4, §128)", () => {
+    const dir = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "protocol-fixtures", "rekordbox", "7.2.10", "macos");
+    for (const action of readdirSync(dir)) {
+      const f = parseFixture(JSON.parse(readFileSync(join(dir, action, "capture.json"), "utf8")));
+      const states = replayFixture(f, 1);
+      expect(states.length).toBeGreaterThan(0);
+      for (const s of states) expect(s.source).toBe("rekordbox");
+    }
+    const both = parseFixture(JSON.parse(readFileSync(join(dir, "both-decks-loaded", "capture.json"), "utf8")));
+    expect(replayFixture(both, 10)).toHaveLength(2);
   });
 });

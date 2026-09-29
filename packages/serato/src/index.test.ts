@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { parseCrate, remoteToDeckState, tempoRegionsToBeats } from "./index.js";
+import { parseCrate, parseBeatGrid, remoteToDeckState, tempoRegionsToBeats } from "./index.js";
 
 const remoteBase = {
   deckId: 1, filepath: "/m/track.mp3", playing: true, playheadSeconds: 30,
@@ -37,5 +37,21 @@ describe("serato", () => {
     expect(beats).toHaveLength(4);
     expect(beats[0]).toMatchObject({ index: 0, beatInBar: 1, bpm: 120 });
     expect(beats[1]!.sourceTimeMs).toBeCloseTo(500);
+  });
+  it("parses real BeatGrid payloads", () => {
+    const b4 = parseBeatGrid(new Uint8Array([1, 0, 0, 0, 0, 1, 0x3d, 0x3c, 0x3e, 0x82, 0x42, 0xaa, 0, 0, 0]));
+    expect(b4).toHaveLength(1);
+    expect(b4[0]!.bpm).toBeCloseTo(85);
+    expect(b4[0]!.startSeconds).toBeCloseTo(0.046, 2);
+    const buf = readFileSync(`${process.env.HOME}/Music/_Serato_/Imported/Scratch Beats_/ScratchBeat5.mp3`);
+    const at = buf.indexOf("Serato BeatGrid");
+    expect(at).toBeGreaterThan(0);
+    const o = at + "Serato BeatGrid".length + 1;
+    const payload = new Uint8Array(buf.buffer, buf.byteOffset + o, 15);
+    expect(parseBeatGrid(payload)[0]!.bpm).toBeCloseTo(88);
+  });
+  it("rejects corrupt BeatGrid payloads", () => {
+    expect(() => parseBeatGrid(new Uint8Array([2, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0]))).toThrow();
+    expect(() => parseBeatGrid(new Uint8Array([1, 0]))).toThrow();
   });
 });

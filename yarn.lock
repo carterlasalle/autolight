@@ -39,6 +39,7 @@ __metadata:
     "@autolight/contracts": "npm:^0.1.0"
     "@autolight/diagnostics": "npm:^0.1.0"
     "@autolight/dj-core": "npm:^0.1.0"
+    "@autolight/rekordbox-live": "npm:^0.1.0"
     "@autolight/renderer": "npm:^0.1.0"
     "@autolight/show-mixer": "npm:^0.1.0"
     "@autolight/show-planner": "npm:^0.1.0"
@@ -99,7 +100,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@autolight/rekordbox-live@workspace:packages/rekordbox-live":
+"@autolight/rekordbox-live@npm:^0.1.0, @autolight/rekordbox-live@workspace:packages/rekordbox-live":
   version: 0.0.0-use.local
   resolution: "@autolight/rekordbox-live@workspace:packages/rekordbox-live"
   dependencies:

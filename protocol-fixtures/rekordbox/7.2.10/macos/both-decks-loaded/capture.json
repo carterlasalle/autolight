@@ -1,0 +1,58 @@
+{
+  "rekordboxVersion": "7.2.10.0333",
+  "platform": "macos",
+  "capture": "",
+  "action": "both-decks-loaded",
+  "expectedEvents": [
+    {
+      "source": "rekordbox",
+      "deckId": 1,
+      "track": {
+        "id": "rb:163221817",
+        "sourceIds": {
+          "rekordboxId": "163221817"
+        },
+        "title": "Nice For What",
+        "artist": "octobersveryown"
+      },
+      "playing": false,
+      "playheadSeconds": 0.0,
+      "playRate": 1.0,
+      "effectiveBpm": 186.92,
+      "loop": {
+        "active": false,
+        "startSeconds": null,
+        "endSeconds": null,
+        "beatLength": null
+      },
+      "channelFader": null,
+      "crossfader": null,
+      "master": null
+    },
+    {
+      "source": "rekordbox",
+      "deckId": 2,
+      "track": {
+        "id": "rb:231828222",
+        "sourceIds": {
+          "rekordboxId": "231828222"
+        },
+        "title": "Homecoming (feat. Chris Martin)",
+        "artist": "Kanye West"
+      },
+      "playing": false,
+      "playheadSeconds": 0.0,
+      "playRate": 1.0,
+      "effectiveBpm": 173.98,
+      "loop": {
+        "active": false,
+        "startSeconds": null,
+        "endSeconds": null,
+        "beatLength": null
+      },
+      "channelFader": null,
+      "crossfader": null,
+      "master": null
+    }
+  ]
+}
