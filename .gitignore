@@ -10,3 +10,6 @@ analysis/.venv/
 __pycache__/
 *.pyc
 *.pyo
+
+test-results/
+playwright-report/
