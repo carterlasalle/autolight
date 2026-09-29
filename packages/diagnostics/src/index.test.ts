@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { emptyMetrics, SessionRecorder, log } from "./index.js";
+import { emptyMetrics, SessionRecorder, parseNdjson, log } from "./index.js";
 
 describe("diagnostics", () => {
   it("starts metrics at zero", () => {
@@ -17,5 +17,13 @@ describe("diagnostics", () => {
   });
   it("logs structured rows", () => {
     expect(log("renderer", "info", "frame").module).toBe("renderer");
+  });
+  it("round-trips ndjson for simulator replay", () => {
+    const r = new SessionRecorder();
+    r.record("deck", { deckId: 1 });
+    const rows = parseNdjson(r.toNdjson());
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.kind).toBe("deck");
+    expect(() => parseNdjson("not json")).toThrow("session line 1");
   });
 });

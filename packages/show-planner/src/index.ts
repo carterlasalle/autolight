@@ -22,6 +22,17 @@ function mulberry32(seedHex: string): () => number {
 
 export const PLANNER_VERSION = "0.1.0";
 
+// Built-in show styles (§135): constraints, not fixed animations.
+export const BUILT_IN_STYLES: Record<string, ShowStyle> = {
+  club: { id: "club", intensityRange: [0.2, 1], darknessPreference: 0.3, reactiveAmount: 0.15, whiteHitFrequency: 0.7, strobeFrequency: 0.2 },
+  house: { id: "house", intensityRange: [0.3, 0.9], darknessPreference: 0.2, reactiveAmount: 0.2, whiteHitFrequency: 0.5, strobeFrequency: 0.1 },
+  festival: { id: "festival", intensityRange: [0.4, 1], darknessPreference: 0.15, reactiveAmount: 0.25, whiteHitFrequency: 0.9, strobeFrequency: 0.4 },
+  lounge: { id: "lounge", intensityRange: [0.1, 0.5], darknessPreference: 0.5, reactiveAmount: 0.1, whiteHitFrequency: 0.1, strobeFrequency: 0 },
+  pop: { id: "pop", intensityRange: [0.3, 0.9], darknessPreference: 0.2, reactiveAmount: 0.2, whiteHitFrequency: 0.6, strobeFrequency: 0.15 },
+  dark: { id: "dark", intensityRange: [0.05, 0.6], darknessPreference: 0.7, reactiveAmount: 0.1, whiteHitFrequency: 0.3, strobeFrequency: 0.05 },
+  minimal: { id: "minimal", intensityRange: [0.15, 0.6], darknessPreference: 0.4, reactiveAmount: 0.05, whiteHitFrequency: 0.2, strobeFrequency: 0 },
+};
+
 // sRGB ↔ linear + OKLCH-ish hue rotation for palette motion (§28: never naive sRGB).
 function srgbToLinear(v: number): number {
   const s = v / 255;
@@ -79,7 +90,7 @@ export function planShow(track: TrackModel, style: ShowStyle): ShowPlan {
   for (const section of track.sections) {
     const n = kindCount[section.kind] ?? 0;
     kindCount[section.kind] = n + 1;
-    const energy = Math.min(sectionEnergy(section.kind), style.intensityRange[1]);
+    const energy = Math.min(Math.max(sectionEnergy(section.kind), style.intensityRange[0]), style.intensityRange[1]);
     const variant = motifVariant(section.kind, n);
     cues.push({
       type: section.kind === "breakdown" ? "breakdown-look" : "section-look",
@@ -101,6 +112,7 @@ export function planShow(track: TrackModel, style: ShowStyle): ShowPlan {
   }
 
   let lastWhite = -Infinity;
+  const clamp = (v: number): number => Math.min(style.intensityRange[1], Math.max(style.intensityRange[0], v));
   for (const ev of track.musicalEvents) {
     if (ev.type === "drop") {
       // Restraint: no white-hit repeat without musical justification (§34).
@@ -108,12 +120,12 @@ export function planShow(track: TrackModel, style: ShowStyle): ShowPlan {
       const useWhite = ev.beat - lastWhite >= 8 && rand() < style.whiteHitFrequency;
       if (useWhite) {
         lastWhite = ev.beat;
-        cues.push({ type: "white-hit", startBeat: ev.beat, durationBeats: 0.25, intensity: 1, target: "ALL", priority: 100 });
+        cues.push({ type: "white-hit", startBeat: ev.beat, durationBeats: 0.25, intensity: clamp(1), target: "ALL", priority: 100 });
       } else {
-        cues.push({ type: "impact", startBeat: ev.beat, durationBeats: 1, intensity: 0.9, target: "PRIMARY", priority: 90 });
+        cues.push({ type: "impact", startBeat: ev.beat, durationBeats: 1, intensity: clamp(0.9), target: "PRIMARY", priority: 90 });
       }
     } else if (ev.type === "predrop" || ev.type === "build-start") {
-      cues.push({ type: "build-ramp", startBeat: ev.beat, durationBeats: ev.endBeat ? ev.endBeat - ev.beat : 8, intensity: 0.6, target: "ALL", priority: 50 });
+      cues.push({ type: "build-ramp", startBeat: ev.beat, durationBeats: ev.endBeat ? ev.endBeat - ev.beat : 8, intensity: clamp(0.6), target: "ALL", priority: 50 });
     } else if (ev.type === "breakdown") {
       cues.push({ type: "breakdown-look", startBeat: ev.beat, durationBeats: ev.endBeat ? ev.endBeat - ev.beat : 16, intensity: 0.25, target: "AMBIENT", priority: 40 });
     } else if (ev.type === "fake-drop") {
@@ -123,6 +135,14 @@ export function planShow(track: TrackModel, style: ShowStyle): ShowPlan {
   }
   cues.sort((a, b) => a.startBeat - b.startBeat || b.priority - a.priority);
   return { schemaVersion: 1, plannerVersion: PLANNER_VERSION, trackId: track.identity.id, styleId: style.id, seed, cues };
+}
+
+// Track corrections (§97): regenerate one section, keep locked edits.
+// Locked cue indices survive; unlocked cues in [start, end) are replaced.
+export function regenerateSection(plan: ShowPlan, startBeat: number, endBeat: number, fresh: ShowCue[], lockedIndices: number[]): ShowPlan {
+  const locked = new Set(lockedIndices);
+  const kept = plan.cues.filter((c, i) => locked.has(i) || c.startBeat + c.durationBeats <= startBeat || c.startBeat >= endBeat);
+  return { ...plan, cues: [...kept, ...fresh].sort((a, b) => a.startBeat - b.startBeat || b.priority - a.priority) };
 }
 
 // Show quality invariants (§114): reject pathological generations.

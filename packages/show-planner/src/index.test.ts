@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { planShow, blendRgb, sectionEnergy, motifVariant, validatePlan, evaluatePlan } from "./index.js";
+import { planShow, blendRgb, sectionEnergy, motifVariant, validatePlan, evaluatePlan, BUILT_IN_STYLES, regenerateSection } from "./index.js";
 import type { TrackModel, ShowStyle } from "@autolight/contracts";
 
 const track = {
@@ -70,5 +70,22 @@ describe("planner", () => {
     expect(d.whiteHits).toBe(1);
     expect(d.blackoutBeats).toBeGreaterThan(0);
     expect(d.meanIntensity).toBeGreaterThan(0);
+  });
+  it("scales energy by style range", () => {
+    expect(Object.keys(BUILT_IN_STYLES)).toContain("festival");
+    const lounge = planShow(track, { ...style, id: "lounge", intensityRange: [0.1, 0.5] });
+    const fest = planShow(track, { ...style, id: "festival", intensityRange: [0.4, 1] });
+    const peak = (cues: { intensity: number }[]): number => Math.max(...cues.map((c) => c.intensity));
+    expect(peak(lounge.cues)).toBeLessThanOrEqual(0.5);
+    expect(peak(fest.cues)).toBeGreaterThan(peak(lounge.cues));
+  });
+  it("regenerates one section, keeps locked cues", () => {
+    const plan = planShow(track, style);
+    const idx = plan.cues.findIndex((c) => c.startBeat === 64);
+    const fresh = [{ type: "section-look", startBeat: 64, durationBeats: 32, intensity: 0.5, target: "PRIMARY", priority: 10 }];
+    const regen = regenerateSection(plan, 64, 96, fresh, [idx]);
+    expect(regen.cues.filter((c) => c.startBeat === 64)).toHaveLength(2);
+    const regen2 = regenerateSection(plan, 64, 96, fresh, []);
+    expect(regen2.cues.filter((c) => c.startBeat === 64)).toHaveLength(1);
   });
 });

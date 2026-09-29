@@ -65,5 +65,16 @@ export function clockHealth(msSinceLastUpdate: number): ClockHealth {
   return "degraded";
 }
 
+// Manual override (§134): BLACKOUT/WHITE/FREEZE/force-low/force-high, resume
+// quantized to beat/bar/phrase (default bar) for a clean handoff.
+export type OverrideKind = "none" | "blackout" | "white" | "freeze" | "force-low" | "force-high";
+export type ResumeAt = "beat" | "bar" | "phrase" | "immediate";
+
+export function quantizeResume(beat: number, at: ResumeAt): number {
+  if (at === "immediate" || at === "beat") return Math.ceil(beat);
+  if (at === "bar") return Math.ceil(beat / 4) * 4;
+  return Math.ceil(beat / 16) * 16;
+}
+
 export { estimatePosition };
 export type { DeckState };

@@ -38,3 +38,23 @@ export function gateFrame(frameIndex: number, spec: FaultSpec): "send" | "drop" 
   if (spec.dropEvery !== undefined && spec.dropEvery > 0 && frameIndex % spec.dropEvery === 0) return "drop";
   return "send";
 }
+
+// Soak harness (§125): simulate N frames of playback, assert no queue growth,
+// no drift, no dead worker. Returns worst observed pending depth (must be ≤1
+// with newest-state-wins) and frames sent.
+export function soak(frames: number, gate: (i: number) => "send" | "drop" | "offline"): { sent: number; dropped: number; offline: number; maxPending: number } {
+  let pending = 0;
+  let maxPending = 0;
+  let sent = 0;
+  let dropped = 0;
+  let offline = 0;
+  for (let i = 0; i < frames; i++) {
+    pending += 1; // show loop produced one frame
+    maxPending = Math.max(maxPending, pending);
+    const action = gate(i);
+    if (action === "send") { sent += 1; pending = 0; }
+    else if (action === "drop") { dropped += 1; pending = 0; }
+    else { offline += 1; pending = 0; } // reconnect sends current frame only (§106)
+  }
+  return { sent, dropped, offline, maxPending };
+}

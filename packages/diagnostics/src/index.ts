@@ -38,3 +38,18 @@ export class SessionRecorder {
     return this.events.length;
   }
 }
+
+// Deterministic session replay (§103, §128): parse recorded .ndjson back to
+// events for simulator injection. Malformed lines fail loudly with line number.
+export function parseNdjson(ndjson: string): { kind: string; payload: Record<string, unknown>; tNs: string }[] {
+  if (!ndjson.trim()) return [];
+  return ndjson.split("\n").map((line, i) => {
+    try {
+      const row = JSON.parse(line) as { kind: string; payload: Record<string, unknown>; tNs: string };
+      if (typeof row.kind !== "string" || typeof row.payload !== "object") throw new Error("bad shape");
+      return row;
+    } catch (e) {
+      throw new Error(`session line ${i + 1}: ${(e as Error).message}`);
+    }
+  });
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clockHealth, evaluateCues, loopBeat, trackDeck } from "./index.js";
+import { clockHealth, evaluateCues, loopBeat, quantizeResume, trackDeck } from "./index.js";
 import { makeDeck } from "@autolight/simulator";
 import type { ShowPlan } from "@autolight/contracts";
 
@@ -35,5 +35,10 @@ describe("show-runtime", () => {
     expect(clockHealth(200)).toBe("extrapolating");
     expect(clockHealth(1000)).toBe("holding");
     expect(clockHealth(5000)).toBe("degraded");
+  });
+  it("quantizes override resume (default bar)", () => {
+    expect(quantizeResume(33.2, "immediate")).toBe(34);
+    expect(quantizeResume(33.2, "bar")).toBe(36);
+    expect(quantizeResume(33.2, "phrase")).toBe(48);
   });
 });
