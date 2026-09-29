@@ -83,3 +83,51 @@ export class LatestStream implements SegmentStream {
   }
   close(): void { this.closed = true; }
 }
+
+// LAN manager (§46, §106-107): discovery → arm → stream; per-device FPS
+// backoff on congestion; reconnect re-arms and sends current frame only.
+export type DeviceHealth = "online" | "degraded" | "offline";
+export interface ManagedDevice {
+  identity: DeviceIdentity;
+  health: DeviceHealth;
+  fps: number;
+  sentFrames: number;
+  supersededFrames: number;
+}
+
+export class DeviceManager {
+  private devices = new Map<string, ManagedDevice>();
+  discover(identity: DeviceIdentity, fps: number): ManagedDevice {
+    const existing = this.devices.get(identity.hardwareId);
+    if (existing) {
+      existing.identity = identity;
+      existing.health = "online";
+      return existing;
+    }
+    const dev: ManagedDevice = { identity, health: "online", fps, sentFrames: 0, supersededFrames: 0 };
+    this.devices.set(identity.hardwareId, dev);
+    return dev;
+  }
+  markOffline(hardwareId: string): void {
+    const dev = this.devices.get(hardwareId);
+    if (dev) dev.health = "offline";
+  }
+  // Congestion: reduce only the affected device's FPS (§107); show stays 60Hz.
+  backoff(hardwareId: string): void {
+    const dev = this.devices.get(hardwareId);
+    if (dev && dev.fps > 5) {
+      dev.fps = Math.max(5, Math.floor(dev.fps / 2));
+      dev.health = "degraded";
+    }
+  }
+  recordSend(hardwareId: string, superseded: number): void {
+    const dev = this.devices.get(hardwareId);
+    if (dev) {
+      dev.sentFrames += 1;
+      dev.supersededFrames += superseded;
+    }
+  }
+  get(hardwareId: string): ManagedDevice | undefined {
+    return this.devices.get(hardwareId);
+  }
+}

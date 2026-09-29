@@ -54,3 +54,10 @@ export function compositeDeckState(input: CompositeDeckInput): {
     playheadSeconds: input.playheadSeconds,
   };
 }
+
+// Fader confirmation (§63, §10): MIDI faders corroborate DJ-software weight
+// but never create audibility alone — both sources must agree the deck is live.
+export function confirmAudible(midiFader: number | null, djWeight: number): boolean {
+  if (midiFader === null) return djWeight > 0;
+  return midiFader > 0.02 && djWeight > 0;
+}

@@ -33,3 +33,30 @@ export interface DecodedMessage {
   state: DeckState;
   raw: Record<string, unknown>;
 }
+
+// Provider contract (§6): no downstream component knows how state was obtained.
+export interface LiveProvider {
+  readonly id: string;
+  readonly source: "rekordbox" | "serato";
+  start(): Promise<void>;
+  stop(): Promise<void>;
+  getDecks(): readonly DeckState[];
+  onDeckState(listener: (state: DeckState) => void): () => void;
+  onConnection(listener: (up: boolean) => void): () => void;
+}
+
+// Version-aware protocol definitions (§146): unknown versions probe but are
+// never declared supported until replay/live qualification passes.
+export interface ProtocolDefinition {
+  versionRange: string;
+  platform: "macos" | "windows";
+  supported: boolean;
+}
+
+export function isSupported(def: ProtocolDefinition, version: string, platform: "macos" | "windows"): boolean {
+  return def.supported && def.platform === platform && version.startsWith(def.versionRange.replace("x", ""));
+}
+
+export function unverifiedWarning(version: string): string {
+  return `UNVERIFIED REKORDBOX VERSION ${version} (§145)`;
+}

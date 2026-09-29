@@ -31,3 +31,29 @@ export function selectResolution(candidates: { zones: number; stableFps: number 
   const ok = candidates.filter((c) => c.stableFps >= targetFps).sort((a, b) => b.zones - a.zones);
   return ok[0]?.zones ?? null;
 }
+
+// Qualification wizard (§52): ordered steps with per-step pass/fail; unknown
+// firmware warns but control continues (§147) until the stream test passes.
+export const QUALIFICATION_STEPS = [
+  "discover", "identify", "power", "brightness", "rgb", "stream",
+  "segment-count", "segment-order", "arm-settle", "fps", "latency", "reconnect",
+] as const;
+export type QualificationStep = (typeof QUALIFICATION_STEPS)[number];
+
+export interface QualificationResult {
+  passed: Record<QualificationStep, boolean>;
+  segmentCount: number | null;
+  orientation: "forward" | "reverse" | null;
+  maxStableFps: number | null;
+}
+
+export function emptyQualification(): QualificationResult {
+  return {
+    passed: Object.fromEntries(QUALIFICATION_STEPS.map((s) => [s, false])) as Record<QualificationStep, boolean>,
+    segmentCount: null, orientation: null, maxStableFps: null,
+  };
+}
+
+export function qualificationComplete(r: QualificationResult): boolean {
+  return QUALIFICATION_STEPS.every((s) => r.passed[s]);
+}

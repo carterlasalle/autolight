@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseFixture, replayFixture } from "./index.js";
+import { parseFixture, replayFixture, isSupported, unverifiedWarning } from "./index.js";
 
 const base: Record<string, unknown> = {
   rekordboxVersion: "7.2.19",
@@ -27,5 +27,12 @@ describe("rekordbox-live", () => {
     const bad = structuredClone(base);
     (bad.expectedEvents as Record<string, unknown>[])[0]!["channelFader"] = 9;
     expect(() => parseFixture(bad)).toThrow();
+  });
+  it("gates support by version and platform", () => {
+    const def = { versionRange: "7.2.x", platform: "macos", supported: true } as const;
+    expect(isSupported(def, "7.2.19", "macos")).toBe(true);
+    expect(isSupported(def, "7.2.19", "windows")).toBe(false);
+    expect(isSupported(def, "7.3.0", "macos")).toBe(false);
+    expect(unverifiedWarning("7.3.0")).toContain("UNVERIFIED");
   });
 });

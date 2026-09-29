@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   encodeFrame, blackoutPayload, whiteHitPayload, latencyBeats,
-  qualificationKey, needsRequalification, LatestStream,
+  qualificationKey, needsRequalification, LatestStream, DeviceManager,
 } from "./index.js";
 
 describe("govee", () => {
@@ -35,5 +35,16 @@ describe("govee", () => {
     const s = new LatestStream((f) => sent.push(f));
     s.setAll(new Uint8Array([1])); s.setAll(new Uint8Array([2])); s.flush();
     expect(sent).toEqual([new Uint8Array([2])]);
+  });
+  it("backs off per-device fps and reconnects clean", () => {
+    const m = new DeviceManager();
+    const dev = m.discover({ hardwareId: "h", sku: "H6076", firmwareVersion: "1", ip: "10.0.0.2" }, 30);
+    m.backoff("h");
+    expect(m.get("h")!.fps).toBe(15);
+    expect(m.get("h")!.health).toBe("degraded");
+    m.markOffline("h");
+    expect(m.get("h")!.health).toBe("offline");
+    m.discover({ hardwareId: "h", sku: "H6076", firmwareVersion: "1", ip: "10.0.0.2" }, dev.fps);
+    expect(m.get("h")!.health).toBe("online");
   });
 });

@@ -36,6 +36,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@autolight/desktop@workspace:apps/desktop"
   dependencies:
+    "@autolight/contracts": "npm:^0.1.0"
     "@types/react": "npm:^18.3.0"
     "@types/react-dom": "npm:^18.3.0"
     electron: "npm:^33.0.0"
@@ -113,6 +114,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@autolight/serato@workspace:packages/serato"
   dependencies:
+    "@autolight/contracts": "npm:^0.1.0"
     vitest: "npm:^3.1.0"
   languageName: unknown
   linkType: soft

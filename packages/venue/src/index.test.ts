@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { globalCellOrder, applyOrientation, selectResolution } from "./index.js";
+import { globalCellOrder, applyOrientation, selectResolution, emptyQualification, qualificationComplete } from "./index.js";
 import type { Fixture } from "@autolight/contracts";
 
 const mk = (id: string, xs: number[]): Fixture => ({
@@ -19,5 +19,11 @@ describe("venue", () => {
   it("picks highest stable resolution", () => {
     expect(selectResolution([{ zones: 200, stableFps: 10 }, { zones: 40, stableFps: 30 }], 24)).toBe(40);
     expect(selectResolution([{ zones: 200, stableFps: 10 }], 24)).toBeNull();
+  });
+  it("tracks wizard completion", () => {
+    const q = emptyQualification();
+    expect(qualificationComplete(q)).toBe(false);
+    for (const k of Object.keys(q.passed) as (keyof typeof q.passed)[]) q.passed[k] = true;
+    expect(qualificationComplete(q)).toBe(true);
   });
 });

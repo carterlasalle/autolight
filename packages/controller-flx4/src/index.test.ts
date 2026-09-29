@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyCC, compositeDeckState, sevenBit } from "./index.js";
+import { classifyCC, compositeDeckState, confirmAudible, sevenBit } from "./index.js";
 
 describe("flx4", () => {
   it("scales 7-bit", () => { expect(sevenBit(127)).toBe(1); expect(sevenBit(0)).toBe(0); });
@@ -11,5 +11,10 @@ describe("flx4", () => {
     const s = compositeDeckState({ deckId: 1, track: { id: "t1" }, playingHint: true, channelFader: 0.8, crossfader: 0.5, playheadSeconds: 30, playRate: 1, receivedAtNs: 0n });
     expect(s.trackId).toBe("t1");
     expect(s.playheadSeconds).toBe(30);
+  });
+  it("confirms audibility only when both sources agree", () => {
+    expect(confirmAudible(0.8, 0.5)).toBe(true);
+    expect(confirmAudible(0, 0.5)).toBe(false);
+    expect(confirmAudible(null, 0.5)).toBe(true);
   });
 });
