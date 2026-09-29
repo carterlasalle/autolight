@@ -13,13 +13,16 @@ def analyze_job(track_id: str, audio_path: str, native_dir: str | None, out_dir:
     Coverage: FULL when audio decodes (native grid + DSP events), STRUCTURED
     for native-only, ADAPTIVE with neither (§70). Native grid always wins (§19).
     """
-    from autolight_analysis import native
     from autolight_analysis.fusion import build_track_model
     from autolight_analysis.schema import validate_track_model
     from autolight_analysis.stems import load_mono_pcm, stem_proxies, spectral_novelty, resample_to_beats
     from autolight_analysis.structure import detect_builds, detect_drops
 
-    anlz = native.extract_anlz(native_dir) if native_dir else None
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        from autolight_analysis import native
+        anlz = native.extract_anlz(native_dir) if native_dir else None
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     if anlz is None:
@@ -44,8 +47,26 @@ def analyze_job(track_id: str, audio_path: str, native_dir: str | None, out_dir:
             silence = [1.0 if e < 0.05 * (max(energy) or 1.0) else 0.0 for e in energy]
             beats = [i + 1 for i in range(n)]
             kinds = [next((p["kind"] for p in phrases if p["startBeat"] <= b < p["endBeat"]), "unknown") for b in beats]
+            # All-in-one structural ML (§16, §19): boundaries corroborate PSSI —
+            # ML never replaces native timing, only votes section-transition events.
+            ml_boundaries: set[int] = set()
+            try:
+                from autolight_analysis.allinone import analyze_full, ml_sections
+                from autolight_analysis.decode import canonical_wav
+                ml = analyze_full(str(canonical_wav(audio_path, out)))
+                if ml is not None and getattr(ml, "segments", None):
+                    beat_times = [b["sourceTimeMs"] / 1000.0 for b in grid]
+                    for s in ml_sections(
+                        [{"start": seg.start, "end": seg.end, "label": seg.label} for seg in ml.segments],
+                        beat_times,
+                    ):
+                        ml_boundaries.add(s["startBeat"])
+                        events.append({"type": "section-transition", "beat": s["startBeat"],
+                                       "confidence": s["confidence"]})
+            except Exception:
+                pass  # ML structure is advisory; DSP+native pipeline stands alone
             builds = detect_builds(beats, energy, drum, kinds)
-            events = detect_drops(beats, bass, drum, energy, novelty, builds, kinds, silence)
+            events = detect_drops(beats, bass, drum, energy, novelty, builds, kinds, silence, ml_boundaries)
             for b in builds:
                 events.append({"type": "build-start", "beat": b["beat"], "endBeat": b.get("impactBeat"),
                                "confidence": b["confidence"], "strength": b["strength"]})

@@ -13,6 +13,7 @@ packages = ["src/autolight_analysis"]
 
 [dependency-groups]
 dev = ["pytest>=8"]
+ml = ["all-in-one-infer>=3.1.0", "beat-this>=1.1.0"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

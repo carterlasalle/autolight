@@ -70,24 +70,27 @@ def detect_drops(
     builds: list[dict],
     pssi_kinds: list[str],
     silence: list[float] | None = None,
+    ml_boundaries: set[int] | None = None,
 ) -> list[dict]:
     """Converging-signal drops + fake-drop pairs (§24-25)."""
     out: list[dict] = []
     build_beats = {b["impactBeat"] for b in builds}
+    ml = ml_boundaries or set()
     for n in range(4, len(beats), 4):
         bj, dj, ej = _rel_jump(bass, n), _rel_jump(drum, n), _rel_jump(energy, n)
         if max(bj, dj, ej) < 0.25:
             continue  # flat loudness isn't a drop — need a genuine jump
         on_boundary = pssi_kinds[n] != pssi_kinds[n - 4] if n < len(pssi_kinds) else False
+        ml_hit = any(abs(beats[n] - b) <= 4 for b in ml)
         near_build = any(abs(beats[n] - bb) <= 8 for bb in build_beats)
-        if not (on_boundary or near_build):
-            continue  # jumps need structural meaning: boundary or build impact
+        if not (on_boundary or near_build or ml_hit):
+            continue  # jumps need structural meaning: boundary, build, or ML vote
         s = drop_score(
             bj, dj, ej,
             preceded_by_build=beats[n] in build_beats,
             preceded_by_dip=(silence[n - 4] > 0.5) if silence else False,
             on_downbeat=True,
-            section_boundary=on_boundary,
+            section_boundary=on_boundary or ml_hit,
         )
         if s["votes"] < 3 or s["confidence"] < 0.6:
             continue

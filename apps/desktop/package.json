@@ -11,6 +11,14 @@
   },
   "dependencies": {
     "@autolight/contracts": "^0.1.0",
+    "@autolight/diagnostics": "^0.1.0",
+    "@autolight/dj-core": "^0.1.0",
+    "@autolight/renderer": "^0.1.0",
+    "@autolight/show-mixer": "^0.1.0",
+    "@autolight/show-planner": "^0.1.0",
+    "@autolight/show-runtime": "^0.1.0",
+    "@autolight/simulator": "^0.1.0",
+    "@autolight/storage": "^0.1.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "zod": "^3.23.8"

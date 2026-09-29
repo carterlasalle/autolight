@@ -37,6 +37,14 @@ __metadata:
   resolution: "@autolight/desktop@workspace:apps/desktop"
   dependencies:
     "@autolight/contracts": "npm:^0.1.0"
+    "@autolight/diagnostics": "npm:^0.1.0"
+    "@autolight/dj-core": "npm:^0.1.0"
+    "@autolight/renderer": "npm:^0.1.0"
+    "@autolight/show-mixer": "npm:^0.1.0"
+    "@autolight/show-planner": "npm:^0.1.0"
+    "@autolight/show-runtime": "npm:^0.1.0"
+    "@autolight/simulator": "npm:^0.1.0"
+    "@autolight/storage": "npm:^0.1.0"
     "@types/react": "npm:^18.3.0"
     "@types/react-dom": "npm:^18.3.0"
     electron: "npm:^33.0.0"
@@ -48,7 +56,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@autolight/diagnostics@workspace:packages/diagnostics":
+"@autolight/diagnostics@npm:^0.1.0, @autolight/diagnostics@workspace:packages/diagnostics":
   version: 0.0.0-use.local
   resolution: "@autolight/diagnostics@workspace:packages/diagnostics"
   dependencies:
@@ -119,7 +127,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@autolight/show-mixer@workspace:packages/show-mixer":
+"@autolight/show-mixer@npm:^0.1.0, @autolight/show-mixer@workspace:packages/show-mixer":
   version: 0.0.0-use.local
   resolution: "@autolight/show-mixer@workspace:packages/show-mixer"
   dependencies:
@@ -142,7 +150,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@autolight/show-runtime@workspace:packages/show-runtime":
+"@autolight/show-runtime@npm:^0.1.0, @autolight/show-runtime@workspace:packages/show-runtime":
   version: 0.0.0-use.local
   resolution: "@autolight/show-runtime@workspace:packages/show-runtime"
   dependencies:
