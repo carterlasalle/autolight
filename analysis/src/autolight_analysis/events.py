@@ -8,9 +8,15 @@ def is_fake_drop(gap_beats: float, silence: bool) -> bool:
 
 
 def build_score(window_energies: list[float], drum_slope: float = 0.0, pssi_up: bool = False) -> dict:
-    """Candidate build at window end (§23). Returns strength + confidence + evidence."""
+    """Candidate build at window end (§23). Returns strength + confidence + evidence.
+
+    Slope is normalized by mean level so loud-sustained sections don't read as
+    builds: only genuine relative climbs score.
+    """
     slope = energy_slope(window_energies)
-    strength = min(1.0, max(0.0, slope * len(window_energies)))
+    mean = sum(window_energies) / len(window_energies) if window_energies else 0.0
+    rel = slope / max(1e-6, mean)
+    strength = min(1.0, max(0.0, rel * len(window_energies) / 4.0))
     evidence = ["energy:rising" if slope > 0 else "energy:flat"]
     confidence = 0.5
     if drum_slope > 0:
