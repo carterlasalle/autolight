@@ -13,6 +13,9 @@ def grid_warning(native_beats: list[float], ml_beats: list[float], tol: float = 
     return abs(native_beats[0] - ml_beats[0]) > tol
 
 
+# Contract mirror: TS trackModelSchema owns truth; keep field-by-field parity.
+# sections: kind/rawLabel/startBeat/endBeat/confidence (no evidence field).
+# musicalEvents: type/beat/endBeat?/confidence/strength?.
 def build_track_model(
     *,
     track_id: str,
@@ -23,26 +26,36 @@ def build_track_model(
     musical_events: list[dict],
     coverage: str,
 ) -> dict:
-    """Assemble immutable versioned TrackModel (§20). Sections carry rawLabel + provenance."""
+    """Assemble immutable versioned TrackModel (§20)."""
     if coverage not in ("full", "structured", "adaptive"):
         raise ValueError(f"coverage={coverage}")
+    sections = [
+        {
+            "kind": p["kind"],
+            "startBeat": p["startBeat"],
+            "endBeat": p["endBeat"],
+            "confidence": p.get("confidence", 0.8),
+            **({"rawLabel": p["rawLabel"]} if p.get("rawLabel") else {}),
+        }
+        for p in phrases
+    ]
+    events = [
+        {
+            "type": e["type"],
+            "beat": e["beat"],
+            "confidence": e.get("confidence", 0.8),
+            **({"endBeat": e["endBeat"]} if e.get("endBeat") is not None else {}),
+            **({"strength": e["strength"]} if e.get("strength") is not None else {}),
+        }
+        for e in musical_events
+    ]
     return {
         "schemaVersion": 1,
         "analyzerVersion": analyzer_version,
         "identity": {"id": track_id, "sourceIds": {}},
         "durationSeconds": duration_seconds,
         "beatGrid": {"version": 1, "beats": beat_grid},
-        "sections": [
-            {
-                "kind": p["kind"],
-                "rawLabel": p.get("rawLabel"),
-                "startBeat": p["startBeat"],
-                "endBeat": p["endBeat"],
-                "confidence": p.get("confidence", 0.8),
-                "evidence": p.get("evidence", ["rekordbox:PSSI"]),
-            }
-            for p in phrases
-        ],
-        "musicalEvents": musical_events,
+        "sections": sections,
+        "musicalEvents": events,
         "analysisCoverage": coverage,
     }

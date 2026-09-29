@@ -19,11 +19,19 @@ def test_build_track_model_sections():
         duration_seconds=200.0,
         beat_grid=[{"index": 0, "beatInBar": 1, "sourceTimeMs": 0.0, "bpm": 128.0}],
         phrases=[{"kind": "build", "rawLabel": "Up 1", "startBeat": 0, "endBeat": 32}],
-        musical_events=[{"type": "drop", "beat": 32, "confidence": 0.9}],
+        musical_events=[
+            {"type": "drop", "beat": 32, "confidence": 0.9, "strength": 0.8, "evidence": ["x"]},
+        ],
         coverage="structured",
     )
     assert got["schemaVersion"] == 1
-    assert got["sections"][0]["evidence"] == ["rekordbox:PSSI"]
+    assert got["sections"] == [
+        {"kind": "build", "startBeat": 0, "endBeat": 32, "confidence": 0.8, "rawLabel": "Up 1"}
+    ]
+    # Contract parity: no evidence key on sections/events.
+    assert got["musicalEvents"] == [
+        {"type": "drop", "beat": 32, "confidence": 0.9, "strength": 0.8}
+    ]
     assert got["analysisCoverage"] == "structured"
 
 

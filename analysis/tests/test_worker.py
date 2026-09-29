@@ -21,6 +21,8 @@ def test_analyze_structured(tmp_path):
     model = json.loads(open(got["artifactPath"]).read())
     assert model["analysisCoverage"] == "structured"
     assert len(model["beatGrid"]["beats"]) > 100
+    from autolight_analysis.schema import validate_track_model
+    assert validate_track_model(model) == []
 
 
 def test_analyze_missing_native_is_adaptive(tmp_path):

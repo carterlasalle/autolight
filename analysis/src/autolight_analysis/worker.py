@@ -15,6 +15,7 @@ def analyze_job(track_id: str, audio_path: str, native_dir: str | None, out_dir:
     """
     from autolight_analysis import native
     from autolight_analysis.fusion import build_track_model
+    from autolight_analysis.schema import validate_track_model
 
     anlz = native.extract_anlz(native_dir) if native_dir else None
     out = Path(out_dir)
@@ -32,6 +33,9 @@ def analyze_job(track_id: str, audio_path: str, native_dir: str | None, out_dir:
             beat_grid=anlz["beatGrid"], phrases=anlz["phrases"],
             musical_events=events, coverage="structured",
         )
+    problems = validate_track_model(model)
+    if problems:
+        raise ValueError(f"contract violations: {problems[:3]}")
     seed = hashlib.sha256(track_id.encode()).hexdigest()[:16]
     path = out / f"{seed}.trackmodel.json"
     path.write_text(json.dumps(model))
