@@ -2941,7 +2941,12 @@ Record exact traps, for example:
 - test must run through .venv;
 - service Y silently defaults to remote;
 -->
-
+Recorded 2026-09-29 (live probes, Rekordbox/Serato installed, neither running):
+- Rekordbox agent port 30001 closed when app shut; Lighting-protocol capture needs Rekordbox running.
+- SoundSwitch not installed; Lighting-provider capture blocked until user installs 2.11+.
+- Serato Remote Bonjour `_SeratoIOSRemote._tcp` silent with Serato shut; DeckState replay fixtures cover CI.
+- Govee LAN scan (UDP 4001 broadcast) found no devices; H6076/H1A45 qualification needs hardware on LAN.
+- pyrekordbox reads live master.db + USBANLZ today (847 tracks); DB access stays read-only.
 TBD.
 
 ---
