@@ -1,0 +1,1 @@
+{"title":"bug-case","type":"object","required":["id","title","symptom","root_cause","violated_invariant"]}

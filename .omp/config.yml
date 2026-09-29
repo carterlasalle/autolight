@@ -1,0 +1,5 @@
+modelRoles:
+  default: openrouter/meta/muse-spark-1.3-contributor:max
+  smol: openrouter/meta/muse-spark-1.3-contributor:max
+  task: openrouter/meta/muse-spark-1.3-contributor:max
+  judge: openrouter/~typesafe/jev-latest

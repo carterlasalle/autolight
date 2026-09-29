@@ -1,0 +1,38 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bugcorpus hooks post-tool-use",
+            "timeout": 60
+          }
+        ],
+        "matcher": "Edit|Write"
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bugcorpus hooks session-stop",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bugcorpus hooks session-start",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

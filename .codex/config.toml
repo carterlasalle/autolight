@@ -1,0 +1,7 @@
+# Bug Corpus for Codex. Trusted-project surface; approve on first run.
+
+# Bug Corpus MCP server. Project config is trusted-only; approve on first run.
+# No secrets here: stdio transport, no auth, no network.
+[mcp_servers.bugcorpus]
+command = "bugcorpus"
+args = ["mcp"]

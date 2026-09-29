@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "bugcorpus": {
+      "command": "bugcorpus",
+      "args": [
+        "mcp"
+      ]
+    }
+  }
+}

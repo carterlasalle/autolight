@@ -1,0 +1,1 @@
+{"title":"finding","type":"object","required":["detector_id","path","start_line","fingerprint","message"]}

@@ -1,0 +1,9 @@
+.scc/*
+!.scc/intent.yaml
+node_modules/
+dist/
+.yarn/
+analysis/.venv/
+*.db
+*.db-wal
+*.db-shm
