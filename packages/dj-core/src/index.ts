@@ -13,6 +13,10 @@ export function isSeek(predictedSeconds: number, observedSeconds: number, thresh
   return Math.abs(predictedSeconds - observedSeconds) > threshold;
 }
 
+// Provider priority (§7): Lighting → Composite FLX4 → adaptive fallback.
+export const PROVIDER_ORDER = ["lighting", "composite-flx4", "adaptive"] as const;
+export type ProviderId = (typeof PROVIDER_ORDER)[number];
+
 // Audible weight (§63) from faders + play state.
 export function audibleWeight(s: DeckState): number {
   if (!s.playing || !s.track) return 0;

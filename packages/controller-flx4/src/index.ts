@@ -22,3 +22,35 @@ export function classifyCC(cc: number, value: number): Flx4Hint | null {
   if (cc === CC.FILTER_2) return { kind: "filter-sweep", channel: 2, value: normalized };
   return null;
 }
+
+// Composite provider skeleton (§10): library identity + MIDI transport hints
+// + native beatgrid → DeckState estimate. MIDI never sets playhead directly;
+// it only confirms faders and transport edges the Lighting provider owns.
+export interface CompositeDeckInput {
+  deckId: number;
+  track: { id: string; rekordboxId?: string; canonicalPath?: string } | null;
+  playingHint: boolean;
+  channelFader: number | null;
+  crossfader: number | null;
+  playheadSeconds: number | null;
+  playRate: number;
+  receivedAtNs: bigint;
+}
+
+export function compositeDeckState(input: CompositeDeckInput): {
+  deckId: number;
+  trackId: string | null;
+  playing: boolean;
+  channelFader: number | null;
+  crossfader: number | null;
+  playheadSeconds: number | null;
+} {
+  return {
+    deckId: input.deckId,
+    trackId: input.track?.id ?? null,
+    playing: input.playingHint,
+    channelFader: input.channelFader,
+    crossfader: input.crossfader,
+    playheadSeconds: input.playheadSeconds,
+  };
+}
