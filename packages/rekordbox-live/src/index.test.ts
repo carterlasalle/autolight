@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { parseFixture, replayFixture, isSupported, unverifiedWarning } from "./index.js";
+import { compositeToDeckState, parseFixture, replayFixture, isSupported, unverifiedWarning } from "./index.js";
 
 const base: Record<string, unknown> = {
   rekordboxVersion: "7.2.19",
@@ -48,5 +48,16 @@ describe("rekordbox-live", () => {
     }
     const both = parseFixture(JSON.parse(readFileSync(join(dir, "both-decks-loaded", "capture.json"), "utf8")));
     expect(replayFixture(both, 10)).toHaveLength(2);
+  });
+  it("decodes composite snapshots to DeckState (§10, live 7.2.10 tracks)", () => {
+    const { state, raw } = compositeToDeckState({
+      deckId: 2, row: { rekordboxId: "231828222", title: "Homecoming (feat. Chris Martin)", artist: "Kanye West" },
+      playing: false, playheadSeconds: 0, playRate: 1, effectiveBpm: 173.98,
+      channelFader: null, crossfader: null, receivedAtNs: 1n,
+    });
+    expect(state.source).toBe("rekordbox");
+    expect(state.track?.id).toBe("rb:231828222");
+    expect(state.effectiveBpm).toBe(173.98);
+    expect(raw).toMatchObject({ provider: "composite-flx4" });
   });
 });

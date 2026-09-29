@@ -12,6 +12,8 @@
   },
   "dependencies": {
     "@autolight/contracts": "^0.1.0",
+    "@autolight/controller-flx4": "^0.1.0",
+    "@autolight/rekordbox-library": "^0.1.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
