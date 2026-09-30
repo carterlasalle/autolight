@@ -3,15 +3,18 @@ import type { DeckState } from "@autolight/contracts";
 import { deckStateSchema } from "@autolight/contracts";
 import { rowToIdentity } from "@autolight/rekordbox-library";
 
-// Protocol fixture envelope (§9.4). Raw capture stays opaque until the
-// Lighting decoder lands; expectedEvents are normalized DeckState snapshots
-// (receivedAtNs excluded — replay stamps its own clock).
+// Protocol fixture envelope. Raw capture is required: a fixture with an
+// empty capture fails the fixture lint (T-TRU-15, T-QA-03), and replay
+// decodes the capture rather than echoing expectations. expectedEvents are
+// human-written DeckState snapshots (receivedAtNs excluded: replay stamps
+// its own clock), each carrying expectedBy naming the human author.
 const fixtureSchema = z.object({
   rekordboxVersion: z.string(),
   platform: z.enum(["macos", "windows"]),
   action: z.string(),
-  capture: z.string(),
+  capture: z.string().min(1, "empty capture: record the raw transport bytes"),
   expectedEvents: z.array(deckStateSchema.omit({ receivedAtNs: true })),
+  expectedBy: z.string().min(1).optional(),
 });
 export type ProtocolFixture = z.infer<typeof fixtureSchema>;
 

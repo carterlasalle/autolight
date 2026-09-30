@@ -47,7 +47,7 @@ Milestone contents and exit proofs are in `README.md`.
 | T-TRU-10 | Security and license scanning | `wp00-truth-and-gates.md` | M0 | `TODO` | none yet | Closes F-QA-14 |
 | T-TRU-11 | CI pipeline rewrite | `wp00-truth-and-gates.md` | M0 | `TODO` | none yet | Closes F-OPS-08, F-QA-06, F-QA-14 |
 | T-TRU-13 | Record the scars in AGENTS.md | `wp00-truth-and-gates.md` | M0 | `TODO` | none yet | Closes F-DOC-06 |
-| T-TRU-15 | Replace the fake tests | `wp00-truth-and-gates.md` | M0 | `TODO` | none yet | Closes F-QA-02, F-QA-03, F-PLAN-12, F-LIVE-02 |
+| T-TRU-15 | Replace the fake tests | `wp00-truth-and-gates.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-TRU-15/README.md` | Closes F-QA-02, F-QA-03, F-PLAN-12, F-LIVE-02 |
 | T-TRU-16 | Portable Python tests | `wp00-truth-and-gates.md` | M0 | `TODO` | none yet | Closes F-ANA-25 |
 | T-TRU-17 | Toolchain facts | `wp00-truth-and-gates.md` | M0 | `TODO` | none yet | Closes F-OPS-07 |
 | T-DOC-03 | CONTRIBUTING and AGENTS alignment | `wp00-truth-and-gates.md` | M0 | `TODO` | none yet | Closes F-DOC-06 |

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { planShow, PLANNER_VERSION } from "./index.js";
@@ -8,8 +8,10 @@ import type { TrackModel } from "@autolight/contracts";
 const dir = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "test-fixtures", "analysis");
 const goldenPath = join(dir, "planner-golden.json");
 
-// Planner regression (§129): same track + version + style → stable ShowPlan.
-// Intentional planner changes update this fixture deliberately.
+// Planner regression: same track + version + style gives stable ShowPlan.
+// Missing golden FAILS (T-TRU-15). Intentional planner changes update the
+// golden deliberately via `yarn golden:update --reason "<text>"`, which
+// appends the reason to test-fixtures/goldens/CHANGELOG.md.
 describe("planner golden", () => {
   it("matches committed golden output", () => {
     const track = JSON.parse(readFileSync(join(dir, "reference-track.json"), "utf8")) as TrackModel;
@@ -20,9 +22,9 @@ describe("planner golden", () => {
     try {
       golden = JSON.parse(readFileSync(goldenPath, "utf8"));
     } catch {
-      mkdirSync(dir, { recursive: true });
-      writeFileSync(goldenPath, JSON.stringify(plan, null, 2));
-      golden = plan;
+      throw new Error(
+        `missing golden ${goldenPath}: run \`yarn golden:update --reason "<why the plan changed>"\` to record it deliberately`,
+      );
     }
     expect(plan).toEqual(golden);
   });

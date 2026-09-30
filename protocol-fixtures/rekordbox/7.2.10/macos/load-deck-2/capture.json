@@ -1,7 +1,7 @@
 {
   "rekordboxVersion": "7.2.10.0333",
   "platform": "macos",
-  "capture": "",
+  "capture": "handwritten-synthetic: real Lighting capture pending owner runbook HW-RB-LIGHT-01 (T-LIVE-09); decoder replays expectations until then",
   "action": "load-deck-2",
   "expectedEvents": [
     {
@@ -29,5 +29,6 @@
       "crossfader": null,
       "master": null
     }
-  ]
+  ],
+  "expectedBy": "hand-authored from the 7.2.10 session log (docs/rekordbox-capture.md)"
 }

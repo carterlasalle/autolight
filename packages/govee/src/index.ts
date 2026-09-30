@@ -144,6 +144,7 @@ export type LanTransport = "lan" | "ble" | "cloud";
 
 export interface SegmentStream {
   setAll(frame: Uint8Array): void;
+  flush(): void;
   close(): void;
 }
 
@@ -158,10 +159,14 @@ export class LatestStream implements SegmentStream {
     this.coalescer.push(frame);
   }
   flush(): void {
+    if (this.closed) return;
     const f = this.coalescer.take();
     if (f) this.sender(f);
   }
-  close(): void { this.closed = true; }
+  close(): void {
+    this.closed = true;
+    this.coalescer.take();
+  }
 }
 
 // Pinned toolkit seam (§44-45): the vendored transport owns the SegmentStream

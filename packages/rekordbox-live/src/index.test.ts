@@ -8,7 +8,7 @@ const base: Record<string, unknown> = {
   rekordboxVersion: "7.2.19",
   platform: "macos",
   action: "play",
-  capture: "",
+  capture: "handwritten-synthetic: lighting decoder pending (T-LIVE-09)",
   expectedEvents: [{
     source: "rekordbox", deckId: 1, track: null, playing: true,
     playheadSeconds: 12.5, playRate: 1, effectiveBpm: 128,
@@ -30,6 +30,11 @@ describe("rekordbox-live", () => {
     const bad = structuredClone(base);
     (bad.expectedEvents as Record<string, unknown>[])[0]!["channelFader"] = 9;
     expect(() => parseFixture(bad)).toThrow();
+  });
+  it("rejects fixtures with empty capture (T-TRU-15 fixture lint)", () => {
+    const empty = structuredClone(base);
+    (empty as Record<string, unknown>)["capture"] = "";
+    expect(() => parseFixture(empty)).toThrow(/empty capture/);
   });
   it("gates support by version and platform", () => {
     const def = { versionRange: "7.2.x", platform: "macos", supported: true } as const;

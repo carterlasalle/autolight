@@ -67,13 +67,17 @@ describe("govee", () => {
     m.discover({ hardwareId: "h", sku: "H6076", firmwareVersion: "1", ip: "10.0.0.2" }, dev.fps);
     expect(m.get("h")!.health).toBe("online");
   });
-  it("toolkit factory satisfies the SegmentStream seam", async () => {
+  it("closed streams drop pending frames instead of sending", async () => {
+    const sent: Uint8Array[] = [];
     const factory: ToolkitStreamFactory = {
-      openStream: async (_ip, _zones) => new LatestStream(() => {}),
+      openStream: async (_ip, _zones) => new LatestStream((f) => { sent.push(f); }),
     };
     const stream = await factory.openStream("10.0.0.2", 14);
     stream.setAll(new Uint8Array([1, 2, 3]));
     stream.close();
-    expect(true).toBe(true);
+    stream.setAll(new Uint8Array([4, 5, 6]));
+    stream.flush();
+    expect(sent.length).toBe(0);
+    expect(sent).toEqual([]);
   });
 });
