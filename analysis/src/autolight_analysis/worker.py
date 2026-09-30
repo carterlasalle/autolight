@@ -39,6 +39,23 @@ def analyze_job(track_id: str, audio_path: str, native_dir: str | None, out_dir:
         phrases = anlz["phrases"]
         try:
             mono, rate = load_mono_pcm(audio_path)
+        except Exception:
+            # No readable audio (missing file, bad decode): ANLZ grid +
+            # phrases alone are STRUCTURED, not a failure (§70).
+            model = build_track_model(
+                track_id=track_id, analyzer_version="0.1.0",
+                duration_seconds=(grid[-1]["sourceTimeMs"] / 1000.0) if grid else 0.0,
+                beat_grid=grid, phrases=phrases,
+                musical_events=[], coverage="structured",
+            )
+            problems = validate_track_model(model)
+            if problems:
+                raise ValueError(f"contract violations: {problems[:3]}")
+            seed = hashlib.sha256(track_id.encode()).hexdigest()[:16]
+            path = out / f"{seed}.trackmodel.json"
+            path.write_text(json.dumps(model))
+            return {"trackId": track_id, "artifactPath": str(path)}
+        try:
             stems = stem_proxies(mono, rate)
             energy = resample_to_beats(stems["mid"] + stems["high"], n)
             bass = resample_to_beats(stems["bass"], n)
@@ -72,9 +89,8 @@ def analyze_job(track_id: str, audio_path: str, native_dir: str | None, out_dir:
                                "confidence": b["confidence"], "strength": b["strength"]})
             events.sort(key=lambda e: e["beat"])
             coverage = "full"
-        except Exception:
-            events = []
-            coverage = "structured"
+        except Exception as e:
+            raise ValueError(f"dsp-fallback: {type(e).__name__}: {e}") from e
         model = build_track_model(
             track_id=track_id, analyzer_version="0.1.0",
             duration_seconds=(grid[-1]["sourceTimeMs"] / 1000.0) if grid else 0.0,
