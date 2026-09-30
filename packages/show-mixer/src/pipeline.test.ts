@@ -25,7 +25,7 @@ describe("pipeline", () => {
     expect(plan.cues.length).toBeGreaterThan(0);
     expect(validatePlan(plan, track.beatGrid.beats.length)).toEqual([]);
     const frames = renderFrame(plan, 40, [makeFixture("f", 14)]);
-    expect(frameHash(frames)).toMatch(/^[0-9a-f]{16}$/);
+    expect(frameHash(frames)).toMatch(/^[0-9a-f]{8}$/);
   });
   it("loads cached track+plan on the fast path (§138)", () => {
     const store = new Store();
