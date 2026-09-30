@@ -1,7 +1,8 @@
 import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
-  testDir: "./e2e",
+  testDir: "./journeys",
+  testMatch: "**/*.journey.ts",
   fullyParallel: true,
   reporter: "line",
 });

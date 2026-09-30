@@ -2,8 +2,8 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
-    // Playwright journeys live here; vitest must not execute them
-    // (it reports "Playwright Test did not expect test() to be called here").
-    exclude: ["e2e/**", "node_modules/**", "dist/**"],
+    // Playwright journeys live in e2e/; vitest collects src only, never dist (S18).
+    include: ["src/**/*.test.ts"],
+    exclude: ["journeys/**", "node_modules/**", "dist/**"],
   },
 });
