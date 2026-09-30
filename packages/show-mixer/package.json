@@ -19,6 +19,7 @@
     "@autolight/storage": "^0.1.0"
   },
   "devDependencies": {
+    "typescript": "^5.6.3",
     "vitest": "^3.1.0"
   }
 }

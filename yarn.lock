@@ -10,6 +10,7 @@ __metadata:
   resolution: "@autolight/analysis-client@workspace:packages/analysis-client"
   dependencies:
     "@types/node": "npm:^22.0.0"
+    typescript: "npm:^5.6.3"
     vitest: "npm:^3.1.0"
   languageName: unknown
   linkType: soft
@@ -28,6 +29,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@autolight/controller-flx4@workspace:packages/controller-flx4"
   dependencies:
+    typescript: "npm:^5.6.3"
     vitest: "npm:^3.1.0"
   languageName: unknown
   linkType: soft
@@ -85,6 +87,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@autolight/diagnostics@workspace:packages/diagnostics"
   dependencies:
+    typescript: "npm:^5.6.3"
     vitest: "npm:^3.1.0"
   languageName: unknown
   linkType: soft
@@ -94,6 +97,7 @@ __metadata:
   resolution: "@autolight/dj-core@workspace:packages/dj-core"
   dependencies:
     "@autolight/contracts": "npm:^0.1.0"
+    typescript: "npm:^5.6.3"
     vitest: "npm:^3.1.0"
     zod: "npm:^3.23.8"
   languageName: unknown
@@ -103,6 +107,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@autolight/govee@workspace:packages/govee"
   dependencies:
+    typescript: "npm:^5.6.3"
     vitest: "npm:^3.1.0"
   languageName: unknown
   linkType: soft
@@ -111,6 +116,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@autolight/reactive-audio@workspace:packages/reactive-audio"
   dependencies:
+    typescript: "npm:^5.6.3"
     vitest: "npm:^3.1.0"
   languageName: unknown
   linkType: soft
@@ -119,6 +125,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@autolight/rekordbox-library@workspace:packages/rekordbox-library"
   dependencies:
+    typescript: "npm:^5.6.3"
     vitest: "npm:^3.1.0"
   languageName: unknown
   linkType: soft
@@ -130,6 +137,7 @@ __metadata:
     "@autolight/contracts": "npm:^0.1.0"
     "@autolight/controller-flx4": "npm:^0.1.0"
     "@autolight/rekordbox-library": "npm:^0.1.0"
+    typescript: "npm:^5.6.3"
     vitest: "npm:^3.1.0"
     zod: "npm:^3.23.8"
   languageName: unknown
@@ -141,6 +149,7 @@ __metadata:
   dependencies:
     "@autolight/contracts": "npm:^0.1.0"
     "@autolight/venue": "npm:^0.1.0"
+    typescript: "npm:^5.6.3"
     vitest: "npm:^3.1.0"
   languageName: unknown
   linkType: soft
@@ -150,6 +159,7 @@ __metadata:
   resolution: "@autolight/serato@workspace:packages/serato"
   dependencies:
     "@autolight/contracts": "npm:^0.1.0"
+    typescript: "npm:^5.6.3"
     vitest: "npm:^3.1.0"
   languageName: unknown
   linkType: soft
@@ -164,6 +174,7 @@ __metadata:
     "@autolight/show-planner": "npm:^0.1.0"
     "@autolight/simulator": "npm:^0.1.0"
     "@autolight/storage": "npm:^0.1.0"
+    typescript: "npm:^5.6.3"
     vitest: "npm:^3.1.0"
   languageName: unknown
   linkType: soft
@@ -173,6 +184,7 @@ __metadata:
   resolution: "@autolight/show-planner@workspace:packages/show-planner"
   dependencies:
     "@autolight/contracts": "npm:^0.1.0"
+    typescript: "npm:^5.6.3"
     vitest: "npm:^3.1.0"
   languageName: unknown
   linkType: soft
@@ -184,6 +196,7 @@ __metadata:
     "@autolight/contracts": "npm:^0.1.0"
     "@autolight/dj-core": "npm:^0.1.0"
     "@autolight/simulator": "npm:^0.1.0"
+    typescript: "npm:^5.6.3"
     vitest: "npm:^3.1.0"
   languageName: unknown
   linkType: soft
@@ -193,6 +206,7 @@ __metadata:
   resolution: "@autolight/simulator@workspace:packages/simulator"
   dependencies:
     "@autolight/contracts": "npm:^0.1.0"
+    typescript: "npm:^5.6.3"
     vitest: "npm:^3.1.0"
   languageName: unknown
   linkType: soft
@@ -202,6 +216,7 @@ __metadata:
   resolution: "@autolight/storage@workspace:packages/storage"
   dependencies:
     "@types/node": "npm:^22.0.0"
+    typescript: "npm:^5.6.3"
     vitest: "npm:^3.1.0"
   languageName: unknown
   linkType: soft
@@ -211,6 +226,7 @@ __metadata:
   resolution: "@autolight/track-model@workspace:packages/track-model"
   dependencies:
     "@autolight/contracts": "npm:^0.1.0"
+    typescript: "npm:^5.6.3"
     vitest: "npm:^3.1.0"
   languageName: unknown
   linkType: soft
@@ -220,6 +236,7 @@ __metadata:
   resolution: "@autolight/venue@workspace:packages/venue"
   dependencies:
     "@autolight/contracts": "npm:^0.1.0"
+    typescript: "npm:^5.6.3"
     vitest: "npm:^3.1.0"
   languageName: unknown
   linkType: soft
