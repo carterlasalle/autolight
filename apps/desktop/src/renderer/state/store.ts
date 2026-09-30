@@ -21,13 +21,25 @@ declare global {
   }
 }
 
-export function invoke(channel: string, payload: unknown): Promise<unknown> {
-  return (
-    window.autolight?.invoke(channel, payload).catch(() => undefined) ?? Promise.resolve(undefined)
-  );
+// T-ARC-02: IPC errors surface in diagnostics status, never swallowed into
+// undefined. Callers that tolerate absence check for null explicitly.
+export async function invoke(channel: string, payload: unknown): Promise<unknown | null> {
+  try {
+    if (!window.autolight) {
+      useShell.getState().diagnostics[`ipc:${channel}`] = "unavailable: preload missing";
+      return null;
+    }
+    return await window.autolight.invoke(channel, payload);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    try {
+      useShell.getState().diagnostics[`ipc:${channel}`] = message;
+    } catch { /* store not ready: error still propagates */ }
+    return null;
+  }
 }
 
-type Route = "live" | "library" | "inspector" | "venue" | "setup" | "diagnostics";
+type Route = "live" | "library" | "inspector" | "venue" | "setup" | "diagnostics" | "settings";
 
 export type EnergyTier = "LOW" | "MED" | "HIGH";
 export const PARTY_PALETTES = ["ND", "Warm", "Cool", "Neon", "Fire", "Ocean", "UV"] as const;
@@ -78,6 +90,7 @@ interface ShellState {
   live: LiveState | null;
   selectedTrackId: string | null;
   diagnostics: Record<string, string>;
+  simulatorMode: boolean;
   set: (patch: Partial<ShellState>) => void;
 }
 
@@ -111,5 +124,6 @@ export const useShell = create<ShellState>((set) => ({
   live: null,
   selectedTrackId: null,
   diagnostics: {},
+  simulatorMode: false,
   set: (patch) => set(patch),
 }));

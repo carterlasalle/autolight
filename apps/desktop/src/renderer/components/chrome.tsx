@@ -8,6 +8,8 @@ import { Badge } from "./ui/badge.js";
 export function Titlebar(): JSX.Element {
   const bpm = useShell((s) => s.bpm);
   const live = useShell((s) => s.live);
+  const simulatorMode = useShell((s) => s.simulatorMode);
+  const set = useShell((s) => s.set);
   return (
     <header className="app-drag-region sticky top-0 z-10 flex h-11 items-center gap-2 border-b bg-background/90 px-4 backdrop-blur-xl">
       <span className="w-16 shrink-0" aria-hidden />
@@ -15,10 +17,28 @@ export function Titlebar(): JSX.Element {
       <Badge variant="secondary" className="app-no-drag">
         {live ? `${live.source.toLowerCase()} ●` : "no decks"}
       </Badge>
+      {simulatorMode ? (
+        <Badge variant="destructive" className="app-no-drag" title="Simulated providers and loopback Govee devices. Same pipeline, simulated sources and sinks.">
+          SIMULATOR
+        </Badge>
+      ) : null}
       <span className="font-timing text-xs text-muted-foreground tabular-nums">
         {bpm !== null ? `${bpm.toFixed(1)} BPM` : "-- BPM"}
       </span>
       <span className="flex-1" />
+      <Button
+        variant="ghost"
+        size="sm"
+        className="app-no-drag"
+        title={simulatorMode ? "Leave Simulator mode" : "Enter Simulator mode"}
+        onClick={() => {
+          const next = !useShell.getState().simulatorMode;
+          set({ simulatorMode: next });
+          void invoke("simulator/mode", { version: 1, enabled: next });
+        }}
+      >
+        {simulatorMode ? "Exit SIM" : "SIM"}
+      </Button>
       <Button
         variant="ghost"
         size="sm"
@@ -50,12 +70,12 @@ export function Statusbar(): JSX.Element {
 
 export function Sidebar({ route, onRoute }: {
   route: string;
-  onRoute: (r: "live" | "library" | "inspector" | "venue" | "setup" | "diagnostics") => void;
+  onRoute: (r: "live" | "library" | "inspector" | "venue" | "setup" | "diagnostics" | "settings") => void;
 }): JSX.Element {
   const groups: { label: string; items: { id: typeof route; label: string }[] }[] = [
     { label: "Show", items: [{ id: "live", label: "Live" }, { id: "library", label: "Library" }, { id: "inspector", label: "Inspector" }] },
     { label: "Lighting", items: [{ id: "venue", label: "Venue" }, { id: "setup", label: "Setup" }] },
-    { label: "System", items: [{ id: "diagnostics", label: "Diagnostics" }] },
+    { label: "System", items: [{ id: "diagnostics", label: "Diagnostics" }, { id: "settings", label: "Settings" }] },
   ];
   return (
     <nav aria-label="Routes" className="flex w-44 shrink-0 flex-col gap-4 border-r p-3">

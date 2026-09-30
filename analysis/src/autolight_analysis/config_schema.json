@@ -1,0 +1,1341 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "autolight-config",
+  "type": "object",
+  "properties": {
+    "runtime.host": {
+      "type": "string",
+      "default": "worker-thread",
+      "description": "enum DS-07 see DS-07 [spec 56]"
+    },
+    "runtime.clock.tickHz": {
+      "type": "number",
+      "default": 60,
+      "description": "Hz 30 to 120 [spec 117]"
+    },
+    "runtime.clock.timerStrategy": {
+      "type": "string",
+      "default": "hybrid",
+      "description": "enum DS-08 see DS-08 [unmeasured (T-ARC-06)]"
+    },
+    "runtime.clock.spinWindowMs": {
+      "type": "number",
+      "default": 1.5,
+      "description": "ms 0 to 5 [unmeasured (T-ARC-06)]"
+    },
+    "runtime.snapshot.uiRateHz": {
+      "type": "number",
+      "default": 30,
+      "description": "Hz 10 to 60 [unmeasured (T-ARC-04)]"
+    },
+    "runtime.snapshot.maxBytes": {
+      "type": "number",
+      "default": 262144,
+      "description": "bytes 16384 to 4194304 [unmeasured (T-ARC-04)]"
+    },
+    "runtime.crash.holdMs": {
+      "type": "number",
+      "default": 2000,
+      "description": "ms 0 to 30000 [unmeasured (T-ARC-03)]"
+    },
+    "runtime.estimator.correctionGain": {
+      "type": "number",
+      "default": 0.15,
+      "description": "ratio per tick 0.01 to 1 [unmeasured (T-RUN-02)]"
+    },
+    "runtime.estimator.maxSlewBeatsPerSec": {
+      "type": "number",
+      "default": 0.08,
+      "description": "beats/s 0 to 1 [unmeasured (T-RUN-02)]"
+    },
+    "runtime.estimator.maxErrorMs": {
+      "type": "number",
+      "default": 20,
+      "description": "ms 1 to 200 [unmeasured target]"
+    },
+    "runtime.seek.thresholdBeats": {
+      "type": "number",
+      "default": 0.5,
+      "description": "beats 0.1 to 16 [unmeasured (was 8, `show-runtime/src/index.ts:42`)]"
+    },
+    "runtime.seek.thresholdMs": {
+      "type": "number",
+      "default": 150,
+      "description": "ms 10 to 2000 [unmeasured (was 250, `dj-core/src/index.ts:12`)]"
+    },
+    "runtime.scratch.rateDeviation": {
+      "type": "number",
+      "default": 0.5,
+      "description": "ratio 0.05 to 2 [unmeasured (T-RUN-05)]"
+    },
+    "runtime.scratch.minReversalsPerSec": {
+      "type": "number",
+      "default": 2,
+      "description": "1/s 0 to 20 [unmeasured]"
+    },
+    "runtime.scratch.resyncAt": {
+      "type": "string",
+      "default": "bar",
+      "description": "enum beat, bar, phrase  [spec 61 \"next sensible boundary\"]"
+    },
+    "runtime.loop.variation": {
+      "type": "string",
+      "default": "alternate-ab",
+      "description": "enum none, alternate-ab, rotate-3  [spec 59]"
+    },
+    "runtime.roll.degradeOrder": {
+      "type": [
+        "array",
+        "object",
+        "string",
+        "number",
+        "boolean"
+      ],
+      "default": [
+        "pulse",
+        "contraction",
+        "impact"
+      ],
+      "description": "list  [spec 60]"
+    },
+    "runtime.health.extrapolateMs": {
+      "type": "number",
+      "default": 500,
+      "description": "ms  [spec 105]"
+    },
+    "runtime.health.holdMs": {
+      "type": "number",
+      "default": 2000,
+      "description": "ms  [spec 105]"
+    },
+    "runtime.override.resumeDefault": {
+      "type": "string",
+      "default": "bar",
+      "description": "enum beat, bar, phrase, immediate [spec 134]"
+    },
+    "runtime.override.whiteIntensity": {
+      "type": "number",
+      "default": 1,
+      "description": "ratio 0 to 1 [spec 48]"
+    },
+    "runtime.override.masterIntensity": {
+      "type": "number",
+      "default": 1,
+      "description": "ratio 0 to 1 [spec 94]"
+    },
+    "runtime.fastPath.budgetMs": {
+      "type": "number",
+      "default": 100,
+      "description": "ms  [unmeasured target (spec 138 \"instantly\")]"
+    },
+    "runtime.upgrade.boundary": {
+      "type": "string",
+      "default": "phrase",
+      "description": "enum section, phrase, bar  [spec 140]"
+    },
+    "ops.startup.budgetMs": {
+      "type": "number",
+      "default": 10000,
+      "description": "ms 1000 to 60000 [unmeasured target (spec 132)]"
+    },
+    "runtime.adaptive.phraseBeats": {
+      "type": "number",
+      "default": 32,
+      "description": "beats 8 to 64 [unmeasured]"
+    },
+    "runtime.adaptive.cooldownPhrases": {
+      "type": "number",
+      "default": 2,
+      "description": "phrases 0 to 8 [was 2 (`reactive-audio/src/index.ts:35`)]"
+    },
+    "runtime.adaptive.engine": {
+      "type": "string",
+      "default": "combined",
+      "description": "enum DS-28  [owner]"
+    },
+    "runtime.adaptive.minLooks": {
+      "type": "number",
+      "default": 24,
+      "description": "count 1 to 500 [unmeasured]"
+    },
+    "mixer.crossfader.curve": {
+      "type": "string",
+      "default": "source",
+      "description": "enum source, linear, constant-power, sharp-cut  [spec 63]"
+    },
+    "mixer.crossfader.assignment": {
+      "type": [
+        "array",
+        "object",
+        "string",
+        "number",
+        "boolean"
+      ],
+      "default": {
+        "1": "A",
+        "2": "B",
+        "3": "THRU",
+        "4": "THRU"
+      },
+      "description": "map A, B, THRU [spec 63]"
+    },
+    "mixer.weight.masterBonus": {
+      "type": "number",
+      "default": 0.1,
+      "description": "ratio 0 to 0.5 [unmeasured]"
+    },
+    "mixer.intro.paletteAt": {
+      "type": "number",
+      "default": 0.05,
+      "description": "weight 0 to 1 [was hardcoded (`show-mixer/src/index.ts:31`)]"
+    },
+    "mixer.intro.rhythmAt": {
+      "type": "number",
+      "default": 0.3,
+      "description": "weight 0 to 1 [was hardcoded]"
+    },
+    "mixer.intro.impactsAt": {
+      "type": "number",
+      "default": 0.7,
+      "description": "weight 0 to 1 [was hardcoded]"
+    },
+    "mixer.blackout.policy": {
+      "type": "string",
+      "default": "auto",
+      "description": "enum DS-18  [spec 66]"
+    },
+    "mixer.blackout.otherDeckThreshold": {
+      "type": "number",
+      "default": 0.3,
+      "description": "weight 0 to 1 [was hardcoded (`show-mixer/src/index.ts:25`)]"
+    },
+    "mixer.owner.hysteresis": {
+      "type": "number",
+      "default": 0.1,
+      "description": "ratio 0 to 0.5 [unmeasured]"
+    },
+    "mixer.owner.factorWeights": {
+      "type": [
+        "array",
+        "object",
+        "string",
+        "number",
+        "boolean"
+      ],
+      "default": "{ weight: 1, master: 0.3, confidence: 0.5, strength: 1, significance: 0.5 }",
+      "description": "map  [unmeasured (spec 65 factors)]"
+    },
+    "mixer.blendSpace": {
+      "type": "string",
+      "default": "oklab-hue-linear-intensity",
+      "description": "enum DS-09  [spec 64 (combined mode)]"
+    },
+    "render.gammaDefault": {
+      "type": "number",
+      "default": 2.2,
+      "description": "exponent 1 to 3 [spec 49 approximation; per device from calibration]"
+    },
+    "render.antialias.subCell": {
+      "type": "boolean",
+      "default": true,
+      "description": "bool  [owner room request]"
+    },
+    "render.singleZone.representative": {
+      "type": "string",
+      "default": "area-weighted-mean-oklab",
+      "description": "enum mean-linear, area-weighted-mean-oklab, dominant, center-cell  [unmeasured]"
+    },
+    "render.latency.mode": {
+      "type": "string",
+      "default": "measured-else-sku",
+      "description": "enum DS-17  [spec 55]"
+    },
+    "render.impact.defaultMs": {
+      "type": "number",
+      "default": 90,
+      "description": "ms 20 to 500 [spec 36 example]"
+    },
+    "render.strobe.maxHz": {
+      "type": "number",
+      "default": 12,
+      "description": "Hz 1 to 30 [unmeasured; also capped by fixture fps]"
+    },
+    "render.tickBudgetMs": {
+      "type": "number",
+      "default": 4,
+      "description": "ms per tick (2,000 cells, two decks) 1 to 16 [unmeasured target]"
+    },
+    "planner.version": {
+      "type": "string",
+      "default": "read-only",
+      "description": "string  [code]"
+    },
+    "planner.mode": {
+      "type": "string",
+      "default": "rules-with-veto",
+      "description": "enum DS-19  [spec 113 (combined mode)]"
+    },
+    "planner.sectionEnergy": {
+      "type": [
+        "array",
+        "object",
+        "string",
+        "number",
+        "boolean"
+      ],
+      "default": "{intro:.3, verse:.45, prechorus:.6, build:.8, drop:1, chorus:.9, breakdown:.25, bridge:.5, instrumental:.6, solo:.7, outro:.3, transition:.5, unknown:.5}",
+      "description": "map  [was `SECTION_ENERGY` (`show-planner/src/index.ts:65-69`)]"
+    },
+    "planner.drop.minConfidence": {
+      "type": "number",
+      "default": 0.5,
+      "description": "ratio  [unmeasured]"
+    },
+    "planner.drop.stages": {
+      "type": [
+        "array",
+        "object",
+        "string",
+        "number",
+        "boolean"
+      ],
+      "default": [
+        8,
+        8,
+        8,
+        4,
+        4
+      ],
+      "description": "beats list  [spec 36 example]"
+    },
+    "planner.drop.preDarknessBeats": {
+      "type": "number",
+      "default": 1,
+      "description": "beats  [spec 35, 36]"
+    },
+    "planner.drop.burstBeats": {
+      "type": "number",
+      "default": 2,
+      "description": "beats  [spec 36]"
+    },
+    "planner.restraint.whiteHitMinBeats": {
+      "type": "number",
+      "default": 16,
+      "description": "beats  [was 8 with \"ponytail\"]"
+    },
+    "planner.restraint.blackoutMinBeats": {
+      "type": "number",
+      "default": 32,
+      "description": "beats  [unmeasured]"
+    },
+    "planner.restraint.strobeMaxDuty": {
+      "type": "number",
+      "default": 0.08,
+      "description": "ratio  [unmeasured]"
+    },
+    "planner.restraint.paletteChangeMinBeats": {
+      "type": "number",
+      "default": 16,
+      "description": "beats  [spec 114]"
+    },
+    "planner.restraint.patternRepeatMax": {
+      "type": "number",
+      "default": 4,
+      "description": "count  [unmeasured]"
+    },
+    "planner.restraint.sectionImpactMax": {
+      "type": "number",
+      "default": 3,
+      "description": "count  [unmeasured]"
+    },
+    "planner.restraint.trackImpactMax": {
+      "type": "number",
+      "default": 12,
+      "description": "count  [unmeasured]"
+    },
+    "planner.contrast.breakdownMaxMean": {
+      "type": "number",
+      "default": 0.3,
+      "description": "ratio  [unmeasured]"
+    },
+    "planner.recurrence.similarityThreshold": {
+      "type": "number",
+      "default": 0.8,
+      "description": "cosine  [unmeasured]"
+    },
+    "planner.candidates.perSection": {
+      "type": "number",
+      "default": 4,
+      "description": "count  [DS-19]"
+    },
+    "planner.chase.basePeriodBeats": {
+      "type": "number",
+      "default": 8,
+      "description": "beats  [was hardcoded]"
+    },
+    "planner.palette.minDistance": {
+      "type": "number",
+      "default": 0.12,
+      "description": "OKLab distance  [unmeasured]"
+    },
+    "planner.events.minConfidence": {
+      "type": "string",
+      "default": "per event type map, 0.5 default",
+      "description": "ratio  [unmeasured]"
+    },
+    "planner.evaluation.bounds": {
+      "type": "string",
+      "default": "map of the ten spec 115 diagnostics to allowed ranges",
+      "description": "map  [unmeasured]"
+    },
+    "planner.compile.budgetMs": {
+      "type": "number",
+      "default": 2000,
+      "description": "ms p95  [unmeasured target]"
+    },
+    "planner.validation.rejectOn": {
+      "type": [
+        "array",
+        "object",
+        "string",
+        "number",
+        "boolean"
+      ],
+      "default": [
+        "exclusive-overlap",
+        "negative-duration",
+        "out-of-range",
+        "unsupported-capability"
+      ],
+      "description": "list  [spec 114]"
+    },
+    "audio.capture.host": {
+      "type": "string",
+      "default": "audio-window",
+      "description": "enum DS-14  [owner]"
+    },
+    "audio.capture.deviceId": {
+      "type": "string",
+      "default": "\"\" (none)",
+      "description": "string  [user]"
+    },
+    "audio.fftSize": {
+      "type": "number",
+      "default": 2048,
+      "description": "samples  [unmeasured]"
+    },
+    "audio.melBands": {
+      "type": "number",
+      "default": 24,
+      "description": "count  [unmeasured]"
+    },
+    "audio.agc.rise": {
+      "type": "number",
+      "default": 0.3,
+      "description": "ratio  [was hardcoded (`reactive-audio/src/index.ts:11`)]"
+    },
+    "audio.agc.decay": {
+      "type": "number",
+      "default": 0.05,
+      "description": "ratio  [was hardcoded]"
+    },
+    "audio.agc.target": {
+      "type": "number",
+      "default": 0.5,
+      "description": "ratio  [was hardcoded]"
+    },
+    "audio.onset.threshold": {
+      "type": "number",
+      "default": 1.5,
+      "description": "z-score  [unmeasured]"
+    },
+    "audio.overlay.cap": {
+      "type": "number",
+      "default": 0.2,
+      "description": "ratio  [was `MAX_OVERLAY_GAIN`; final amount = cap times `style.reactiveAmount`]"
+    },
+    "analysis.worker.concurrency": {
+      "type": "number",
+      "default": 1,
+      "description": "jobs  [unmeasured]"
+    },
+    "analysis.worker.restartBackoffMs": {
+      "type": [
+        "array",
+        "object",
+        "string",
+        "number",
+        "boolean"
+      ],
+      "default": [
+        1000,
+        30000
+      ],
+      "description": "ms min/max  [unmeasured]"
+    },
+    "analysis.worker.jobTimeoutMs": {
+      "type": "number",
+      "default": 900000,
+      "description": "ms  [unmeasured]"
+    },
+    "analysis.worker.heartbeatMs": {
+      "type": "number",
+      "default": 5000,
+      "description": "ms  [unmeasured]"
+    },
+    "analysis.cacheDir": {
+      "type": "string",
+      "default": "<userData>/analysis-cache",
+      "description": "path  [spec 82]"
+    },
+    "analysis.device": {
+      "type": "string",
+      "default": "auto",
+      "description": "enum auto, cpu, cuda  [spec 16]"
+    },
+    "analysis.ml.enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "bool  [spec 16]"
+    },
+    "analysis.ml.modelCacheDir": {
+      "type": "string",
+      "default": "<userData>/models",
+      "description": "path  [T-ANA-05]"
+    },
+    "analysis.ml.offlineOnly": {
+      "type": "string",
+      "default": "true during Live",
+      "description": "bool  [spec 110]"
+    },
+    "analysis.stems.mode": {
+      "type": "string",
+      "default": "fusion",
+      "description": "enum DS-10  [owner]"
+    },
+    "analysis.structure.mode": {
+      "type": "string",
+      "default": "fused",
+      "description": "enum DS-11  [spec 19]"
+    },
+    "analysis.metrical.mode": {
+      "type": "string",
+      "default": "both",
+      "description": "enum DS-12  [spec 17]"
+    },
+    "analysis.frame.hop": {
+      "type": "number",
+      "default": 512,
+      "description": "samples  [unmeasured (was 1024)]"
+    },
+    "analysis.frame.size": {
+      "type": "number",
+      "default": 2048,
+      "description": "samples  [was hardcoded]"
+    },
+    "analysis.bands": {
+      "type": [
+        "array",
+        "object",
+        "string",
+        "number",
+        "boolean"
+      ],
+      "default": "{bass:[20,150], lowMid:[150,500], mid:[500,2000], high:[2000,20000]}",
+      "description": "Hz  [was hardcoded (`stems.py:51-59`)]"
+    },
+    "analysis.build.windows": {
+      "type": [
+        "array",
+        "object",
+        "string",
+        "number",
+        "boolean"
+      ],
+      "default": [
+        8,
+        16,
+        32
+      ],
+      "description": "beats  [spec 23]"
+    },
+    "analysis.drop.minJump": {
+      "type": "number",
+      "default": 0.25,
+      "description": "relative  [was hardcoded (`structure.py:81`)]"
+    },
+    "analysis.drop.minVotes": {
+      "type": "number",
+      "default": 3,
+      "description": "count  [was hardcoded]"
+    },
+    "analysis.drop.minConfidence": {
+      "type": "number",
+      "default": 0.6,
+      "description": "ratio  [was hardcoded]"
+    },
+    "analysis.silence.level": {
+      "type": "number",
+      "default": 0.05,
+      "description": "ratio of max  [was hardcoded (`worker.py:47`)]"
+    },
+    "analysis.fakeDrop.gapBeats": {
+      "type": [
+        "array",
+        "object",
+        "string",
+        "number",
+        "boolean"
+      ],
+      "default": [
+        1,
+        4
+      ],
+      "description": "beats  [spec 25]"
+    },
+    "analysis.gridWarning.toleranceMs": {
+      "type": "number",
+      "default": 50,
+      "description": "ms  [was 0.05 s]"
+    },
+    "analysis.gridWarning.minAnchors": {
+      "type": "number",
+      "default": 32,
+      "description": "count  [unmeasured]"
+    },
+    "analysis.decode.resampler": {
+      "type": "string",
+      "default": "soxr",
+      "description": "enum soxr, swr  [unmeasured]"
+    },
+    "analysis.beatthis.invoke": {
+      "type": "string",
+      "default": "api",
+      "description": "enum api, cli  [upstream README]"
+    },
+    "analysis.aggregate.subdivisions": {
+      "type": "number",
+      "default": 4,
+      "description": "per beat  [unmeasured]"
+    },
+    "analysis.stems.keepAudio": {
+      "type": "boolean",
+      "default": false,
+      "description": "bool  [disk budget]"
+    },
+    "govee.lan.engine": {
+      "type": "string",
+      "default": "auto",
+      "description": "enum DS-02  [owner]"
+    },
+    "govee.lan.ports.scan": {
+      "type": "number",
+      "default": 4001,
+      "description": "port  [Govee WLAN guide]"
+    },
+    "govee.lan.ports.reply": {
+      "type": "number",
+      "default": 4002,
+      "description": "port  [Govee WLAN guide]"
+    },
+    "govee.lan.ports.control": {
+      "type": "number",
+      "default": 4003,
+      "description": "port  [Govee WLAN guide]"
+    },
+    "govee.lan.interfaces": {
+      "type": [
+        "array",
+        "object",
+        "string",
+        "number",
+        "boolean"
+      ],
+      "default": "[] (all eligible)",
+      "description": "list of interface names  [spec 111]"
+    },
+    "govee.lan.discovery.multicast": {
+      "type": "boolean",
+      "default": true,
+      "description": "bool  [govee2mqtt `lan_api.rs`]"
+    },
+    "govee.lan.discovery.perInterfaceBroadcast": {
+      "type": "boolean",
+      "default": true,
+      "description": "bool  [govee2mqtt]"
+    },
+    "govee.lan.discovery.globalBroadcast": {
+      "type": "boolean",
+      "default": true,
+      "description": "bool  [govee2mqtt]"
+    },
+    "govee.lan.discovery.scanList": {
+      "type": [
+        "array",
+        "object",
+        "string",
+        "number",
+        "boolean"
+      ],
+      "default": [],
+      "description": "IPs or hostnames  [govee2mqtt `GOVEE_LAN_SCAN`]"
+    },
+    "govee.lan.discovery.retryInitialMs": {
+      "type": "number",
+      "default": 2000,
+      "description": "ms  [govee2mqtt `lan_api.rs:521`]"
+    },
+    "govee.lan.discovery.retryMaxMs": {
+      "type": "number",
+      "default": 60000,
+      "description": "ms  [govee2mqtt `lan_api.rs:522`]"
+    },
+    "govee.lan.discovery.backgroundRescanMs": {
+      "type": "number",
+      "default": 30000,
+      "description": "ms  [unmeasured (Lightwave 15 s, HA 300 s)]"
+    },
+    "govee.lan.status.retryMs": {
+      "type": "number",
+      "default": 350,
+      "description": "ms  [govee2mqtt `lan_api.rs:605`]"
+    },
+    "govee.lan.status.deadlineMs": {
+      "type": "number",
+      "default": 10000,
+      "description": "ms  [govee2mqtt `lan_api.rs:601`]"
+    },
+    "govee.lan.arm.settleMsDefault": {
+      "type": "number",
+      "default": 50,
+      "description": "ms  [toolkit measurements default]"
+    },
+    "govee.lan.stream.fallbackHz": {
+      "type": "number",
+      "default": 10,
+      "description": "Hz  [toolkit `FALLBACK_HZ`]"
+    },
+    "govee.lan.stream.targetHz": {
+      "type": "number",
+      "default": 60,
+      "description": "Hz  [spec 117 logical rate; per device capped by qualification]"
+    },
+    "govee.lan.stream.keepaliveMs": {
+      "type": "string",
+      "default": "0 (off)",
+      "description": "ms  [only if qualification shows the unit drops an idle stream]"
+    },
+    "govee.lan.stream.maxRearmAttempts": {
+      "type": "number",
+      "default": 3,
+      "description": "count  [unmeasured (spec 147 \"do not spam\")]"
+    },
+    "govee.lan.stream.rearmWindowMs": {
+      "type": "number",
+      "default": 60000,
+      "description": "ms  [unmeasured]"
+    },
+    "govee.lan.command.minSpacingMs": {
+      "type": "number",
+      "default": 40,
+      "description": "ms  [unmeasured (toolkit: third back-to-back command dropped)]"
+    },
+    "govee.lan.reconnect.maxMs": {
+      "type": "number",
+      "default": 5000,
+      "description": "ms  [unmeasured target]"
+    },
+    "govee.lan.backoff.minFps": {
+      "type": "number",
+      "default": 5,
+      "description": "fps  [was hardcoded (`govee/src/index.ts:213`)]"
+    },
+    "govee.brightness.maxPerMinute": {
+      "type": "number",
+      "default": 6,
+      "description": "commands  [unmeasured (spec 50 \"slow\")]"
+    },
+    "govee.identify.flashMs": {
+      "type": "number",
+      "default": 1000,
+      "description": "ms  [comment intent in `show-service.ts:101`]"
+    },
+    "govee.testChase.stepMs": {
+      "type": "number",
+      "default": 150,
+      "description": "ms  [unmeasured]"
+    },
+    "govee.ble.backend": {
+      "type": "string",
+      "default": "auto",
+      "description": "enum DS-04  [owner]"
+    },
+    "govee.ble.encryptedLink": {
+      "type": "string",
+      "default": "auto",
+      "description": "enum DS-05  [owner decision]"
+    },
+    "govee.ble.writeBudgetHzDefault": {
+      "type": "number",
+      "default": 100,
+      "description": "Hz  [toolkit `devices/H61A0.yaml:273` (one unit)]"
+    },
+    "govee.ble.writeDrainMsDefault": {
+      "type": "number",
+      "default": 300,
+      "description": "ms  [unmeasured (toolkit says measure per unit)]"
+    },
+    "govee.ble.scanTimeoutMs": {
+      "type": "number",
+      "default": 10000,
+      "description": "ms  [unmeasured]"
+    },
+    "govee.ble.colorQuantizeLevels": {
+      "type": "string",
+      "default": "0 (off)",
+      "description": "levels per channel  [unmeasured]"
+    },
+    "govee.ble.hostColorChannel": {
+      "type": "boolean",
+      "default": true,
+      "description": "bool  [toolkit ble.md section 8]"
+    },
+    "govee.matter.enabled": {
+      "type": "boolean",
+      "default": false,
+      "description": "bool  [owner decision per device]"
+    },
+    "govee.matter.commandRateHz": {
+      "type": "number",
+      "default": 10,
+      "description": "Hz  [unmeasured]"
+    },
+    "govee.cloud.enabled": {
+      "type": "boolean",
+      "default": false,
+      "description": "bool  [spec 148]"
+    },
+    "govee.cloud.perDevicePerMinute": {
+      "type": "number",
+      "default": 10,
+      "description": "requests  [Govee docs via toolkit `cloud.md:102`]"
+    },
+    "govee.cloud.perAccountPerDay": {
+      "type": "number",
+      "default": 10000,
+      "description": "requests  [Govee docs via toolkit `cloud.md:101`]"
+    },
+    "govee.failover.policy": {
+      "type": "string",
+      "default": "hybrid",
+      "description": "enum DS-03  [owner]"
+    },
+    "govee.failover.lanLossMs": {
+      "type": "number",
+      "default": 3000,
+      "description": "ms  [unmeasured]"
+    },
+    "govee.failover.probeIntervalMs": {
+      "type": "number",
+      "default": 10000,
+      "description": "ms  [unmeasured]"
+    },
+    "govee.device.<fixtureId>.transportMode": {
+      "type": "string",
+      "default": "hybrid",
+      "description": "enum DS-31  [owner (per device)]"
+    },
+    "govee.device.<fixtureId>.transportOrder": {
+      "type": [
+        "array",
+        "object",
+        "string",
+        "number",
+        "boolean"
+      ],
+      "default": [
+        "lan-razer",
+        "ble-segmented",
+        "lan-json",
+        "ble-single",
+        "matter"
+      ],
+      "description": "ordered list  [spec 148]"
+    },
+    "live.provider": {
+      "type": "string",
+      "default": "fusion",
+      "description": "enum DS-01  [owner]"
+    },
+    "live.provider.staleMs": {
+      "type": "number",
+      "default": 500,
+      "description": "ms  [spec 105]"
+    },
+    "live.rkbx.oscBind": {
+      "type": "string",
+      "default": "127.0.0.1:4460",
+      "description": "host:port  [rkbx_link README default destination]"
+    },
+    "live.rkbx.configPath": {
+      "type": "string",
+      "default": "",
+      "description": "path to user's rkbx_link folder  [user]"
+    },
+    "live.prolink.mode": {
+      "type": "string",
+      "default": "passive",
+      "description": "enum DS-29  [owner]"
+    },
+    "live.prolink.deviceNumber": {
+      "type": "number",
+      "default": 7,
+      "description": "1 to 15  [unmeasured (must not collide with real players)]"
+    },
+    "live.prolink.keepaliveMs": {
+      "type": "number",
+      "default": 1500,
+      "description": "ms  [dysentery analysis]"
+    },
+    "live.prolink.peerExpiryMs": {
+      "type": "number",
+      "default": 5000,
+      "description": "ms  [unmeasured]"
+    },
+    "live.ax.intervalMs": {
+      "type": "number",
+      "default": 250,
+      "description": "ms  [unmeasured (was 1000)]"
+    },
+    "live.ax.timeoutMs": {
+      "type": "number",
+      "default": 2000,
+      "description": "ms  [unmeasured (was 8000)]"
+    },
+    "live.agentApi.port": {
+      "type": "number",
+      "default": 30001,
+      "description": "port  [rkbx_os2l README, capture log]"
+    },
+    "live.os2l.enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "bool  [owner notes]"
+    },
+    "live.link.enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "bool  [spec 10]"
+    },
+    "live.link.quantum": {
+      "type": "number",
+      "default": 4,
+      "description": "beats  [Ableton Link default]"
+    },
+    "live.memoryReader.enabled": {
+      "type": "boolean",
+      "default": false,
+      "description": "bool  [owner consent required]"
+    },
+    "live.memoryReader.offsetsFile": {
+      "type": "string",
+      "default": "<userData>/offsets/rekordbox.json",
+      "description": "path  [T-LIVE-11]"
+    },
+    "live.lighting.enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "bool  [spec 7]"
+    },
+    "live.fusion.authority": {
+      "type": [
+        "array",
+        "object",
+        "string",
+        "number",
+        "boolean"
+      ],
+      "default": [
+        "lighting-ipc",
+        "memory-cleanroom",
+        "rkbx-osc",
+        "prolink",
+        "composite-flx4",
+        "ax",
+        "os2l"
+      ],
+      "description": "ordered list  [spec 7 extended by owner]"
+    },
+    "live.fusion.disagreeBeats": {
+      "type": "number",
+      "default": 0.25,
+      "description": "beats  [unmeasured]"
+    },
+    "live.fusion.switchHoldMs": {
+      "type": "number",
+      "default": 500,
+      "description": "ms  [unmeasured]"
+    },
+    "live.rkbx.playingEpsilonMs": {
+      "type": "number",
+      "default": 5,
+      "description": "ms  [unmeasured]"
+    },
+    "live.rkbx.pauseHoldMs": {
+      "type": "number",
+      "default": 150,
+      "description": "ms  [unmeasured]"
+    },
+    "live.prolink.interfaces": {
+      "type": [
+        "array",
+        "object",
+        "string",
+        "number",
+        "boolean"
+      ],
+      "default": "[] (all eligible)",
+      "description": "list  [spec 111]"
+    },
+    "live.ax.cpuBudgetPercent": {
+      "type": "number",
+      "default": 3,
+      "description": "percent  [unmeasured]"
+    },
+    "live.composite.openFilePollMs": {
+      "type": "number",
+      "default": 500,
+      "description": "ms  [unmeasured]"
+    },
+    "live.composite.correlationWindowMs": {
+      "type": "number",
+      "default": 4000,
+      "description": "ms  [unmeasured]"
+    },
+    "live.composite.lockedErrorMs": {
+      "type": "number",
+      "default": 15,
+      "description": "ms  [unmeasured target]"
+    },
+    "live.link.mode": {
+      "type": "string",
+      "default": "auto",
+      "description": "enum DS-36  [license constraint]"
+    },
+    "live.link.publish": {
+      "type": "boolean",
+      "default": false,
+      "description": "bool  [owner]"
+    },
+    "flx4.backend": {
+      "type": "string",
+      "default": "auto",
+      "description": "enum DS-13  [owner]"
+    },
+    "flx4.portMatch": {
+      "type": "string",
+      "default": "DDJ-FLX4",
+      "description": "regex  [device name]"
+    },
+    "flx4.tempoRange": {
+      "type": "string",
+      "default": "source",
+      "description": "enum source, 6, 10, 16, wide  [Rekordbox tempo range setting]"
+    },
+    "flx4.hotplugPollMs": {
+      "type": "number",
+      "default": 2000,
+      "description": "ms  [unmeasured]"
+    },
+    "flx4.hints.filterWindowMs": {
+      "type": "number",
+      "default": 1500,
+      "description": "ms  [unmeasured]"
+    },
+    "flx4.hints.enabled": {
+      "type": "string",
+      "default": "all hint types",
+      "description": "list  [spec 11]"
+    },
+    "serato.remote.enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "bool  [spec 3.1]"
+    },
+    "serato.master.inferHoldMs": {
+      "type": "number",
+      "default": 750,
+      "description": "ms  [unmeasured]"
+    },
+    "library.rekordbox.reader": {
+      "type": "string",
+      "default": "auto",
+      "description": "enum DS-15  [owner]"
+    },
+    "library.watch.debounceMs": {
+      "type": "number",
+      "default": 2000,
+      "description": "ms  [unmeasured]"
+    },
+    "library.watch.engine": {
+      "type": "string",
+      "default": "auto",
+      "description": "enum DS-35  [owner]"
+    },
+    "library.watch.pollMs": {
+      "type": "number",
+      "default": 60000,
+      "description": "ms  [unmeasured]"
+    },
+    "library.fileHash.strategy": {
+      "type": "string",
+      "default": "full",
+      "description": "enum full, sampled  [spec 12]"
+    },
+    "library.rekordbox.dbPath": {
+      "type": "string",
+      "default": "auto-detected",
+      "description": "path  [rekordbox-connect detection]"
+    },
+    "library.rekordbox.optionsPath": {
+      "type": "string",
+      "default": "auto-detected",
+      "description": "path  [rekordbox-connect detection]"
+    },
+    "library.rekordbox.sharePath": {
+      "type": "string",
+      "default": "auto-detected",
+      "description": "path  [rekordbox-connect detection]"
+    },
+    "library.rekordbox.crossCheck": {
+      "type": "boolean",
+      "default": true,
+      "description": "bool  [DS-15 combined mode]"
+    },
+    "library.serato.root": {
+      "type": "string",
+      "default": "auto-detected (~/Music/_Serato_)",
+      "description": "path  [serato-connect, Serato docs]"
+    },
+    "identity.fingerprint.mode": {
+      "type": "string",
+      "default": "both",
+      "description": "enum DS-34  [spec 12]"
+    },
+    "identity.fingerprint.acousticThreshold": {
+      "type": "number",
+      "default": 0.9,
+      "description": "similarity  [unmeasured]"
+    },
+    "contracts.mapping.benchMs": {
+      "type": "number",
+      "default": 250,
+      "description": "ms per million mappings  [unmeasured target]"
+    },
+    "room.distanceMetric": {
+      "type": "string",
+      "default": "auto",
+      "description": "enum DS-24  [owner room request]"
+    },
+    "room.perimeter.zero": {
+      "type": "string",
+      "default": "dj-nearest",
+      "description": "enum DS-25  [owner room request]"
+    },
+    "room.perimeter.direction": {
+      "type": "string",
+      "default": "clockwise",
+      "description": "enum clockwise, counterclockwise  [owner]"
+    },
+    "room.pivot": {
+      "type": "string",
+      "default": "room-center",
+      "description": "enum room-center, dj, anchor id  [owner]"
+    },
+    "room.sides.centerBandWidth": {
+      "type": "number",
+      "default": 0.15,
+      "description": "fraction of room width  [unmeasured]"
+    },
+    "room.splits.defaultAngleDeg": {
+      "type": "number",
+      "default": 0,
+      "description": "degrees from DJ facing  [owner]"
+    },
+    "room.splits.mode": {
+      "type": "string",
+      "default": "blend",
+      "description": "enum DS-33  [owner room request]"
+    },
+    "room.splits.featherMeters": {
+      "type": "number",
+      "default": 0.25,
+      "description": "m  [unmeasured]"
+    },
+    "room.zones.featherMeters": {
+      "type": "number",
+      "default": 0.2,
+      "description": "m  [unmeasured]"
+    },
+    "room.orbit.path": {
+      "type": "string",
+      "default": "auto",
+      "description": "enum DS-32  [owner room request]"
+    },
+    "room.orientation.leftRightFrom": {
+      "type": "string",
+      "default": "dj",
+      "description": "enum dj, audience  [spec 40]"
+    },
+    "room.nearDj.radiusMeters": {
+      "type": "number",
+      "default": 1.5,
+      "description": "m  [unmeasured]"
+    },
+    "venue.spline.toleranceMeters": {
+      "type": "number",
+      "default": 0.005,
+      "description": "m  [unmeasured]"
+    },
+    "venue.fields.budgetMs": {
+      "type": "number",
+      "default": 20,
+      "description": "ms for 2,000 cells  [unmeasured target]"
+    },
+    "storage.driver": {
+      "type": "string",
+      "default": "auto",
+      "description": "enum DS-06  [owner]"
+    },
+    "storage.sqlite.synchronous": {
+      "type": "string",
+      "default": "NORMAL",
+      "description": "enum OFF, NORMAL, FULL  [SQLite WAL guidance]"
+    },
+    "storage.sqlite.busyTimeoutMs": {
+      "type": "number",
+      "default": 5000,
+      "description": "ms  [unmeasured]"
+    },
+    "ops.safeState.look": {
+      "type": "string",
+      "default": "ending-look",
+      "description": "enum hold-last, ending-look, blackout  [spec 133]"
+    },
+    "diagnostics.mode": {
+      "type": "string",
+      "default": "normal",
+      "description": "enum normal, diagnostic  [spec 102, 130]"
+    },
+    "diagnostics.log.maxFileMb": {
+      "type": "number",
+      "default": 10,
+      "description": "MB  [unmeasured]"
+    },
+    "diagnostics.log.files": {
+      "type": "number",
+      "default": 5,
+      "description": "count  [unmeasured]"
+    },
+    "diagnostics.recorder.enabled": {
+      "type": "boolean",
+      "default": false,
+      "description": "bool  [spec 103]"
+    },
+    "diagnostics.recorder.maxMb": {
+      "type": "number",
+      "default": 512,
+      "description": "MB  [unmeasured]"
+    },
+    "security.cloudAllowed": {
+      "type": "boolean",
+      "default": false,
+      "description": "bool  [spec 110]"
+    },
+    "update.checkOnLaunch": {
+      "type": "boolean",
+      "default": false,
+      "description": "bool  [spec 145]"
+    },
+    "update.neverDuringLive": {
+      "type": "string",
+      "default": "read-only invariant",
+      "description": "  [spec 145]"
+    },
+    "ui.shortcuts.*": {
+      "type": "string",
+      "default": "B blackout, W white, F freeze, A auto, M manual, Up and Down master, 1 to 9 presets",
+      "description": "map  [spec 94]"
+    },
+    "ui.shortcuts.whiteMode": {
+      "type": "string",
+      "default": "hold",
+      "description": "enum hold, toggle  [owner]"
+    },
+    "ui.live.minTimingFontPx": {
+      "type": "number",
+      "default": 48,
+      "description": "px  [spec 143]"
+    },
+    "ui.live.minBodyFontPx": {
+      "type": "number",
+      "default": 16,
+      "description": "px  [spec 143]"
+    },
+    "qa.events.toleranceBeats": {
+      "type": "number",
+      "default": 1,
+      "description": "beats  [unmeasured target]"
+    },
+    "qa.events.minRecall": {
+      "type": "string",
+      "default": "per event type map, 0.8 default",
+      "description": "ratio  [unmeasured target]"
+    },
+    "qa.events.minPrecision": {
+      "type": "string",
+      "default": "per event type map, 0.7 default",
+      "description": "ratio  [unmeasured target]"
+    },
+    "qa.key.minAccuracy": {
+      "type": "number",
+      "default": 0.7,
+      "description": "ratio  [unmeasured target]"
+    },
+    "qa.replay.timeToleranceMs": {
+      "type": "number",
+      "default": 5,
+      "description": "ms  [unmeasured target]"
+    },
+    "qa.faults.*": {
+      "type": "string",
+      "default": "scenario parameter maps",
+      "description": "map  [spec 104 to 107]"
+    },
+    "qa.perf.ciSlack": {
+      "type": "number",
+      "default": 3,
+      "description": "multiplier on reference thresholds  [CI runner variance]"
+    },
+    "qa.soak.maxMemSlopeMbPerHour": {
+      "type": "number",
+      "default": 5,
+      "description": "MB per hour  [spec 125 \"no growth trend\"]"
+    },
+    "qa.soak.maxLatencySlopeMsPerHour": {
+      "type": "number",
+      "default": 1,
+      "description": "ms per hour  [spec 125]"
+    },
+    "qa.sync.maxBeatErrorMs": {
+      "type": "number",
+      "default": 20,
+      "description": "ms p95  [unmeasured target]"
+    },
+    "qa.validation.minPerCategory": {
+      "type": "number",
+      "default": 3,
+      "description": "tracks  [spec 116]"
+    }
+  }
+}

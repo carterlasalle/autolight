@@ -27,6 +27,9 @@ export const SHUTDOWN_ORDER = [
 
 export async function boot(): Promise<void> {
   await app.whenReady();
+  // T-ARC-02: handlers register before the window exists so the renderer's
+  // first requests never race registration.
+  createIpc();
   const win = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -46,7 +49,6 @@ export async function boot(): Promise<void> {
   } else {
     await win.loadFile(join(__dirname, "..", "renderer", "index.html"));
   }
-  createIpc();
   startAxLoop();
   startProlink();
 }

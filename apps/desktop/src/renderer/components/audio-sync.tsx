@@ -15,7 +15,8 @@ export function AudioSyncCard(): JSX.Element {
 
   useEffect(() => {
     void invoke("audio/devices", { version: 1 }).then((raw: unknown) => {
-      const list = (raw as { devices?: { index: number; name: string }[] } | undefined)?.devices ?? [];
+      const envelope = raw as { ok?: boolean; devices?: { index: number; name: string }[] } | null;
+      const list = envelope && envelope.ok !== false && Array.isArray(envelope.devices) ? envelope.devices : [];
       if (list.length > 0) s.set({ audioDevices: list });
     });
     return () => {

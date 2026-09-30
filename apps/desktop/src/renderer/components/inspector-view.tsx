@@ -2,12 +2,11 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card.js";
 import { inspectorLanes } from "../library.js";
 import type { InspectorLane } from "../library.js";
-import { trackModelSchema } from "@autolight/contracts";
-import { useShell } from "../state/store.js";
-
-// Inspector (§96): synchronized beat lanes for the resolved track.
-// Loads the committed TrackModel so sections/events/grid are real —
-// selected deck row in Library picks which deck inspects.
+import type { TrackModel } from "@autolight/contracts";
+import { useShell, invoke } from "../state/store.js";
+// Inspector: synchronized beat lanes for the resolved track.
+// Loads the installed TrackModel from the show host over typed IPC,
+// never from fixture files. Selected deck row in Library picks the deck.
 export function InspectorView(): JSX.Element {
   const selected = useShell((s) => s.selectedTrackId);
   const live = useShell((s) => s.live);
@@ -15,18 +14,19 @@ export function InspectorView(): JSX.Element {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const names = ["live-homecoming.trackmodel.json", "live-deck2.trackmodel.json"];
-      for (const name of names) {
-        try {
-          const res = await fetch(`./analysis/${name}`);
-          if (!res.ok) continue;
-          const model = trackModelSchema.parse(await res.json());
-          const title = model.identity.title ?? model.identity.id;
+      try {
+        const raw = (await invoke("show/live", { version: 1 })) as unknown as {
+          decks: { state: { deckId: number }; track: TrackModel | null }[];
+        } | null;
+        const decks = raw && Array.isArray(raw.decks) ? raw.decks : [];
+        for (const d of decks) {
+          if (!d.track) continue;
+          const title = d.track.identity.title ?? d.track.identity.id;
           if (selected && title !== selected && live && title !== live.deckA.title && title !== live.deckB.title) continue;
-          if (!cancelled) setLanes(inspectorLanes(model));
+          if (!cancelled) setLanes(inspectorLanes(d.track));
           return;
-        } catch { /* try next fixture */ }
-      }
+        }
+      } catch { /* show host unreachable: empty lanes below */ }
       if (!cancelled) setLanes([]);
     })();
     return () => { cancelled = true; };

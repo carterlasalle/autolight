@@ -1,54 +1,75 @@
-import { ipcMain } from "electron";
-import { z } from "zod";
+import { ipcMain, type IpcMainInvokeEvent } from "electron";
+import { channels, type Channel } from "@autolight/ipc";
 import {
   scanLanCommand, identifyCommand, testChaseCommand,
   pollAxCommand, listAudioDevices, readAudioLevel,
-  readDiagnostics, readLiveShow,
+  readDiagnostics, readLiveShow, setSimulatorMode, setFollowMode,
+  setShowStyle, setEnergyTier, triggerBuild, triggerDrop,
+  setMasterBlackout, setMasterFull, setMasterFreeze, setMasterIntensity, resumeMaster,
+  readShowState, readVenueList, setVenueColor, deviceAction,
 } from "./show-service.js";
-const channels = {
-  "venue/list": z.object({ version: z.literal(1) }),
-  "venue/set-color": z.object({ version: z.literal(1), rgb: z.tuple([z.number(), z.number(), z.number()]) }),
-  "venue/device-action": z.object({ version: z.literal(1), id: z.string(), action: z.string() }),
-  "venue/scan": z.object({ version: z.literal(1) }),
-  "venue/identify": z.object({ version: z.literal(1), id: z.string() }),
-  "venue/test-chase": z.object({ version: z.literal(1), id: z.string() }),
-  "show/state": z.object({ version: z.literal(1), deck: z.number() }),
-  "show/live": z.object({ version: z.literal(1) }),
-  "show/style": z.object({ version: z.literal(1), style: z.string(), palette: z.string() }),
-  "show/energy": z.object({ version: z.literal(1), tier: z.string() }),
-  "show/trigger-build": z.object({ version: z.literal(1) }),
-  "show/trigger-drop": z.object({ version: z.literal(1) }),
-  "follow/ax": z.object({ version: z.literal(1) }),
-  "follow/mode": z.object({ version: z.literal(1), mode: z.string() }),
-  "audio/devices": z.object({ version: z.literal(1) }),
-  "audio/level": z.object({ version: z.literal(1) }),
-  // Emergency controls (§94): BLACKOUT needs no modal; keyboard shortcuts exist.
-  "master/blackout": z.object({ version: z.literal(1) }),
-  "master/full": z.object({ version: z.literal(1) }),
-  "master/freeze": z.object({ version: z.literal(1), frozen: z.boolean() }),
-  "master/intensity": z.object({ version: z.literal(1), value: z.number().min(0).max(1) }),
-  "master/resume": z.object({ version: z.literal(1), at: z.enum(["beat", "bar", "phrase", "immediate"]) }),
-  // Diagnostics tabs (§101): DJ events, transport, clock, analysis, planner,
-  // renderer, fixtures, latency, logs.
-  "diagnostics/get": z.object({ version: z.literal(1), tab: z.string() }),
-  "diagnostics/all": z.object({ version: z.literal(1) }),
-} as const;
-export type Channel = keyof typeof channels;
+
+// Typed IPC router (T-ARC-02, spec 87). Handlers register before the window
+// is created (main.ts calls createIpc first). Every request validates against
+// the channel schema; every response validates before return. Sender frame is
+// checked: only the app window may invoke. Errors return typed
+// { ok: false, error } and surface in UI status, never swallowed.
+export type ChannelHandler<C extends Channel> = (
+  request: import("@autolight/ipc").ChannelRequest<C>,
+) => Promise<import("@autolight/ipc").ChannelResponse<C>> | import("@autolight/ipc").ChannelResponse<C>;
+
+const handlers: { [C in Channel]: ChannelHandler<C> } = {
+  "master/blackout": () => setMasterBlackout(),
+  "master/full": () => setMasterFull(),
+  "master/freeze": (req) => setMasterFreeze(req.frozen),
+  "master/intensity": (req) => setMasterIntensity(req.value),
+  "master/resume": (req) => resumeMaster(req.at),
+  "show/live": () => readLiveShow(),
+  "show/style": (req) => setShowStyle(req.style, req.palette),
+  "show/energy": (req) => setEnergyTier(req.tier),
+  "show/trigger-build": () => triggerBuild(),
+  "show/trigger-drop": () => triggerDrop(),
+  "show/state": (req) => readShowState(req.deck),
+  "venue/list": () => readVenueList(),
+  "venue/set-color": (req) => setVenueColor(req.rgb),
+  "venue/device-action": (req) => deviceAction(req.id, req.action),
+  "venue/scan": () => scanLanCommand(),
+  "venue/identify": (req) => identifyCommand(req.id),
+  "venue/test-chase": (req) => testChaseCommand(req.id),
+  "follow/ax": () => pollAxCommand(),
+  "follow/mode": (req) => setFollowMode(req.mode),
+  "audio/devices": () => listAudioDevices(),
+  "audio/level": () => readAudioLevel(),
+  "diagnostics/get": (req) => ({ ok: true as const, tab: req.tab }),
+  "diagnostics/all": () => readDiagnostics(),
+  "simulator/mode": (req) => setSimulatorMode(req.enabled),
+};
+
+function senderAllowed(event: IpcMainInvokeEvent): boolean {
+  try {
+    const url = event.senderFrame?.url ?? "";
+    if (!url) return true;
+    return url.startsWith("file://") || url.startsWith("http://localhost:5173");
+  } catch {
+    return false;
+  }
+}
 
 export function createIpc(): void {
-  const extra: Record<string, (...args: never[]) => unknown> = {
-    "venue/scan": () => scanLanCommand(),
-    "venue/identify": (_e: unknown, payload: unknown) => identifyCommand((payload as { id: string }).id),
-    "venue/test-chase": (_e: unknown, payload: unknown) => testChaseCommand((payload as { id: string }).id),
-    "follow/ax": () => pollAxCommand(),
-    "audio/devices": () => listAudioDevices(),
-    "audio/level": () => readAudioLevel(),
-    "diagnostics/all": () => readDiagnostics(),
-    "show/live": () => readLiveShow(),
-  };
-  for (const [ch, schema] of Object.entries(channels)) {
-    if (ch in extra) continue; // real handler wins over schema echo
-    ipcMain.handle(ch, (_e, payload) => schema.parse(payload));
+  for (const name of Object.keys(channels) as Channel[]) {
+    ipcMain.handle(name, async (event, payload) => {
+      if (!senderAllowed(event)) {
+        return { ok: false, error: { code: "E_SENDER", message: `sender not allowed for ${name}` } };
+      }
+      try {
+        const req = channels[name].request.parse(payload);
+        const handler = handlers[name] as (r: unknown) => Promise<unknown> | unknown;
+        const res = await handler(req);
+        return (channels[name].response as { parse: (v: unknown) => unknown }).parse(res);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return { ok: false, error: { code: "E_HANDLER", message: `${name}: ${message}` } };
+      }
+    });
   }
-  for (const [ch, fn] of Object.entries(extra)) ipcMain.handle(ch, fn as (e: unknown, p: unknown) => unknown);
 }

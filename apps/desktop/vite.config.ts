@@ -24,7 +24,6 @@ export default defineConfig({
     },
   },
   base: "./",
-  publicDir: join(root, "..", "..", "test-fixtures"),
   build: {
     outDir: join(root, "dist", "renderer"),
     emptyOutDir: true,

@@ -9,7 +9,8 @@ export function VenueView(): JSX.Element {
   const s = useShell();
   const scan = (): void => {
     void invoke("venue/scan", { version: 1 }).then((result: unknown) => {
-      const list = (result as { devices?: { address: string; name: string }[] } | undefined)?.devices ?? [];
+      const envelope = result as { ok?: boolean; devices?: { address: string; name: string }[] } | null;
+      const list = envelope && envelope.ok !== false && Array.isArray(envelope.devices) ? envelope.devices : [];
       s.set({ devices: list });
       // Qualify every discovered light as a tile (real scan data only):
       // SKU from the reply name, IP from the reply address.

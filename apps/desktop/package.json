@@ -15,6 +15,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.typecheck.json"
   },
   "dependencies": {
+    "@autolight/config": "^0.1.0",
     "@autolight/contracts": "^0.1.0",
     "@autolight/diagnostics": "^0.1.0",
     "@autolight/dj-core": "^0.1.0",

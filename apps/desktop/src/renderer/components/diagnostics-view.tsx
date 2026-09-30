@@ -17,7 +17,8 @@ export function DiagnosticsView(): JSX.Element {
     let cancelled = false;
     void invoke("diagnostics/all", { version: 1 }).then((raw: unknown) => {
       if (cancelled) return;
-      const d = raw as { ax?: unknown; prolink?: unknown; events?: number } | undefined;
+      const envelope = raw as { ok?: boolean; diagnostics?: { ax?: unknown; prolink?: unknown; events?: number } } | null;
+      const d = envelope && envelope.ok !== false ? envelope.diagnostics : undefined;
       set({
         diagnostics: {
           "DJ Events": `AX: ${JSON.stringify(d?.ax ?? [])} PROLINK: ${JSON.stringify(d?.prolink ?? {})}`,

@@ -7,12 +7,12 @@ import { InspectorView } from "./components/inspector-view.js";
 import { VenueView } from "./components/venue-view.js";
 import { SetupView } from "./components/setup-view.js";
 import { DiagnosticsView } from "./components/diagnostics-view.js";
+import { SettingsView } from "./components/settings-view.js";
 import { CommandPalette } from "./components/command-palette.js";
 import { Toaster } from "./components/ui/sonner.js";
 import { useShell, invoke } from "./state/store.js";
-import { resolveLiveDecks, useLiveCursor } from "./state/resolve-live.js";
+import { useLiveCursor } from "./state/resolve-live.js";
 import { shortcutFor } from "./shortcuts.js";
-import "./styles/globals.css";
 // App shell: titlebar + sidebar + workspace + statusbar (§88-89).
 // Live owns the performance surface; the rest are tabs in the same window.
 export function Shell(): JSX.Element {
@@ -55,6 +55,7 @@ export function Shell(): JSX.Element {
           {route === "venue" && <VenueView />}
           {route === "setup" && <SetupView />}
           {route === "diagnostics" && <DiagnosticsView />}
+          {route === "settings" && <SettingsView />}
         </main>
       </div>
       <Statusbar />
