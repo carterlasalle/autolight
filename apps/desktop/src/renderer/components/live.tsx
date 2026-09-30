@@ -1,17 +1,42 @@
 import { useShell, invoke } from "../state/store.js";
+import type { LiveState } from "../state/store.js";
 import { Button } from "./ui/button.js";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card.js";
 import { Badge } from "./ui/badge.js";
 import { Slider } from "./ui/slider.js";
 import { Switch } from "./ui/switch.js";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select.js";
-import { PARTY_SWATCHES, PARTY_PALETTES, ALT_PATTERNS } from "../components.js";
-import type { AltPattern, PartyPalette } from "../components.js";
-
+import { PARTY_PALETTES, ALT_PATTERNS } from "../state/store.js";
+import type { AltPattern, PartyPalette } from "../state/store.js";
 // Live screen (§89): status → decks + master clock → venue + upcoming →
-// emergency bar. Compact 32–36px controls, 12–14px text, mono for timing.
-export function LiveView({ live }: { live: NonNullable<ReturnType<typeof useShell.getState>["live"]> | null }): JSX.Element {
-  if (!live) return <p className="text-sm text-muted-foreground">No show loaded.</p>;
+// emergency bar. Empty until a real show resolves — never mock tracks.
+// Compact 32–36px controls, 12–14px text, mono for timing.
+export function LiveView({ live }: { live: LiveState | null }): JSX.Element {
+  if (!live) {
+    return (
+      <div className="flex flex-col gap-3">
+        <Card>
+          <CardHeader className="pb-1"><CardTitle>No show loaded</CardTitle></CardHeader>
+          <CardContent>
+            <p className="text-[13px] text-muted-foreground">
+              Load a track on a Rekordbox deck. The show appears here once the
+              library resolves the ANLZ grid and the planner compiles cues.
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="flex items-center gap-2 pt-4">
+            <div role="toolbar" aria-label="Master" className="flex gap-2">
+              <Button variant="destructive" size="sm" onClick={() => { void invoke("master/blackout", { version: 1 }); }}>Blackout</Button>
+              <Button variant="outline" size="sm" onClick={() => { void invoke("master/full", { version: 1 }); }}>Full</Button>
+              <Button variant="outline" size="sm" onClick={() => { void invoke("master/freeze", { version: 1, frozen: true }); }}>Freeze</Button>
+              <Button variant="outline" size="sm" onClick={() => { void invoke("master/resume", { version: 1, at: "bar" }); }}>Auto</Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
   return (
     <div className="flex flex-col gap-3">
       <div className="grid grid-cols-[1fr_240px_1fr] gap-3">
@@ -25,7 +50,7 @@ export function LiveView({ live }: { live: NonNullable<ReturnType<typeof useShel
         </Card>
         <Card className="text-center">
           <CardContent className="flex flex-col justify-center pt-4">
-            <p role="timer" className="font-timing text-5xl font-semibold tabular-nums">{live.bpm.toFixed(2)}</p>
+            <p role="timer" className="font-timing text-5xl font-semibold tabular-nums">{live.bpm !== null ? live.bpm.toFixed(2) : "--.--"}</p>
             <span className="text-xs tracking-widest text-muted-foreground">BPM</span>
           </CardContent>
         </Card>
@@ -42,27 +67,35 @@ export function LiveView({ live }: { live: NonNullable<ReturnType<typeof useShel
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-[13px]">Live venue preview</CardTitle></CardHeader>
           <CardContent>
-            <div role="img" aria-label="Venue preview" className="flex min-h-19 items-stretch gap-1">
-              {live.cells.map((c, i) => (
-                <span key={i} data-x={c.x} className="min-h-16 min-w-1.5 flex-1 rounded-[3px]" style={{ backgroundColor: c.color }} />
-              ))}
-            </div>
+            {live.cells.length > 0 ? (
+              <div role="img" aria-label="Venue preview" className="flex min-h-19 items-stretch gap-1">
+                {live.cells.map((c, i) => (
+                  <span key={i} data-x={c.x} className="min-h-16 min-w-1.5 flex-1 rounded-[3px]" style={{ backgroundColor: c.color }} />
+                ))}
+              </div>
+            ) : (
+              <p className="text-[13px] text-muted-foreground">No fixture output — qualify a light on the Venue tab.</p>
+            )}
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-[13px]">Upcoming</CardTitle></CardHeader>
           <CardContent>
-            <ol aria-label="Upcoming cues" className="flex flex-col gap-1.5">
-              {live.cues.slice(0, 5).map((c, i) => {
-                const delta = Math.max(0, Math.round(c.startBeat - (live.beat ?? 0)));
-                return (
-                  <li key={i} className="flex items-center justify-between gap-2 rounded-md border bg-muted/40 px-2.5 py-1.5 text-[13px]">
-                    <span>{c.type.replace(/-/g, " ")} → {c.target}</span>
-                    <span className="font-timing text-primary">{delta === 0 ? "now" : `+${delta}`}</span>
-                  </li>
-                );
-              })}
-            </ol>
+            {live.cues.length > 0 ? (
+              <ol aria-label="Upcoming cues" className="flex flex-col gap-1.5">
+                {live.cues.slice(0, 5).map((c, i) => {
+                  const delta = Math.max(0, Math.round(c.startBeat - (live.beat ?? 0)));
+                  return (
+                    <li key={i} className="flex items-center justify-between gap-2 rounded-md border bg-muted/40 px-2.5 py-1.5 text-[13px]">
+                      <span>{c.type.replace(/-/g, " ")} → {c.target}</span>
+                      <span className="font-timing text-primary">{delta === 0 ? "now" : `+${delta}`}</span>
+                    </li>
+                  );
+                })}
+              </ol>
+            ) : (
+              <p className="text-[13px] text-muted-foreground">No cues — plan compiles after analysis.</p>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -116,23 +149,25 @@ export function ControlGrid(): JSX.Element {
         <CardHeader className="pb-2"><CardTitle className="text-[13px]">Audio sync</CardTitle></CardHeader>
         <CardContent>
           <p className="font-timing text-[13px] tabular-nums">BPM: {s.bpm !== null ? s.bpm.toFixed(1) : "--"}</p>
-          <div className="flex gap-2">
-            <Button size="sm" variant="outline" onClick={() => { s.set({ bpm: 128 }); }}>Start</Button>
-            <Button size="sm" variant="outline" onClick={() => { s.set({ bpm: null }); }}>Stop</Button>
-          </div>
+          <p className="text-[13px] text-muted-foreground">Live audio overlay is not wired yet — the show runs from the DJ grid, never mic guessing.</p>
         </CardContent>
       </Card>
       <Card>
         <CardHeader className="pb-2"><CardTitle className="text-[13px]">Color + brightness</CardTitle></CardHeader>
         <CardContent>
           <div role="group" aria-label="Swatches" className="flex flex-wrap gap-2">
-            {PARTY_SWATCHES.map(([name, rgb]) => (
+            {[
+              ["Red", [255, 0, 0]], ["Green", [0, 255, 0]], ["Blue", [0, 0, 255]],
+              ["White", [255, 255, 255]], ["Warm", [255, 180, 120]],
+              ["ND Blue", [12, 36, 150]], ["Gold", [255, 200, 0]],
+              ["Purple", [170, 0, 255]], ["Cyan", [0, 255, 255]], ["Amber", [255, 120, 0]],
+            ].map(([name, rgb]) => (
               <button
-                key={name} type="button" aria-label={name} title={name}
+                key={name as string} type="button" aria-label={name as string} title={name as string}
                 className="size-7 rounded-full border-2 border-white/20"
-                style={{ backgroundColor: `rgb(${rgb[0]},${rgb[1]},${rgb[2]})` }}
+                style={{ backgroundColor: `rgb(${(rgb as number[])[0]},${(rgb as number[])[1]},${(rgb as number[])[2]})` }}
                 onClick={() => {
-                  s.set({ wheelColor: rgb });
+                  s.set({ wheelColor: rgb as [number, number, number] });
                   void invoke("venue/set-color", { version: 1, rgb });
                 }}
               />

@@ -1,9 +1,19 @@
 import { create } from "zustand";
-import type { LiveState } from "../App.js";
+import type { ShowCue } from "@autolight/contracts";
 import type { DeviceTile } from "../venue.js";
-import type { EnergyTier } from "../components.js";
-import type { PartyPalette } from "../components.js";
-import type { AltPattern, LightTarget } from "../components.js";
+
+// LiveState: resolved show for the decks actually loaded right now.
+// null = nothing resolved yet — UI shows empty states, never mock tracks.
+export interface LiveState {
+  source: "REKORDBOX" | "SERATO";
+  bpm: number | null;
+  beat: number | undefined;
+  deckA: { title: string; section: string | undefined; countdown: string | undefined };
+  deckB: { title: string; section: string | undefined; countdown: string | undefined };
+  cues: ShowCue[];
+  cells: { x: number; color: string }[];
+}
+
 
 declare global {
   interface Window {
@@ -18,6 +28,19 @@ export function invoke(channel: string, payload: unknown): Promise<unknown> {
 }
 
 type Route = "live" | "library" | "inspector" | "venue" | "setup" | "diagnostics";
+
+export type EnergyTier = "LOW" | "MED" | "HIGH";
+export const PARTY_PALETTES = ["ND", "Warm", "Cool", "Neon", "Fire", "Ocean", "UV"] as const;
+export type PartyPalette = (typeof PARTY_PALETTES)[number];
+export const ALT_PATTERNS = [
+  "Alternating Flash",
+  "Alternating On/Off",
+  "Alternating Colors",
+  "Chase (A→B→A→B)",
+  "Opposite Colors",
+] as const;
+export type AltPattern = (typeof ALT_PATTERNS)[number];
+export type LightTarget = "A" | "B" | "Both";
 
 interface ShellState {
   route: Route;
@@ -59,7 +82,7 @@ export const useShell = create<ShellState>((set) => ({
   altOn: false,
   altPattern: "Alternating Flash",
   altSpeed: 500,
-  bpm: 128,
+  bpm: null,
   devices: [],
   target: "Both",
   tiles: [],

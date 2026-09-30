@@ -10,7 +10,6 @@ import { DiagnosticsView } from "./components/diagnostics-view.js";
 import { CommandPalette } from "./components/command-palette.js";
 import { Toaster } from "./components/ui/sonner.js";
 import { useShell, invoke } from "./state/store.js";
-import { useDemoShow } from "./state/demo.js";
 import { shortcutFor } from "./shortcuts.js";
 import "./styles/globals.css";
 
@@ -20,7 +19,7 @@ export function Shell(): JSX.Element {
   const route = useShell((s) => s.route);
   const set = useShell((s) => s.set);
   const live = useShell((s) => s.live);
-  useDemoShow();
+
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {

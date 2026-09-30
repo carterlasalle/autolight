@@ -6,17 +6,17 @@ import { Badge } from "./ui/badge.js";
 // Titlebar: hiddenInset traffic lights on macOS, overlay on Win/Linux
 // (electron/main.ts). Drag region + no-drag controls per Electron docs.
 export function Titlebar(): JSX.Element {
-  const running = useShell((s) => s.running);
   const bpm = useShell((s) => s.bpm);
+  const live = useShell((s) => s.live);
   return (
     <header className="app-drag-region sticky top-0 z-10 flex h-11 items-center gap-2 border-b bg-background/90 px-4 backdrop-blur-xl">
       <span className="w-16 shrink-0" aria-hidden />
       <span className="text-[13px] font-semibold tracking-tight">AutoLight</span>
-      <Badge variant={running ? "default" : "secondary"} className="app-no-drag">
-        {running ? "rekordbox ●" : "held"}
+      <Badge variant="secondary" className="app-no-drag">
+        {live ? `${live.source.toLowerCase()} ●` : "no decks"}
       </Badge>
       <span className="font-timing text-xs text-muted-foreground tabular-nums">
-        {(bpm ?? 128).toFixed(1)} BPM
+        {bpm !== null ? `${bpm.toFixed(1)} BPM` : "-- BPM"}
       </span>
       <span className="flex-1" />
       <Button
@@ -33,16 +33,17 @@ export function Titlebar(): JSX.Element {
 
 export function Statusbar(): JSX.Element {
   const bpm = useShell((s) => s.bpm);
-  const tiles = useShell((s) => s.tiles);
+  const live = useShell((s) => s.live);
+  const devices = useShell((s) => s.devices);
   return (
     <footer className="flex h-8 items-center gap-3 border-t px-4 text-xs text-muted-foreground">
       <span className="flex items-center gap-1.5">
-        <span className="inline-block size-1.5 rounded-full bg-[var(--ok)]" aria-hidden /> Rekordbox
+        <span className="inline-block size-1.5 rounded-full bg-muted-foreground" aria-hidden /> {live ? live.source : "No DJ link"}
       </span>
-      <span>Analysis ready</span>
-      <span>{tiles.length > 0 ? `${tiles.length} lights` : "4 lights"}</span>
+      <span>{live ? "Show loaded" : "No show — load a track"}</span>
+      <span>{devices.length > 0 ? `${devices.length} lights` : "No lights"}</span>
       <span className="flex-1" />
-      <span className="font-timing tabular-nums">{(bpm ?? 128).toFixed(1)} BPM · 5.8 ms</span>
+      <span className="font-timing tabular-nums">{bpm !== null ? `${bpm.toFixed(1)} BPM` : "-- BPM"}</span>
     </footer>
   );
 }

@@ -6,15 +6,9 @@ import { tileForFixture } from "../venue.js";
 import { makeFixture } from "@autolight/simulator";
 
 // Venue (§98) + devices (§99): discovery, assignment, target, health tiles.
+// Empty until Scan finds real lights — no simulated fixtures.
 export function VenueView(): JSX.Element {
   const s = useShell();
-  const fx = [
-    { ...makeFixture("left", 14, 0, 0), groups: ["PRIMARY"] },
-    { ...makeFixture("right", 14, 1, 1), groups: ["SECONDARY"] },
-  ];
-  const tiles = s.tiles.length > 0
-    ? s.tiles
-    : fx.map((f) => tileForFixture(f, { fps: 30, sent: 0, superseded: 0, latencyMs: 25, health: "online", ip: "sim" }));
   return (
     <div className="flex max-w-5xl flex-col gap-3">
       <Card>
@@ -33,7 +27,7 @@ export function VenueView(): JSX.Element {
               Scan
             </Button>
             <span className="text-[13px] text-muted-foreground">
-              {s.devices.length === 0 ? "No devices found" : `${s.devices.length} found`} · A: sim-left · B: sim-right
+              {s.devices.length === 0 ? "No lights found — Scan the LAN." : `${s.devices.length} found`}
             </span>
             <div className="flex gap-3" role="radiogroup" aria-label="Control target">
               {(["A", "B", "Both"] as const).map((t) => (
@@ -46,33 +40,41 @@ export function VenueView(): JSX.Element {
           </div>
         </CardContent>
       </Card>
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3">
-        {tiles.map((t) => (
-          <Card key={t.id}>
-            <CardHeader className="pb-1">
-              <CardTitle className="flex items-center gap-2 text-sm">
-                {t.id} <span className="font-normal text-muted-foreground">({t.sku})</span>
-                <Badge variant={t.health === "online" ? "default" : "secondary"} className="ml-auto">{t.health}</Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="font-timing text-xs tabular-nums text-muted-foreground">
-                {t.fps}fps · {t.segments} segs · {t.latencyMs}ms
-              </p>
-              <div className="flex gap-2">
-                {(["IDENTIFY", "TEST CHASE", "RECALIBRATE"] as const).map((a) => (
-                  <Button
-                    key={a} size="sm" variant="outline"
-                    onClick={() => { void invoke("venue/device-action", { version: 1, id: t.id, action: a }); }}
-                  >
-                    {a}
-                  </Button>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      {s.tiles.length > 0 ? (
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3">
+          {s.tiles.map((t) => (
+            <Card key={t.id}>
+              <CardHeader className="pb-1">
+                <CardTitle className="flex items-center gap-2 text-sm">
+                  {t.id} <span className="font-normal text-muted-foreground">({t.sku})</span>
+                  <Badge variant={t.health === "online" ? "default" : "secondary"} className="ml-auto">{t.health}</Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="font-timing text-xs tabular-nums text-muted-foreground">
+                  {t.fps}fps · {t.segments} segs · {t.latencyMs}ms
+                </p>
+                <div className="flex gap-2">
+                  {(["IDENTIFY", "TEST CHASE", "RECALIBRATE"] as const).map((a) => (
+                    <Button
+                      key={a} size="sm" variant="outline"
+                      onClick={() => { void invoke("venue/device-action", { version: 1, id: t.id, action: a }); }}
+                    >
+                      {a}
+                    </Button>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : (
+        <Card>
+          <CardContent className="pt-4">
+            <p className="text-[13px] text-muted-foreground">No fixtures qualified yet. Scan, then run IDENTIFY + TEST CHASE per light.</p>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
