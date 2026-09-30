@@ -1,16 +1,18 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "outDir": "dist",
-    "rootDir": ".",
+    "outDir": "dist/electron-tmp",
+    "rootDir": "electron",
     "jsx": "react-jsx",
-    "lib": [
-      "ES2022",
-      "DOM"
-    ]
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "baseUrl": ".",
+    "paths": { "@/*": ["./src/renderer/*"] }
   },
   "include": [
-    "electron",
-    "src"
+    "electron"
   ]
 }

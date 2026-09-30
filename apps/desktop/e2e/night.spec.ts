@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { liveViewModel } from "../src/live.js";
+import { liveViewModel } from "../src/renderer/live.js";
 import { makeDeck, makeFixture } from "@autolight/simulator";
 
 // Desktop E2E (§126): critical user journeys against the pure view-model —

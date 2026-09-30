@@ -1,6 +1,8 @@
 export interface LogRow { ts: string; monoNs: bigint; module: string; severity: "debug"|"info"|"warn"|"error"; deck?: number; event?: string }
+// performance.now fallback: show worker has no process.hrtime (§86).
+const nowNs = (): bigint => BigInt(Math.round(performance.now() * 1e6));
 export function log(module: string, severity: LogRow["severity"], event: string): LogRow {
-  return { ts: new Date().toISOString(), monoNs: process.hrtime.bigint(), module, severity, event };
+  return { ts: new Date().toISOString(), monoNs: nowNs(), module, severity, event };
 }
 
 // Local metrics (§131): DJ rates, clock error, render/device FPS, superseded frames.
@@ -29,7 +31,7 @@ export class SessionRecorder {
   constructor(private readonly maxEvents = 100_000) {}
   record(kind: string, payload: Record<string, unknown>): void {
     if (this.events.length >= this.maxEvents) this.events.shift();
-    this.events.push({ tNs: process.hrtime.bigint(), kind, payload });
+    this.events.push({ tNs: nowNs(), kind, payload });
   }
   toNdjson(): string {
     return this.events.map((e) => JSON.stringify({ ...e, tNs: e.tNs.toString() })).join("\n");

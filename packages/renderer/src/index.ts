@@ -51,16 +51,24 @@ export function renderFrame(plan: ShowPlan, beat: number, fixtures: Fixture[]): 
   const orderIndex = new Map<string, number>(order.map((c, i) => [`${c.fixtureId}:${c.cellIndex}`, i]));
   const lit = new Map<string, number>();
   for (const cue of [...active].reverse()) paintCue(cue, beat, fixtures, lit, orderIndex, order.length);
-  const seedHue = active.length ? Math.floor(active[0]!.startBeat) * 13 : 0;
+  // Restrained palette (§28-29): at most 2 hues + white. Hue is per-section
+  // (seeded by the look's start beat), not per-cell — cells sharing a look
+  // share a color, with left→right brightness shaping for movement feel.
+  const lookHue = (startBeat: number): number => (Math.floor(startBeat) * 137 + 210) % 360;
+  const topHue = active.length ? lookHue(active[active.length - 1]!.startBeat) : 210;
+  const subHue = active.length > 1 ? lookHue(active[active.length - 2]!.startBeat) : (topHue + 40) % 360;
   const entries: [number, OrderedCell][] = [...order.entries()];
   for (const [i, cell] of entries) {
     const fix = fixtures.find((f) => f.id === cell.fixtureId)!;
     const buf = out.get(fix.id)!;
     const level = lit.get(`${cell.fixtureId}:${cell.cellIndex}`) ?? 0;
     if (level <= 0) continue;
-    const hue = (i * 47 + seedHue) % 360;
-    const [r, g, b] = hsv2rgb(hue, 0.9, 1);
-    const k = linearScale(255, level) / 255;
+    const isTop = (orderIndex.get(`${cell.fixtureId}:${cell.cellIndex}`) ?? 0) % 2 === 0;
+    const whiteOut = active.some((c) => (c.type === "white-hit" || c.type === "impact") && c.target === "ALL");
+    const hue = whiteOut ? -1 : isTop ? topHue : subHue;
+    const shape = 0.75 + (0.25 * i) / Math.max(1, order.length - 1);
+    const [r, g, b] = hue < 0 ? [255, 255, 255] : hsv2rgb(hue, 0.85, 1);
+    const k = (linearScale(255, Math.min(1, level * shape)) / 255);
     buf[cell.cellIndex * 3] = Math.round(r * k);
     buf[cell.cellIndex * 3 + 1] = Math.round(g * k);
     buf[cell.cellIndex * 3 + 2] = Math.round(b * k);
@@ -75,9 +83,17 @@ function hsv2rgb(h: number, s: number, v: number): [number, number, number] {
 }
 
 export function frameHash(frames: Map<string, Uint8Array>): string {
-  const h = createHash("sha256");
-  for (const [id, buf] of [...frames].sort(([a], [b]) => (a < b ? -1 : 1))) { h.update(id); h.update(buf); }
-  return h.digest("hex").slice(0, 16);
+  // FNV-1a hex: browser-safe (§86 show worker runs the same code as tests).
+  let h = 0x811c9dc5;
+  const mix = (b: number): void => {
+    h ^= b & 0xff;
+    h = Math.imul(h, 0x01000193) >>> 0;
+  };
+  for (const [id, buf] of [...frames].sort(([a], [b]) => (a < b ? -1 : 1))) {
+    for (let i = 0; i < id.length; i++) mix(id.charCodeAt(i)!);
+    for (const byte of buf) mix(byte);
+  }
+  return h.toString(16).padStart(8, "0");
 }
 
 // Per-fixture latency compensation (§55): slower fixtures sample the plan

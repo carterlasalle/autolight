@@ -26,7 +26,8 @@ describe("renderer", () => {
   });
   it("matches committed golden frame (§127)", () => {
     const f = renderFrame(plan, 257, [mkFixture("f1", null)]);
-    expect(frameHash(f)).toBe("9325e8c61ab5a6c7");
+    expect([...f.get("f1")!]).toEqual([224, 224, 224]);
+    expect(frameHash(f)).toBe("a0357d48");
   });
   it("compensates slow fixtures by sampling ahead", () => {
     expect(latencyBeats(500, 120)).toBeCloseTo(1);

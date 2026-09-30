@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { app, BrowserWindow } from "electron";
 import { createIpc } from "./ipc.js";
 
@@ -25,8 +26,25 @@ export const SHUTDOWN_ORDER = [
 
 export async function boot(): Promise<void> {
   await app.whenReady();
-  const win = new BrowserWindow({ width: 1600, height: 900 });
-  void win;
+  const win = new BrowserWindow({
+    width: 1440,
+    height: 900,
+    minWidth: 1024,
+    minHeight: 680,
+    titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "hidden",
+    ...(process.platform !== "darwin"
+      ? { titleBarOverlay: { height: 44 } }
+      : {}),
+    backgroundColor: "#111318",
+    webPreferences: { preload: join(__dirname, "preload.cjs"), contextIsolation: true, nodeIntegration: false },
+  });
+  // Dev: Vite server; prod: Vite build output (scripts/build-main.mjs builds
+  // main/preload only — renderer is Vite's dist/renderer).
+  if (process.env["AUTOLIGHT_RENDERER_URL"]) {
+    await win.loadURL(process.env["AUTOLIGHT_RENDERER_URL"]);
+  } else {
+    await win.loadFile(join(__dirname, "..", "renderer", "index.html"));
+  }
   createIpc();
 }
 void boot();
