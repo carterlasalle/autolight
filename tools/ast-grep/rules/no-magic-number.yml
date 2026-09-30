@@ -1,0 +1,30 @@
+id: no-magic-number
+language: TypeScript
+severity: warning
+message: "Numeric literal outside the T-CFG-04 allowlist (0, 1, -1, 2, array index math, bit masks in protocol codecs citing a protocol constants file). Move the value to packages/config or a protocol constants file (T-CFG-04)."
+rule:
+  all:
+    - pattern: $NUM
+    - kind: number
+    - not:
+        regex: ^(0|1|2)$
+    - not:
+        inside:
+          kind: subscript_expression
+          stopBy: end
+files:
+  - packages/show-mixer/src/**
+  - packages/show-planner/src/**
+  - packages/show-runtime/src/**
+  - packages/renderer/src/**
+  - packages/venue/src/**
+  - packages/govee/src/**
+  - packages/dj-core/src/**
+  - packages/reactive-audio/src/**
+  - packages/rekordbox-library/src/**
+  - packages/rekordbox-live/src/**
+  - packages/serato/src/**
+  - packages/controller-flx4/src/**
+  - packages/analysis-client/src/**
+  - apps/desktop/electron/**
+note: "Ratchet baseline (warning): later per-package tasks migrate each finding to the registry or a protocol constants file until zero, when this rule turns blocking. Bit masks in protocol codecs stay allowed while the codec file cites its protocol constants file; array indices stay allowed; literal -1 stays allowed as a sentinel next to 0 and 1."

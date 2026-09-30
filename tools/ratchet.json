@@ -31,6 +31,11 @@
       "count": 28,
       "blocking": false,
       "note": "renderer string invoke callers, migrate per task"
+    },
+    "no-magic-number": {
+      "count": 311,
+      "blocking": false,
+      "note": "T-CFG-04 baseline: production src plus apps/desktop/electron, tests excluded; per-package tasks migrate to registry or protocol constants until zero, then blocking"
     }
   },
   "knip": {
