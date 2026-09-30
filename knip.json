@@ -1,0 +1,23 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "apps/desktop/electron/main.ts",
+    "apps/desktop/electron/preload.ts",
+    "apps/desktop/src/renderer/main.tsx",
+    "apps/desktop/src/renderer/shell.tsx",
+    "packages/*/src/index.ts"
+  ],
+  "project": ["packages/*/src/**/*.ts", "apps/desktop/electron/**/*.ts", "apps/desktop/src/**/*.ts", "apps/desktop/src/**/*.tsx"],
+  "ignore": ["packages/*/dist/**", "apps/desktop/dist/**"],
+  "rules": {
+    "files": "warn",
+    "dependencies": "warn",
+    "unlisted": "error",
+    "binaries": "warn",
+    "unresolved": "error",
+    "exports": "warn",
+    "types": "warn",
+    "enumMembers": "off",
+    "classMembers": "off"
+  }
+}
