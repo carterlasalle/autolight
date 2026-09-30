@@ -39,6 +39,8 @@ __metadata:
     "@autolight/contracts": "npm:^0.1.0"
     "@autolight/diagnostics": "npm:^0.1.0"
     "@autolight/dj-core": "npm:^0.1.0"
+    "@autolight/govee": "npm:^0.1.0"
+    "@autolight/reactive-audio": "npm:^0.1.0"
     "@autolight/rekordbox-live": "npm:^0.1.0"
     "@autolight/renderer": "npm:^0.1.0"
     "@autolight/show-mixer": "npm:^0.1.0"
@@ -97,7 +99,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@autolight/govee@workspace:packages/govee":
+"@autolight/govee@npm:^0.1.0, @autolight/govee@workspace:packages/govee":
   version: 0.0.0-use.local
   resolution: "@autolight/govee@workspace:packages/govee"
   dependencies:
@@ -105,7 +107,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@autolight/reactive-audio@workspace:packages/reactive-audio":
+"@autolight/reactive-audio@npm:^0.1.0, @autolight/reactive-audio@workspace:packages/reactive-audio":
   version: 0.0.0-use.local
   resolution: "@autolight/reactive-audio@workspace:packages/reactive-audio"
   dependencies:

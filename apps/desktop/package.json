@@ -18,6 +18,8 @@
     "@autolight/contracts": "^0.1.0",
     "@autolight/diagnostics": "^0.1.0",
     "@autolight/dj-core": "^0.1.0",
+    "@autolight/govee": "^0.1.0",
+    "@autolight/reactive-audio": "^0.1.0",
     "@autolight/rekordbox-live": "^0.1.0",
     "@autolight/renderer": "^0.1.0",
     "@autolight/show-mixer": "^0.1.0",
