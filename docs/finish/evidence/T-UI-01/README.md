@@ -25,7 +25,7 @@ Closes F-UI-14, F-APP-14. Probes P-142-components, P-88-frame-time.
   InspectorPanel. Components own no timing, no I/O and no authoritative
   state; every number shown is passed in as measured or configured data or
   rendered as "unmeasured".
-- `library.tsx` keeps its `inspectorLanes` text-lane helper and its test in
+- the library module keeps its inspectorLanes text-lane helper and its test in
   `screens.test.ts` (that file is outside this slice); the inspector screen
   now binds the installed TrackModel through kit `InspectorPanel` instead.
 
