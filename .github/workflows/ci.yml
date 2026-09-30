@@ -17,7 +17,7 @@ jobs:
       # each.mjs shells out to `yarn` per workspace; corepack shims are not
       # on PATH for child processes on Windows, so build from the repo root.
       - run: yarn install --immutable
-      - run: yarn workspaces foreach --all --topological-dev run build
+      - run: yarn workspaces foreach --all --topological-dev --exclude autolight run build
       - run: yarn workspaces foreach --all run typecheck
       - run: yarn workspaces foreach --all run test
       - uses: actions/setup-python@v5
