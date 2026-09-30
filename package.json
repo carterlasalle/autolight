@@ -7,11 +7,11 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "node scripts/each.mjs run build",
-    "test": "node scripts/each.mjs run test",
-    "lint": "node scripts/each.mjs run lint",
-    "typecheck": "node scripts/each.mjs run typecheck",
-    "verify:phase1": "node scripts/each.mjs run typecheck && uv run --project analysis pytest -q"
+    "build": "yarn workspaces foreach --all --topological-dev --exclude autolight run build",
+    "test": "yarn workspaces foreach --all run test",
+    "lint": "yarn workspaces foreach --all run lint",
+    "typecheck": "yarn workspaces foreach --all run typecheck",
+    "verify:phase1": "yarn workspaces foreach --all run typecheck && uv run --project analysis pytest -q"
   },
   "devDependencies": {
     "typescript": "^5.6.3",
