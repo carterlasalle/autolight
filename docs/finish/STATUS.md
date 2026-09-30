@@ -55,7 +55,7 @@ Milestone contents and exit proofs are in `README.md`.
 | T-UI-01 | Component library and a single application root | `wp13-ui.md` | M0 | `TODO` | none yet | Closes F-UI-14, F-APP-14 |
 | T-SEC-03 | Electron hardening | `wp14-data-security-ops.md` | M0 | `TODO` | none yet | Closes F-SEC-01, F-APP-05 |
 | T-OPS-01 | Environment facts | `wp14-data-security-ops.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-OPS-01/README.md` |  |
-| T-QA-02 | Electron E2E harness | `wp15-verification-qualification.md` | M0 | `TODO` | none yet | Closes F-QA-02, F-X-16 |
+| T-QA-02 | Electron E2E harness | `wp15-verification-qualification.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-QA-02/README.md` | Closes F-QA-02, F-X-16 |
 
 ## Tasks in M1
 
