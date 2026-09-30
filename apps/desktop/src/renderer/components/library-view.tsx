@@ -1,6 +1,6 @@
 import { useShell } from "../state/store.js";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card.js";
-import { Badge } from "./ui/badge.js";
+import { MetricBadge, StatusDot, deckBpm } from "./kit.js";
 
 // Library (§95): readiness table. Live rows arrive from the store;
 // empty state invites analysis instead of showing a blank grid.
@@ -38,8 +38,8 @@ export function LibraryView(): JSX.Element {
                   >
                     <td className="border-b py-1.5 pr-3">{r.title || "—"}</td>
                     <td className="border-b py-1.5 pr-3">—</td>
-                    <td className="border-b py-1.5 pr-3 font-timing tabular-nums">{r.bpm !== null ? r.bpm.toFixed(1) : "—"}</td>
-                    <td className="border-b py-1.5"><Badge variant="secondary">READY</Badge></td>
+                    <td className="border-b py-1.5 pr-3"><MetricBadge metric={{ label: "bpm", value: deckBpm(r.bpm), unit: "" }} /></td>
+                    <td className="border-b py-1.5"><StatusDot tone="ok" label="READY" /></td>
                   </tr>
                 ))}
               </tbody>

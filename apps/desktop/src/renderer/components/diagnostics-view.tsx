@@ -2,8 +2,13 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card.js";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs.js";
 import { invoke, useShell } from "../state/store.js";
+import { deckBpm } from "./kit.js";
 
 const TABS = ["DJ Events", "Transport", "Beat Clock", "Analysis", "Planner", "Renderer", "Fixtures", "Latency", "Logs"];
+
+function renderBpm(bpm: number | null): string {
+  return bpm === null ? "-- BPM" : `${deckBpm(bpm)} BPM`;
+}
 
 // Diagnostics (§101): tab bar + live panel; status only, never interrupts Live (§144).
 export function DiagnosticsView(): JSX.Element {
@@ -23,7 +28,7 @@ export function DiagnosticsView(): JSX.Element {
         diagnostics: {
           "DJ Events": `AX: ${JSON.stringify(d?.ax ?? [])} PROLINK: ${JSON.stringify(d?.prolink ?? {})}`,
           Transport: live ? `${live.source} deck1=${live.deckA.title} deck2=${live.deckB.title}` : "no decks",
-          "Beat Clock": live?.beat !== undefined ? `beat ${live.beat.toFixed(1)} @ ${bpm !== null ? bpm.toFixed(1) : "--"} BPM` : "no clock",
+          "Beat Clock": live?.beat !== undefined ? `beat ${deckBpm(live.beat)} @ ${renderBpm(bpm)}` : "no clock",
           Analysis: live ? "ANLZ grid + plan resolved" : "no track",
           Planner: live ? `${live.cues.length} upcoming cues` : "no plan",
           Renderer: live ? `${live.cells.length} cells` : "no frames",

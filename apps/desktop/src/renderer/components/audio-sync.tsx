@@ -3,6 +3,7 @@ import { useShell, invoke } from "../state/store.js";
 import { Button } from "./ui/button.js";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card.js";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select.js";
+import { MetricBadge, deckBpm } from "./kit.js";
 
 // Audio sync: real mic overlay. Device select enumerates inputs, level meter
 // proves signal, overlay nudges brightness/sparkle only (§69) — never
@@ -76,7 +77,7 @@ export function AudioSyncCard(): JSX.Element {
     <Card>
       <CardHeader className="pb-2"><CardTitle className="text-[13px]">Audio sync</CardTitle></CardHeader>
       <CardContent>
-        <p className="font-timing text-[13px] tabular-nums">BPM: {s.bpm !== null ? s.bpm.toFixed(1) : "--"}</p>
+        <MetricBadge metric={{ label: "BPM", value: deckBpm(s.bpm), unit: "" }} />
         <label className="flex items-center gap-2 text-[13px]">Input:
           <Select
             value={s.audioDevice !== null ? String(s.audioDevice) : ""}

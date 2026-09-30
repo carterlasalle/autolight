@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "./ui/card.js";
 import { Button } from "./ui/button.js";
 import { Badge } from "./ui/badge.js";
 import { Input } from "./ui/input.js";
+import { ConfigField } from "./kit.js";
 
 // Settings (T-CFG-05): every registry key visible with effective value,
 // default, unit, range, layer badge, receipt badge, description, live-safe
@@ -47,15 +48,9 @@ export function SettingsView(): JSX.Element {
       {rows.slice(0, 200).map((k) => (
         <Card key={k.key}>
           <CardContent className="flex flex-wrap items-center gap-2 pt-3">
-            <code className="text-[13px] font-semibold">{k.key}</code>
             <Badge variant="secondary">{k.type}</Badge>
             <Badge variant="outline">{k.scope}</Badge>
-            <Badge variant={k.receipt.startsWith("spec") ? "default" : k.receipt.startsWith("unmeasured") ? "destructive" : "secondary"}>
-              {k.receipt.slice(0, 40)}
-            </Badge>
-            {k.liveSafe ? <Badge variant="default">live-safe</Badge> : <Badge variant="outline">restart-safe</Badge>}
-            <span className="ml-auto font-timing text-[13px] tabular-nums">default: {k.defaultRaw.slice(0, 60)}</span>
-            <span className="w-full text-[13px] text-muted-foreground">{k.unit}{k.range ? ` (${k.range})` : ""}</span>
+            <ConfigField def={{ key: k.key, value: k.defaultRaw, unit: k.unit, range: k.range, receipt: k.receipt, liveSafe: k.liveSafe }} />
           </CardContent>
         </Card>
       ))}

@@ -2,6 +2,7 @@ import { useShell, invoke } from "../state/store.js";
 import { Button } from "./ui/button.js";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card.js";
 import { Badge } from "./ui/badge.js";
+import { MetricBadge, StatusDot, deckBpm } from "./kit.js";
 
 // Titlebar: hiddenInset traffic lights on macOS, overlay on Win/Linux
 // (electron/main.ts). Drag region + no-drag controls per Electron docs.
@@ -22,9 +23,7 @@ export function Titlebar(): JSX.Element {
           SIMULATOR
         </Badge>
       ) : null}
-      <span className="font-timing text-xs text-muted-foreground tabular-nums">
-        {bpm !== null ? `${bpm.toFixed(1)} BPM` : "-- BPM"}
-      </span>
+      <MetricBadge metric={{ label: "BPM", value: deckBpm(bpm), unit: "" }} />
       <span className="flex-1" />
       <Button
         variant="ghost"
@@ -57,13 +56,11 @@ export function Statusbar(): JSX.Element {
   const devices = useShell((s) => s.devices);
   return (
     <footer className="flex h-8 items-center gap-3 border-t px-4 text-xs text-muted-foreground">
-      <span className="flex items-center gap-1.5">
-        <span className="inline-block size-1.5 rounded-full bg-muted-foreground" aria-hidden /> {live ? live.source : "No DJ link"}
-      </span>
+      <StatusDot tone={live ? "ok" : "neutral"} label={live ? live.source : "No DJ link"} />
       <span>{live ? "Show loaded" : "No show — load a track"}</span>
       <span>{devices.length > 0 ? `${devices.length} lights` : "No lights"}</span>
       <span className="flex-1" />
-      <span className="font-timing tabular-nums">{bpm !== null ? `${bpm.toFixed(1)} BPM` : "-- BPM"}</span>
+      <MetricBadge metric={{ label: "BPM", value: deckBpm(bpm), unit: "" }} />
     </footer>
   );
 }

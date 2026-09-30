@@ -1,5 +1,4 @@
 import { useEffect } from "react";
-import { createRoot } from "react-dom/client";
 import { Sidebar, Statusbar, Titlebar } from "./components/chrome.js";
 import { ControlGrid, LiveView } from "./components/live.js";
 import { LibraryView } from "./components/library-view.js";
@@ -65,6 +64,3 @@ export function Shell(): JSX.Element {
   );
 }
 
-const root = document.getElementById("root");
-if (!root) throw new Error("missing #root");
-createRoot(root).render(<Shell />);

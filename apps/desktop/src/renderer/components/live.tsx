@@ -3,16 +3,29 @@ import type { LiveState } from "../state/store.js";
 import { AudioSyncCard } from "./audio-sync.js";
 import { Button } from "./ui/button.js";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card.js";
-import { Badge } from "./ui/badge.js";
 import { Slider } from "./ui/slider.js";
 import { Switch } from "./ui/switch.js";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select.js";
 import { PARTY_PALETTES, ALT_PATTERNS } from "../state/store.js";
 import type { AltPattern, PartyPalette } from "../state/store.js";
+import { CueList, DeckPanel, FixturePreview, MasterControls, deckBpm } from "./kit.js";
 // Live screen (§89): status → decks + master clock → venue + upcoming →
 // emergency bar. Empty until a real show resolves — never fixture tracks.
 // Compact 32–36px controls, 12–14px text, mono for timing.
+function masterIntent(intent: "blackout" | "full" | "freeze" | "resume"): void {
+  if (intent === "blackout") void invoke("master/blackout", { version: 1 });
+  else if (intent === "full") void invoke("master/full", { version: 1 });
+  else if (intent === "freeze") void invoke("master/freeze", { version: 1, frozen: true });
+  else void invoke("master/resume", { version: 1, at: "bar" });
+}
+
+function masterClock(bpm: number | null): string {
+  const oneDecimal = deckBpm(bpm);
+  return bpm === null ? "--.--" : `${oneDecimal}0`;
+}
+
 export function LiveView({ live }: { live: LiveState | null }): JSX.Element {
+  const manual = useShell((s) => s.manual);
   if (!live) {
     return (
       <div className="flex flex-col gap-3">
@@ -26,13 +39,8 @@ export function LiveView({ live }: { live: LiveState | null }): JSX.Element {
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="flex items-center gap-2 pt-4">
-            <div role="toolbar" aria-label="Master" className="flex gap-2">
-              <Button variant="destructive" size="sm" onClick={() => { void invoke("master/blackout", { version: 1 }); }}>Blackout</Button>
-              <Button variant="outline" size="sm" onClick={() => { void invoke("master/full", { version: 1 }); }}>Full</Button>
-              <Button variant="outline" size="sm" onClick={() => { void invoke("master/freeze", { version: 1, frozen: true }); }}>Freeze</Button>
-              <Button variant="outline" size="sm" onClick={() => { void invoke("master/resume", { version: 1, at: "bar" }); }}>Auto</Button>
-            </div>
+          <CardContent className="pt-4">
+            <MasterControls state={{ intensity: null, frozen: false, blackout: false, auto: !manual }} onIntent={masterIntent} />
           </CardContent>
         </Card>
       </div>
@@ -41,39 +49,39 @@ export function LiveView({ live }: { live: LiveState | null }): JSX.Element {
   return (
     <div className="flex flex-col gap-3">
       <div className="grid grid-cols-[1fr_240px_1fr] gap-3">
-        <Card>
-          <CardHeader className="pb-1"><CardTitle>{live.deckA.title}</CardTitle></CardHeader>
-          <CardContent>
-            <p className="text-xs text-muted-foreground">Deck 1</p>
-            {live.deckA.section ? <p className="text-[13px] font-semibold text-primary">{live.deckA.section}</p> : null}
-            {live.deckA.countdown ? <p className="font-timing text-[13px] text-[var(--warn)]">{live.deckA.countdown}</p> : null}
-          </CardContent>
-        </Card>
+        <DeckPanel
+          deck={{
+            title: live.deckA.title,
+            subtitle: "Deck 1",
+            bpm: live.bpm,
+            section: live.deckA.section ?? null,
+            countdown: live.deckA.countdown ?? null,
+            health: "neutral",
+          }}
+        />
         <Card className="text-center">
           <CardContent className="flex flex-col justify-center pt-4">
-            <p role="timer" className="font-timing text-5xl font-semibold tabular-nums">{live.bpm !== null ? live.bpm.toFixed(2) : "--.--"}</p>
+            <p role="timer" className="font-timing text-5xl font-semibold tabular-nums">{masterClock(live.bpm)}</p>
             <span className="text-xs tracking-widest text-muted-foreground">BPM</span>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="pb-1"><CardTitle>{live.deckB.title}</CardTitle></CardHeader>
-          <CardContent>
-            <p className="text-xs text-muted-foreground">Deck 2</p>
-            {live.deckB.section ? <p className="text-[13px] font-semibold text-primary">{live.deckB.section}</p> : null}
-            {live.deckB.countdown ? <p className="font-timing text-[13px] text-[var(--warn)]">{live.deckB.countdown}</p> : null}
-          </CardContent>
-        </Card>
+        <DeckPanel
+          deck={{
+            title: live.deckB.title,
+            subtitle: "Deck 2",
+            bpm: live.bpm,
+            section: live.deckB.section ?? null,
+            countdown: live.deckB.countdown ?? null,
+            health: "neutral",
+          }}
+        />
       </div>
       <div className="grid grid-cols-[2fr_1fr] gap-3">
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-[13px]">Live venue preview</CardTitle></CardHeader>
           <CardContent>
             {live.cells.length > 0 ? (
-              <div role="img" aria-label="Venue preview" className="flex min-h-19 items-stretch gap-1">
-                {live.cells.map((c, i) => (
-                  <span key={i} data-x={c.x} className="min-h-16 min-w-1.5 flex-1 rounded-[3px]" style={{ backgroundColor: c.color }} />
-                ))}
-              </div>
+              <FixturePreview rows={[{ cells: live.cells }]} />
             ) : (
               <p className="text-[13px] text-muted-foreground">No fixture output — qualify a light on the Venue tab.</p>
             )}
@@ -83,17 +91,10 @@ export function LiveView({ live }: { live: LiveState | null }): JSX.Element {
           <CardHeader className="pb-2"><CardTitle className="text-[13px]">Upcoming</CardTitle></CardHeader>
           <CardContent>
             {live.cues.length > 0 ? (
-              <ol aria-label="Upcoming cues" className="flex flex-col gap-1.5">
-                {live.cues.slice(0, 5).map((c, i) => {
-                  const delta = Math.max(0, Math.round(c.startBeat - (live.beat ?? 0)));
-                  return (
-                    <li key={i} className="flex items-center justify-between gap-2 rounded-md border bg-muted/40 px-2.5 py-1.5 text-[13px]">
-                      <span>{c.type.replace(/-/g, " ")} → {c.target}</span>
-                      <span className="font-timing text-primary">{delta === 0 ? "now" : `+${delta}`}</span>
-                    </li>
-                  );
-                })}
-              </ol>
+              <CueList
+                cues={live.cues.slice(0, 5).map((c) => ({ cue: c, now: live.beat ?? 0 }))}
+                now={live.beat ?? 0}
+              />
             ) : (
               <p className="text-[13px] text-muted-foreground">No cues — plan compiles after analysis.</p>
             )}
@@ -101,14 +102,8 @@ export function LiveView({ live }: { live: LiveState | null }): JSX.Element {
         </Card>
       </div>
       <Card>
-        <CardContent className="flex items-center gap-2 pt-4">
-          <div role="toolbar" aria-label="Master" className="flex gap-2">
-            <Button variant="destructive" size="sm" onClick={() => { void invoke("master/blackout", { version: 1 }); }}>Blackout</Button>
-            <Button variant="outline" size="sm" onClick={() => { void invoke("master/full", { version: 1 }); }}>Full</Button>
-            <Button variant="outline" size="sm" onClick={() => { void invoke("master/freeze", { version: 1, frozen: true }); }}>Freeze</Button>
-            <Button variant="outline" size="sm" onClick={() => { void invoke("master/resume", { version: 1, at: "bar" }); }}>Auto</Button>
-          </div>
-          <Badge variant="secondary" className="ml-auto">80%</Badge>
+        <CardContent className="pt-4">
+          <MasterControls state={{ intensity: null, frozen: false, blackout: false, auto: !manual }} onIntent={masterIntent} />
         </CardContent>
       </Card>
     </div>

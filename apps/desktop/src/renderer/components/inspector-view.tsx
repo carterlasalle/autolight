@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card.js";
-import { inspectorLanes } from "../library.js";
-import type { InspectorLane } from "../library.js";
+import { InspectorPanel } from "./kit.js";
 import type { TrackModel } from "@autolight/contracts";
 import { useShell, invoke } from "../state/store.js";
 // Inspector: synchronized beat lanes for the resolved track.
@@ -10,7 +9,8 @@ import { useShell, invoke } from "../state/store.js";
 export function InspectorView(): JSX.Element {
   const selected = useShell((s) => s.selectedTrackId);
   const live = useShell((s) => s.live);
-  const [lanes, setLanes] = useState<InspectorLane[] | null>(null);
+  const [track, setTrack] = useState<TrackModel | null>(null);
+  const [loaded, setLoaded] = useState(false);
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -23,11 +23,11 @@ export function InspectorView(): JSX.Element {
           if (!d.track) continue;
           const title = d.track.identity.title ?? d.track.identity.id;
           if (selected && title !== selected && live && title !== live.deckA.title && title !== live.deckB.title) continue;
-          if (!cancelled) setLanes(inspectorLanes(d.track));
-          return;
+          if (!cancelled) { setLoaded(true); setTrack(d.track); return; }
         }
+        if (!cancelled) { setLoaded(true); setTrack(null); }
       } catch { /* show host unreachable: empty lanes below */ }
-      if (!cancelled) setLanes([]);
+      if (!cancelled) { setLoaded(true); setTrack(null); }
     })();
     return () => { cancelled = true; };
   }, [selected, live]);
@@ -36,19 +36,16 @@ export function InspectorView(): JSX.Element {
       <Card>
         <CardHeader className="pb-2"><CardTitle className="text-[13px]">Track inspector{selected ? ` — ${selected}` : ""}</CardTitle></CardHeader>
         <CardContent>
-          {lanes === null ? (
+          {!loaded ? (
             <p className="text-[13px] text-muted-foreground">Loading lanes…</p>
-          ) : lanes.length === 0 ? (
+          ) : track === null ? (
             <p className="text-[13px] text-muted-foreground">No track analyzed yet. Lanes for waveform, grid, sections, events, and cues appear after the analysis worker finishes a loaded deck.</p>
           ) : (
-            <div className="flex flex-col gap-3">
-              {lanes.map((lane) => (
-                <div key={lane.name}>
-                  <p className="text-xs font-medium text-muted-foreground">{lane.name} ({lane.beats.length})</p>
-                  <p className="font-timing text-xs tabular-nums">{lane.beats.slice(0, 24).map((b) => String(b ?? "·")).join(" ")}{lane.beats.length > 24 ? " …" : ""}</p>
-                </div>
-              ))}
-            </div>
+            <InspectorPanel
+              track={track}
+              startBeat={0}
+              endBeat={Math.max(1, ...track.sections.map((s) => s.endBeat), ...track.musicalEvents.map((e) => e.beat))}
+            />
           )}
         </CardContent>
       </Card>

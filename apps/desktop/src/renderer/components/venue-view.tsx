@@ -1,7 +1,7 @@
 import { useShell, invoke } from "../state/store.js";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card.js";
 import { Button } from "./ui/button.js";
-import { Badge } from "./ui/badge.js";
+import { DeviceTile } from "./kit.js";
 
 // Venue (§98) + devices (§99): discovery, assignment, target, health tiles.
 // Empty until Scan finds real lights — no simulated fixtures.
@@ -54,39 +54,15 @@ export function VenueView(): JSX.Element {
       {s.tiles.length > 0 ? (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3">
           {s.tiles.map((t) => (
-            <Card key={t.id}>
-              <CardHeader className="pb-1">
-                <CardTitle className="flex items-center gap-2 text-sm">
-                  {t.id} <span className="font-normal text-muted-foreground">({t.sku})</span>
-                  <Badge variant={t.health === "online" ? "default" : "secondary"} className="ml-auto">{t.health}</Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="font-timing text-xs tabular-nums text-muted-foreground">
-                  {t.fps}fps · {t.segments} segs · {t.latencyMs}ms
-                </p>
-                <div className="flex gap-2">
-                  <Button
-                    size="sm" variant="outline"
-                    onClick={() => { void invoke("venue/identify", { version: 1, id: t.id }); }}
-                  >
-                    IDENTIFY
-                  </Button>
-                  <Button
-                    size="sm" variant="outline"
-                    onClick={() => { void invoke("venue/test-chase", { version: 1, id: t.id }); }}
-                  >
-                    TEST CHASE
-                  </Button>
-                  <Button
-                    size="sm" variant="outline"
-                    onClick={() => { void invoke("venue/device-action", { version: 1, id: t.id, action: "RECALIBRATE" }); }}
-                  >
-                    RECALIBRATE
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+            <DeviceTile
+              key={t.id}
+              tile={t}
+              onAction={(a) => {
+                if (a === "IDENTIFY") void invoke("venue/identify", { version: 1, id: t.id });
+                else if (a === "TEST CHASE") void invoke("venue/test-chase", { version: 1, id: t.id });
+                else void invoke("venue/device-action", { version: 1, id: t.id, action: "RECALIBRATE" });
+              }}
+            />
           ))}
         </div>
       ) : (
