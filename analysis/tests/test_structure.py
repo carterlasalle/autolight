@@ -1,6 +1,6 @@
-from autolight_analysis.structure import detect_builds, detect_drops
-from autolight_analysis.schema import validate_track_model
 from autolight_analysis.fusion import build_track_model
+from autolight_analysis.schema import validate_track_model
+from autolight_analysis.structure import detect_builds, detect_drops
 
 
 def _flat(n, v=0.1):
@@ -60,7 +60,9 @@ def test_drops_deduped_to_one_per_window():
     kinds = ["chorus"] * 64
     drops = detect_drops(beats, bass, drum, energy, _flat(64, 0.05), [], kinds)
     hits = [d["beat"] for d in drops if d["type"] == "drop"]
-    assert all(b - a >= 8 for a, b in zip(hits, hits[1:])), f"machine-gun drops: {hits}"
+    from itertools import pairwise
+
+    assert all(b - a >= 8 for a, b in pairwise(hits)), f"machine-gun drops: {hits}"
 
 
 def test_events_validate_against_contract():
@@ -70,9 +72,23 @@ def test_events_validate_against_contract():
     kinds = ["verse"] * 32 + ["build"] * 32
     events = detect_builds(beats, energy, drum, kinds)
     model = build_track_model(
-        track_id="t", analyzer_version="0.1.0", duration_seconds=150.0,
-        beat_grid=[{"index": i, "beatInBar": (i % 4) + 1, "sourceTimeMs": i * 500.0, "bpm": 120.0} for i in range(64)],
-        phrases=[{"kind": "verse", "startBeat": 0, "endBeat": 32}, {"kind": "build", "rawLabel": "Up 1", "startBeat": 32, "endBeat": 64}],
-        musical_events=events, coverage="full",
+        track_id="t",
+        analyzer_version="0.1.0",
+        duration_seconds=150.0,
+        beat_grid=[
+            {
+                "index": i,
+                "beatInBar": (i % 4) + 1,
+                "sourceTimeMs": i * 500.0,
+                "bpm": 120.0,
+            }
+            for i in range(64)
+        ],
+        phrases=[
+            {"kind": "verse", "startBeat": 0, "endBeat": 32},
+            {"kind": "build", "rawLabel": "Up 1", "startBeat": 32, "endBeat": 64},
+        ],
+        musical_events=events,
+        coverage="full",
     )
     assert validate_track_model(model) == []

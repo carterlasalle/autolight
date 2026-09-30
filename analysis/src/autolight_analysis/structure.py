@@ -3,6 +3,7 @@ drops, breakdowns, fills, silence. Consumes native PSSI phrases + DSP beat
 envelopes; every event carries provenance (§19). No thresholds fire a drop
 alone — converging signals vote (§24).
 """
+
 from __future__ import annotations
 
 from autolight_analysis.events import build_score, drop_score, is_fake_drop
@@ -14,7 +15,7 @@ def _beat_index(beat: float, beats: list[float]) -> int:
 
 
 def detect_builds(
-    beats: list[float],
+    beats: list[float] | list[int],
     energy: list[float],
     drum: list[float],
     pssi_kinds: list[str],
@@ -47,13 +48,12 @@ def detect_builds(
         if merged and b["startBeat"] - merged[-1]["startBeat"] < 8:
             if b["strength"] > merged[-1]["strength"]:
                 merged[-1] = b
-            merged[-1]["endBeat"] = max(merged[-1].get("impactBeat"), b.get("impactBeat"))
+            merged[-1]["endBeat"] = max(
+                merged[-1].get("impactBeat") or 0, b.get("impactBeat") or 0
+            )
         else:
             merged.append(b)
-    return [
-        {"type": "build-start", **b, "beat": b["startBeat"]}
-        for b in merged
-    ]
+    return [{"type": "build-start", **b, "beat": b["startBeat"]} for b in merged]
 
 
 def _rel_jump(series: list[float], n: int, span: int = 4) -> float:
@@ -62,7 +62,7 @@ def _rel_jump(series: list[float], n: int, span: int = 4) -> float:
 
 
 def detect_drops(
-    beats: list[float],
+    beats: list[float] | list[int],
     bass: list[float],
     drum: list[float],
     energy: list[float],
@@ -78,15 +78,20 @@ def detect_drops(
     ml = ml_boundaries or set()
     for n in range(4, len(beats), 4):
         bj, dj, ej = _rel_jump(bass, n), _rel_jump(drum, n), _rel_jump(energy, n)
-        if max(bj, dj, ej) < 0.25:
+        nj = _rel_jump(novelty, n)
+        if max(bj, dj, ej, nj) < 0.25:
             continue  # flat loudness isn't a drop — need a genuine jump
-        on_boundary = pssi_kinds[n] != pssi_kinds[n - 4] if n < len(pssi_kinds) else False
+        on_boundary = (
+            pssi_kinds[n] != pssi_kinds[n - 4] if n < len(pssi_kinds) else False
+        )
         ml_hit = any(abs(beats[n] - b) <= 4 for b in ml)
         near_build = any(abs(beats[n] - bb) <= 8 for bb in build_beats)
         if not (on_boundary or near_build or ml_hit):
             continue  # jumps need structural meaning: boundary, build, or ML vote
         s = drop_score(
-            bj, dj, ej,
+            bj,
+            dj,
+            ej,
             preceded_by_build=beats[n] in build_beats,
             preceded_by_dip=(silence[n - 4] > 0.5) if silence else False,
             on_downbeat=True,
@@ -96,31 +101,66 @@ def detect_drops(
             continue
         beat = beats[n]
         # Fake-drop check: expected impact dissolves into silence, real hit lands
-        # 1–4 beats later (§25). Emit the pair; planner holds darkness between.
+        # 1-4 beats later (spec 25). Emit the pair; planner holds darkness between.
         if silence is not None and n + 16 < len(beats) and silence[n] > 0.5:
             for m in range(n + 4, min(n + 17, len(beats)), 4):
-                later = drop_score(_rel_jump(bass, m), _rel_jump(drum, m),
-                                   _rel_jump(energy, m), on_downbeat=True)
+                later = drop_score(
+                    _rel_jump(bass, m),
+                    _rel_jump(drum, m),
+                    _rel_jump(energy, m),
+                    on_downbeat=True,
+                )
                 if later["votes"] >= 3 and is_fake_drop(beats[m] - beat, True):
-                    out.append({"type": "fake-drop", "beat": beat, "endBeat": beats[m],
-                                "confidence": s["confidence"], "strength": s["strength"]})
-                    out.append({"type": "drop", "beat": beats[m],
-                                "confidence": later["confidence"], "strength": later["strength"]})
+                    out.append(
+                        {
+                            "type": "fake-drop",
+                            "beat": beat,
+                            "endBeat": beats[m],
+                            "confidence": s["confidence"],
+                            "strength": s["strength"],
+                        }
+                    )
+                    out.append(
+                        {
+                            "type": "drop",
+                            "beat": beats[m],
+                            "confidence": later["confidence"],
+                            "strength": later["strength"],
+                        }
+                    )
                     break
             else:
-                out.append({"type": "drop", "beat": beat,
-                            "confidence": s["confidence"], "strength": s["strength"]})
+                out.append(
+                    {
+                        "type": "drop",
+                        "beat": beat,
+                        "confidence": s["confidence"],
+                        "strength": s["strength"],
+                    }
+                )
         else:
-            out.append({"type": "drop", "beat": beat,
-                        "confidence": s["confidence"], "strength": s["strength"]})
+            out.append(
+                {
+                    "type": "drop",
+                    "beat": beat,
+                    "confidence": s["confidence"],
+                    "strength": s["strength"],
+                }
+            )
     # Breakdowns: sustained low energy + PSSI breakdown label.
     for n in range(0, len(beats), 4):
         if n < len(pssi_kinds) and pssi_kinds[n] == "breakdown":
             seg = energy[n : n + 16]
             if seg and max(seg) < 0.4 * (max(energy) or 1.0):
-                out.append({"type": "breakdown", "beat": beats[n],
-                            "endBeat": beats[min(n + 16, len(beats) - 1)],
-                            "confidence": 0.7, "strength": 0.3})
+                out.append(
+                    {
+                        "type": "breakdown",
+                        "beat": beats[n],
+                        "endBeat": beats[min(n + 16, len(beats) - 1)],
+                        "confidence": 0.7,
+                        "strength": 0.3,
+                    }
+                )
     # Silence / final hit.
     if silence is not None:
         for n in range(0, len(beats), 4):

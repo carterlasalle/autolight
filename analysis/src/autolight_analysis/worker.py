@@ -1,34 +1,50 @@
 """Framed-JSON stdio worker (§14). Large artifacts via cache files, never IPC blobs."""
+
 from __future__ import annotations
 
 import hashlib
 import json
+import subprocess
 import sys
 from pathlib import Path
 
 
-def analyze_job(track_id: str, audio_path: str, native_dir: str | None, out_dir: str | Path) -> dict:
+def analyze_job(
+    track_id: str, audio_path: str, native_dir: str | None, out_dir: str | Path
+) -> dict:
     """Native ANLZ + DSP event extraction → TrackModel artifact file.
 
     Coverage: FULL when audio decodes (native grid + DSP events), STRUCTURED
     for native-only, ADAPTIVE with neither (§70). Native grid always wins (§19).
     """
+    import warnings
+
     from autolight_analysis.fusion import build_track_model
     from autolight_analysis.schema import validate_track_model
-    from autolight_analysis.stems import load_mono_pcm, stem_proxies, spectral_novelty, resample_to_beats
+    from autolight_analysis.stems import (
+        load_mono_pcm,
+        resample_to_beats,
+        spectral_novelty,
+        stem_proxies,
+    )
     from autolight_analysis.structure import detect_builds, detect_drops
 
-    import warnings
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         from autolight_analysis import native
+
         anlz = native.extract_anlz(native_dir) if native_dir else None
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     if anlz is None:
         model = build_track_model(
-            track_id=track_id, analyzer_version="0.1.0", duration_seconds=0.0,
-            beat_grid=[], phrases=[], musical_events=[], coverage="adaptive",
+            track_id=track_id,
+            analyzer_version="0.1.0",
+            duration_seconds=0.0,
+            beat_grid=[],
+            phrases=[],
+            musical_events=[],
+            coverage="adaptive",
         )
         problems = validate_track_model(model)
         if problems:
@@ -39,14 +55,17 @@ def analyze_job(track_id: str, audio_path: str, native_dir: str | None, out_dir:
         phrases = anlz["phrases"]
         try:
             mono, rate = load_mono_pcm(audio_path)
-        except Exception:
+        except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError):
             # No readable audio (missing file, bad decode): ANLZ grid +
             # phrases alone are STRUCTURED, not a failure (§70).
             model = build_track_model(
-                track_id=track_id, analyzer_version="0.1.0",
+                track_id=track_id,
+                analyzer_version="0.1.0",
                 duration_seconds=(grid[-1]["sourceTimeMs"] / 1000.0) if grid else 0.0,
-                beat_grid=grid, phrases=phrases,
-                musical_events=[], coverage="structured",
+                beat_grid=grid,
+                phrases=phrases,
+                musical_events=[],
+                coverage="structured",
             )
             problems = validate_track_model(model)
             if problems:
@@ -63,50 +82,92 @@ def analyze_job(track_id: str, audio_path: str, native_dir: str | None, out_dir:
             novelty = resample_to_beats(spectral_novelty(mono), n)
             silence = [1.0 if e < 0.05 * (max(energy) or 1.0) else 0.0 for e in energy]
             beats = [i + 1 for i in range(n)]
-            kinds = [next((p["kind"] for p in phrases if p["startBeat"] <= b < p["endBeat"]), "unknown") for b in beats]
+            kinds = [
+                next(
+                    (p["kind"] for p in phrases if p["startBeat"] <= b < p["endBeat"]),
+                    "unknown",
+                )
+                for b in beats
+            ]
             # All-in-one structural ML (§16, §19): boundaries corroborate PSSI —
             # ML never replaces native timing, only votes section-transition events.
             ml_boundaries: set[int] = set()
+            events: list[dict] = []
             try:
                 from autolight_analysis.allinone import analyze_full, ml_sections
                 from autolight_analysis.decode import canonical_wav
+
                 ml = analyze_full(str(canonical_wav(audio_path, out)))
                 if ml is not None and getattr(ml, "segments", None):
                     beat_times = [b["sourceTimeMs"] / 1000.0 for b in grid]
                     for s in ml_sections(
-                        [{"start": seg.start, "end": seg.end, "label": seg.label} for seg in ml.segments],
+                        [
+                            {"start": seg.start, "end": seg.end, "label": seg.label}
+                            for seg in ml.segments
+                        ],
                         beat_times,
                     ):
                         ml_boundaries.add(s["startBeat"])
-                        events.append({"type": "section-transition", "beat": s["startBeat"],
-                                       "confidence": s["confidence"]})
-            except Exception:
+                        events.append(
+                            {
+                                "type": "section-transition",
+                                "beat": s["startBeat"],
+                                "confidence": s["confidence"],
+                            }
+                        )
+            except (ImportError, OSError, ValueError, RuntimeError):
                 pass  # ML structure is advisory; DSP+native pipeline stands alone
             builds = detect_builds(beats, energy, drum, kinds)
-            events = detect_drops(beats, bass, drum, energy, novelty, builds, kinds, silence, ml_boundaries)
+            events = events + detect_drops(
+                beats,
+                bass,
+                drum,
+                energy,
+                novelty,
+                builds,
+                kinds,
+                silence,
+                ml_boundaries,
+            )
             for b in builds:
-                events.append({"type": "build-start", "beat": b["beat"], "endBeat": b.get("impactBeat"),
-                               "confidence": b["confidence"], "strength": b["strength"]})
+                events.append(
+                    {
+                        "type": "build-start",
+                        "beat": b["beat"],
+                        "endBeat": b.get("impactBeat"),
+                        "confidence": b["confidence"],
+                        "strength": b["strength"],
+                    }
+                )
             events.sort(key=lambda e: e["beat"])
             coverage = "full"
-        except Exception as e:
+        except (ValueError, RuntimeError, OSError) as e:
             raise ValueError(f"dsp-fallback: {type(e).__name__}: {e}") from e
         model = build_track_model(
-            track_id=track_id, analyzer_version="0.1.0",
+            track_id=track_id,
+            analyzer_version="0.1.0",
             duration_seconds=(grid[-1]["sourceTimeMs"] / 1000.0) if grid else 0.0,
-            beat_grid=grid, phrases=phrases,
-            musical_events=events, coverage=coverage,
+            beat_grid=grid,
+            phrases=phrases,
+            musical_events=events,
+            coverage=coverage,
         )
         # Beat-This cross-check (§17): flag disagreement, never replace grid.
         from autolight_analysis.metrical import grid_warning, ml_downbeats
+
         try:
             ml = ml_downbeats(audio_path)
             native_times = [b["sourceTimeMs"] / 1000.0 for b in grid[:8]]
             if ml is not None and grid_warning(native_times, ml[:8], tol=0.05):
-                events.append({"type": "section-transition", "beat": 1, "confidence": 0.5})
-                model = {**model, "musicalEvents": model["musicalEvents"] + [
-                    {"type": "section-transition", "beat": 1, "confidence": 0.5}]}
-        except Exception:
+                events.append(
+                    {"type": "section-transition", "beat": 1, "confidence": 0.5}
+                )
+                model = {
+                    **model,
+                    "musicalEvents": model["musicalEvents"]
+                    + [{"type": "section-transition", "beat": 1, "confidence": 0.5}],
+                }
+        except (ImportError, OSError, ValueError, RuntimeError):
             pass  # ML cross-check is advisory; native pipeline stands alone
         problems = validate_track_model(model)
         if problems:
@@ -117,14 +178,14 @@ def analyze_job(track_id: str, audio_path: str, native_dir: str | None, out_dir:
     return {"trackId": track_id, "artifactPath": str(path)}
 
 
-def handle(msg: dict, out_dir: str | Path = "/tmp/autolight-analysis") -> dict:
+def handle(msg: dict, out_dir: str | Path = "/tmp/autolight-analysis") -> dict:  # noqa: S108 - documented local fallback; production passes userData cache dir
     if msg.get("type") == "analyze":
         try:
             job = analyze_job(
                 msg["trackId"], msg["audioPath"], msg.get("nativeMetadataPath"), out_dir
             )
             return {"type": "complete", **job}
-        except Exception as e:  # worker never crashes the show (§14, §109)
+        except Exception as e:  # noqa: BLE001 - top-level job guard: any failure becomes a typed failed frame, never a dead worker (§14, §109)
             return {"type": "failed", "trackId": msg.get("trackId"), "error": str(e)}
     if msg.get("type") == "ping":
         return {"type": "pong"}

@@ -2,7 +2,11 @@
 name = "autolight-analysis"
 version = "0.1.0"
 requires-python = ">=3.12"
-dependencies = ["numpy>=1.26", "pyrekordbox>=0.4.0"]
+dependencies = [
+    "numpy>=1.26",
+    "pydantic>=2.13.5",
+    "pyrekordbox>=0.4.0",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -12,8 +16,23 @@ build-backend = "hatchling.build"
 packages = ["src/autolight_analysis"]
 
 [dependency-groups]
-dev = ["pytest>=8"]
+dev = [
+    "pyright>=1.1.414",
+    "pytest>=8",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.16.9",
+]
 ml = ["all-in-one-infer>=3.1.0", "beat-this>=1.1.0"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["BLE", "S", "E", "F", "ARG", "I", "SIM", "RUF"]
+# T-TRU-09: tests may open fixture files directly and assert freely.
+# Production (src/) gets the full rule set with zero ignores.
+[tool.ruff.lint.per-file-ignores]
+"tests/*.py" = ["SIM115", "S101", "PLR2004", "ARG"]

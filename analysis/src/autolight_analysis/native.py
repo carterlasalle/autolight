@@ -13,20 +13,41 @@ from pathlib import Path
 # High mood: kind → base label; k-flags expand Intro/Up/Chorus/Outro variants.
 HIGH_LABELS = {1: "Intro", 2: "Up", 3: "Down", 5: "Chorus", 6: "Outro"}
 MID_LABELS = {
-    1: "Intro", 2: "Verse 1", 3: "Verse 2", 4: "Verse 3", 5: "Verse 4",
-    6: "Verse 5", 7: "Verse 6", 8: "Bridge", 9: "Chorus", 10: "Outro",
+    1: "Intro",
+    2: "Verse 1",
+    3: "Verse 2",
+    4: "Verse 3",
+    5: "Verse 4",
+    6: "Verse 5",
+    7: "Verse 6",
+    8: "Bridge",
+    9: "Chorus",
+    10: "Outro",
 }
 LOW_LABELS = {
-    1: "Intro", 2: "Verse 1", 3: "Verse 1", 4: "Verse 1", 5: "Verse 2",
-    6: "Verse 2", 7: "Verse 2", 8: "Bridge", 9: "Chorus", 10: "Outro",
+    1: "Intro",
+    2: "Verse 1",
+    3: "Verse 1",
+    4: "Verse 1",
+    5: "Verse 2",
+    6: "Verse 2",
+    7: "Verse 2",
+    8: "Bridge",
+    9: "Chorus",
+    10: "Outro",
 }
 
 # Normalized section vocabulary (§21). Raw label preserved alongside.
 _NORMALIZE = {
-    "intro": "intro", "verse": "verse",
-    "up": "build", "down": "breakdown", "chorus": "chorus",
-    "bridge": "bridge", "outro": "outro",
+    "intro": "intro",
+    "verse": "verse",
+    "up": "build",
+    "down": "breakdown",
+    "chorus": "chorus",
+    "bridge": "bridge",
+    "outro": "outro",
 }
+
 
 def high_label(kind: int, k1: int = 0, k2: int = 0, k3: int = 0) -> str:
     base = HIGH_LABELS.get(kind, f"Unknown{kind}")
@@ -65,7 +86,12 @@ def beat_grid_from_pqtz(beats_in_bar, bpms, times_seconds):
     pyrekordbox already scales: tempo→BPM, time→seconds.
     """
     return [
-        {"index": i, "beatInBar": int(b), "sourceTimeMs": float(t) * 1000.0, "bpm": float(bpm)}
+        {
+            "index": i,
+            "beatInBar": int(b),
+            "sourceTimeMs": float(t) * 1000.0,
+            "bpm": float(bpm),
+        }
         for i, (b, bpm, t) in enumerate(zip(beats_in_bar, bpms, times_seconds))
     ]
 
@@ -77,17 +103,24 @@ def phrases_from_pssi(mood: int, bank: int, end_beat: int, entries) -> list[dict
         label = phrase_label(mood, int(e.kind), int(e.k1), int(e.k2), int(e.k3))
         start = int(e.beat)
         end = int(entries[n + 1].beat) if n + 1 < len(entries) else int(end_beat)
-        out.append({
-            "startBeat": start,
-            "endBeat": end,
-            "rawLabel": label,
-            "kind": normalize_section(label),
-            "mood": mood,
-            "bank": bank,
-            "fill": bool(e.fill),
-            "fillBeat": int(e.beat_fill) if e.fill else None,
-            "raw": {"kind": int(e.kind), "k1": int(e.k1), "k2": int(e.k2), "k3": int(e.k3)},
-        })
+        out.append(
+            {
+                "startBeat": start,
+                "endBeat": end,
+                "rawLabel": label,
+                "kind": normalize_section(label),
+                "mood": mood,
+                "bank": bank,
+                "fill": bool(e.fill),
+                "fillBeat": int(e.beat_fill) if e.fill else None,
+                "raw": {
+                    "kind": int(e.kind),
+                    "k1": int(e.k1),
+                    "k2": int(e.k2),
+                    "k3": int(e.k3),
+                },
+            }
+        )
     return out
 
 
@@ -104,11 +137,11 @@ def extract_anlz(anlz_dir: str | Path) -> dict:
     dat = AnlzFile.parse_file(root / "ANLZ0000.DAT")
     try:
         ext = AnlzFile.parse_file(root / "ANLZ0000.EXT")
-    except Exception:
+    except Exception:  # noqa: BLE001 - EXT variants raise ConstError on unknown tags; per-file fallback
         ext = None
     try:
         ex2 = AnlzFile.parse_file(root / "ANLZ0000.2EX")
-    except Exception:
+    except Exception:  # noqa: BLE001 - same variant fallback for 2EX
         ex2 = None
 
     pqtz = dat.getall("PQTZ")[0]
@@ -118,8 +151,10 @@ def extract_anlz(anlz_dir: str | Path) -> dict:
     if ext is not None:
         try:
             pssi = ext.getall("PSSI")[0]
-            phrases = phrases_from_pssi(int(pssi.mood), int(pssi.bank), int(pssi.end_beat), list(pssi.entries))
-        except Exception:
+            phrases = phrases_from_pssi(
+                int(pssi.mood), int(pssi.bank), int(pssi.end_beat), list(pssi.entries)
+            )
+        except (AttributeError, ValueError, IndexError):
             phrases = []
 
     cues: list[dict] = []
@@ -127,17 +162,19 @@ def extract_anlz(anlz_dir: str | Path) -> dict:
         for tag in ("PCO2", "PCOB"):
             try:
                 sections = ext.getall(tag)
-            except Exception:
+            except (AttributeError, ValueError):
                 continue
             for section in sections:
                 for entry in getattr(section, "entries", []):
-                    cues.append({
-                        "source": tag,
-                        "hotcue": int(getattr(entry, "hot_cue", 0)),
-                        "timeMs": int(getattr(entry, "time", 0)),
-                        "loopTimeMs": int(getattr(entry, "loop_time", -1)),
-                        "comment": str(getattr(entry, "comment", "") or ""),
-                    })
+                    cues.append(
+                        {
+                            "source": tag,
+                            "hotcue": int(getattr(entry, "hot_cue", 0)),
+                            "timeMs": int(getattr(entry, "time", 0)),
+                            "loopTimeMs": int(getattr(entry, "loop_time", -1)),
+                            "comment": str(getattr(entry, "comment", "") or ""),
+                        }
+                    )
 
     def _has(tag: str) -> bool:
         for src in (ext, ex2):
@@ -146,7 +183,7 @@ def extract_anlz(anlz_dir: str | Path) -> dict:
             try:
                 if src.getall(tag):
                     return True
-            except Exception:
+            except (AttributeError, ValueError):
                 continue
         return False
 

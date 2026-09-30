@@ -161,7 +161,7 @@ Milestone contents and exit proofs are in `README.md`.
 
 | Task | Title | File | Milestone | Status | Evidence | Notes |
 | --- | --- | --- | --- | --- | --- | --- |
-| T-TRU-09 | Python lint and types | `wp00-truth-and-gates.md` | M3 | `TODO` | none yet | Closes F-QA-14 |
+| T-TRU-09 | Python lint and types | `wp00-truth-and-gates.md` | M3 | `DONE-VERIFIED` | `docs/finish/evidence/T-TRU-09/README.md` | Closes F-QA-14 |
 | T-RBL-04 | Full ANLZ extraction with per-tag outcomes | `wp06-rekordbox-library-identity.md` | M3 | `TODO` | none yet | Closes F-RBL-02, F-RBL-03, F-RBL-04, F-RBL-05 |
 | T-RBL-07 | Live deck to library to cached model resolution | `wp06-rekordbox-library-identity.md` | M3 | `TODO` | none yet | Closes F-APP-03 |
 | T-ID-01 | Durable identity: alias graph, file hash and PCM fingerprint | `wp06-rekordbox-library-identity.md` | M3 | `TODO` | none yet | Closes F-ID-01, F-LIVE-07 |
