@@ -1,0 +1,38 @@
+
+Running 1 test using 1 worker
+
+(node:45396) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1/1] journeys/m1-slice.journey.ts:10:1 › m1 slice: clean launch to graceful shutdown in Simulator mode
+  1) journeys/m1-slice.journey.ts:10:1 › m1 slice: clean launch to graceful shutdown in Simulator mode › step 2: startup stages in order with timings 
+
+    Error: electronApplication.evaluate: Error: test channel unavailable (ipcMain handlers: open)
+        at eval (eval at evaluate (:311:30), <anonymous>:7:21)
+        at UtilityScript.evaluate (<anonymous>:313:16)
+        at UtilityScript.<anonymous> (<anonymous>:1:44)
+        at eval (eval at evaluate (:311:30), <anonymous>:7:21)
+        at UtilityScript.evaluate (<anonymous>:313:16)
+        at UtilityScript.<anonymous> (<anonymous>:1:44)
+        at Object.invokeTestChannel (/Users/rocket/autolight/apps/desktop/journeys/_harness.ts:76:9)
+        at /Users/rocket/autolight/apps/desktop/journeys/m1-slice.journey.ts:22:37
+        at /Users/rocket/autolight/apps/desktop/journeys/m1-slice.journey.ts:21:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/m1-slice.journey.ts-m1-sli-f4f9a--shutdown-in-Simulator-mode/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/m1-slice.journey.ts-m1-sli-f4f9a--shutdown-in-Simulator-mode/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/m1-slice.journey.ts-m1-sli-f4f9a--shutdown-in-Simulator-mode/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/m1-slice.journey.ts-m1-sli-f4f9a--shutdown-in-Simulator-mode/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+  1 failed
+    journeys/m1-slice.journey.ts:10:1 › m1 slice: clean launch to graceful shutdown in Simulator mode 
