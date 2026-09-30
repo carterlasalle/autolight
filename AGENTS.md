@@ -2733,7 +2733,7 @@ yarn install
 ### Develop
 
 ```sh
-TBD
+yarn dev
 ```
 
 ### Focused test
@@ -2746,31 +2746,37 @@ TBD
 ### Full test
 
 ```sh
-TBD
+yarn vitest run
+uv run --project analysis pytest -q
+yarn workspace @autolight/desktop test:e2e
 ```
 
 ### Lint
 
 ```sh
-TBD
+yarn sg scan --config tools/ast-grep/sgconfig.yml
+node tools/forbidden-words.mjs
+uv run --project analysis ruff check analysis/src/autolight_analysis analysis/tests
 ```
 
 ### Typecheck
 
 ```sh
-TBD
+yarn workspaces foreach --all run typecheck
+uv run --project analysis pyright analysis/src/autolight_analysis
 ```
 
 ### Build
 
 ```sh
-TBD
+yarn build
 ```
 
 ### Full validation / Definition-of-Done command
 
 ```sh
-yarn run verify:phase1
+yarn truth
+yarn verify:all
 ```
 
 ---
@@ -2793,34 +2799,31 @@ Root scripts use `node scripts/each.mjs` (yarn foreach run form broken here).
 
 ## Configuration
 
-<!--
-Record important configuration files, env behavior, and non-obvious defaults.
-Never put real secrets here.
--->
-
-TBD.
+240 keys in `packages/config` generated from `docs/finish/03-config-and-decisions.md`
+section 3 (`yarn workspace @autolight/config run export`). Python reads
+`analysis/src/autolight_analysis/config_schema.json` plus `config_defaults.json`.
+Settings UI lists every key. Never put real secrets here (Govee API key lives
+in safeStorage, T-SEC-01).
 
 ---
 
 ## Architecture boundaries
 
-<!--
-Record project-specific dependency direction and ownership rules.
--->
-
-TBD.
+Renderer observes snapshots and sends intents; never imports show-runtime,
+show-mixer, renderer, govee, or simulator (depcruiser `renderer-no-show-internals`).
+Planner never imports govee or venue device internals (venue independence).
+Show host owns time, output, and UDP sockets. Main owns the DB file. Python
+worker owns analysis artifacts. Enforced by `.dependency-cruiser.cjs`.
 
 ---
 
 ## Source-of-truth files
 
-<!--
-Examples:
-- Schema X owns generated Y.
-- Never edit generated Z directly.
--->
-
-TBD.
+- `docs/finish/03-config-and-decisions.md` section 3 owns `packages/config/src/registry.ts`,
+  `docs/config-reference.md`, and the analysis config JSON (export script only).
+- TypeScript Zod schemas own the Python models (generated, T-ANA-12).
+- `capabilities.yaml` owns the README capability table (generated block).
+- `docs/finish/STATUS.md` owns task state (via make-status, never hand-added rows).
 
 ---
 
@@ -2846,12 +2849,14 @@ TBD.
 
 ## Test topology
 
-<!--
-Record where unit/component/integration/E2E tests live and the fastest way to
-run a single test.
--->
-
-TBD.
+- Unit: `packages/*/src/*.test.ts` via `yarn vitest run` (47 files, 232 tests);
+  single: `yarn vitest run <path>`. Python: `uv run --project analysis pytest -q`
+  (46 passed, 2 owner-skipped); single: `pytest analysis/tests/test_worker.py -q`.
+- Playwright journeys: `apps/desktop/journeys/*.journey.ts` via
+  `yarn workspace @autolight/desktop test:e2e` (4 passed). Never `.spec.ts`
+  under a Vitest-scanned dir (S18).
+- Replay: `packages/rekordbox-live` fixture tests over `protocol-fixtures/`.
+- Goldens: planner golden plus renderer goldens; update only via `yarn golden:update`.
 
 ---
 
@@ -2964,7 +2969,34 @@ Weak:
 "Verify things carefully."
 -->
 
-TBD.
+S1 echo IPC behind real buttons (`apps/desktop/electron/ipc.ts:49-52`): every channel needs a side-effecting handler plus integration proof.
+S2 tests that cannot fail (`e2e/night.spec.ts` tautology, self-writing goldens, soak counter reset): red-run each fix.
+S3 fixtures served as live data (`vite.config.ts` publicDir plus `resolve-live.ts` fetches): Simulator mode only.
+S4 comments claiming absent behavior (IDENTIFY flash-then-restore, TEST CHASE ramp, "this is wired"): describe code as-is.
+S5 swallowed errors (`worker.py except pass`, `.catch(()=>undefined)`, `socket.on(error,()=>undefined)`): name or surface every catch.
+S6 invented UI measurements (`venue-view.tsx` 14/30fps/25ms/online): unknown stays unknown until qualification.
+S7 work in the wrong layer (show loop in React, audio capture in React, dual AX polling): show host owns time and output.
+S8 dead code as features (`pushFrame` zero callers, unused DeviceManager/FrameCoalescer): reachable from entry plus integration test.
+S9 compute then discard (`void identity`, `void predicted`): use it or delete it, never void to silence lint.
+S10 duplicate implementations (PSSI tables TS+Python, dual grid_warning, dual latencyBeats): one source of truth each.
+S11 tests using inputs the system never produces (`translateBlackout` SIDE target): inputs from real upstream code.
+S12 unit mismatches (`toNativeBeat` msx1000, beats-as-seconds isSeek, 0- vs 1-based beats): branded types plus one origin.
+S13 stopping at env blockers instead of building simulators plus runbooks: mark only the physical step BLOCKED-HARDWARE.
+S14 easiest-path recorded as decision (ADR-001 AX-first, rkbx_link never evaluated): all options behind switches.
+S15 README over-claims: capability table generates from capabilities.yaml, zero PASS without qualification.
+S16 per-datagram process spawn (`show-service.ts` node -e per UDP send): persistent sockets on hot paths.
+S17 spec prohibitions violated while tests pass (power-off blackout, single-color H6076, per-beat brightness): byte-level invariants.
+S18 inflated counts (dist tests collected by Vitest): src-only includes, journeys renamed to .journey.ts.
+S19 machine paths in tests (`/Users/rocket/...`): committed fixtures, owner tests behind AUTOLIGHT_OWNER_LIBRARY.
+S20 protocol from memory while source on disk (razer encoder vs toolkit): golden vectors from upstream first.
+S21 hardcoded tunables everywhere: every value a config key with receipt plus Settings row.
+S22 analysis `full` when ML failed: readiness computed from inputs, never set by hand.
+S23 transitive verification (helper unit test as product proof): evidence names exact behavior observed.
+S24 relative runtime paths (`../../analysis`): resolve from app paths through the path service.
+S25 spawning dev tools from product code (`execFile node`): bundle everything the app runs.
+S26 unbounded live queues (soak counter reset per iteration): bounded latest-wins plus drop counters.
+S27 hidden failover (silent transport switches reporting success): every switch logged, shown, reversible.
+S28 env-gated demo paths in release builds: Simulator mode is the only demo path, badged.
 
 ---
 
