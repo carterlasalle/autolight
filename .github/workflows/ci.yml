@@ -20,6 +20,9 @@ jobs:
       - run: yarn workspaces foreach --all --topological-dev --exclude autolight run build
       - run: yarn workspaces foreach --all run typecheck
       - run: yarn workspaces foreach --all run test
+      - uses: FedericoCarboni/setup-ffmpeg@v3
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
