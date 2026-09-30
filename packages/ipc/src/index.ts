@@ -124,6 +124,61 @@ export const channels = {
     request: z.object({ version: v1, enabled: z.boolean() }),
     response: z.union([ok(z.object({ enabled: z.boolean() })), errorSchema]),
   },
+  "config/get": {
+    request: z.object({ version: v1, key: z.string() }),
+    response: z.union([
+      ok(z.object({ key: z.string(), value: z.unknown(), layer: z.string(), liveSafe: z.boolean() })),
+      errorSchema,
+    ]),
+  },
+  "config/set": {
+    request: z.object({
+      version: v1,
+      scope: z.enum(["app", "venue", "device", "style", "session"]),
+      key: z.string(),
+      value: z.unknown(),
+    }),
+    response: z.union([
+      ok(z.object({ key: z.string(), scope: z.string(), value: z.unknown(), layer: z.string() })),
+      errorSchema,
+    ]),
+  },
+  "config/reset": {
+    request: z.object({
+      version: v1,
+      scope: z.enum(["app", "venue", "device", "style", "session"]),
+      key: z.string(),
+    }),
+    response: z.union([ok(z.object({ key: z.string(), scope: z.string() })), errorSchema]),
+  },
+  "config/export": {
+    request: z.object({ version: v1 }),
+    response: z.union([ok(z.object({ json: z.string() })), errorSchema]),
+  },
+  "config/import": {
+    request: z.object({ version: v1, json: z.string() }),
+    response: z.union([ok(z.object({ applied: z.number() })), errorSchema]),
+  },
+  "config/schema": {
+    request: z.object({ version: v1, key: z.string().optional() }),
+    response: z.union([
+      ok(
+        z.object({
+          keys: z.array(
+            z.object({
+              key: z.string(),
+              type: z.string(),
+              scope: z.string(),
+              unit: z.string(),
+              range: z.string(),
+              liveSafe: z.boolean(),
+            }),
+          ),
+        }),
+      ),
+      errorSchema,
+    ]),
+  },
 } as const;
 
 export type Channel = keyof typeof channels;

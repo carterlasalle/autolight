@@ -1,6 +1,8 @@
 import { app } from "electron";
+import { join } from "node:path";
 import { execFile } from "node:child_process";
 import { SessionRecorder, emptyMetrics, type Metrics } from "@autolight/diagnostics";
+import { KEYS as CONFIG_KEYS, PersistentConfigStore, defineKey, type Scope } from "@autolight/config";
 import { scanLan, frameToLan } from "./govee-lan.js";
 import { pollAxDecks, startProlinkWatch } from "./follow.js";
 import { turnCommand } from "@autolight/govee";
@@ -27,11 +29,19 @@ export interface ShowServiceState {
   energyTier: string;
   venueColor: [number, number, number];
   simulatorMode: boolean;
+  // T-CFG-02 layered config: file path injected from userData at startup.
+  config: PersistentConfigStore;
 }
 
 let service: ShowServiceState | null = null;
 
 export function createShowService(): ShowServiceState {
+  let configPath: string | undefined;
+  try {
+    configPath = join(app.getPath("userData"), "config.json");
+  } catch {
+    configPath = undefined;
+  }
   service = {
     recorder: new SessionRecorder(), metrics: emptyMetrics(), stage: ["db"],
     ax: [], prolink: { beat: null, bpm: null, peerPresent: false },
@@ -42,6 +52,7 @@ export function createShowService(): ShowServiceState {
     energyTier: "MED",
     venueColor: [255, 255, 255],
     simulatorMode: false,
+    config: new PersistentConfigStore(configPath),
   };
   return service;
 }
@@ -273,4 +284,71 @@ export function readLiveShow(): { ok: true; decks: never[]; fixtures: never[] } 
   // Decks resolve via the provider manager (T-LIVE-02, T-RBL-07) and plans
   // via the cache (T-RUN-08). Until then: honest empty, never fixtures.
   return { ok: true, decks: [], fixtures: [] };
+}
+
+// T-CFG-02 config channels: layered get/set/reset plus export/import/schema.
+// Invalid keys and values return typed errors naming the key, the value, the
+// allowed range, and the fix. Change events emit config:changed with the diff.
+export function configGet(key: string): { ok: true; key: string; value: unknown; layer: string; liveSafe: boolean } | { ok: false; error: { code: string; message: string } } {
+  const svc = getShowService();
+  let def;
+  try {
+    def = defineKey(key);
+  } catch {
+    return { ok: false, error: { code: "E_UNKNOWN_KEY", message: `${key}: unknown key (fix: remove it or pick a registry key)` } };
+  }
+  let value: unknown;
+  try {
+    value = svc.config.get(key);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { ok: false, error: { code: "E_CONFIG_GET", message: `${key}: ${message}` } };
+  }
+  return { ok: true, key, value, layer: svc.config.layerOf(key), liveSafe: def.liveSafe };
+}
+
+export function configSet(scope: Scope, key: string, value: unknown): { ok: true; key: string; scope: string; value: unknown; layer: string } | { ok: false; error: { code: string; message: string } } {
+  const svc = getShowService();
+  try {
+    defineKey(key);
+  } catch {
+    return { ok: false, error: { code: "E_UNKNOWN_KEY", message: `${key}: unknown key (fix: remove it or pick a registry key)` } };
+  }
+  svc.config.set(scope, key, value);
+  svc.recorder.record("config/set", { scope, key });
+  return { ok: true, key, scope, value, layer: svc.config.layerOf(key) };
+}
+
+export function configReset(scope: Scope, key: string): { ok: true; key: string; scope: string } {
+  const svc = getShowService();
+  svc.config.reset(scope, key);
+  svc.recorder.record("config/reset", { scope, key });
+  return { ok: true, key, scope };
+}
+
+export function configExport(): { ok: true; json: string } {
+  return { ok: true, json: getShowService().config.exportJson() };
+}
+
+export function configImport(json: string): { ok: true; applied: number } | { ok: false; error: { code: string; message: string } } {
+  const svc = getShowService();
+  const res = svc.config.importJson(json);
+  if (!res.ok) {
+    return { ok: false, error: { code: "E_CONFIG_IMPORT", message: res.badKeys.join("; ") } };
+  }
+  let applied = 0;
+  try {
+    applied = Object.keys(JSON.parse(json).values ?? {}).length;
+  } catch {
+    applied = 0;
+  }
+  svc.recorder.record("config/import", { applied });
+  return { ok: true, applied };
+}
+
+export function configSchema(key?: string): { ok: true; keys: { key: string; type: string; scope: string; unit: string; range: string; liveSafe: boolean }[] } {
+  const rows = (key ? CONFIG_KEYS.filter((k) => k.key === key) : CONFIG_KEYS).map((k) => ({
+    key: k.key, type: k.type, scope: k.scope, unit: k.unit, range: k.range, liveSafe: k.liveSafe,
+  }));
+  return { ok: true, keys: rows };
 }

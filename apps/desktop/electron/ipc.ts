@@ -7,6 +7,7 @@ import {
   setShowStyle, setEnergyTier, triggerBuild, triggerDrop,
   setMasterBlackout, setMasterFull, setMasterFreeze, setMasterIntensity, resumeMaster,
   readShowState, readVenueList, setVenueColor, deviceAction,
+  configGet, configSet, configReset, configExport, configImport, configSchema,
 } from "./show-service.js";
 
 // Typed IPC router (T-ARC-02, spec 87). Handlers register before the window
@@ -43,6 +44,12 @@ const handlers: { [C in Channel]: ChannelHandler<C> } = {
   "diagnostics/get": (req) => ({ ok: true as const, tab: req.tab }),
   "diagnostics/all": () => readDiagnostics(),
   "simulator/mode": (req) => setSimulatorMode(req.enabled),
+  "config/get": (req) => configGet(req.key),
+  "config/set": (req) => configSet(req.scope, req.key, req.value),
+  "config/reset": (req) => configReset(req.scope, req.key),
+  "config/export": () => configExport(),
+  "config/import": (req) => configImport(req.json),
+  "config/schema": (req) => configSchema(req.key),
 };
 
 function senderAllowed(event: IpcMainInvokeEvent): boolean {
