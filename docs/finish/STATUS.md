@@ -30,7 +30,7 @@ Milestone contents and exit proofs are in `README.md`.
 | Task | Title | File | Milestone | Status | Evidence | Notes |
 | --- | --- | --- | --- | --- | --- | --- |
 | T-CFG-01 | Create `@autolight/config` | `03-config-and-decisions.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-CFG-01/README.md` | Closes F-CFG-02, F-DATA-08 |
-| T-CFG-02 | Layered resolution and persistence | `03-config-and-decisions.md` | M0 | `TODO` | none yet | Closes F-CFG-02, F-DATA-08 |
+| T-CFG-02 | Layered resolution and persistence | `03-config-and-decisions.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-CFG-02/README.md` | Closes F-CFG-02, F-DATA-08 |
 | T-CFG-03 | Python config bridge | `03-config-and-decisions.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-CFG-03/README.md` | Closes F-CFG-01 |
 | T-CFG-04 | Extract every hardcoded value | `03-config-and-decisions.md` | M0 | `TODO` | none yet | Closes F-CFG-01, F-PLAN-17, F-AUD-04, F-GOV-11 |
 | T-CFG-05 | Settings UI | `03-config-and-decisions.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-CFG-05/README.md` | Closes F-UI-17, F-CFG-02 |
