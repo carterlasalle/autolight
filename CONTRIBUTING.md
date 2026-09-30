@@ -57,14 +57,20 @@ Write a failing test for the observable contract first. Then make the smallest c
 
 - `packages/*/src/*.test.ts` for package behavior (Vitest)
 - `analysis/tests/` for the Python pipeline (pytest)
-- `apps/desktop/e2e/` for critical user journeys (Playwright, real fixtures only)
-- `protocol-fixtures/` + `replayFixture` for transport decoders
+- `apps/desktop/journeys/*.journey.ts` for critical user journeys (Playwright, real show host plus simulators; never `e2e/*.spec.ts`, which Vitest collects)
+- `protocol-fixtures/` (non-empty `capture` required, `expectedBy` names the human author) decoded by the real transport, never echoed
 
-Do not add tests that assert mock/demo UI text, lock in incidental formatting, or duplicate type checking. E2E specs must use real `test-fixtures/analysis` TrackModels — never mock tracks, fixtures, or BPM.
+Do not add tests that assert fixture/demo UI text, lock in incidental formatting, or duplicate type checking.
+Test layers: unit (`packages/*/src/*.test.ts`, file naming `*.test.ts`), property (`*.property.test.ts`, fast-check),
+protocol-replay (`packages/*/src/replay*.test.ts` over `protocol-fixtures/`), analysis golden, planner golden,
+renderer golden, device simulator, fault injection, desktop E2E (`journeys/*.journey.ts` via `_electron.launch`),
+performance (harness with `measurement.json`), soak (nightly wall-clock plus `HW-SOAK-01`).
+Evidence for every closed finish-plan task lives in `docs/finish/evidence/<TASK-ID>/` with a README, red run,
+and green run. No em-dashes in prose under `docs/finish/` (owner preference, checked by the coverage tool).
 
 ### Planner and renderer changes
 
-- Plans are deterministic: same track + style + planner version → same ShowPlan. Update `test-fixtures/analysis/planner-golden.json` deliberately when intended behavior changes.
+- Plans are deterministic: same track + style + planner version → same ShowPlan. Update `test-fixtures/analysis/planner-golden.json` only via `yarn golden:update --reason "<text>"`, which appends to `test-fixtures/goldens/CHANGELOG.md`. Missing goldens fail.
 - Renderer golden frames (`packages/renderer/src/index.test.ts`) pin exact output. A hash change means visible output changed — say what and why in the PR.
 - Restraint rules hold: palettes stay at 2 hues + white (§28–29); live audio overlay stays ≤20% brightness/sparkle and never restructures the show (§68–69).
 
@@ -96,13 +102,11 @@ Keep task-oriented information in `docs/` and link new documents from the README
 Run the narrowest relevant check while iterating. Before requesting review for a cross-cutting change, run:
 
 ```bash
-yarn typecheck
-yarn test
-yarn verify:phase1
-cd apps/desktop && yarn test:e2e
+yarn truth
+yarn verify:all
 ```
 
-`yarn verify:phase1` is `typecheck` plus the Python suite. E2E needs Playwright browsers (`yarn playwright install chromium` inside `apps/desktop`).
+`yarn truth` runs the five M0 gates (plan coverage, manifest, claims, forbidden words, ast-grep). `yarn verify:all` runs build, typecheck, vitest (47 files, 232 tests), pytest (46 passed, 2 owner-skipped), and the 4 Playwright journeys. E2E needs Playwright browsers (`yarn playwright install chromium` inside `apps/desktop`). Bug Corpus (`uv run bugcorpus learn`) records every confirmed-bug fix with its BugCase ID in the evidence README.
 
 ## Pull request checklist
 

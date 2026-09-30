@@ -50,7 +50,7 @@ Milestone contents and exit proofs are in `README.md`.
 | T-TRU-15 | Replace the fake tests | `wp00-truth-and-gates.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-TRU-15/README.md` | Closes F-QA-02, F-QA-03, F-PLAN-12, F-LIVE-02 |
 | T-TRU-16 | Portable Python tests | `wp00-truth-and-gates.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-TRU-16/README.md` | Closes F-ANA-25 |
 | T-TRU-17 | Toolchain facts | `wp00-truth-and-gates.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-TRU-17/README.md` | Closes F-OPS-07 |
-| T-DOC-03 | CONTRIBUTING and AGENTS alignment | `wp00-truth-and-gates.md` | M0 | `TODO` | none yet | Closes F-DOC-06 |
+| T-DOC-03 | CONTRIBUTING and AGENTS alignment | `wp00-truth-and-gates.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-DOC-03/README.md` | Closes F-DOC-06 |
 | T-GOV-14 | Simulators and recording transports | `wp03-govee-lan.md` | M0 | `TODO` | none yet | Closes F-QA-12, F-GOV-23 |
 | T-UI-01 | Component library and a single application root | `wp13-ui.md` | M0 | `TODO` | none yet | Closes F-UI-14, F-APP-14 |
 | T-SEC-03 | Electron hardening | `wp14-data-security-ops.md` | M0 | `TODO` | none yet | Closes F-SEC-01, F-APP-05 |
