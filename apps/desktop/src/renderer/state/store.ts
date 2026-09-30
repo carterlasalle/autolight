@@ -42,8 +42,15 @@ export const ALT_PATTERNS = [
 export type AltPattern = (typeof ALT_PATTERNS)[number];
 export type LightTarget = "A" | "B" | "Both";
 
+// Follow mode: preview = designer tool (resolved grid + plan, no playhead
+// chase). ax-beat = coarse AX poll (1Hz, ±1 beat). prolink = Virtual-CDJ
+// beat/status capture (beat-accurate, needs link peer). soundswitch =
+// Lighting IPC when that capture lands. No board required in any mode.
+export type FollowMode = "preview" | "ax-beat" | "prolink" | "soundswitch";
+
 interface ShellState {
   route: Route;
+  followMode: FollowMode;
   style: string;
   palette: PartyPalette;
   blinder: boolean;
@@ -68,6 +75,7 @@ interface ShellState {
 
 export const useShell = create<ShellState>((set) => ({
   route: "live",
+  followMode: "preview",
   style: "House",
   palette: "ND",
   blinder: true,
