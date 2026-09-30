@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/carterlasalle/autolight/blob/main/SECURITY.md
+    about: Do not open a public issue for vulnerabilities. Report privately by email.
+  - name: Question / discussion
+    url: https://github.com/carterlasalle/autolight/discussions
+    about: Setup help, rig advice, and how-does-it-work questions.

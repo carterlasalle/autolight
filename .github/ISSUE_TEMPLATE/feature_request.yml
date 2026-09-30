@@ -1,0 +1,55 @@
+name: Feature request
+description: New feature or request
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Small, complete proposals land fastest. Read `docs/SPEC.MD` first if it touches timing, transport, or output.
+  - type: input
+    id: title
+    attributes:
+      label: Proposal
+      description: One sentence — what becomes true?
+      placeholder: Crossfade hands impact ownership to the incoming deck
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What DJ/hardware situation does this solve?
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Live show / runtime
+        - Planner / renderer output
+        - Rekordbox transport / library
+        - Serato transport / library
+        - Govee hardware / LAN
+        - Desktop UI
+        - Analysis worker (Python)
+        - Build / CI / packaging
+    validations:
+      required: true
+  - type: textarea
+    id: design
+    attributes:
+      label: Proposed design
+      description: Approach, SPEC sections affected, and what stays unchanged.
+  - type: textarea
+    id: non-goals
+    attributes:
+      label: Non-goals
+      description: What this proposal explicitly does not do.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: No Rekordbox database write path is required
+        - label: No mock/demo data is required in UI or tests

@@ -1,0 +1,52 @@
+name: Hardware / rig report
+description: Govee device, DMX, or physical rig issue
+labels: [hardware]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Physical-rig issues need device facts, not screenshots of the UI. Qualification data wins.
+  - type: input
+    id: device
+    attributes:
+      label: Device
+      description: SKU + count + firmware, e.g. 2x H6076 (1.04) + H1A45 (2.01).
+      placeholder: 2x H6076
+    validations:
+      required: true
+  - type: dropdown
+    id: transport
+    attributes:
+      label: Transport
+      options:
+        - LAN (UDP segment stream)
+        - RB-DMX1 / DMX
+        - Not yet connected
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What the rig did. Include per-device FPS, latency, and health if known.
+    validations:
+      required: true
+  - type: textarea
+    id: qualification
+    attributes:
+      label: Qualification
+      description: Segment count, order, stable FPS, latency, reconnect result (see docs/qualification.md).
+      render: text
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: Blackout leaves the stream armed (no power-cycle)
+        - label: No secrets or LAN credentials are included

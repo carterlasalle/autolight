@@ -1,0 +1,73 @@
+name: Bug report
+description: Something isn't working
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Fill in what you can — logs and fixtures beat guesses.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Commit SHA, tag, or `git log --oneline -1`.
+      placeholder: main @ 3027d99
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Live show / runtime
+        - Planner / renderer output
+        - Rekordbox transport / library
+        - Serato transport / library
+        - Govee hardware / LAN
+        - Desktop UI
+        - Analysis worker (Python)
+        - Build / CI / packaging
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: OS
+      options:
+        - macOS
+        - Windows
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should the show do? Cite a SPEC section if you know it.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What happened instead? Paste errors, not paraphrases.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: Exact steps, fixtures, or captures (protocol-fixtures path welcome).
+      render: shell
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / evidence
+      description: Relevant log lines, screenshots, or `diagnostics/get` output. Strip secrets first.
+      render: text
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I checked for duplicate issues
+        - label: No secrets, credentials, or private library data are included
