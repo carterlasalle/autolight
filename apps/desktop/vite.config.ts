@@ -24,9 +24,10 @@ export default defineConfig({
     },
   },
   base: "./",
+  publicDir: join(root, "..", "..", "test-fixtures"),
   build: {
     outDir: join(root, "dist", "renderer"),
     emptyOutDir: true,
   },
-  server: { port: 5173, strictPort: true },
+  server: { port: 5173, strictPort: true, fs: { allow: [join(root, "..", "..")] } },
 });

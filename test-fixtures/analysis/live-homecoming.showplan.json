@@ -1,0 +1,609 @@
+{
+ "schemaVersion": 1,
+ "plannerVersion": "0.1.0",
+ "trackId": "rb:231828222",
+ "styleId": "club",
+ "seed": "5c055e42",
+ "cues": [
+  {
+   "type": "section-look",
+   "startBeat": 1,
+   "durationBeats": 17,
+   "intensity": 0.3,
+   "target": "PRIMARY",
+   "priority": 10
+  },
+  {
+   "type": "chase-flip",
+   "startBeat": 9,
+   "durationBeats": 8,
+   "intensity": 0.3,
+   "target": "RIGHT",
+   "priority": 11
+  },
+  {
+   "type": "chase-flip",
+   "startBeat": 17,
+   "durationBeats": 1,
+   "intensity": 0.3,
+   "target": "RIGHT",
+   "priority": 11
+  },
+  {
+   "type": "section-look",
+   "startBeat": 18,
+   "durationBeats": 32,
+   "intensity": 0.8,
+   "target": "PRIMARY",
+   "priority": 10
+  },
+  {
+   "type": "chase-flip",
+   "startBeat": 26,
+   "durationBeats": 8,
+   "intensity": 0.8,
+   "target": "RIGHT",
+   "priority": 11
+  },
+  {
+   "type": "chase-flip",
+   "startBeat": 34,
+   "durationBeats": 8,
+   "intensity": 0.8,
+   "target": "RIGHT",
+   "priority": 11
+  },
+  {
+   "type": "chase-flip",
+   "startBeat": 42,
+   "durationBeats": 8,
+   "intensity": 0.8,
+   "target": "RIGHT",
+   "priority": 11
+  },
+  {
+   "type": "section-look",
+   "startBeat": 50,
+   "durationBeats": 32,
+   "intensity": 0.8,
+   "target": "SECONDARY",
+   "priority": 10
+  },
+  {
+   "type": "chase-flip",
+   "startBeat": 58,
+   "durationBeats": 8,
+   "intensity": 0.8,
+   "target": "RIGHT",
+   "priority": 11
+  },
+  {
+   "type": "chase-flip",
+   "startBeat": 66,
+   "durationBeats": 8,
+   "intensity": 0.8,
+   "target": "RIGHT",
+   "priority": 11
+  },
+  {
+   "type": "chase-flip",
+   "startBeat": 74,
+   "durationBeats": 8,
+   "intensity": 0.8,
+   "target": "RIGHT",
+   "priority": 11
+  },
+  {
+   "type": "section-look",
+   "startBeat": 82,
+   "durationBeats": 16,
+   "intensity": 0.8,
+   "target": "PRIMARY",
+   "priority": 10
+  },
+  {
+   "type": "chase-flip",
+   "startBeat": 90,
+   "durationBeats": 8,
+   "intensity": 0.8,
+   "target": "RIGHT",
+   "priority": 11
+  },
+  {
+   "type": "breakdown-look",
+   "startBeat": 98,
+   "durationBeats": 32,
+   "intensity": 0.25,
+   "target": "PRIMARY",
+   "priority": 10
+  },
+  {
+   "type": "chase-flip",
+   "startBeat": 106,
+   "durationBeats": 8,
+   "intensity": 0.25,
+   "target": "RIGHT",
+   "priority": 11
+  },
+  {
+   "type": "chase-flip",
+   "startBeat": 114,
+   "durationBeats": 8,
+   "intensity": 0.25,
+   "target": "RIGHT",
+   "priority": 11
+  },
+  {
+   "type": "chase-flip",
+   "startBeat": 122,
+   "durationBeats": 8,
+   "intensity": 0.25,
+   "target": "RIGHT",
+   "priority": 11
+  },
+  {
+   "type": "section-look",
+   "startBeat": 130,
+   "durationBeats": 32,
+   "intensity": 0.8,
+   "target": "SECONDARY",
+   "priority": 10
+  },
+  {
+   "type": "chase-flip",
+   "startBeat": 138,
+   "durationBeats": 8,
+   "intensity": 0.8,
+   "target": "RIGHT",
+   "priority": 11
+  },
+  {
+   "type": "chase-flip",
+   "startBeat": 146,
+   "durationBeats": 8,
+   "intensity": 0.8,
+   "target": "RIGHT",
+   "priority": 11
+  },
+  {
+   "type": "chase-flip",
+   "startBeat": 154,
+   "durationBeats": 8,
+   "intensity": 0.8,
+   "target": "RIGHT",
+   "priority": 11
+  },
+  {
+   "type": "breakdown-look",
+   "startBeat": 162,
+   "durationBeats": 32,
+   "intensity": 0.25,
+   "target": "SECONDARY",
+   "priority": 10
+  },
+  {
+   "type": "chase-flip",
+   "startBeat": 170,
+   "durationBeats": 8,
+   "intensity": 0.25,
+   "target": "RIGHT",
+   "priority": 11
+  },
+  {
+   "type": "chase-flip",
+   "startBeat": 178,
+   "durationBeats": 8,
+   "intensity": 0.25,
+   "target": "RIGHT",
+   "priority": 11
+  },
+  {
+   "type": "chase-flip",
+   "startBeat": 186,
+   "durationBeats": 8,
+   "intensity": 0.25,
+   "target": "RIGHT",
+   "priority": 11
+  },
+  {
+   "type": "breakdown-look",
+   "startBeat": 194,
+   "durationBeats": 32,
+   "intensity": 0.25,
+   "target": "PRIMARY",
+   "priority": 10
+  },
+  {
+   "type": "chase-flip",
+   "startBeat": 202,
+   "durationBeats": 8,
+   "intensity": 0.25,
+   "target": "RIGHT",
+   "priority": 11
+  },
+  {
+   "type": "chase-flip",
+   "startBeat": 210,
+   "durationBeats": 8,
+   "intensity": 0.25,
+   "target": "RIGHT",
+   "priority": 11
+  },
+  {
+   "type": "chase-flip",
+   "startBeat": 218,
+   "durationBeats": 8,
+   "intensity": 0.25,
+   "target": "RIGHT",
+   "priority": 11
+  },
+  {
+   "type": "section-look",
+   "startBeat": 226,
+   "durationBeats": 32,
+   "intensity": 0.8,
+   "target": "PRIMARY",
+   "priority": 10
+  },
+  {
+   "type": "chase-flip",
+   "startBeat": 234,
+   "durationBeats": 8,
+   "intensity": 0.8,
+   "target": "RIGHT",
+   "priority": 11
+  },
+  {
+   "type": "chase-flip",
+   "startBeat": 242,
+   "durationBeats": 8,
+   "intensity": 0.8,
+   "target": "RIGHT",
+   "priority": 11
+  },
+  {
+   "type": "chase-flip",
+   "startBeat": 250,
+   "durationBeats": 8,
+   "intensity": 0.8,
+   "target": "RIGHT",
+   "priority": 11
+  },
+  {
+   "type": "section-look",
+   "startBeat": 258,
+   "durationBeats": 16,
+   "intensity": 0.8,
+   "target": "SECONDARY",
+   "priority": 10
+  },
+  {
+   "type": "chase-flip",
+   "startBeat": 266,
+   "durationBeats": 8,
+   "intensity": 0.8,
+   "target": "RIGHT",
+   "priority": 11
+  },
+  {
+   "type": "section-look",
+   "startBeat": 274,
+   "durationBeats": 16,
+   "intensity": 0.8,
+   "target": "PRIMARY",
+   "priority": 10
+  },
+  {
+   "type": "chase-flip",
+   "startBeat": 282,
+   "durationBeats": 8,
+   "intensity": 0.8,
+   "target": "RIGHT",
+   "priority": 11
+  },
+  {
+   "type": "section-look",
+   "startBeat": 290,
+   "durationBeats": 32,
+   "intensity": 0.8,
+   "target": "SECONDARY",
+   "priority": 10
+  },
+  {
+   "type": "chase-flip",
+   "startBeat": 298,
+   "durationBeats": 8,
+   "intensity": 0.8,
+   "target": "RIGHT",
+   "priority": 11
+  },
+  {
+   "type": "chase-flip",
+   "startBeat": 306,
+   "durationBeats": 8,
+   "intensity": 0.8,
+   "target": "RIGHT",
+   "priority": 11
+  },
+  {
+   "type": "chase-flip",
+   "startBeat": 314,
+   "durationBeats": 8,
+   "intensity": 0.8,
+   "target": "RIGHT",
+   "priority": 11
+  },
+  {
+   "type": "section-look",
+   "startBeat": 322,
+   "durationBeats": 32,
+   "intensity": 0.8,
+   "target": "PRIMARY",
+   "priority": 10
+  },
+  {
+   "type": "chase-flip",
+   "startBeat": 330,
+   "durationBeats": 8,
+   "intensity": 0.8,
+   "target": "RIGHT",
+   "priority": 11
+  },
+  {
+   "type": "chase-flip",
+   "startBeat": 338,
+   "durationBeats": 8,
+   "intensity": 0.8,
+   "target": "RIGHT",
+   "priority": 11
+  },
+  {
+   "type": "chase-flip",
+   "startBeat": 346,
+   "durationBeats": 8,
+   "intensity": 0.8,
+   "target": "RIGHT",
+   "priority": 11
+  },
+  {
+   "type": "breakdown-look",
+   "startBeat": 354,
+   "durationBeats": 16,
+   "intensity": 0.25,
+   "target": "SECONDARY",
+   "priority": 10
+  },
+  {
+   "type": "chase-flip",
+   "startBeat": 362,
+   "durationBeats": 8,
+   "intensity": 0.25,
+   "target": "RIGHT",
+   "priority": 11
+  },
+  {
+   "type": "section-look",
+   "startBeat": 370,
+   "durationBeats": 16,
+   "intensity": 0.8,
+   "target": "SECONDARY",
+   "priority": 10
+  },
+  {
+   "type": "chase-flip",
+   "startBeat": 378,
+   "durationBeats": 8,
+   "intensity": 0.8,
+   "target": "RIGHT",
+   "priority": 11
+  },
+  {
+   "type": "breakdown-look",
+   "startBeat": 386,
+   "durationBeats": 32,
+   "intensity": 0.25,
+   "target": "PRIMARY",
+   "priority": 10
+  },
+  {
+   "type": "chase-flip",
+   "startBeat": 394,
+   "durationBeats": 8,
+   "intensity": 0.25,
+   "target": "RIGHT",
+   "priority": 11
+  },
+  {
+   "type": "chase-flip",
+   "startBeat": 402,
+   "durationBeats": 8,
+   "intensity": 0.25,
+   "target": "RIGHT",
+   "priority": 11
+  },
+  {
+   "type": "chase-flip",
+   "startBeat": 410,
+   "durationBeats": 8,
+   "intensity": 0.25,
+   "target": "RIGHT",
+   "priority": 11
+  },
+  {
+   "type": "section-look",
+   "startBeat": 418,
+   "durationBeats": 32,
+   "intensity": 0.8,
+   "target": "PRIMARY",
+   "priority": 10
+  },
+  {
+   "type": "chase-flip",
+   "startBeat": 426,
+   "durationBeats": 8,
+   "intensity": 0.8,
+   "target": "RIGHT",
+   "priority": 11
+  },
+  {
+   "type": "chase-flip",
+   "startBeat": 434,
+   "durationBeats": 8,
+   "intensity": 0.8,
+   "target": "RIGHT",
+   "priority": 11
+  },
+  {
+   "type": "chase-flip",
+   "startBeat": 442,
+   "durationBeats": 8,
+   "intensity": 0.8,
+   "target": "RIGHT",
+   "priority": 11
+  },
+  {
+   "type": "section-look",
+   "startBeat": 450,
+   "durationBeats": 32,
+   "intensity": 0.8,
+   "target": "SECONDARY",
+   "priority": 10
+  },
+  {
+   "type": "chase-flip",
+   "startBeat": 458,
+   "durationBeats": 8,
+   "intensity": 0.8,
+   "target": "RIGHT",
+   "priority": 11
+  },
+  {
+   "type": "chase-flip",
+   "startBeat": 466,
+   "durationBeats": 8,
+   "intensity": 0.8,
+   "target": "RIGHT",
+   "priority": 11
+  },
+  {
+   "type": "chase-flip",
+   "startBeat": 474,
+   "durationBeats": 8,
+   "intensity": 0.8,
+   "target": "RIGHT",
+   "priority": 11
+  },
+  {
+   "type": "breakdown-look",
+   "startBeat": 482,
+   "durationBeats": 16,
+   "intensity": 0.25,
+   "target": "SECONDARY",
+   "priority": 10
+  },
+  {
+   "type": "chase-flip",
+   "startBeat": 490,
+   "durationBeats": 8,
+   "intensity": 0.25,
+   "target": "RIGHT",
+   "priority": 11
+  },
+  {
+   "type": "section-look",
+   "startBeat": 498,
+   "durationBeats": 32,
+   "intensity": 0.8,
+   "target": "PRIMARY",
+   "priority": 10
+  },
+  {
+   "type": "chase-flip",
+   "startBeat": 506,
+   "durationBeats": 8,
+   "intensity": 0.8,
+   "target": "RIGHT",
+   "priority": 11
+  },
+  {
+   "type": "chase-flip",
+   "startBeat": 514,
+   "durationBeats": 8,
+   "intensity": 0.8,
+   "target": "RIGHT",
+   "priority": 11
+  },
+  {
+   "type": "chase-flip",
+   "startBeat": 522,
+   "durationBeats": 8,
+   "intensity": 0.8,
+   "target": "RIGHT",
+   "priority": 11
+  },
+  {
+   "type": "breakdown-look",
+   "startBeat": 530,
+   "durationBeats": 32,
+   "intensity": 0.25,
+   "target": "PRIMARY",
+   "priority": 10
+  },
+  {
+   "type": "chase-flip",
+   "startBeat": 538,
+   "durationBeats": 8,
+   "intensity": 0.25,
+   "target": "RIGHT",
+   "priority": 11
+  },
+  {
+   "type": "chase-flip",
+   "startBeat": 546,
+   "durationBeats": 8,
+   "intensity": 0.25,
+   "target": "RIGHT",
+   "priority": 11
+  },
+  {
+   "type": "chase-flip",
+   "startBeat": 554,
+   "durationBeats": 8,
+   "intensity": 0.25,
+   "target": "RIGHT",
+   "priority": 11
+  },
+  {
+   "type": "section-look",
+   "startBeat": 562,
+   "durationBeats": 25,
+   "intensity": 0.3,
+   "target": "PRIMARY",
+   "priority": 10
+  },
+  {
+   "type": "chase-flip",
+   "startBeat": 570,
+   "durationBeats": 8,
+   "intensity": 0.3,
+   "target": "RIGHT",
+   "priority": 11
+  },
+  {
+   "type": "chase-flip",
+   "startBeat": 578,
+   "durationBeats": 8,
+   "intensity": 0.3,
+   "target": "RIGHT",
+   "priority": 11
+  },
+  {
+   "type": "chase-flip",
+   "startBeat": 586,
+   "durationBeats": 1,
+   "intensity": 0.3,
+   "target": "RIGHT",
+   "priority": 11
+  }
+ ]
+}
