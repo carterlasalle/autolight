@@ -37,9 +37,9 @@ Milestone contents and exit proofs are in `README.md`.
 | T-ARC-01 | Show host with all DS-07 modes | `04-target-architecture.md` | M0 | `TODO` | none yet | Closes F-APP-02 |
 | T-ARC-02 | Typed IPC API | `04-target-architecture.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-ARC-02/README.md` | Closes F-APP-04, F-APP-05, F-APP-06 |
 | T-ARC-03 | Startup, shutdown and crash policy | `04-target-architecture.md` | M0 | `TODO` | none yet | Closes F-APP-01, F-OPS-03, F-OPS-09 |
-| T-TRU-01 | Coverage tool and status discipline in CI | `wp00-truth-and-gates.md` | M0 | `TODO` | none yet | Closes F-DOC-06 |
+| T-TRU-01 | Coverage tool and status discipline in CI | `wp00-truth-and-gates.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-TRU-01/README.md` | Closes F-DOC-06 |
 | T-TRU-02 | Remove fixture data from production; add an explicit Simulator mode | `wp00-truth-and-gates.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-TRU-02/README.md` | Closes F-APP-03, F-APP-07, F-UI-19 |
-| T-TRU-04 | Reachability and architecture gates | `wp00-truth-and-gates.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-TRU-04/README.md` | Closes F-QA-14 |
+| T-TRU-04 | Reachability and architecture gates | `wp00-truth-and-gates.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-TRU-04/README.md` | Closes F-APP-13, F-DOC-02, F-QA-14 |
 | T-TRU-05 | Capability manifest and generated README claims | `wp00-truth-and-gates.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-TRU-05/README.md` | Closes F-DOC-02, F-APP-13, F-QA-14 |
 | T-TRU-06 | Anti-pattern rule pack | `wp00-truth-and-gates.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-TRU-06/README.md` | Closes F-APP-13, F-DOC-02, F-QA-14 |
 | T-TRU-07 | Vitest configuration and coverage | `wp00-truth-and-gates.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-TRU-07/README.md` | Closes F-QA-01, F-QA-08, F-QA-14 |
@@ -49,7 +49,7 @@ Milestone contents and exit proofs are in `README.md`.
 | T-TRU-13 | Record the scars in AGENTS.md | `wp00-truth-and-gates.md` | M0 | `TODO` | none yet | Closes F-DOC-06 |
 | T-TRU-15 | Replace the fake tests | `wp00-truth-and-gates.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-TRU-15/README.md` | Closes F-QA-02, F-QA-03, F-PLAN-12, F-LIVE-02 |
 | T-TRU-16 | Portable Python tests | `wp00-truth-and-gates.md` | M0 | `TODO` | none yet | Closes F-ANA-25 |
-| T-TRU-17 | Toolchain facts | `wp00-truth-and-gates.md` | M0 | `TODO` | none yet | Closes F-OPS-07 |
+| T-TRU-17 | Toolchain facts | `wp00-truth-and-gates.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-TRU-17/README.md` | Closes F-OPS-07 |
 | T-DOC-03 | CONTRIBUTING and AGENTS alignment | `wp00-truth-and-gates.md` | M0 | `TODO` | none yet | Closes F-DOC-06 |
 | T-GOV-14 | Simulators and recording transports | `wp03-govee-lan.md` | M0 | `TODO` | none yet | Closes F-QA-12, F-GOV-23 |
 | T-UI-01 | Component library and a single application root | `wp13-ui.md` | M0 | `TODO` | none yet | Closes F-UI-14, F-APP-14 |
