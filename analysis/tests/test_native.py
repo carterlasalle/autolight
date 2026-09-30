@@ -55,9 +55,9 @@ def test_phrases_end_chain_and_fill():
 
 
 def test_extract_real_anlz():
-    got = extract_anlz(
-        "/Users/rocket/Library/Pioneer/rekordbox/share/PIONEER/USBANLZ/135/fb47d-24bc-49c5-b5e7-ce275ed46465"
-    )
+    import pathlib
+    sample = pathlib.Path(__file__).parent / "fixtures" / "anlz-sample"
+    got = extract_anlz(str(sample))
     assert len(got["beatGrid"]) > 100
     assert got["beatGrid"][0]["beatInBar"] == 1
     assert len(got["phrases"]) == 18
