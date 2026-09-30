@@ -1,5 +1,6 @@
 import { useShell, invoke } from "../state/store.js";
 import type { LiveState } from "../state/store.js";
+import { AudioSyncCard } from "./audio-sync.js";
 import { Button } from "./ui/button.js";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card.js";
 import { Badge } from "./ui/badge.js";
@@ -145,13 +146,7 @@ export function ControlGrid(): JSX.Element {
             : <Button size="sm" variant="outline" onClick={() => { s.set({ running: false }); void invoke("master/freeze", { version: 1, frozen: true }); }}>Stop live autoloops</Button>}
         </CardContent>
       </Card>
-      <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-[13px]">Audio sync</CardTitle></CardHeader>
-        <CardContent>
-          <p className="font-timing text-[13px] tabular-nums">BPM: {s.bpm !== null ? s.bpm.toFixed(1) : "--"}</p>
-          <p className="text-[13px] text-muted-foreground">Live audio overlay is not wired yet — the show runs from the DJ grid, never mic guessing.</p>
-        </CardContent>
-      </Card>
+      <AudioSyncCard />
       <Card>
         <CardHeader className="pb-2"><CardTitle className="text-[13px]">Color + brightness</CardTitle></CardHeader>
         <CardContent>

@@ -1,7 +1,6 @@
 import { useShell } from "../state/store.js";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card.js";
 import { Badge } from "./ui/badge.js";
-import { rowForTrack } from "../library.js";
 
 // Library (§95): readiness table. Live rows arrive from the store;
 // empty state invites analysis instead of showing a blank grid.
@@ -9,13 +8,18 @@ import { rowForTrack } from "../library.js";
 // empty until the watcher resolves real tracks — never fake rows.
 export function LibraryView(): JSX.Element {
   const live = useShell((s) => s.live);
-  const hasTracks = live !== null;
+  const set = useShell((s) => s.set);
+  const selected = useShell((s) => s.selectedTrackId);
+  const rows = [
+    live ? { deck: 1 as const, title: live.deckA.title, bpm: live.bpm, id: live.deckA.title } : null,
+    live && live.deckB.title !== "—" ? { deck: 2 as const, title: live.deckB.title, bpm: live.bpm, id: live.deckB.title } : null,
+  ].filter((r): r is NonNullable<typeof r> => r !== null);
   return (
     <div className="flex max-w-5xl flex-col gap-3">
       <Card>
         <CardHeader className="pb-2"><CardTitle className="text-[13px]">Library</CardTitle></CardHeader>
         <CardContent>
-          {hasTracks ? (
+          {rows.length > 0 ? (
             <table aria-label="Library" className="w-full border-collapse text-[13px]">
               <thead>
                 <tr className="text-left text-xs text-muted-foreground">
@@ -26,12 +30,18 @@ export function LibraryView(): JSX.Element {
                 </tr>
               </thead>
               <tbody>
-                <tr>
-                  <td className="border-b py-1.5 pr-3">{live.deckA.title || live.deckB.title || "—"}</td>
-                  <td className="border-b py-1.5 pr-3">—</td>
-                  <td className="border-b py-1.5 pr-3 font-timing tabular-nums">{live.bpm !== null ? live.bpm.toFixed(1) : "—"}</td>
-                  <td className="border-b py-1.5"><Badge variant="secondary">READY</Badge></td>
-                </tr>
+                {rows.map((r) => (
+                  <tr
+                    key={`${r.deck}-${r.id}`}
+                    className={selected === r.id ? "bg-muted/50" : "cursor-pointer"}
+                    onClick={() => { set({ selectedTrackId: r.id }); }}
+                  >
+                    <td className="border-b py-1.5 pr-3">{r.title || "—"}</td>
+                    <td className="border-b py-1.5 pr-3">—</td>
+                    <td className="border-b py-1.5 pr-3 font-timing tabular-nums">{r.bpm !== null ? r.bpm.toFixed(1) : "—"}</td>
+                    <td className="border-b py-1.5"><Badge variant="secondary">READY</Badge></td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           ) : (

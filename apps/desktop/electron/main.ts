@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { app, BrowserWindow } from "electron";
 import { createIpc } from "./ipc.js";
+import { startAxLoop, startProlink } from "./show-service.js";
 
 // Startup sequence (§132): DB → show worker → Govee → DJ adapter →
 // library watcher → analysis worker → venue → tracks → plans → arm → READY.
@@ -46,5 +47,7 @@ export async function boot(): Promise<void> {
     await win.loadFile(join(__dirname, "..", "renderer", "index.html"));
   }
   createIpc();
+  startAxLoop();
+  startProlink();
 }
 void boot();

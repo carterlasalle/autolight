@@ -62,16 +62,89 @@ export function latencyBeats(latencyMs: number, bpm: number): number {
   return (Math.max(0, latencyMs) / 1000) * (bpm / 60);
 }
 
+// Official Govee LAN API (wlan-guide): JSON over UDP — scan to multicast
+// 239.255.255.250:4001, replies on 4002, unicast control to device IP:4003.
+// Exactly 4 commands: turn, brightness, devStatus, colorwc. Whole-device
+// color only — no scene/DreamView/segment commands, so beat-synced shows
+// drive colorwc + brightness. Kelvin 0 = pure RGB; nonzero overrides RGB.
+export const MULTICAST = "239.255.255.250";
+export const SCAN_REQUEST = { msg: { cmd: "scan", data: { account_topic: "reserve" } } } as const;
+
+export interface ScanReply {
+  ip: string;
+  device: string;
+  sku: string;
+  bleVersionHard: string;
+  bleVersionSoft: string;
+  wifiVersionHard: string;
+  wifiVersionSoft: string;
+}
+
+export function parseScanReply(raw: unknown): ScanReply | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const data = (raw as { msg?: { cmd?: unknown; data?: unknown } }).msg?.data as Record<string, unknown> | undefined;
+  if (!data || typeof data["ip"] !== "string" || typeof data["device"] !== "string" || typeof data["sku"] !== "string") return null;
+  return {
+    ip: data["ip"] as string,
+    device: data["device"] as string,
+    sku: data["sku"] as string,
+    bleVersionHard: typeof data["bleVersionHard"] === "string" ? data["bleVersionHard"] as string : "",
+    bleVersionSoft: typeof data["bleVersionSoft"] === "string" ? data["bleVersionSoft"] as string : "",
+    wifiVersionHard: typeof data["wifiVersionHard"] === "string" ? data["wifiVersionHard"] as string : "",
+    wifiVersionSoft: typeof data["wifiVersionSoft"] === "string" ? data["wifiVersionSoft"] as string : "",
+  };
+}
+
+export function turnCommand(on: boolean): string {
+  return JSON.stringify({ msg: { cmd: "turn", data: { value: on ? 1 : 0 } } });
+}
+
+export function brightnessCommand(value: number): string {
+  const v = Math.min(100, Math.max(1, Math.round(value)));
+  return JSON.stringify({ msg: { cmd: "brightness", data: { value: v } } });
+}
+
+export function colorCommand(r: number, g: number, b: number): string {
+  const clamp = (v: number): number => Math.min(255, Math.max(0, Math.round(v)));
+  return JSON.stringify({ msg: { cmd: "colorwc", data: { color: { r: clamp(r), g: clamp(g), b: clamp(b) }, colorTemInKelvin: 0 } } });
+}
+
+export function devStatusCommand(): string {
+  return JSON.stringify({ msg: { cmd: "devStatus", data: {} } });
+}
+
+export interface LanDeviceStatus {
+  onOff: boolean;
+  brightness: number;
+  color: { r: number; g: number; b: number };
+  colorTemInKelvin: number;
+}
+
+export function parseDevStatus(raw: unknown): LanDeviceStatus | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const data = (raw as { msg?: { cmd?: unknown; data?: unknown } }).msg?.data as Record<string, unknown> | undefined;
+  if (!data || typeof data["onOff"] !== "number" || typeof data["brightness"] !== "number") return null;
+  const color = data["color"] as { r?: unknown; g?: unknown; b?: unknown } | undefined;
+  return {
+    onOff: (data["onOff"] as number) === 1,
+    brightness: data["brightness"] as number,
+    color: {
+      r: typeof color?.r === "number" ? color.r as number : 0,
+      g: typeof color?.g === "number" ? color.g as number : 0,
+      b: typeof color?.b === "number" ? color.b as number : 0,
+    },
+    colorTemInKelvin: typeof data["colorTemInKelvin"] === "number" ? data["colorTemInKelvin"] as number : 0,
+  };
+}
+
+// Transport contract: Electron main owns UDP sockets; renderer owns desired
+// state (§149). LAN first with read-back verify; BLE last-resort single-color
+// (Lightwave order); cloud REST never for frames (10/min/device ceiling).
+export type LanTransport = "lan" | "ble" | "cloud";
+
 export interface SegmentStream {
   setAll(frame: Uint8Array): void;
   close(): void;
-}
-
-// Toolkit transport seam (§44-45): the pinned govee-toolkit fork owns the
-// SegmentStream behind this interface. LatestStream below is the no-hardware
-// fallback + test double with identical newest-state-wins semantics.
-export interface ToolkitStreamFactory {
-  openStream(deviceIp: string, zones: number): Promise<SegmentStream>;
 }
 
 // Newest-state-wins stream: setAll coalesces, flush takes latest (§51).
@@ -89,6 +162,21 @@ export class LatestStream implements SegmentStream {
     if (f) this.sender(f);
   }
   close(): void { this.closed = true; }
+}
+
+// Pinned toolkit seam (§44-45): the vendored transport owns the SegmentStream
+// behind this interface; LatestStream above is the no-hardware test double.
+export interface ToolkitStreamFactory {
+  openStream(deviceIp: string, zones: number): Promise<SegmentStream>;
+}
+
+// H6076 is single-zone over LAN (community-confirmed): gradient paints
+// collapse to the middle color on Wi-Fi; segments/scenes stay cloud-only.
+export function collapseToSingleColor(frame: Uint8Array): [number, number, number] {
+  const n = Math.floor(frame.length / 3);
+  if (n <= 0) return [0, 0, 0];
+  const mid = Math.floor(n / 2) * 3;
+  return [frame[mid] ?? 0, frame[mid + 1] ?? 0, frame[mid + 2] ?? 0];
 }
 
 // LAN manager (§46, §106-107): discovery → arm → stream; per-device FPS

@@ -66,10 +66,18 @@ interface ShellState {
   altPattern: AltPattern;
   altSpeed: number;
   bpm: number | null;
+  reactiveLevel: number;
+  audioDevices: { index: number; name: string }[];
+  audioDevice: number | null;
+  audioLevel: number;
+  audioPermission: "unknown" | "granted" | "denied";
+  paletteHue: number;
   devices: { address: string; name: string }[];
   target: LightTarget;
   tiles: DeviceTile[];
   live: LiveState | null;
+  selectedTrackId: string | null;
+  diagnostics: Record<string, string>;
   set: (patch: Partial<ShellState>) => void;
 }
 
@@ -91,9 +99,17 @@ export const useShell = create<ShellState>((set) => ({
   altPattern: "Alternating Flash",
   altSpeed: 500,
   bpm: null,
+  reactiveLevel: 0,
+  audioDevices: [],
+  audioDevice: null,
+  audioLevel: 0,
+  audioPermission: "unknown",
+  paletteHue: 0,
   devices: [],
   target: "Both",
   tiles: [],
   live: null,
+  selectedTrackId: null,
+  diagnostics: {},
   set: (patch) => set(patch),
 }));

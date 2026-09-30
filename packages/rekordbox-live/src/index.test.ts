@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { compositeToDeckState, parseFixture, replayFixture, isSupported, unverifiedWarning } from "./index.js";
+import { compositeToDeckState, parseFixture, replayFixture, isSupported, unverifiedWarning, axBeatToPlayhead, combineTransport } from "./index.js";
 
 const base: Record<string, unknown> = {
   rekordboxVersion: "7.2.19",
@@ -59,5 +59,18 @@ describe("rekordbox-live", () => {
     expect(state.track?.id).toBe("rb:231828222");
     expect(state.effectiveBpm).toBe(173.98);
     expect(raw).toMatchObject({ provider: "composite-flx4" });
+  });
+  it("maps AX elapsed onto the ANLZ grid, null when unreadable", () => {
+    const grid = [{ sourceTimeMs: 0 }, { sourceTimeMs: 345 }, { sourceTimeMs: 690 }];
+    expect(axBeatToPlayhead({ deckId: 1, elapsedSeconds: 0.5, playing: true, readable: true, sampledAtNs: 1n }, grid)).toBe(2);
+    expect(axBeatToPlayhead({ deckId: 1, elapsedSeconds: null, playing: null, readable: false, sampledAtNs: 1n }, grid)).toBeNull();
+  });
+  it("combines prolink > ax > estimator without fabricating", () => {
+    const est = { estimatedBeat: 9, estimatedBpm: 174 };
+    expect(combineTransport({ prolink: { beat: 42, playing: true, bpm: 174, peerPresent: true }, ax: { beat: 7, playing: true }, ...est }).source).toBe("prolink");
+    expect(combineTransport({ prolink: { beat: null, playing: null, bpm: null, peerPresent: false }, ax: { beat: 7, playing: true }, ...est }).source).toBe("ax-beat");
+    const held = combineTransport({ prolink: { beat: null, playing: null, bpm: null, peerPresent: false }, ax: { beat: null, playing: null }, ...est });
+    expect(held.source).toBe("preview");
+    expect(held.beat).toBe(9);
   });
 });

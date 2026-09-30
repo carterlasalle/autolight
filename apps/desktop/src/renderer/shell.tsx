@@ -10,7 +10,7 @@ import { DiagnosticsView } from "./components/diagnostics-view.js";
 import { CommandPalette } from "./components/command-palette.js";
 import { Toaster } from "./components/ui/sonner.js";
 import { useShell, invoke } from "./state/store.js";
-import { resolveLiveDecks } from "./state/resolve-live.js";
+import { resolveLiveDecks, useLiveCursor } from "./state/resolve-live.js";
 import { shortcutFor } from "./shortcuts.js";
 import "./styles/globals.css";
 // App shell: titlebar + sidebar + workspace + statusbar (§88-89).
@@ -20,14 +20,7 @@ export function Shell(): JSX.Element {
   const set = useShell((s) => s.set);
   const live = useShell((s) => s.live);
 
-  useEffect(() => {
-    let cancelled = false;
-    void resolveLiveDecks().then((r) => {
-      if (!r || cancelled) return;
-      set({ live: r.live, bpm: r.bpm });
-    });
-    return () => { cancelled = true; };
-  }, [set]);
+  useLiveCursor();
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {

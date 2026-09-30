@@ -1,4 +1,4 @@
-import { useShell } from "../state/store.js";
+import { useShell, invoke } from "../state/store.js";
 import type { FollowMode } from "../state/store.js";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card.js";
 import { SETUP_STEPS } from "../venue.js";
@@ -14,7 +14,14 @@ const MODES: { id: FollowMode; title: string; body: string }[] = [
 export function SetupView(): JSX.Element {
   const mode = useShell((s) => s.followMode);
   const set = useShell((s) => s.set);
-  const done: string[] = ["dj", "controller"];
+  const live = useShell((s) => s.live);
+  const devices = useShell((s) => s.devices);
+  const tiles = useShell((s) => s.tiles);
+  const done: string[] = [
+    ...(live ? ["dj", "library", "analysis", "preview"] : ["dj"]),
+    ...(devices.length > 0 ? ["lights"] : []),
+    ...(tiles.length > 0 ? ["identify", "qualification"] : []),
+  ];
   return (
     <div className="flex max-w-3xl flex-col gap-3">
       <Card>
@@ -23,7 +30,7 @@ export function SetupView(): JSX.Element {
           <div role="radiogroup" aria-label="Follow mode" className="flex flex-col gap-2">
             {MODES.map((m) => (
               <label key={m.id} className="flex cursor-pointer items-start gap-2 rounded-md border p-2.5 text-[13px]">
-                <input type="radio" name="follow-mode" checked={mode === m.id} onChange={() => { set({ followMode: m.id }); }} className="mt-1" />
+                <input type="radio" name="follow-mode" checked={mode === m.id} onChange={() => { set({ followMode: m.id }); void invoke("follow/mode", { version: 1, mode: m.id }); }} className="mt-1" />
                 <span><strong>{m.title}.</strong> {m.body}</span>
               </label>
             ))}
