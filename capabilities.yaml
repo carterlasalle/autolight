@@ -1,0 +1,216 @@
+# capabilities.yaml (T-TRU-05). Generated truth table: the README table renders from this file.
+# Status vocabulary: PASS, IMPLEMENTED_UNQUALIFIED, PARTIAL, FAIL, UNAVAILABLE_ON_THIS_DEVICE, MISSING.
+# Nothing here claims PASS: simulator runs never qualify hardware.
+
+- id: live-follow
+  title: Rekordbox live deck follow
+  spec: [6, 7, 120]
+  status: PARTIAL
+  missing:
+    - Lighting IPC decoder pending (T-LIVE-09)
+    - rkbx_link sidecar owner decision (OD-03)
+    - composite provider inputs not acquired (T-LIVE-07)
+  implementation:
+    - apps/desktop/electron/follow.ts
+    - apps/desktop/electron/show-service.ts
+  entry: main.ts > createIpc > follow/ax + show/live
+  evidence: docs/finish/evidence/T-TRU-05/README.md
+
+- id: library
+  title: Rekordbox library reader
+  spec: [4, 5]
+  status: PARTIAL
+  missing:
+    - master.db reader not in app (T-RBL-01)
+    - ANLZ path resolution string math only (T-RBL-02)
+  implementation:
+    - packages/rekordbox-library/src/index.ts
+  entry: library-service (planned, T-ARC-05)
+  evidence: docs/finish/evidence/T-TRU-05/README.md
+
+- id: analysis
+  title: Analysis worker
+  spec: [13, 14, 15, 16, 17, 18, 19, 20, 22, 23, 24, 25, 70]
+  status: PARTIAL
+  missing:
+    - supervisor not instantiated (T-ANA-02)
+    - ML session unused (T-ANA-05)
+    - 14 event types missing (T-ANA-10)
+    - evidence stripped (T-ANA-11)
+  implementation:
+    - analysis/src/autolight_analysis/worker.py
+  entry: analysis-supervisor > worker stdio
+  evidence: docs/finish/evidence/T-TRU-05/README.md
+
+- id: planner
+  title: Show planner
+  spec: [26, 27, 28, 29, 30, 31, 32, 34, 35, 36, 37, 72]
+  status: PARTIAL
+  missing:
+    - 6-level hierarchy missing (T-PLAN-03)
+    - restraint 1 of 11 fields (T-PLAN-05)
+    - primitives 7 of 27 (T-PLAN-04)
+  implementation:
+    - packages/show-planner/src/index.ts
+  entry: planShow(track, style)
+  evidence: docs/finish/evidence/T-TRU-05/README.md
+
+- id: mixer
+  title: Two-deck mixer
+  spec: [62, 63, 64, 65, 66, 67]
+  status: PARTIAL
+  missing:
+    - crossfader curve wrong (T-MIX-01)
+    - blackout ALL unhandled (T-MIX-04)
+  implementation:
+    - packages/show-mixer/src/index.ts
+  entry: liveViewModel > mixDown
+  evidence: docs/finish/evidence/T-TRU-05/README.md
+
+- id: renderer
+  title: Layer stack renderer
+  spec: [33, 49, 55, 76]
+  status: PARTIAL
+  missing:
+    - 8-layer stack missing (T-REND-01)
+    - Math.max compositing (T-REND-01)
+  implementation:
+    - packages/renderer/src/index.ts
+  entry: renderFrame(plan, beat, fixtures)
+  evidence: docs/finish/evidence/T-TRU-05/README.md
+
+- id: govee-lan
+  title: Govee LAN transport
+  spec: [44, 45, 46, 47, 48, 50, 51]
+  status: PARTIAL
+  missing:
+    - toolkit not a dependency (T-GOV-01)
+    - razer encoder wrong (T-GOV-02)
+    - per-datagram spawn (T-GOV-04)
+  implementation:
+    - packages/govee/src/index.ts
+    - apps/desktop/electron/govee-lan.ts
+  entry: pushFrame > frameToLan > sendToDevice
+  evidence: docs/finish/evidence/T-TRU-05/README.md
+
+- id: ipc
+  title: Typed IPC
+  spec: [87]
+  status: PARTIAL
+  missing:
+    - 24 channels typed (T-ARC-02 done)
+    - side-effect integration test pending (T-TRU-03)
+  implementation:
+    - packages/ipc/src/index.ts
+    - apps/desktop/electron/ipc.ts
+  entry: createIpc > handlers > show-service
+  evidence: docs/finish/evidence/T-TRU-05/README.md
+
+- id: config
+  title: Configuration registry
+  spec: []
+  status: PARTIAL
+  missing:
+    - 240 keys visible (T-CFG-01/05 done)
+    - persistence pending (T-CFG-02)
+    - hardcoded values pending (T-CFG-04)
+  implementation:
+    - packages/config/src/index.ts
+  entry: ConfigStore.get
+  evidence: docs/finish/evidence/T-TRU-05/README.md
+
+- id: simulator
+  title: Simulator mode
+  spec: [104]
+  status: PARTIAL
+  missing:
+    - renderer toggle plus badge done (T-TRU-02)
+    - main handler plus loopback sim pending (T-GOV-14)
+  implementation:
+    - packages/simulator/src/index.ts
+  entry: simulator/mode IPC
+  evidence: docs/finish/evidence/T-TRU-05/README.md
+
+- id: serato
+  title: Serato support
+  spec: [3, 121]
+  status: MISSING
+  missing:
+    - serato-connect not a dependency (T-SER-01)
+  evidence: docs/finish/evidence/T-TRU-05/README.md
+
+- id: flx4
+  title: DDJ-FLX4 telemetry
+  spec: [11]
+  status: MISSING
+  missing:
+    - no MIDI I/O (T-FLX-01)
+  evidence: docs/finish/evidence/T-TRU-05/README.md
+
+- id: ble
+  title: BLE transport
+  spec: [148]
+  status: MISSING
+  missing:
+    - no BLE transport (T-BLE-01..10)
+  evidence: docs/finish/evidence/T-TRU-05/README.md
+
+- id: matter
+  title: Matter control
+  spec: [148]
+  status: MISSING
+  missing:
+    - no Matter controller (T-MAT-01..04)
+  evidence: docs/finish/evidence/T-TRU-05/README.md
+
+- id: room
+  title: Room and venue mapping
+  spec: [38, 39, 40, 41, 98]
+  status: MISSING
+  missing:
+    - no room editor (T-ROOM-03)
+    - no strip wizard (T-ROOM-04)
+  evidence: docs/finish/evidence/T-TRU-05/README.md
+
+- id: storage
+  title: Storage service
+  spec: [80, 81, 82]
+  status: PARTIAL
+  missing:
+    - Store exists, never opened by app (T-DATA-01)
+  implementation:
+    - packages/storage/src/index.ts
+  entry: Store (renderer only)
+  evidence: docs/finish/evidence/T-TRU-05/README.md
+
+- id: ui
+  title: UI screens
+  spec: [88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 99, 100, 101, 102]
+  status: PARTIAL
+  missing:
+    - Settings added (T-CFG-05)
+    - waveform, corrections, room canvas missing
+  implementation:
+    - apps/desktop/src/renderer/
+  entry: Shell routes
+  evidence: docs/finish/evidence/T-TRU-05/README.md
+
+- id: packaging
+  title: Packaging
+  spec: [145, 153]
+  status: MISSING
+  missing:
+    - no electron-builder (T-OPS-05)
+  evidence: docs/finish/evidence/T-TRU-05/README.md
+
+- id: verification
+  title: Verification harnesses
+  spec: [104, 116, 117, 125, 126, 127, 128, 129]
+  status: PARTIAL
+  missing:
+    - E2E pure-model only (T-QA-02)
+    - no camera/soak/gates
+  implementation:
+    - apps/desktop/e2e/
+  entry: playwright test
+  evidence: docs/finish/evidence/T-TRU-05/README.md

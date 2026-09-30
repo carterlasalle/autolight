@@ -93,6 +93,30 @@ Then launch `dist/electron/main.cjs` with Electron. The app is local-first and o
 
 ## Capabilities
 
+<!-- capabilities:start -->
+| Capability | Status | Missing |
+| --- | --- | --- |
+| Rekordbox live deck follow (live-follow) | PARTIAL | Lighting IPC decoder pending (T-LIVE-09); rkbx_link sidecar owner decision (OD-03); composite provider inputs not acquired (T-LIVE-07); apps/desktop/electron/follow.ts; apps/desktop/electron/show-service.ts |
+| Rekordbox library reader (library) | PARTIAL | master.db reader not in app (T-RBL-01); ANLZ path resolution string math only (T-RBL-02); packages/rekordbox-library/src/index.ts |
+| Analysis worker (analysis) | PARTIAL | supervisor not instantiated (T-ANA-02); ML session unused (T-ANA-05); 14 event types missing (T-ANA-10); evidence stripped (T-ANA-11); analysis/src/autolight_analysis/worker.py |
+| Show planner (planner) | PARTIAL | 6-level hierarchy missing (T-PLAN-03); restraint 1 of 11 fields (T-PLAN-05); primitives 7 of 27 (T-PLAN-04); packages/show-planner/src/index.ts |
+| Two-deck mixer (mixer) | PARTIAL | crossfader curve wrong (T-MIX-01); blackout ALL unhandled (T-MIX-04); packages/show-mixer/src/index.ts |
+| Layer stack renderer (renderer) | PARTIAL | 8-layer stack missing (T-REND-01); Math.max compositing (T-REND-01); packages/renderer/src/index.ts |
+| Govee LAN transport (govee-lan) | PARTIAL | toolkit not a dependency (T-GOV-01); razer encoder wrong (T-GOV-02); per-datagram spawn (T-GOV-04); packages/govee/src/index.ts; apps/desktop/electron/govee-lan.ts |
+| Typed IPC (ipc) | PARTIAL | 24 channels typed (T-ARC-02 done); side-effect integration test pending (T-TRU-03); packages/ipc/src/index.ts; apps/desktop/electron/ipc.ts |
+| Configuration registry (config) | PARTIAL | 240 keys visible (T-CFG-01/05 done); persistence pending (T-CFG-02); hardcoded values pending (T-CFG-04); packages/config/src/index.ts |
+| Simulator mode (simulator) | PARTIAL | renderer toggle plus badge done (T-TRU-02); main handler plus loopback sim pending (T-GOV-14); packages/simulator/src/index.ts |
+| Serato support (serato) | MISSING | serato-connect not a dependency (T-SER-01) |
+| DDJ-FLX4 telemetry (flx4) | MISSING | no MIDI I/O (T-FLX-01) |
+| BLE transport (ble) | MISSING | no BLE transport (T-BLE-01..10) |
+| Matter control (matter) | MISSING | no Matter controller (T-MAT-01..04) |
+| Room and venue mapping (room) | MISSING | no room editor (T-ROOM-03); no strip wizard (T-ROOM-04) |
+| Storage service (storage) | PARTIAL | Store exists, never opened by app (T-DATA-01); packages/storage/src/index.ts |
+| UI screens (ui) | PARTIAL | Settings added (T-CFG-05); waveform, corrections, room canvas missing; apps/desktop/src/renderer/ |
+| Packaging (packaging) | MISSING | no electron-builder (T-OPS-05) |
+| Verification harnesses (verification) | PARTIAL | E2E pure-model only (T-QA-02); no camera/soak/gates; apps/desktop/e2e/ |
+<!-- capabilities:end -->
+
 | Area | What AutoLight provides |
 |---|---|
 | DJ sources | Rekordbox library (read-only SQLCipher + WAL), ANLZ grids/phrases/cues/waveforms, Serato crates + Remote transport, FLX4 MIDI as secondary truth |
