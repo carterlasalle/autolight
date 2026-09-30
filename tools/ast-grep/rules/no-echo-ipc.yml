@@ -1,0 +1,7 @@
+id: no-echo-ipc
+language: tsx
+severity: error
+message: "IPC handler echoes its payload instead of producing a side effect or authoritative data (S1, T-TRU-03)."
+rule:
+  pattern: "ipcMain.handle($CH, (_e, $P) => $SCHEMA.parse($P))"
+note: "Every channel must map to a real handler in electron/ipc.ts that changes authoritative state or returns authoritative data."

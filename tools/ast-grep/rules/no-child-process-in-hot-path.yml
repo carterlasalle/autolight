@@ -1,0 +1,11 @@
+id: no-child-process-in-hot-path
+language: tsx
+severity: error
+message: "child_process in show-time path (S16). Hot paths use persistent resources."
+rule:
+  pattern: "execFile($$$ARGS)"
+  inside:
+    any:
+      - pattern: "export function sendToDevice($$$ARGS) { $$$BODY }"
+      - pattern: "export function pushFrame($$$ARGS) { $$$BODY }"
+note: "T-GOV-04 replaces per-datagram spawn with persistent sockets owned by the govee manager."

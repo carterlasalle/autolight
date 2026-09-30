@@ -60,7 +60,7 @@ Generated from `docs/finish/03-config-and-decisions.md` section 3 by `yarn works
 | `planner.drop.stages` | `[8,8,8,4,4]` | beats list |  | spec 36 example | Y |
 | `planner.drop.preDarknessBeats` | `1` | beats |  | spec 35, 36 | Y |
 | `planner.drop.burstBeats` | `2` | beats |  | spec 36 | Y |
-| `planner.restraint.whiteHitMinBeats` | `16` | beats |  | was 8 with "ponytail" | Y |
+| `planner.restraint.whiteHitMinBeats` | `16` | beats |  | was 8, now a registry key | Y |
 | `planner.restraint.blackoutMinBeats` | `32` | beats |  | unmeasured | Y |
 | `planner.restraint.strobeMaxDuty` | `0.08` | ratio |  | unmeasured | Y |
 | `planner.restraint.paletteChangeMinBeats` | `16` | beats |  | spec 114 | Y |

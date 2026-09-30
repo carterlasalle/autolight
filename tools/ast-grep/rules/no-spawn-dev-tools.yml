@@ -1,0 +1,12 @@
+id: no-spawn-dev-tools
+language: tsx
+severity: error
+message: "Spawning a developer tool from product code (S25). The packaged app has no node/python on PATH."
+rule:
+  any:
+    - pattern: 'execFile("node", $$$ARGS)'
+    - pattern: 'spawn("node", $$$ARGS)'
+    - pattern: 'execFile("python", $$$ARGS)'
+    - pattern: 'execFile("python3", $$$ARGS)'
+    - pattern: 'execFile("npx", $$$ARGS)'
+note: "Ship or locate everything the app runs (bundled uv, Python, FFmpeg). T-OPS-05."

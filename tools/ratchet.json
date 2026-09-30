@@ -1,0 +1,12 @@
+{
+  "generated": "2026-09-30",
+  "rules": {
+    "no-echo-ipc": { "count": 0, "blocking": true },
+    "no-catch-undefined": { "count": 0, "blocking": true },
+    "no-tautological-expect": { "count": 0, "blocking": true },
+    "no-golden-self-write": { "count": 0, "blocking": true },
+    "no-child-process-in-hot-path": { "count": 1, "blocking": false, "note": "sendToDevice per-datagram spawn, T-GOV-04 replaces with persistent sockets" },
+    "no-spawn-dev-tools": { "count": 1, "blocking": false, "note": "same sendToDevice node -e spawn, T-GOV-04" },
+    "no-string-ipc": { "count": 28, "blocking": false, "note": "renderer string invoke callers, migrate per task" }
+  }
+}

@@ -3,7 +3,7 @@ import type { ShowCue } from "@autolight/contracts";
 import type { DeviceTile } from "../venue.js";
 
 // LiveState: resolved show for the decks actually loaded right now.
-// null = nothing resolved yet — UI shows empty states, never mock tracks.
+// null = nothing resolved yet — UI shows empty states, never fixture tracks.
 export interface LiveState {
   source: "REKORDBOX" | "SERATO";
   bpm: number | null;

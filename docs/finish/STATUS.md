@@ -41,7 +41,7 @@ Milestone contents and exit proofs are in `README.md`.
 | T-TRU-02 | Remove fixture data from production; add an explicit Simulator mode | `wp00-truth-and-gates.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-TRU-02/README.md` | Closes F-APP-03, F-APP-07, F-UI-19 |
 | T-TRU-04 | Reachability and architecture gates | `wp00-truth-and-gates.md` | M0 | `TODO` | none yet | Closes F-QA-14 |
 | T-TRU-05 | Capability manifest and generated README claims | `wp00-truth-and-gates.md` | M0 | `TODO` | none yet | Closes F-DOC-02, F-APP-13, F-QA-14 |
-| T-TRU-06 | Anti-pattern rule pack | `wp00-truth-and-gates.md` | M0 | `TODO` | none yet | Closes F-APP-13, F-DOC-02, F-QA-14 |
+| T-TRU-06 | Anti-pattern rule pack | `wp00-truth-and-gates.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-TRU-06/README.md` | Closes F-APP-13, F-DOC-02, F-QA-14 |
 | T-TRU-07 | Vitest configuration and coverage | `wp00-truth-and-gates.md` | M0 | `TODO` | none yet | Closes F-QA-01, F-QA-08, F-QA-14 |
 | T-TRU-08 | Mutation testing | `wp00-truth-and-gates.md` | M0 | `TODO` | none yet | Closes F-QA-08, F-QA-14 |
 | T-TRU-10 | Security and license scanning | `wp00-truth-and-gates.md` | M0 | `TODO` | none yet | Closes F-QA-14 |

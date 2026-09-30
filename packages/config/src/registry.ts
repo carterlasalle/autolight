@@ -71,7 +71,7 @@ export const KEYS: readonly KeyDef[] = [
   { key: "planner.drop.stages", type: "json", defaultRaw: "[8,8,8,4,4]", unit: "beats list", range: "", receipt: "spec 36 example", liveSafe: true, scope: "style" },
   { key: "planner.drop.preDarknessBeats", type: "number", defaultRaw: "1", unit: "beats", range: "", receipt: "spec 35, 36", liveSafe: true, scope: "style" },
   { key: "planner.drop.burstBeats", type: "number", defaultRaw: "2", unit: "beats", range: "", receipt: "spec 36", liveSafe: true, scope: "style" },
-  { key: "planner.restraint.whiteHitMinBeats", type: "number", defaultRaw: "16", unit: "beats", range: "", receipt: "was 8 with \"ponytail\"", liveSafe: true, scope: "style" },
+  { key: "planner.restraint.whiteHitMinBeats", type: "number", defaultRaw: "16", unit: "beats", range: "", receipt: "was 8, now a registry key", liveSafe: true, scope: "style" },
   { key: "planner.restraint.blackoutMinBeats", type: "number", defaultRaw: "32", unit: "beats", range: "", receipt: "unmeasured", liveSafe: true, scope: "style" },
   { key: "planner.restraint.strobeMaxDuty", type: "number", defaultRaw: "0.08", unit: "ratio", range: "", receipt: "unmeasured", liveSafe: true, scope: "style" },
   { key: "planner.restraint.paletteChangeMinBeats", type: "number", defaultRaw: "16", unit: "beats", range: "", receipt: "spec 114", liveSafe: true, scope: "style" },

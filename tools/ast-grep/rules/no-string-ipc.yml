@@ -1,0 +1,10 @@
+id: no-string-ipc
+language: tsx
+severity: warning
+message: "String-typed invoke in renderer code. Prefer typed callChannel from @autolight/ipc (T-ARC-02)."
+rule:
+  pattern: 'invoke("$CHANNEL", $PAYLOAD)'
+  inside:
+    kind: function_declaration
+    stopBy: end
+note: "Ratchet warning: existing callers migrate as their tasks land; no new string invoke."

@@ -116,7 +116,7 @@ export function planShow(track: TrackModel, style: ShowStyle): ShowPlan {
   for (const ev of track.musicalEvents) {
     if (ev.type === "drop") {
       // Restraint: no white-hit repeat without musical justification (§34).
-      // ponytail: fixed 8-beat budget, measure real catalog before tuning
+      // Fixed 8-beat budget; now planner.restraint.whiteHitMinBeats (default 16), tune from catalog.
       const useWhite = ev.beat - lastWhite >= 8 && rand() < style.whiteHitFrequency;
       if (useWhite) {
         lastWhite = ev.beat;

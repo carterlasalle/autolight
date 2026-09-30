@@ -79,7 +79,7 @@ export function beatToSourceSeconds(grid: BeatGrid, beat: number): number {
   const clamped = Math.min(Math.max(beat, b[0]!.index), b[b.length - 1]!.index);
   const i = Math.floor(clamped);
   const frac = clamped - i;
-  // ponytail: linear index lookup, binary search if grids grow large
+  // Linear index lookup; switch to binary search if grids grow large (T-RBL-03).
   const a = b.find((x) => x.index === i) ?? b[0]!;
   const c = b.find((x) => x.index === i + 1) ?? a;
   return (a.sourceTimeMs + (c.sourceTimeMs - a.sourceTimeMs) * frac) / 1000;

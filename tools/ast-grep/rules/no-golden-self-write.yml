@@ -1,0 +1,7 @@
+id: no-golden-self-write
+language: tsx
+severity: error
+message: "Test writes golden files itself; goldens update only via yarn golden:update (S2)."
+rule:
+  pattern: "writeFileSync($GOLDEN, $PLAN)"
+note: "Missing goldens fail. Deliberate updates go through scripts/golden-update.mjs with a reason."

@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { PARTY_PALETTES, ALT_PATTERNS } from "../state/store.js";
 import type { AltPattern, PartyPalette } from "../state/store.js";
 // Live screen (§89): status → decks + master clock → venue + upcoming →
-// emergency bar. Empty until a real show resolves — never mock tracks.
+// emergency bar. Empty until a real show resolves — never fixture tracks.
 // Compact 32–36px controls, 12–14px text, mono for timing.
 export function LiveView({ live }: { live: LiveState | null }): JSX.Element {
   if (!live) {

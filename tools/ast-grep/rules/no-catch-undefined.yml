@@ -1,0 +1,7 @@
+id: no-catch-undefined
+language: tsx
+severity: error
+message: "Swallowed promise rejection into undefined (S5). Surface into diagnostics status."
+rule:
+  pattern: ".catch(() => undefined)"
+note: "T-ARC-02: store.invoke records into diagnostics and returns null."

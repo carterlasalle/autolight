@@ -321,7 +321,7 @@
     "planner.restraint.whiteHitMinBeats": {
       "type": "number",
       "default": 16,
-      "description": "beats  [was 8 with \"ponytail\"]"
+      "description": "beats  [was 8, now a registry key]"
     },
     "planner.restraint.blackoutMinBeats": {
       "type": "number",

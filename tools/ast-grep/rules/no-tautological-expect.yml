@@ -1,0 +1,9 @@
+id: no-tautological-expect
+language: tsx
+severity: error
+message: "Test cannot fail: tautological expectation (S2)."
+rule:
+  any:
+    - pattern: "expect(true).toBe(true)"
+    - pattern: "expect(false).toBe(false)"
+note: "A test must be shown failing against the broken behaviour (red run in evidence)."
