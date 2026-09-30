@@ -17,7 +17,7 @@ index. First run on current code:
 ## dependency-cruiser (3 rules, CI error)
 
 - `renderer-no-show-internals` (S7): renderer may not reach show-runtime,
-  show-mixer, renderer, or govee. RED today: `live.ts` imports
+  show-mixer, renderer, or govee. RED today: the Live view model imports
   `@autolight/show-mixer` and `@autolight/renderer` (2 violations above).
   This is the F-APP-02 spine violation: the show loop lives in React.
   Turns green with T-ARC-01 plus T-REND-01 (show host owns time and output,
@@ -29,7 +29,7 @@ index. First run on current code:
 
 - `yarn knip` output saved (counts above).
 - `yarn depcruise --config .dependency-cruiser.cjs packages
-  apps/desktop/src apps/desktop/electron`: 2 errors, both the known live.ts
+  apps/desktop/src apps/desktop/electron`: 2 errors, both the known renderer
   spine violation.
 
 ## Ratchet
