@@ -85,13 +85,13 @@ Milestone contents and exit proofs are in `README.md`.
 | T-RBL-03 | Beat origin, units and beat to time mapping | `wp06-rekordbox-library-identity.md` | M1 | `TODO` | none yet | Closes F-RBL-06, F-RBL-09 |
 | T-RBL-05 | One definition for PSSI labels and section normalization | `wp06-rekordbox-library-identity.md` | M1 | `TODO` | none yet | Closes F-RBL-07 |
 | T-RBL-06 | Library change detection and selective invalidation | `wp06-rekordbox-library-identity.md` | M1 | `TODO` | none yet | Closes F-RBL-10 |
-| T-LIVE-01 | Provider contract, generation token and the shared contract suite | `wp07-rekordbox-live.md` | M1 | `TODO` | none yet | Closes F-LIVE-13 |
-| T-LIVE-02 | Provider manager and the fusion provider (DS-01) | `wp07-rekordbox-live.md` | M1 | `TODO` | none yet | Closes F-LIVE-14, F-APP-08 |
-| T-LIVE-03 | rkbx_link OSC provider (`rkbx-osc`) | `wp07-rekordbox-live.md` | M1 | `TODO` | none yet | Closes F-LIVE-03 |
+| T-LIVE-01 | Provider contract, generation token and the shared contract suite | `wp07-rekordbox-live.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-LIVE-01/README.md` | Closes F-LIVE-13 |
+| T-LIVE-02 | Provider manager and the fusion provider (DS-01) | `wp07-rekordbox-live.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-LIVE-02/README.md` | Closes F-LIVE-14, F-APP-08 |
+| T-LIVE-03 | rkbx_link OSC provider (`rkbx-osc`) | `wp07-rekordbox-live.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-LIVE-03/README.md` | Closes F-LIVE-03 |
 | T-LIVE-04 | rkbx_link setup assistant | `wp07-rekordbox-live.md` | M1 | `TODO` | none yet | Closes F-LIVE-03 |
-| T-LIVE-05 | PRO DJ LINK provider (`prolink`, DS-29) | `wp07-rekordbox-live.md` | M1 | `TODO` | none yet | Closes F-LIVE-04 |
-| T-LIVE-06 | Accessibility provider (`ax`) on macOS and Windows | `wp07-rekordbox-live.md` | M1 | `TODO` | none yet | Closes F-LIVE-05, F-APP-10, F-QA-06 |
-| T-LIVE-08 | Rekordbox local agent API (port 30001) | `wp07-rekordbox-live.md` | M1 | `TODO` | none yet | Closes F-LIVE-09 |
+| T-LIVE-05 | PRO DJ LINK provider (`prolink`, DS-29) | `wp07-rekordbox-live.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-LIVE-05/README.md` | Closes F-LIVE-04 |
+| T-LIVE-06 | Accessibility provider (`ax`) on macOS and Windows | `wp07-rekordbox-live.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-LIVE-06/README.md` | Closes F-LIVE-05, F-APP-10, F-QA-06 |
+| T-LIVE-08 | Rekordbox local agent API (port 30001) | `wp07-rekordbox-live.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-LIVE-08/README.md` | Closes F-LIVE-09 |
 | T-RUN-01 | Deck worlds in the show host | `wp12-runtime-mixer-renderer.md` | M1 | `TODO` | none yet | Closes F-APP-02 |
 | T-RUN-02 | State estimator with smooth correction | `wp12-runtime-mixer-renderer.md` | M1 | `TODO` | none yet | Closes F-RUN-01, F-APP-09 |
 | T-RUN-03 | Seek as random access | `wp12-runtime-mixer-renderer.md` | M1 | `TODO` | none yet | Closes F-RUN-01 |
