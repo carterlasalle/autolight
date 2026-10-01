@@ -36,7 +36,7 @@ Milestone contents and exit proofs are in `README.md`.
 | T-CFG-05 | Settings UI | `03-config-and-decisions.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-CFG-05/README.md` | Closes F-UI-17, F-CFG-02 |
 | T-ARC-01 | Show host with all DS-07 modes | `04-target-architecture.md` | M0 | `TODO` | none yet | Closes F-APP-02 |
 | T-ARC-02 | Typed IPC API | `04-target-architecture.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-ARC-02/README.md` | Closes F-APP-04, F-APP-05, F-APP-06 |
-| T-ARC-03 | Startup, shutdown and crash policy | `04-target-architecture.md` | M0 | `TODO` | none yet | Closes F-APP-01, F-OPS-03, F-OPS-09 |
+| T-ARC-03 | Startup, shutdown and crash policy | `04-target-architecture.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-ARC-03/README.md` | Closes F-APP-01, F-OPS-03, F-OPS-09 |
 | T-TRU-01 | Coverage tool and status discipline in CI | `wp00-truth-and-gates.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-TRU-01/README.md` | Closes F-DOC-06 |
 | T-TRU-02 | Remove fixture data from production; add an explicit Simulator mode | `wp00-truth-and-gates.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-TRU-02/README.md` | Closes F-APP-03, F-APP-07, F-UI-19 |
 | T-TRU-04 | Reachability and architecture gates | `wp00-truth-and-gates.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-TRU-04/README.md` | Closes F-APP-13, F-DOC-02, F-QA-14 |
@@ -53,7 +53,7 @@ Milestone contents and exit proofs are in `README.md`.
 | T-DOC-03 | CONTRIBUTING and AGENTS alignment | `wp00-truth-and-gates.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-DOC-03/README.md` | Closes F-DOC-06 |
 | T-GOV-14 | Simulators and recording transports | `wp03-govee-lan.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-GOV-14/README.md` | Closes F-QA-12, F-GOV-23 |
 | T-UI-01 | Component library and a single application root | `wp13-ui.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-UI-01/README.md` | Closes F-UI-14, F-APP-14 |
-| T-SEC-03 | Electron hardening | `wp14-data-security-ops.md` | M0 | `TODO` | none yet | Closes F-SEC-01, F-APP-05 |
+| T-SEC-03 | Electron hardening | `wp14-data-security-ops.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-SEC-03/README.md` | Closes F-SEC-01, F-APP-05 |
 | T-OPS-01 | Environment facts | `wp14-data-security-ops.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-OPS-01/README.md` |  |
 | T-QA-02 | Electron E2E harness | `wp15-verification-qualification.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-QA-02/README.md` | Closes F-QA-02, F-X-16 |
 
