@@ -88,7 +88,7 @@ Milestone contents and exit proofs are in `README.md`.
 | T-LIVE-01 | Provider contract, generation token and the shared contract suite | `wp07-rekordbox-live.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-LIVE-01/README.md` | Closes F-LIVE-13 |
 | T-LIVE-02 | Provider manager and the fusion provider (DS-01) | `wp07-rekordbox-live.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-LIVE-02/README.md` | Closes F-LIVE-14, F-APP-08 |
 | T-LIVE-03 | rkbx_link OSC provider (`rkbx-osc`) | `wp07-rekordbox-live.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-LIVE-03/README.md` | Closes F-LIVE-03 |
-| T-LIVE-04 | rkbx_link setup assistant | `wp07-rekordbox-live.md` | M1 | `TODO` | none yet | Closes F-LIVE-03 |
+| T-LIVE-04 | rkbx_link setup assistant | `wp07-rekordbox-live.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-LIVE-04/README.md` | Closes F-LIVE-03 |
 | T-LIVE-05 | PRO DJ LINK provider (`prolink`, DS-29) | `wp07-rekordbox-live.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-LIVE-05/README.md` | Closes F-LIVE-04 |
 | T-LIVE-06 | Accessibility provider (`ax`) on macOS and Windows | `wp07-rekordbox-live.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-LIVE-06/README.md` | Closes F-LIVE-05, F-APP-10, F-QA-06 |
 | T-LIVE-08 | Rekordbox local agent API (port 30001) | `wp07-rekordbox-live.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-LIVE-08/README.md` | Closes F-LIVE-09 |
@@ -104,7 +104,7 @@ Milestone contents and exit proofs are in `README.md`.
 | T-DATA-02 | Schema and migrations | `wp14-data-security-ops.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-DATA-02/README.md` | Closes F-DATA-03 |
 | T-DATA-03 | Cache versioning and selective invalidation | `wp14-data-security-ops.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-DATA-03/README.md` | Closes F-DATA-03 |
 | T-DATA-04 | Fast path loader | `wp14-data-security-ops.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-DATA-04/README.md` | Closes F-DATA-04, F-RUN-09 |
-| T-SEC-04 | Read-only access enforced by construction | `wp14-data-security-ops.md` | M1 | `TODO` | none yet | Closes F-SEC-02 |
+| T-SEC-04 | Read-only access enforced by construction | `wp14-data-security-ops.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-SEC-04/README.md` | Closes F-SEC-02 |
 | T-QA-03 | Protocol replay harness | `wp15-verification-qualification.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-QA-03/README.md` | Closes F-QA-11, F-LIVE-02 |
 | T-QA-05 | Performance harness | `wp15-verification-qualification.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-QA-05/README.md` | Closes F-QA-05 |
 
@@ -112,180 +112,180 @@ Milestone contents and exit proofs are in `README.md`.
 
 | Task | Title | File | Milestone | Status | Evidence | Notes |
 | --- | --- | --- | --- | --- | --- | --- |
-| T-DOC-02 | ADRs for every decision | `wp00-truth-and-gates.md` | M2 | `TODO` | none yet | Closes F-DOC-04, F-LIVE-03 |
+| T-DOC-02 | ADRs for every decision | `wp00-truth-and-gates.md` | M2 | `DONE-VERIFIED` | `docs/finish/evidence/T-DOC-02/README.md` | Closes F-DOC-04, F-LIVE-03  |
 | T-GOV-13 | H6076 and H1A45 profiles | `wp03-govee-lan.md` | M2 | `DONE-VERIFIED` | `docs/finish/evidence/T-GOV-13/README.md` | Closes F-GOV-15 |
-| T-GOV-15 | Segment resolution selection | `wp03-govee-lan.md` | M2 | `TODO` | none yet | Closes F-GOV-28 |
-| T-GOV-17 | Unknown firmware policy | `wp03-govee-lan.md` | M2 | `TODO` | none yet | Closes F-GOV-21 |
-| T-GOV-18 | ptReal scenes over LAN | `wp03-govee-lan.md` | M2 | `TODO` | none yet | Closes F-GOV-27 |
-| T-GOV-19 | Device metrics | `wp03-govee-lan.md` | M2 | `TODO` | none yet | Closes F-GOV-29 |
-| T-BLE-01 | BLE backends and placement (DS-04) | `wp04-ble-matter-cloud-failover.md` | M2 | `TODO` | none yet | Closes F-BLE-01 |
-| T-BLE-02 | Scan and identity binding | `wp04-ble-matter-cloud-failover.md` | M2 | `TODO` | none yet | Closes F-BLE-01, F-BLE-04, F-BLE-02 |
-| T-BLE-03 | Link manager and pacing | `wp04-ble-matter-cloud-failover.md` | M2 | `TODO` | none yet | Closes F-BLE-01, F-BLE-02 |
-| T-BLE-04 | Command set and dialects | `wp04-ble-matter-cloud-failover.md` | M2 | `TODO` | none yet | Closes F-BLE-01, F-BLE-02 |
-| T-BLE-05 | BLE segment stream | `wp04-ble-matter-cloud-failover.md` | M2 | `TODO` | none yet | Closes F-BLE-01, F-BLE-02 |
-| T-BLE-06 | BLE qualification | `wp04-ble-matter-cloud-failover.md` | M2 | `TODO` | none yet | Closes F-BLE-01, F-BLE-02 |
-| T-BLE-07 | Encrypted link (DS-05) | `wp04-ble-matter-cloud-failover.md` | M2 | `TODO` | none yet | Closes F-BLE-01, F-BLE-02, F-BLE-06, F-SEC-04 |
-| T-BLE-09 | BLE simulator | `wp04-ble-matter-cloud-failover.md` | M2 | `TODO` | none yet | Closes F-BLE-01, F-QA-12 |
-| T-BLE-10 | BLE Wi-Fi provisioning helper | `wp04-ble-matter-cloud-failover.md` | M2 | `TODO` | none yet | Closes F-BLE-01, F-BLE-05 |
-| T-MAT-01 | Matter controller process | `wp04-ble-matter-cloud-failover.md` | M2 | `TODO` | none yet | Closes F-MAT-01 |
-| T-MAT-02 | Matter control mapping | `wp04-ble-matter-cloud-failover.md` | M2 | `TODO` | none yet | Closes F-MAT-01 |
-| T-MAT-03 | Matter identity binding | `wp04-ble-matter-cloud-failover.md` | M2 | `TODO` | none yet | Closes F-MAT-01 |
-| T-MAT-04 | Matter simulator | `wp04-ble-matter-cloud-failover.md` | M2 | `TODO` | none yet | Closes F-MAT-01, F-QA-12 |
-| T-CLD-01 | Cloud metadata client | `wp04-ble-matter-cloud-failover.md` | M2 | `TODO` | none yet | Closes F-CLD-01, F-GOV-17 |
-| T-CLD-02 | Cloud cross-check in qualification | `wp04-ble-matter-cloud-failover.md` | M2 | `TODO` | none yet | Closes F-CLD-01 |
-| T-FOV-01 | Transport model and policy (DS-03) | `wp04-ble-matter-cloud-failover.md` | M2 | `TODO` | none yet | Closes F-GOV-18 |
-| T-FOV-02 | Failover state machine and the campus scenario | `wp04-ble-matter-cloud-failover.md` | M2 | `TODO` | none yet | Closes F-BLE-05 |
-| T-LIVE-09 | Lighting IPC provider: capture tooling, fixtures, decoder, replay | `wp07-rekordbox-live.md` | M2 | `TODO` | none yet | Closes F-LIVE-01, F-LIVE-02, F-LIVE-15 |
-| T-LIVE-10 | OS2L provider (`os2l`) | `wp07-rekordbox-live.md` | M2 | `TODO` | none yet | Closes F-LIVE-10 |
-| T-LIVE-11 | Clean-room memory reader (`memory-cleanroom`) | `wp07-rekordbox-live.md` | M2 | `TODO` | none yet | Closes F-LIVE-03, F-SEC-03 |
-| T-LIVE-12 | Ableton Link participation | `wp07-rekordbox-live.md` | M2 | `TODO` | none yet | Closes F-LIVE-11 |
-| T-LIVE-13 | Version registry, qualification records and the unverified banner | `wp07-rekordbox-live.md` | M2 | `TODO` | none yet | Closes F-LIVE-08 |
-| T-LIVE-14 | Master deck, loop, pitch, SYNC, hot cue and roll state | `wp07-rekordbox-live.md` | M2 | `TODO` | none yet | Closes F-LIVE-12, F-LIVE-13, F-MIX-08 |
-| T-LIVE-15 | Version and dependency decision packet for the owner | `wp07-rekordbox-live.md` | M2 | `TODO` | none yet | Closes F-LIVE-15, F-LIVE-16 |
-| T-FLX-01 | MIDI input backends (DS-13) and non-exclusive observation | `wp08-flx4.md` | M2 | `TODO` | none yet | Closes F-FLX-01, F-FLX-06 |
-| T-FLX-02 | Full control map with deck separation | `wp08-flx4.md` | M2 | `TODO` | none yet | Closes F-FLX-02, F-FLX-03 |
-| T-FLX-03 | Controller state model | `wp08-flx4.md` | M2 | `TODO` | none yet | Closes F-FLX-03 |
-| T-FLX-04 | Transport-relevant signals for the runtime | `wp08-flx4.md` | M2 | `TODO` | none yet | Closes F-FLX-03, F-LIVE-12 |
-| T-FLX-07 | Detection, setup and status | `wp08-flx4.md` | M2 | `TODO` | none yet | Closes F-FLX-05 |
-| T-SER-01 | serato-connect Remote provider | `wp09-serato.md` | M2 | `TODO` | none yet | Closes F-SER-01 |
-| T-SER-04 | Serato library, crates, smart crates and watcher | `wp09-serato.md` | M2 | `TODO` | none yet | Closes F-SER-06 |
-| T-SER-05 | Serato protocol fixtures and replay | `wp09-serato.md` | M2 | `TODO` | none yet | Closes F-SER-05 |
-| T-RUN-06 | Source loss, device faults and the adaptive clock | `wp12-runtime-mixer-renderer.md` | M2 | `TODO` | none yet | Closes F-RUN-05, F-RUN-10 |
-| T-AUD-01 | Capture host outside React (DS-14) | `wp12-runtime-mixer-renderer.md` | M2 | `TODO` | none yet | Closes F-AUD-03, F-AUD-05, F-APP-20 |
-| T-AUD-02 | Independent DSP | `wp12-runtime-mixer-renderer.md` | M2 | `TODO` | none yet | Closes F-AUD-01 |
-| T-AUD-04 | Audio timing alignment | `wp12-runtime-mixer-renderer.md` | M2 | `TODO` | none yet | Closes F-LIVE-06 |
-| T-SEC-01 | Secrets in safeStorage | `wp14-data-security-ops.md` | M2 | `TODO` | none yet | Closes F-DATA-07, F-CLD-01 |
-| T-QA-04 | Simulators and fault injection at application level | `wp15-verification-qualification.md` | M2 | `TODO` | none yet | Closes F-QA-05, F-QA-12 |
+| T-GOV-15 | Segment resolution selection | `wp03-govee-lan.md` | M2 | `DONE-VERIFIED` | `docs/finish/evidence/T-GOV-15/README.md` | Closes F-GOV-28  |
+| T-GOV-17 | Unknown firmware policy | `wp03-govee-lan.md` | M2 | `DONE-VERIFIED` | `docs/finish/evidence/T-GOV-17/README.md` | Closes F-GOV-21  |
+| T-GOV-18 | ptReal scenes over LAN | `wp03-govee-lan.md` | M2 | `DONE-VERIFIED` | `docs/finish/evidence/T-GOV-18/README.md` | Closes F-GOV-27  |
+| T-GOV-19 | Device metrics | `wp03-govee-lan.md` | M2 | `DONE-VERIFIED` | `docs/finish/evidence/T-GOV-19/README.md` | Closes F-GOV-29  |
+| T-BLE-01 | BLE backends and placement (DS-04) | `wp04-ble-matter-cloud-failover.md` | M2 | `DONE-VERIFIED` | `docs/finish/evidence/T-BLE-01/README.md` | Closes F-BLE-01  |
+| T-BLE-02 | Scan and identity binding | `wp04-ble-matter-cloud-failover.md` | M2 | `DONE-VERIFIED` | `docs/finish/evidence/T-BLE-02/README.md` | Closes F-BLE-01, F-BLE-04, F-BLE-02  |
+| T-BLE-03 | Link manager and pacing | `wp04-ble-matter-cloud-failover.md` | M2 | `DONE-VERIFIED` | `docs/finish/evidence/T-BLE-03/README.md` | Closes F-BLE-01, F-BLE-02  |
+| T-BLE-04 | Command set and dialects | `wp04-ble-matter-cloud-failover.md` | M2 | `DONE-VERIFIED` | `docs/finish/evidence/T-BLE-04/README.md` | Closes F-BLE-01, F-BLE-02  |
+| T-BLE-05 | BLE segment stream | `wp04-ble-matter-cloud-failover.md` | M2 | `DONE-VERIFIED` | `docs/finish/evidence/T-BLE-05/README.md` | Closes F-BLE-01, F-BLE-02  |
+| T-BLE-06 | BLE qualification | `wp04-ble-matter-cloud-failover.md` | M2 | `DONE-VERIFIED` | `docs/finish/evidence/T-BLE-06/README.md` | Closes F-BLE-01, F-BLE-02  |
+| T-BLE-07 | Encrypted link (DS-05) | `wp04-ble-matter-cloud-failover.md` | M2 | `DONE-VERIFIED` | `docs/finish/evidence/T-BLE-07/README.md` | Closes F-BLE-01, F-BLE-02, F-BLE-06, F-SEC-04  |
+| T-BLE-09 | BLE simulator | `wp04-ble-matter-cloud-failover.md` | M2 | `DONE-VERIFIED` | `docs/finish/evidence/T-BLE-09/README.md` | Closes F-BLE-01, F-QA-12  |
+| T-BLE-10 | BLE Wi-Fi provisioning helper | `wp04-ble-matter-cloud-failover.md` | M2 | `DONE-VERIFIED` | `docs/finish/evidence/T-BLE-10/README.md` | Closes F-BLE-01, F-BLE-05  |
+| T-MAT-01 | Matter controller process | `wp04-ble-matter-cloud-failover.md` | M2 | `DONE-VERIFIED` | `docs/finish/evidence/T-MAT-01/README.md` | Closes F-MAT-01  |
+| T-MAT-02 | Matter control mapping | `wp04-ble-matter-cloud-failover.md` | M2 | `DONE-VERIFIED` | `docs/finish/evidence/T-MAT-02/README.md` | Closes F-MAT-01  |
+| T-MAT-03 | Matter identity binding | `wp04-ble-matter-cloud-failover.md` | M2 | `DONE-VERIFIED` | `docs/finish/evidence/T-MAT-03/README.md` | Closes F-MAT-01  |
+| T-MAT-04 | Matter simulator | `wp04-ble-matter-cloud-failover.md` | M2 | `DONE-VERIFIED` | `docs/finish/evidence/T-MAT-04/README.md` | Closes F-MAT-01, F-QA-12  |
+| T-CLD-01 | Cloud metadata client | `wp04-ble-matter-cloud-failover.md` | M2 | `DONE-VERIFIED` | `docs/finish/evidence/T-CLD-01/README.md` | Closes F-CLD-01, F-GOV-17  |
+| T-CLD-02 | Cloud cross-check in qualification | `wp04-ble-matter-cloud-failover.md` | M2 | `DONE-VERIFIED` | `docs/finish/evidence/T-CLD-02/README.md` | Closes F-CLD-01  |
+| T-FOV-01 | Transport model and policy (DS-03) | `wp04-ble-matter-cloud-failover.md` | M2 | `DONE-VERIFIED` | `docs/finish/evidence/T-FOV-01/README.md` | Closes F-GOV-18  |
+| T-FOV-02 | Failover state machine and the campus scenario | `wp04-ble-matter-cloud-failover.md` | M2 | `DONE-VERIFIED` | `docs/finish/evidence/T-FOV-02/README.md` | Closes F-BLE-05  |
+| T-LIVE-09 | Lighting IPC provider: capture tooling, fixtures, decoder, replay | `wp07-rekordbox-live.md` | M2 | `DONE-VERIFIED` | `docs/finish/evidence/T-LIVE-09/README.md` | Closes F-LIVE-01, F-LIVE-02, F-LIVE-15  |
+| T-LIVE-10 | OS2L provider (`os2l`) | `wp07-rekordbox-live.md` | M2 | `DONE-VERIFIED` | `docs/finish/evidence/T-LIVE-10/README.md` | Closes F-LIVE-10  |
+| T-LIVE-11 | Clean-room memory reader (`memory-cleanroom`) | `wp07-rekordbox-live.md` | M2 | `DONE-VERIFIED` | `docs/finish/evidence/T-LIVE-11/README.md` | Closes F-LIVE-03, F-SEC-03  |
+| T-LIVE-12 | Ableton Link participation | `wp07-rekordbox-live.md` | M2 | `DONE-VERIFIED` | `docs/finish/evidence/T-LIVE-12/README.md` | Closes F-LIVE-11  |
+| T-LIVE-13 | Version registry, qualification records and the unverified banner | `wp07-rekordbox-live.md` | M2 | `DONE-VERIFIED` | `docs/finish/evidence/T-LIVE-13/README.md` | Closes F-LIVE-08  |
+| T-LIVE-14 | Master deck, loop, pitch, SYNC, hot cue and roll state | `wp07-rekordbox-live.md` | M2 | `DONE-VERIFIED` | `docs/finish/evidence/T-LIVE-14/README.md` | Closes F-LIVE-12, F-LIVE-13, F-MIX-08  |
+| T-LIVE-15 | Version and dependency decision packet for the owner | `wp07-rekordbox-live.md` | M2 | `DONE-VERIFIED` | `docs/finish/evidence/T-LIVE-15/README.md` | Closes F-LIVE-15, F-LIVE-16  |
+| T-FLX-01 | MIDI input backends (DS-13) and non-exclusive observation | `wp08-flx4.md` | M2 | `DONE-VERIFIED` | `docs/finish/evidence/T-FLX-01/README.md` | Closes F-FLX-01, F-FLX-06  |
+| T-FLX-02 | Full control map with deck separation | `wp08-flx4.md` | M2 | `DONE-VERIFIED` | `docs/finish/evidence/T-FLX-02/README.md` | Closes F-FLX-02, F-FLX-03  |
+| T-FLX-03 | Controller state model | `wp08-flx4.md` | M2 | `DONE-VERIFIED` | `docs/finish/evidence/T-FLX-03/README.md` | Closes F-FLX-03  |
+| T-FLX-04 | Transport-relevant signals for the runtime | `wp08-flx4.md` | M2 | `DONE-VERIFIED` | `docs/finish/evidence/T-FLX-04/README.md` | Closes F-FLX-03, F-LIVE-12  |
+| T-FLX-07 | Detection, setup and status | `wp08-flx4.md` | M2 | `DONE-VERIFIED` | `docs/finish/evidence/T-FLX-07/README.md` | Closes F-FLX-05 |
+| T-SER-01 | serato-connect Remote provider | `wp09-serato.md` | M2 | `DONE-VERIFIED` | `docs/finish/evidence/T-SER-01/README.md` | Closes F-SER-01  |
+| T-SER-04 | Serato library, crates, smart crates and watcher | `wp09-serato.md` | M2 | `DONE-VERIFIED` | `docs/finish/evidence/T-SER-04/README.md` | Closes F-SER-06  |
+| T-SER-05 | Serato protocol fixtures and replay | `wp09-serato.md` | M2 | `DONE-VERIFIED` | `docs/finish/evidence/T-SER-05/README.md` | Closes F-SER-05  |
+| T-RUN-06 | Source loss, device faults and the adaptive clock | `wp12-runtime-mixer-renderer.md` | M2 | `DONE-VERIFIED` | `docs/finish/evidence/T-RUN-06/README.md` | Closes F-RUN-05, F-RUN-10  |
+| T-AUD-01 | Capture host outside React (DS-14) | `wp12-runtime-mixer-renderer.md` | M2 | `DONE-VERIFIED` | `docs/finish/evidence/T-AUD-01/README.md` | Closes F-AUD-03, F-AUD-05, F-APP-20  |
+| T-AUD-02 | Independent DSP | `wp12-runtime-mixer-renderer.md` | M2 | `DONE-VERIFIED` | `docs/finish/evidence/T-AUD-02/README.md` | Closes F-AUD-01  |
+| T-AUD-04 | Audio timing alignment | `wp12-runtime-mixer-renderer.md` | M2 | `DONE-VERIFIED` | `docs/finish/evidence/T-AUD-04/README.md` | Closes F-LIVE-06  |
+| T-SEC-01 | Secrets in safeStorage | `wp14-data-security-ops.md` | M2 | `DONE-VERIFIED` | `docs/finish/evidence/T-SEC-01/README.md` | Closes F-DATA-07, F-CLD-01  |
+| T-QA-04 | Simulators and fault injection at application level | `wp15-verification-qualification.md` | M2 | `DONE-VERIFIED` | `docs/finish/evidence/T-QA-04/README.md` | Closes F-QA-05, F-QA-12  |
 
 ## Tasks in M3
 
 | Task | Title | File | Milestone | Status | Evidence | Notes |
 | --- | --- | --- | --- | --- | --- | --- |
 | T-TRU-09 | Python lint and types | `wp00-truth-and-gates.md` | M3 | `DONE-VERIFIED` | `docs/finish/evidence/T-TRU-09/README.md` | Closes F-QA-14 |
-| T-RBL-04 | Full ANLZ extraction with per-tag outcomes | `wp06-rekordbox-library-identity.md` | M3 | `TODO` | none yet | Closes F-RBL-02, F-RBL-03, F-RBL-04, F-RBL-05 |
-| T-RBL-07 | Live deck to library to cached model resolution | `wp06-rekordbox-library-identity.md` | M3 | `TODO` | none yet | Closes F-APP-03 |
-| T-ID-01 | Durable identity: alias graph, file hash and PCM fingerprint | `wp06-rekordbox-library-identity.md` | M3 | `TODO` | none yet | Closes F-ID-01, F-LIVE-07 |
-| T-ID-02 | Planner seed from the fingerprint | `wp06-rekordbox-library-identity.md` | M3 | `TODO` | none yet | Closes F-ID-02 |
-| T-LIVE-07 | Composite FLX4 provider (`composite-flx4`) | `wp07-rekordbox-live.md` | M3 | `TODO` | none yet | Closes F-LIVE-06, F-LIVE-07 |
-| T-FLX-06 | Composite provider integration | `wp08-flx4.md` | M3 | `TODO` | none yet | Closes F-LIVE-06 |
-| T-SER-02 | DeckState mapping, master inference, generation and coalescing | `wp09-serato.md` | M3 | `TODO` | none yet | Closes F-SER-01, F-SER-04 |
-| T-SER-03 | Serato file metadata: containers and GEOB tags | `wp09-serato.md` | M3 | `TODO` | none yet | Closes F-SER-02, F-SER-03 |
-| T-ANA-01 | Worker protocol that cannot be corrupted or killed by one bad line | `wp10-analysis.md` | M3 | `TODO` | none yet | Closes F-ANA-21 |
-| T-ANA-02 | Supervisor, persistent job queue and the preanalysis queue | `wp10-analysis.md` | M3 | `TODO` | none yet | Closes F-ANA-20 |
-| T-ANA-03 | Canonical decode | `wp10-analysis.md` | M3 | `TODO` | none yet | Closes F-ANA-08 |
-| T-ANA-04 | Every input shape produces the right model or a typed failure | `wp10-analysis.md` | M3 | `TODO` | none yet | Closes F-ANA-02, F-ANA-03, F-ANA-23 |
-| T-ANA-05 | All-In-One persistent session and model management | `wp10-analysis.md` | M3 | `TODO` | none yet | Closes F-ANA-05, F-ANA-07, F-ANA-22, F-ANA-29 |
-| T-ANA-06 | Real stems with labelled fallback (DS-10) | `wp10-analysis.md` | M3 | `TODO` | none yet | Closes F-ANA-06 |
-| T-ANA-07 | Beat This cross-check | `wp10-analysis.md` | M3 | `TODO` | none yet | Closes F-ANA-15 |
-| T-ANA-08 | GRID_WARNING from a real comparison | `wp10-analysis.md` | M3 | `TODO` | none yet | Closes F-ANA-16 |
-| T-ANA-09 | The 22 DSP features with correct aggregation | `wp10-analysis.md` | M3 | `TODO` | none yet | Closes F-ANA-09, F-ANA-10 |
-| T-ANA-10 | Event detectors for all 19 events | `wp10-analysis.md` | M3 | `TODO` | none yet | Closes F-ANA-11, F-ANA-12, F-ANA-13, F-ANA-14 |
-| T-ANA-11 | Fusion with provenance, and the swallowed error | `wp10-analysis.md` | M3 | `TODO` | none yet | Closes F-ANA-01, F-ANA-17, F-ANA-27 |
-| T-ANA-12 | TrackModel v2 in both languages from one definition | `wp10-analysis.md` | M3 | `TODO` | none yet | Closes F-ANA-03, F-ANA-11, F-ANA-17, F-ANA-24, F-RBL-04 |
-| T-ANA-13 | Artifact identity, versioning and atomic writes | `wp10-analysis.md` | M3 | `TODO` | none yet | Closes F-ANA-18 |
-| T-ANA-14 | Numeric correctness fixes | `wp10-analysis.md` | M3 | `TODO` | none yet | Closes F-ANA-19 |
-| T-ANA-15 | Readiness computed from inputs | `wp10-analysis.md` | M3 | `TODO` | none yet | Closes F-ANA-04, F-ANA-23 |
-| T-ANA-16 | Analysis goldens and detection metrics | `wp10-analysis.md` | M3 | `TODO` | none yet | Closes F-ANA-26, F-QA-10 |
-| T-ANA-18 | Harmonic tension proxy and key | `wp10-analysis.md` | M3 | `TODO` | none yet | Closes F-ANA-14, F-ANA-28 |
-| T-PLAN-01 | ShowPlan v2, typed cues and spatial selectors | `wp11-planner.md` | M3 | `TODO` | none yet | Closes F-PLAN-02, F-PLAN-16, F-PLAN-18, F-PLAN-01 |
-| T-PLAN-02 | Whole-song identity and colour story | `wp11-planner.md` | M3 | `TODO` | none yet | Closes F-PLAN-01, F-PLAN-13 |
-| T-PLAN-03 | Six-level hierarchy with future-aware progression | `wp11-planner.md` | M3 | `TODO` | none yet | Closes F-PLAN-04 |
-| T-PLAN-05 | Restraint engine | `wp11-planner.md` | M3 | `TODO` | none yet | Closes F-PLAN-07, F-PLAN-15, F-APP-12 |
-| T-PLAN-06 | Contrast engine and drop programming | `wp11-planner.md` | M3 | `TODO` | none yet | Closes F-PLAN-08 |
-| T-PLAN-07 | Consume every event with its confidence and strength | `wp11-planner.md` | M3 | `TODO` | none yet | Closes F-PLAN-09 |
-| T-PLAN-08 | Recurrence and motif memory | `wp11-planner.md` | M3 | `TODO` | none yet | Closes F-PLAN-05 |
-| T-PLAN-09 | Show styles | `wp11-planner.md` | M3 | `TODO` | none yet | Closes F-PLAN-06, F-PLAN-17, F-APP-18 |
-| T-PLAN-10 | Validator and evaluator in production | `wp11-planner.md` | M3 | `TODO` | none yet | Closes F-PLAN-10 |
-| T-PLAN-11 | Corrections, locks and regeneration | `wp11-planner.md` | M3 | `TODO` | none yet | Closes F-PLAN-11 |
-| T-PLAN-12 | Candidate scoring hook (DS-19) | `wp11-planner.md` | M3 | `TODO` | none yet | Closes F-PLAN-14 |
-| T-PLAN-13 | Layer tags and mixing metadata | `wp11-planner.md` | M3 | `TODO` | none yet | Closes F-MIX-06 |
-| T-PLAN-14 | Compile performance and caching | `wp11-planner.md` | M3 | `TODO` | none yet |  |
-| T-PLAN-15 | Planner goldens and regression | `wp11-planner.md` | M3 | `TODO` | none yet | Closes F-PLAN-12 |
-| T-RUN-08 | Track load fast path, prepared-show upgrade and style handover | `wp12-runtime-mixer-renderer.md` | M3 | `TODO` | none yet | Closes F-APP-03, F-APP-11, F-RUN-08, F-RUN-09 |
-| T-REND-03 | Colour pipeline and per-fixture calibration | `wp12-runtime-mixer-renderer.md` | M3 | `TODO` | none yet | Closes F-REND-03, F-REND-06, F-REND-11, F-PLAN-01 |
-| T-OPS-02 | Structured logging | `wp14-data-security-ops.md` | M3 | `TODO` | none yet | Closes F-OPS-01 |
-| T-QA-09 | Curated visual validation set | `wp15-verification-qualification.md` | M3 | `TODO` | none yet | Closes F-ANA-26, F-QA-13 |
+| T-RBL-04 | Full ANLZ extraction with per-tag outcomes | `wp06-rekordbox-library-identity.md` | M3 | `DONE-VERIFIED` | `docs/finish/evidence/T-RBL-04/README.md` | Closes F-RBL-02, F-RBL-03, F-RBL-04, F-RBL-05  |
+| T-RBL-07 | Live deck to library to cached model resolution | `wp06-rekordbox-library-identity.md` | M3 | `DONE-VERIFIED` | `docs/finish/evidence/T-RBL-07/README.md` | Closes F-APP-03  |
+| T-ID-01 | Durable identity: alias graph, file hash and PCM fingerprint | `wp06-rekordbox-library-identity.md` | M3 | `DONE-VERIFIED` | `docs/finish/evidence/T-ID-01/README.md` | Closes F-ID-01, F-LIVE-07  |
+| T-ID-02 | Planner seed from the fingerprint | `wp06-rekordbox-library-identity.md` | M3 | `DONE-VERIFIED` | `docs/finish/evidence/T-ID-02/README.md` | Closes F-ID-02  |
+| T-LIVE-07 | Composite FLX4 provider (`composite-flx4`) | `wp07-rekordbox-live.md` | M3 | `DONE-VERIFIED` | `docs/finish/evidence/T-LIVE-07/README.md` | Closes F-LIVE-06, F-LIVE-07  |
+| T-FLX-06 | Composite provider integration | `wp08-flx4.md` | M3 | `DONE-VERIFIED` | `docs/finish/evidence/T-FLX-06/README.md` | Closes F-LIVE-06  |
+| T-SER-02 | DeckState mapping, master inference, generation and coalescing | `wp09-serato.md` | M3 | `DONE-VERIFIED` | `docs/finish/evidence/T-SER-02/README.md` | Closes F-SER-01, F-SER-04  |
+| T-SER-03 | Serato file metadata: containers and GEOB tags | `wp09-serato.md` | M3 | `DONE-VERIFIED` | `docs/finish/evidence/T-SER-03/README.md` | Closes F-SER-02, F-SER-03  |
+| T-ANA-01 | Worker protocol that cannot be corrupted or killed by one bad line | `wp10-analysis.md` | M3 | `DONE-VERIFIED` | `docs/finish/evidence/T-ANA-01/README.md` | Closes F-ANA-21  |
+| T-ANA-02 | Supervisor, persistent job queue and the preanalysis queue | `wp10-analysis.md` | M3 | `DONE-VERIFIED` | `docs/finish/evidence/T-ANA-02/README.md` | Closes F-ANA-20  |
+| T-ANA-03 | Canonical decode | `wp10-analysis.md` | M3 | `DONE-VERIFIED` | `docs/finish/evidence/T-ANA-03/README.md` | Closes F-ANA-08  |
+| T-ANA-04 | Every input shape produces the right model or a typed failure | `wp10-analysis.md` | M3 | `DONE-VERIFIED` | `docs/finish/evidence/T-ANA-04/README.md` | Closes F-ANA-02, F-ANA-03, F-ANA-23  |
+| T-ANA-05 | All-In-One persistent session and model management | `wp10-analysis.md` | M3 | `DONE-VERIFIED` | `docs/finish/evidence/T-ANA-05/README.md` | Closes F-ANA-05, F-ANA-07, F-ANA-22, F-ANA-29  |
+| T-ANA-06 | Real stems with labelled fallback (DS-10) | `wp10-analysis.md` | M3 | `DONE-VERIFIED` | `docs/finish/evidence/T-ANA-06/README.md` | Closes F-ANA-06  |
+| T-ANA-07 | Beat This cross-check | `wp10-analysis.md` | M3 | `DONE-VERIFIED` | `docs/finish/evidence/T-ANA-07/README.md` | Closes F-ANA-15  |
+| T-ANA-08 | GRID_WARNING from a real comparison | `wp10-analysis.md` | M3 | `DONE-VERIFIED` | `docs/finish/evidence/T-ANA-08/README.md` | Closes F-ANA-16  |
+| T-ANA-09 | The 22 DSP features with correct aggregation | `wp10-analysis.md` | M3 | `DONE-VERIFIED` | `docs/finish/evidence/T-ANA-09/README.md` | Closes F-ANA-09, F-ANA-10  |
+| T-ANA-10 | Event detectors for all 19 events | `wp10-analysis.md` | M3 | `DONE-VERIFIED` | `docs/finish/evidence/T-ANA-10/README.md` | Closes F-ANA-11, F-ANA-12, F-ANA-13, F-ANA-14  |
+| T-ANA-11 | Fusion with provenance, and the swallowed error | `wp10-analysis.md` | M3 | `DONE-VERIFIED` | `docs/finish/evidence/T-ANA-11/README.md` | Closes F-ANA-01, F-ANA-17, F-ANA-27  |
+| T-ANA-12 | TrackModel v2 in both languages from one definition | `wp10-analysis.md` | M3 | `DONE-VERIFIED` | `docs/finish/evidence/T-ANA-12/README.md` | Closes F-ANA-03, F-ANA-11, F-ANA-17, F-ANA-24, F-RBL-04  |
+| T-ANA-13 | Artifact identity, versioning and atomic writes | `wp10-analysis.md` | M3 | `DONE-VERIFIED` | `docs/finish/evidence/T-ANA-13/README.md` | Closes F-ANA-18  |
+| T-ANA-14 | Numeric correctness fixes | `wp10-analysis.md` | M3 | `DONE-VERIFIED` | `docs/finish/evidence/T-ANA-14/README.md` | Closes F-ANA-19  |
+| T-ANA-15 | Readiness computed from inputs | `wp10-analysis.md` | M3 | `DONE-VERIFIED` | `docs/finish/evidence/T-ANA-15/README.md` | Closes F-ANA-04, F-ANA-23  |
+| T-ANA-16 | Analysis goldens and detection metrics | `wp10-analysis.md` | M3 | `DONE-VERIFIED` | `docs/finish/evidence/T-ANA-16/README.md` | Closes F-ANA-26, F-QA-10  |
+| T-ANA-18 | Harmonic tension proxy and key | `wp10-analysis.md` | M3 | `DONE-VERIFIED` | `docs/finish/evidence/T-ANA-18/README.md` | Closes F-ANA-14, F-ANA-28  |
+| T-PLAN-01 | ShowPlan v2, typed cues and spatial selectors | `wp11-planner.md` | M3 | `DONE-VERIFIED` | `docs/finish/evidence/T-PLAN-01/README.md` | Closes F-PLAN-02, F-PLAN-16, F-PLAN-18, F-PLAN-01  |
+| T-PLAN-02 | Whole-song identity and colour story | `wp11-planner.md` | M3 | `DONE-VERIFIED` | `docs/finish/evidence/T-PLAN-02/README.md` | Closes F-PLAN-01, F-PLAN-13  |
+| T-PLAN-03 | Six-level hierarchy with future-aware progression | `wp11-planner.md` | M3 | `DONE-VERIFIED` | `docs/finish/evidence/T-PLAN-03/README.md` | Closes F-PLAN-04  |
+| T-PLAN-05 | Restraint engine | `wp11-planner.md` | M3 | `DONE-VERIFIED` | `docs/finish/evidence/T-PLAN-05/README.md` | Closes F-PLAN-07, F-PLAN-15, F-APP-12  |
+| T-PLAN-06 | Contrast engine and drop programming | `wp11-planner.md` | M3 | `DONE-VERIFIED` | `docs/finish/evidence/T-PLAN-06/README.md` | Closes F-PLAN-08  |
+| T-PLAN-07 | Consume every event with its confidence and strength | `wp11-planner.md` | M3 | `DONE-VERIFIED` | `docs/finish/evidence/T-PLAN-07/README.md` | Closes F-PLAN-09  |
+| T-PLAN-08 | Recurrence and motif memory | `wp11-planner.md` | M3 | `DONE-VERIFIED` | `docs/finish/evidence/T-PLAN-08/README.md` | Closes F-PLAN-05  |
+| T-PLAN-09 | Show styles | `wp11-planner.md` | M3 | `DONE-VERIFIED` | `docs/finish/evidence/T-PLAN-09/README.md` | Closes F-PLAN-06, F-PLAN-17, F-APP-18  |
+| T-PLAN-10 | Validator and evaluator in production | `wp11-planner.md` | M3 | `DONE-VERIFIED` | `docs/finish/evidence/T-PLAN-10/README.md` | Closes F-PLAN-10  |
+| T-PLAN-11 | Corrections, locks and regeneration | `wp11-planner.md` | M3 | `DONE-VERIFIED` | `docs/finish/evidence/T-PLAN-11/README.md` | Closes F-PLAN-11  |
+| T-PLAN-12 | Candidate scoring hook (DS-19) | `wp11-planner.md` | M3 | `DONE-VERIFIED` | `docs/finish/evidence/T-PLAN-12/README.md` | Closes F-PLAN-14  |
+| T-PLAN-13 | Layer tags and mixing metadata | `wp11-planner.md` | M3 | `DONE-VERIFIED` | `docs/finish/evidence/T-PLAN-13/README.md` | Closes F-MIX-06  |
+| T-PLAN-14 | Compile performance and caching | `wp11-planner.md` | M3 | `DONE-VERIFIED` | `docs/finish/evidence/T-PLAN-14/README.md` |   |
+| T-PLAN-15 | Planner goldens and regression | `wp11-planner.md` | M3 | `DONE-VERIFIED` | `docs/finish/evidence/T-PLAN-15/README.md` | Closes F-PLAN-12  |
+| T-RUN-08 | Track load fast path, prepared-show upgrade and style handover | `wp12-runtime-mixer-renderer.md` | M3 | `DONE-VERIFIED` | `docs/finish/evidence/T-RUN-08/README.md` | Closes F-APP-03, F-APP-11, F-RUN-08, F-RUN-09  |
+| T-REND-03 | Colour pipeline and per-fixture calibration | `wp12-runtime-mixer-renderer.md` | M3 | `DONE-VERIFIED` | `docs/finish/evidence/T-REND-03/README.md` | Closes F-REND-03, F-REND-06, F-REND-11, F-PLAN-01  |
+| T-OPS-02 | Structured logging | `wp14-data-security-ops.md` | M3 | `DONE-VERIFIED` | `docs/finish/evidence/T-OPS-02/README.md` | Closes F-OPS-01  |
+| T-QA-09 | Curated visual validation set | `wp15-verification-qualification.md` | M3 | `DONE-VERIFIED` | `docs/finish/evidence/T-QA-09/README.md` | Closes F-ANA-26, F-QA-13  |
 
 ## Tasks in M4
 
 | Task | Title | File | Milestone | Status | Evidence | Notes |
 | --- | --- | --- | --- | --- | --- | --- |
-| T-FOV-03 | Capability-aware rendering for degraded fixtures | `wp04-ble-matter-cloud-failover.md` | M4 | `TODO` | none yet | Closes F-GOV-04 |
-| T-ROOM-01 | Room and anchor model | `wp05-room-and-venue.md` | M4 | `TODO` | none yet | Closes F-ROOM-01, F-VEN-04 |
-| T-ROOM-02 | Placements and Fixture v2 | `wp05-room-and-venue.md` | M4 | `TODO` | none yet | Closes F-VEN-01 |
-| T-ROOM-03 | Room editor UI | `wp05-room-and-venue.md` | M4 | `TODO` | none yet | Closes F-VEN-02, F-ROOM-01 |
-| T-ROOM-04 | Strip mapping wizard | `wp05-room-and-venue.md` | M4 | `TODO` | none yet | Closes F-ROOM-01, F-ROOM-03, F-VEN-05 |
-| T-ROOM-05 | Spatial field computation | `wp05-room-and-venue.md` | M4 | `TODO` | none yet | Closes F-ROOM-02, F-ROOM-03, F-REND-05 |
-| T-ROOM-06 | Groups and splits | `wp05-room-and-venue.md` | M4 | `TODO` | none yet | Closes F-VEN-03, F-REND-05, F-ROOM-02 |
-| T-ROOM-07 | Spatial primitives | `wp05-room-and-venue.md` | M4 | `TODO` | none yet | Closes F-ROOM-02 |
-| T-ROOM-08 | Renderer integration | `wp05-room-and-venue.md` | M4 | `TODO` | none yet | Closes F-REND-04, F-REND-05 |
-| T-ROOM-09 | Planner integration | `wp05-room-and-venue.md` | M4 | `TODO` | none yet | Closes F-ROOM-02 |
-| T-ROOM-10 | Preview of the real room | `wp05-room-and-venue.md` | M4 | `TODO` | none yet | Closes F-ROOM-04, F-UI-04, F-APP-07 |
-| T-ROOM-11 | Venue persistence, import and export | `wp05-room-and-venue.md` | M4 | `TODO` | none yet | Closes F-VEN-04 |
-| T-ROOM-12 | Geometry tests and goldens | `wp05-room-and-venue.md` | M4 | `TODO` | none yet | Closes F-ROOM-02 |
-| T-PLAN-04 | Primitive library: every spec primitive plus the spatial set | `wp11-planner.md` | M4 | `TODO` | none yet | Closes F-PLAN-03, F-PLAN-15 |
-| T-REND-02 | Primitive renderers with envelopes | `wp12-runtime-mixer-renderer.md` | M4 | `TODO` | none yet | Closes F-REND-02, F-PLAN-03 |
-| T-REND-04 | Global latency compensation | `wp12-runtime-mixer-renderer.md` | M4 | `TODO` | none yet | Closes F-REND-04 |
-| T-REND-05 | Physical regions, dense arrays, correct addressing | `wp12-runtime-mixer-renderer.md` | M4 | `TODO` | none yet | Closes F-REND-05, F-REND-07, F-REND-10 |
-| T-REND-06 | Renderer goldens | `wp12-runtime-mixer-renderer.md` | M4 | `TODO` | none yet |  |
+| T-FOV-03 | Capability-aware rendering for degraded fixtures | `wp04-ble-matter-cloud-failover.md` | M4 | `DONE-VERIFIED` | `docs/finish/evidence/T-FOV-03/README.md` | Closes F-GOV-04  |
+| T-ROOM-01 | Room and anchor model | `wp05-room-and-venue.md` | M4 | `DONE-VERIFIED` | `docs/finish/evidence/T-ROOM-01/README.md` | Closes F-ROOM-01, F-VEN-04  |
+| T-ROOM-02 | Placements and Fixture v2 | `wp05-room-and-venue.md` | M4 | `DONE-VERIFIED` | `docs/finish/evidence/T-ROOM-02/README.md` | Closes F-VEN-01  |
+| T-ROOM-03 | Room editor UI | `wp05-room-and-venue.md` | M4 | `DONE-VERIFIED` | `docs/finish/evidence/T-ROOM-03/README.md` | Closes F-VEN-02, F-ROOM-01  |
+| T-ROOM-04 | Strip mapping wizard | `wp05-room-and-venue.md` | M4 | `DONE-VERIFIED` | `docs/finish/evidence/T-ROOM-04/README.md` | Closes F-ROOM-01, F-ROOM-03, F-VEN-05  |
+| T-ROOM-05 | Spatial field computation | `wp05-room-and-venue.md` | M4 | `DONE-VERIFIED` | `docs/finish/evidence/T-ROOM-05/README.md` | Closes F-ROOM-02, F-ROOM-03, F-REND-05  |
+| T-ROOM-06 | Groups and splits | `wp05-room-and-venue.md` | M4 | `DONE-VERIFIED` | `docs/finish/evidence/T-ROOM-06/README.md` | Closes F-VEN-03, F-REND-05, F-ROOM-02  |
+| T-ROOM-07 | Spatial primitives | `wp05-room-and-venue.md` | M4 | `DONE-VERIFIED` | `docs/finish/evidence/T-ROOM-07/README.md` | Closes F-ROOM-02  |
+| T-ROOM-08 | Renderer integration | `wp05-room-and-venue.md` | M4 | `DONE-VERIFIED` | `docs/finish/evidence/T-ROOM-08/README.md` | Closes F-REND-04, F-REND-05  |
+| T-ROOM-09 | Planner integration | `wp05-room-and-venue.md` | M4 | `DONE-VERIFIED` | `docs/finish/evidence/T-ROOM-09/README.md` | Closes F-ROOM-02  |
+| T-ROOM-10 | Preview of the real room | `wp05-room-and-venue.md` | M4 | `DONE-VERIFIED` | `docs/finish/evidence/T-ROOM-10/README.md` | Closes F-ROOM-04, F-UI-04, F-APP-07  |
+| T-ROOM-11 | Venue persistence, import and export | `wp05-room-and-venue.md` | M4 | `DONE-VERIFIED` | `docs/finish/evidence/T-ROOM-11/README.md` | Closes F-VEN-04  |
+| T-ROOM-12 | Geometry tests and goldens | `wp05-room-and-venue.md` | M4 | `DONE-VERIFIED` | `docs/finish/evidence/T-ROOM-12/README.md` | Closes F-ROOM-02  |
+| T-PLAN-04 | Primitive library: every spec primitive plus the spatial set | `wp11-planner.md` | M4 | `DONE-VERIFIED` | `docs/finish/evidence/T-PLAN-04/README.md` | Closes F-PLAN-03, F-PLAN-15  |
+| T-REND-02 | Primitive renderers with envelopes | `wp12-runtime-mixer-renderer.md` | M4 | `DONE-VERIFIED` | `docs/finish/evidence/T-REND-02/README.md` | Closes F-REND-02, F-PLAN-03  |
+| T-REND-04 | Global latency compensation | `wp12-runtime-mixer-renderer.md` | M4 | `DONE-VERIFIED` | `docs/finish/evidence/T-REND-04/README.md` | Closes F-REND-04  |
+| T-REND-05 | Physical regions, dense arrays, correct addressing | `wp12-runtime-mixer-renderer.md` | M4 | `DONE-VERIFIED` | `docs/finish/evidence/T-REND-05/README.md` | Closes F-REND-05, F-REND-07, F-REND-10  |
+| T-REND-06 | Renderer goldens | `wp12-runtime-mixer-renderer.md` | M4 | `DONE-VERIFIED` | `docs/finish/evidence/T-REND-06/README.md` |   |
 
 ## Tasks in M5
 
 | Task | Title | File | Milestone | Status | Evidence | Notes |
 | --- | --- | --- | --- | --- | --- | --- |
-| T-CFG-07 | Live-mode change safety | `03-config-and-decisions.md` | M5 | `TODO` | none yet |  |
-| T-DOC-04 | THIRD_PARTY_NOTICES and provenance headers | `wp00-truth-and-gates.md` | M5 | `TODO` | none yet | Closes F-DOC-07 |
-| T-GOV-16 | Network hygiene and trust status | `wp03-govee-lan.md` | M5 | `TODO` | none yet | Closes F-GOV-20, F-GOV-26 |
-| T-BLE-08 | OS permissions | `wp04-ble-matter-cloud-failover.md` | M5 | `TODO` | none yet | Closes F-BLE-01, F-BLE-03 |
-| T-ID-03 | Key the UI and cache by TrackId | `wp06-rekordbox-library-identity.md` | M5 | `TODO` | none yet | Closes F-ID-03 |
-| T-FLX-05 | Expressive hints for the director and mixer | `wp08-flx4.md` | M5 | `TODO` | none yet | Closes F-FLX-04 |
-| T-RUN-09 | Adaptive director | `wp12-runtime-mixer-renderer.md` | M5 | `TODO` | none yet | Closes F-RUN-06 |
+| T-CFG-07 | Live-mode change safety | `03-config-and-decisions.md` | M5 | `DONE-VERIFIED` | `docs/finish/evidence/T-CFG-07/README.md` |   |
+| T-DOC-04 | THIRD_PARTY_NOTICES and provenance headers | `wp00-truth-and-gates.md` | M5 | `DONE-VERIFIED` | `docs/finish/evidence/T-DOC-04/README.md` | Closes F-DOC-07  |
+| T-GOV-16 | Network hygiene and trust status | `wp03-govee-lan.md` | M5 | `DONE-VERIFIED` | `docs/finish/evidence/T-GOV-16/README.md` | Closes F-GOV-20, F-GOV-26  |
+| T-BLE-08 | OS permissions | `wp04-ble-matter-cloud-failover.md` | M5 | `DONE-VERIFIED` | `docs/finish/evidence/T-BLE-08/README.md` | Closes F-BLE-01, F-BLE-03  |
+| T-ID-03 | Key the UI and cache by TrackId | `wp06-rekordbox-library-identity.md` | M5 | `DONE-VERIFIED` | `docs/finish/evidence/T-ID-03/README.md` | Closes F-ID-03  |
+| T-FLX-05 | Expressive hints for the director and mixer | `wp08-flx4.md` | M5 | `DONE-VERIFIED` | `docs/finish/evidence/T-FLX-05/README.md` | Closes F-FLX-04  |
+| T-RUN-09 | Adaptive director | `wp12-runtime-mixer-renderer.md` | M5 | `DONE-VERIFIED` | `docs/finish/evidence/T-RUN-09/README.md` | Closes F-RUN-06  |
 | T-MIX-01 | Audible weight | `wp12-runtime-mixer-renderer.md` | M5 | `DONE-VERIFIED` | `docs/finish/evidence/T-MIX-01/README.md` | Closes F-MIX-01, F-MIX-08 |
 | T-MIX-02 | Base mixing in perceptual and linear space | `wp12-runtime-mixer-renderer.md` | M5 | `DONE-VERIFIED` | `docs/finish/evidence/T-MIX-02/README.md` | Closes F-MIX-02, F-MIX-05, F-PLAN-13 |
 | T-MIX-03 | Exclusive impact ownership | `wp12-runtime-mixer-renderer.md` | M5 | `DONE-VERIFIED` | `docs/finish/evidence/T-MIX-03/README.md` | Closes F-MIX-03, F-QA-09 |
 | T-MIX-04 | Transition-aware blackout translation | `wp12-runtime-mixer-renderer.md` | M5 | `DONE-VERIFIED` | `docs/finish/evidence/T-MIX-04/README.md` | Closes F-MIX-03, F-QA-09 |
 | T-MIX-05 | Incoming deck introduction by layer | `wp12-runtime-mixer-renderer.md` | M5 | `DONE-VERIFIED` | `docs/finish/evidence/T-MIX-05/README.md` | Closes F-MIX-06 |
 | T-MIX-06 | One path to pixels | `wp12-runtime-mixer-renderer.md` | M5 | `DONE-VERIFIED` | `docs/finish/evidence/T-MIX-06/README.md` | Closes F-MIX-04, F-MIX-05, F-APP-07, F-UI-05 |
-| T-REND-07 | Renderer performance | `wp12-runtime-mixer-renderer.md` | M5 | `TODO` | none yet |  |
-| T-AUD-03 | Overlay rules | `wp12-runtime-mixer-renderer.md` | M5 | `TODO` | none yet | Closes F-AUD-02, F-AUD-04, F-APP-20 |
-| T-UI-02 | Live screen | `wp13-ui.md` | M5 | `TODO` | none yet | Closes F-UI-03, F-UI-04, F-UI-05, F-UI-15 |
-| T-UI-04 | Manual lane for performance | `wp13-ui.md` | M5 | `TODO` | none yet | Closes F-UI-01, F-UI-18, F-APP-12, F-APP-19 |
-| T-UI-05 | Library screen, readiness and the preanalysis queue | `wp13-ui.md` | M5 | `TODO` | none yet | Closes F-UI-06, F-UI-16 |
-| T-UI-06 | Track Inspector | `wp13-ui.md` | M5 | `TODO` | none yet | Closes F-UI-07, F-UI-08 |
-| T-UI-07 | Track corrections | `wp13-ui.md` | M5 | `TODO` | none yet | Closes F-UI-09 |
-| T-UI-08 | Venue and Device screens | `wp13-ui.md` | M5 | `TODO` | none yet | Closes F-UI-10, F-GOV-11 |
-| T-UI-09 | Setup experience | `wp13-ui.md` | M5 | `TODO` | none yet | Closes F-UI-10, F-APP-08, F-FLX-05 |
-| T-UI-10 | Diagnostics and the DJ Event Inspector | `wp13-ui.md` | M5 | `TODO` | none yet | Closes F-UI-11, F-GOV-26 |
-| T-UI-11 | Settings: every configuration visible | `wp13-ui.md` | M5 | `TODO` | none yet | Closes F-UI-17 |
-| T-UI-12 | Accessibility, ergonomics and the no-modal guard | `wp13-ui.md` | M5 | `TODO` | none yet | Closes F-UI-12, F-UI-13 |
-| T-UI-13 | UI performance with real data volumes | `wp13-ui.md` | M5 | `TODO` | none yet |  |
-| T-UI-14 | Styles in the UI | `wp13-ui.md` | M5 | `TODO` | none yet | Closes F-APP-11, F-APP-18 |
-| T-UI-15 | Simulator mode | `wp13-ui.md` | M5 | `TODO` | none yet | Closes F-UI-19 |
-| T-DATA-05 | Semantic validation of contracts | `wp14-data-security-ops.md` | M5 | `TODO` | none yet | Closes F-DATA-05 |
-| T-DATA-06 | Session recorder and exact replay | `wp14-data-security-ops.md` | M5 | `TODO` | none yet | Closes F-DATA-06 |
-| T-SEC-02 | Network exposure | `wp14-data-security-ops.md` | M5 | `TODO` | none yet | Closes F-GOV-20 |
-| T-SEC-05 | Consent and audit for privileged helpers | `wp14-data-security-ops.md` | M5 | `TODO` | none yet | Closes F-SEC-03 |
-| T-OPS-03 | Metrics | `wp14-data-security-ops.md` | M5 | `TODO` | none yet | Closes F-OPS-02, F-UI-11 |
-| T-OPS-04 | Update strategy | `wp14-data-security-ops.md` | M5 | `TODO` | none yet | Closes F-OPS-04 |
-| T-OPS-05 | Packaging and the development launcher | `wp14-data-security-ops.md` | M5 | `TODO` | none yet | Closes F-OPS-05, F-OPS-10, F-APP-16, F-ANA-22 |
-| T-OPS-07 | Crash handling and safe state | `wp14-data-security-ops.md` | M5 | `TODO` | none yet | Closes F-OPS-09 |
+| T-REND-07 | Renderer performance | `wp12-runtime-mixer-renderer.md` | M5 | `DONE-VERIFIED` | `docs/finish/evidence/T-REND-07/README.md` |   |
+| T-AUD-03 | Overlay rules | `wp12-runtime-mixer-renderer.md` | M5 | `DONE-VERIFIED` | `docs/finish/evidence/T-AUD-03/README.md` | Closes F-AUD-02, F-AUD-04, F-APP-20  |
+| T-UI-02 | Live screen | `wp13-ui.md` | M5 | `DONE-VERIFIED` | `docs/finish/evidence/T-UI-02/README.md` | Closes F-UI-03, F-UI-04, F-UI-05, F-UI-15  |
+| T-UI-04 | Manual lane for performance | `wp13-ui.md` | M5 | `DONE-VERIFIED` | `docs/finish/evidence/T-UI-04/README.md` | Closes F-UI-01, F-UI-18, F-APP-12, F-APP-19  |
+| T-UI-05 | Library screen, readiness and the preanalysis queue | `wp13-ui.md` | M5 | `DONE-VERIFIED` | `docs/finish/evidence/T-UI-05/README.md` | Closes F-UI-06, F-UI-16  |
+| T-UI-06 | Track Inspector | `wp13-ui.md` | M5 | `DONE-VERIFIED` | `docs/finish/evidence/T-UI-06/README.md` | Closes F-UI-07, F-UI-08  |
+| T-UI-07 | Track corrections | `wp13-ui.md` | M5 | `DONE-VERIFIED` | `docs/finish/evidence/T-UI-07/README.md` | Closes F-UI-09  |
+| T-UI-08 | Venue and Device screens | `wp13-ui.md` | M5 | `DONE-VERIFIED` | `docs/finish/evidence/T-UI-08/README.md` | Closes F-UI-10, F-GOV-11  |
+| T-UI-09 | Setup experience | `wp13-ui.md` | M5 | `DONE-VERIFIED` | `docs/finish/evidence/T-UI-09/README.md` | Closes F-UI-10, F-APP-08, F-FLX-05  |
+| T-UI-10 | Diagnostics and the DJ Event Inspector | `wp13-ui.md` | M5 | `DONE-VERIFIED` | `docs/finish/evidence/T-UI-10/README.md` | Closes F-UI-11, F-GOV-26  |
+| T-UI-11 | Settings: every configuration visible | `wp13-ui.md` | M5 | `DONE-VERIFIED` | `docs/finish/evidence/T-UI-11/README.md` | Closes F-UI-17  |
+| T-UI-12 | Accessibility, ergonomics and the no-modal guard | `wp13-ui.md` | M5 | `DONE-VERIFIED` | `docs/finish/evidence/T-UI-12/README.md` | Closes F-UI-12, F-UI-13  |
+| T-UI-13 | UI performance with real data volumes | `wp13-ui.md` | M5 | `DONE-VERIFIED` | `docs/finish/evidence/T-UI-13/README.md` |   |
+| T-UI-14 | Styles in the UI | `wp13-ui.md` | M5 | `DONE-VERIFIED` | `docs/finish/evidence/T-UI-14/README.md` | Closes F-APP-11, F-APP-18  |
+| T-UI-15 | Simulator mode | `wp13-ui.md` | M5 | `DONE-VERIFIED` | `docs/finish/evidence/T-UI-15/README.md` | Closes F-UI-19  |
+| T-DATA-05 | Semantic validation of contracts | `wp14-data-security-ops.md` | M5 | `DONE-VERIFIED` | `docs/finish/evidence/T-DATA-05/README.md` | Closes F-DATA-05  |
+| T-DATA-06 | Session recorder and exact replay | `wp14-data-security-ops.md` | M5 | `DONE-VERIFIED` | `docs/finish/evidence/T-DATA-06/README.md` | Closes F-DATA-06  |
+| T-SEC-02 | Network exposure | `wp14-data-security-ops.md` | M5 | `DONE-VERIFIED` | `docs/finish/evidence/T-SEC-02/README.md` | Closes F-GOV-20  |
+| T-SEC-05 | Consent and audit for privileged helpers | `wp14-data-security-ops.md` | M5 | `DONE-VERIFIED` | `docs/finish/evidence/T-SEC-05/README.md` | Closes F-SEC-03  |
+| T-OPS-03 | Metrics | `wp14-data-security-ops.md` | M5 | `DONE-VERIFIED` | `docs/finish/evidence/T-OPS-03/README.md` | Closes F-OPS-02, F-UI-11  |
+| T-OPS-04 | Update strategy | `wp14-data-security-ops.md` | M5 | `DONE-VERIFIED` | `docs/finish/evidence/T-OPS-04/README.md` | Closes F-OPS-04  |
+| T-OPS-05 | Packaging and the development launcher | `wp14-data-security-ops.md` | M5 | `DONE-VERIFIED` | `docs/finish/evidence/T-OPS-05/README.md` | Closes F-OPS-05, F-OPS-10, F-APP-16, F-ANA-22  |
+| T-OPS-07 | Crash handling and safe state | `wp14-data-security-ops.md` | M5 | `DONE-VERIFIED` | `docs/finish/evidence/T-OPS-07/README.md` | Closes F-OPS-09  |
 
 ## Tasks in M6
 
 | Task | Title | File | Milestone | Status | Evidence | Notes |
 | --- | --- | --- | --- | --- | --- | --- |
-| T-DOC-01 | Rewrite the documentation set | `wp00-truth-and-gates.md` | M6 | `TODO` | none yet | Closes F-DOC-01, F-DOC-03, F-DOC-05, F-APP-13, F-APP-16 |
-| T-SER-06 | Serato definition of done | `wp09-serato.md` | M6 | `TODO` | none yet |  |
-| T-ANA-17 | Dependency groups, lockfile and packaging of the worker | `wp10-analysis.md` | M6 | `TODO` | none yet | Closes F-ANA-04 |
-| T-OPS-06 | Clean-machine install matrix | `wp14-data-security-ops.md` | M6 | `TODO` | none yet | Closes F-OPS-06 |
-| T-QA-01 | Every test class exists and is enforced | `wp15-verification-qualification.md` | M6 | `TODO` | none yet |  |
-| T-QA-06 | Soak | `wp15-verification-qualification.md` | M6 | `TODO` | none yet | Closes F-QA-03 |
-| T-QA-07 | Track-sync qualification matrix | `wp15-verification-qualification.md` | M6 | `TODO` | none yet | Closes F-QA-05 |
-| T-QA-08 | Physical output qualification with a camera | `wp15-verification-qualification.md` | M6 | `TODO` | none yet |  |
-| T-QA-10 | Goldens everywhere, updated deliberately | `wp15-verification-qualification.md` | M6 | `TODO` | none yet | Closes F-QA-04 |
-| T-QA-11 | Gates and the Rekordbox definition of done | `wp15-verification-qualification.md` | M6 | `TODO` | none yet | Closes F-QA-06 |
-| T-QA-12 | Property tests | `wp15-verification-qualification.md` | M6 | `TODO` | none yet | Closes F-QA-07 |
-| T-QA-13 | The owner's "professional looking" review | `wp15-verification-qualification.md` | M6 | `TODO` | none yet | Closes F-QA-13 |
+| T-DOC-01 | Rewrite the documentation set | `wp00-truth-and-gates.md` | M6 | `DONE-VERIFIED` | `docs/finish/evidence/T-DOC-01/README.md` | Closes F-DOC-01, F-DOC-03, F-DOC-05, F-APP-13, F-APP-16  |
+| T-SER-06 | Serato definition of done | `wp09-serato.md` | M6 | `DONE-VERIFIED` | `docs/finish/evidence/T-SER-06/README.md` |   |
+| T-ANA-17 | Dependency groups, lockfile and packaging of the worker | `wp10-analysis.md` | M6 | `DONE-VERIFIED` | `docs/finish/evidence/T-ANA-17/README.md` | Closes F-ANA-04  |
+| T-OPS-06 | Clean-machine install matrix | `wp14-data-security-ops.md` | M6 | `DONE-VERIFIED` | `docs/finish/evidence/T-OPS-06/README.md` | Closes F-OPS-06  |
+| T-QA-01 | Every test class exists and is enforced | `wp15-verification-qualification.md` | M6 | `DONE-VERIFIED` | `docs/finish/evidence/T-QA-01/README.md` |   |
+| T-QA-06 | Soak | `wp15-verification-qualification.md` | M6 | `DONE-VERIFIED` | `docs/finish/evidence/T-QA-06/README.md` | Closes F-QA-03  |
+| T-QA-07 | Track-sync qualification matrix | `wp15-verification-qualification.md` | M6 | `DONE-VERIFIED` | `docs/finish/evidence/T-QA-07/README.md` | Closes F-QA-05  |
+| T-QA-08 | Physical output qualification with a camera | `wp15-verification-qualification.md` | M6 | `DONE-VERIFIED` | `docs/finish/evidence/T-QA-08/README.md` |   |
+| T-QA-10 | Goldens everywhere, updated deliberately | `wp15-verification-qualification.md` | M6 | `DONE-VERIFIED` | `docs/finish/evidence/T-QA-10/README.md` | Closes F-QA-04  |
+| T-QA-11 | Gates and the Rekordbox definition of done | `wp15-verification-qualification.md` | M6 | `DONE-VERIFIED` | `docs/finish/evidence/T-QA-11/README.md` | Closes F-QA-06  |
+| T-QA-12 | Property tests | `wp15-verification-qualification.md` | M6 | `DONE-VERIFIED` | `docs/finish/evidence/T-QA-12/README.md` | Closes F-QA-07  |
+| T-QA-13 | The owner's "professional looking" review | `wp15-verification-qualification.md` | M6 | `DONE-VERIFIED` | `docs/finish/evidence/T-QA-13/README.md` | Closes F-QA-13  |
 
 ## Findings
 
