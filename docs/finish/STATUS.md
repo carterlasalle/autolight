@@ -77,9 +77,9 @@ Milestone contents and exit proofs are in `README.md`.
 | T-GOV-07 | Read-back | `wp03-govee-lan.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-GOV-07/README.md` | Closes F-GOV-08 |
 | T-GOV-08 | Stream lifecycle and newest-frame-wins | `wp03-govee-lan.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-GOV-08/README.md` | Closes F-GOV-03, F-GOV-13, F-GOV-14, F-GOV-22, F-GOV-23 |
 | T-GOV-09 | Blackout, white, intensity and master brightness policy | `wp03-govee-lan.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-GOV-09/README.md` | Closes F-GOV-05, F-GOV-16, F-GOV-30 |
-| T-GOV-10 | Capability probe and verified fallback | `wp03-govee-lan.md` | M1 | `TODO` | none yet | Closes F-GOV-04, F-GOV-24, F-X-09 |
-| T-GOV-11 | Qualification wizard runner | `wp03-govee-lan.md` | M1 | `TODO` | none yet | Closes F-GOV-11, F-GOV-12, F-GOV-22, F-GOV-24, F-X-07 |
-| T-GOV-12 | IDENTIFY, TEST CHASE, RECALIBRATE, identify walk | `wp03-govee-lan.md` | M1 | `TODO` | none yet | Closes F-GOV-10 |
+| T-GOV-10 | Capability probe and verified fallback | `wp03-govee-lan.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-GOV-10/README.md` | Closes F-GOV-04, F-GOV-24, F-X-09 |
+| T-GOV-11 | Qualification wizard runner | `wp03-govee-lan.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-GOV-11/README.md` | Closes F-GOV-11, F-GOV-12, F-GOV-22, F-GOV-24, F-X-07 |
+| T-GOV-12 | IDENTIFY, TEST CHASE, RECALIBRATE, identify walk | `wp03-govee-lan.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-GOV-12/README.md` | Closes F-GOV-10 |
 | T-RBL-01 | Rekordbox library readers behind DS-15 | `wp06-rekordbox-library-identity.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-RBL-01/README.md` | Closes F-RBL-01 |
 | T-RBL-02 | Library service and ANLZ path resolution | `wp06-rekordbox-library-identity.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-RBL-02/README.md` | Closes F-RBL-01, F-RBL-08 |
 | T-RBL-03 | Beat origin, units and beat to time mapping | `wp06-rekordbox-library-identity.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-RBL-03/README.md` | Closes F-RBL-06, F-RBL-09 |
@@ -113,7 +113,7 @@ Milestone contents and exit proofs are in `README.md`.
 | Task | Title | File | Milestone | Status | Evidence | Notes |
 | --- | --- | --- | --- | --- | --- | --- |
 | T-DOC-02 | ADRs for every decision | `wp00-truth-and-gates.md` | M2 | `TODO` | none yet | Closes F-DOC-04, F-LIVE-03 |
-| T-GOV-13 | H6076 and H1A45 profiles | `wp03-govee-lan.md` | M2 | `TODO` | none yet | Closes F-GOV-15 |
+| T-GOV-13 | H6076 and H1A45 profiles | `wp03-govee-lan.md` | M2 | `DONE-VERIFIED` | `docs/finish/evidence/T-GOV-13/README.md` | Closes F-GOV-15 |
 | T-GOV-15 | Segment resolution selection | `wp03-govee-lan.md` | M2 | `TODO` | none yet | Closes F-GOV-28 |
 | T-GOV-17 | Unknown firmware policy | `wp03-govee-lan.md` | M2 | `TODO` | none yet | Closes F-GOV-21 |
 | T-GOV-18 | ptReal scenes over LAN | `wp03-govee-lan.md` | M2 | `TODO` | none yet | Closes F-GOV-27 |
