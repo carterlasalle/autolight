@@ -1,3 +1,4 @@
+import { readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
@@ -8,7 +9,7 @@ const packages = join(root, "..");
 // to their sources, so this package's tests exercise the code the app bundles
 // instead of a package dist that may predate a sibling's current edits.
 const workspaceAlias = Object.fromEntries(
-  ["contracts", "rekordbox-library", "rekordbox-live", "storage"].map((name) => [
+  readdirSync(packages).map((name) => [
     `@autolight/${name}`,
     join(packages, name, "src", "index.ts"),
   ]),
