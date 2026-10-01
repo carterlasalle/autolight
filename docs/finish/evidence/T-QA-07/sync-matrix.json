@@ -1,0 +1,107 @@
+{
+  "provider": "sim-rekordbox",
+  "thresholdMs": 20,
+  "rows": [
+    {
+      "row": "normal",
+      "p95Ms": 3.87,
+      "verdict": "PASS"
+    },
+    {
+      "row": "pitch+8pct",
+      "p95Ms": 5.9,
+      "verdict": "PASS"
+    },
+    {
+      "row": "pitch-8pct",
+      "p95Ms": 5.93,
+      "verdict": "PASS"
+    },
+    {
+      "row": "pitch+16pct",
+      "p95Ms": 27.53,
+      "verdict": "FAIL"
+    },
+    {
+      "row": "pitch-16pct",
+      "p95Ms": 27.82,
+      "verdict": "FAIL"
+    },
+    {
+      "row": "play-pause",
+      "p95Ms": 6.95,
+      "verdict": "PASS"
+    },
+    {
+      "row": "cue-restart",
+      "p95Ms": 6.85,
+      "verdict": "PASS"
+    },
+    {
+      "row": "hotcue-jump",
+      "p95Ms": 6.77,
+      "verdict": "PASS"
+    },
+    {
+      "row": "seek-forward",
+      "p95Ms": 6.92,
+      "verdict": "PASS"
+    },
+    {
+      "row": "seek-back",
+      "p95Ms": 6.57,
+      "verdict": "PASS"
+    },
+    {
+      "row": "loop-4beat",
+      "p95Ms": 6.82,
+      "verdict": "PASS"
+    },
+    {
+      "row": "loop-1beat",
+      "p95Ms": 6.75,
+      "verdict": "PASS"
+    },
+    {
+      "row": "loop-1/2",
+      "p95Ms": 6.87,
+      "verdict": "PASS"
+    },
+    {
+      "row": "roll-1/4",
+      "p95Ms": 6.94,
+      "verdict": "PASS"
+    },
+    {
+      "row": "scratch",
+      "p95Ms": 10.71,
+      "verdict": "PASS"
+    },
+    {
+      "row": "reverse",
+      "p95Ms": 13.91,
+      "verdict": "PASS"
+    },
+    {
+      "row": "sync-toggle",
+      "p95Ms": 6.84,
+      "verdict": "PASS"
+    },
+    {
+      "row": "two-decks",
+      "p95Ms": 6.75,
+      "verdict": "PASS"
+    },
+    {
+      "row": "crossfade",
+      "p95Ms": 6.94,
+      "verdict": "PASS"
+    },
+    {
+      "row": "track-replace",
+      "p95Ms": 6.66,
+      "verdict": "PASS"
+    }
+  ],
+  "note": "SIM ground truth. HW rows under HW-SYNC-01; failing rows stay FAIL in capability status."
+}

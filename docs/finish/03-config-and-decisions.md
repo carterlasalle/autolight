@@ -328,6 +328,8 @@ literal not listed here, add it. `R:` is the receipt. `LS` is live-safe
 | `govee.cloud.enabled` | false | bool | spec 148 | N |
 | `govee.cloud.perDevicePerMinute` | 10 | requests | Govee docs via toolkit `cloud.md:102` | N |
 | `govee.cloud.perAccountPerDay` | 10000 | requests | Govee docs via toolkit `cloud.md:101` | N |
+| `govee.cloud.apiKey` | secrets-module, no default, never stored as plain text | secret id | T-SEC-01 | N |
+| `agent.apiToken` | secrets-module, no default, never stored as plain text | secret id | T-SEC-01 | N |
 | `govee.failover.policy` | `hybrid` | enum DS-03 | owner | N |
 | `govee.failover.lanLossMs` | 3000 | ms | unmeasured | Y |
 | `govee.failover.probeIntervalMs` | 10000 | ms | unmeasured | Y |

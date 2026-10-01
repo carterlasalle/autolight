@@ -24,6 +24,14 @@ export { ToolkitEngine, defaultToolkitLoader, isUnavailableError, ToolkitUnavail
 export type { BindingModule, BindingDevice, BindingDeviceStatus, BindingStream, BindingSdk, BindingDeviceHandle, ToolkitLoader, ToolkitLoadResult, UnavailableReasonClass } from "./engines/toolkit.js";
 export { NativeStreamEngine, SocketTransport, hasStatus, hasDiscover } from "./engines/native-ts.js";
 export type { NativeEngineOptions, StatusCapable, DiscoverCapable } from "./engines/native-ts.js";
+export { selectResolution } from "./resolution.js";
+export type { ResolutionKind, ResolutionMode, ResolutionInput, ResolutionCandidate, ResolutionDecision } from "./resolution.js";
+export { FirmwarePolicy } from "./firmware.js";
+export type { FirmwarePolicyOptions, StreamGate, FirmwareDecision } from "./firmware.js";
+export { ptRealCommand, parsePtRealCommand, sceneFromCatalog, listScenes, sceneCommand } from "./scenes.js";
+export type { SceneCatalog, SceneMoment, SceneRequest } from "./scenes.js";
+export { DeviceMetrics } from "./metrics.js";
+export type { DeviceHealthState, DeviceMetricsRow, MetricsSample } from "./metrics.js";
 
 // Legacy alias kept until T-GOV-02 deletes encodeFrame (M1): maps to encodeRaw.
 export function encodeFrame(opcode: number, payload: Uint8Array): Uint8Array {

@@ -1,0 +1,34 @@
+id: no-library-write
+language: TypeScript
+severity: error
+message: "Library package writes outside its fixture seam (T-SEC-04, F-SEC-02). Library readers are read-only by construction; production sources must never call a write API."
+rule:
+  any:
+    - pattern: "writeFileSync($$$ARGS)"
+    - pattern: "writeFile($$$ARGS)"
+    - pattern: "appendFileSync($$$ARGS)"
+    - pattern: "appendFile($$$ARGS)"
+    - pattern: "copyFileSync($$$ARGS)"
+    - pattern: "copyFile($$$ARGS)"
+    - pattern: "renameSync($$$ARGS)"
+    - pattern: "rename($$$ARGS)"
+    - pattern: "unlinkSync($$$ARGS)"
+    - pattern: "unlink($$$ARGS)"
+    - pattern: "rmSync($$$ARGS)"
+    - pattern: "rm($$$ARGS)"
+    - pattern: "mkdirSync($$$ARGS)"
+    - pattern: "mkdir($$$ARGS)"
+    - pattern: "createWriteStream($$$ARGS)"
+    - pattern: "openSync($$$ARGS)"
+files:
+  - packages/rekordbox-library/src/anlz.ts
+  - packages/rekordbox-library/src/beat.ts
+  - packages/rekordbox-library/src/db.ts
+  - packages/rekordbox-library/src/driver.ts
+  - packages/rekordbox-library/src/index.ts
+  - packages/rekordbox-library/src/options.ts
+  - packages/rekordbox-library/src/pssi.ts
+  - packages/rekordbox-library/src/service.ts
+  - packages/rekordbox-library/src/sidecar.ts
+  - packages/rekordbox-library/src/watch.ts
+  - packages/serato/src/index.ts

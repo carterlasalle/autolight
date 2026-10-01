@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { z } from "zod";
 import { KEYS, defineKey } from "./registry.js";
+import { isSecretId } from "./secrets.js";
 import { ConfigStore, type Scope } from "./base.js";
 
 // T-CFG-02 persistence and change events. The JSON file path is injected by
@@ -60,6 +61,10 @@ export function validateImportValues(values: Record<string, unknown>): string[] 
   const bad: string[] = [];
   const rangeRe = /^\s*(-?\d+(?:\.\d+)?)\s+to\s+(-?\d+(?:\.\d+)?)\s*$/;
   for (const [k, v] of Object.entries(values)) {
+    if (isSecretId(k)) {
+      bad.push(`${k}: is a secret id, use the secrets-service (fix: remove it from the import)`);
+      continue;
+    }
     const def = KEYS.find((d) => d.key === k);
     if (!def) {
       bad.push(`${k}: unknown key, got ${JSON.stringify(v)} (fix: remove it)`);

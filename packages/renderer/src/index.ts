@@ -13,7 +13,9 @@ import {
 
 // The layer stack is the renderer's public compositing surface (T-REND-01).
 export * from "./layers.js";
-
+export * from "./spatial.js";
+export * from "./regions.js";
+export * from "./capability.js";
 // Logical frame at arbitrary beat (§58: random-access state function).
 // Blackout = RGB 0,0,0, never power-off (§47). Darkness is a first-class layer
 // contribution (T-REND-01): it replaces with black at its alpha instead of

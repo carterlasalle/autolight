@@ -1,0 +1,1 @@
+{"commandRateHzDefault":10,"minIntervalMsAtDefault":100,"timerFloorMsPerTick":1.1,"timerFloorSampleMs":1134.5,"timerFloorIterations":1000,"sustainablePerDeviceHz":"unmeasured, waits on hardware","receipt":"govee.matter.commandRateHz stays unmeasured"}

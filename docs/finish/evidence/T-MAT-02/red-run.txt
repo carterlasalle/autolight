@@ -1,0 +1,21 @@
+RED RUNS (impl reverted, tests kept; each run observed 2026-10-01 during development, impl restored after):
+
+controller (MatterError replaced with plain Error in src/controller.ts):
+ FAIL  src/controller.test.ts > InMemoryAdapter commission > rejects a bad pairing code with a typed error
+ FAIL  src/controller.test.ts > InMemoryAdapter commission > refuses work after close
+ FAIL  src/controller.test.ts > InMemoryAdapter command and read > throws unknown-node for a node that was never commissioned
+ src/controller.test.ts (10 tests | 3 failed)
+
+mapping (transitionDs 0 replaced with 50 in src/mapping.ts):
+ FAIL  src/mapping.test.ts > toMatterWrites > maps red to on plus level plus hue/saturation, every transition 0
+ FAIL  src/mapping.test.ts > cctToMatterSetupWrites > maps 2700K to mireds with the level scaled
+ src/mapping.test.ts (8 tests | 2 failed)
+
+binding (MatterError replaced with plain Error in src/binding.ts):
+ FAIL  src/binding.test.ts > bindNode > saves nothing when the user declines after the flash
+ FAIL  src/binding.test.ts > bindNode > refuses to overwrite an existing binding without allowRebind
+ src/binding.test.ts (4 tests | 2 failed)
+
+simulator (TEST_PAIRING_CODE changed to 9999-999-9999 in src/simulator.ts):
+ FAIL  src/simulator.test.ts > virtual light > uses the fixed test pairing code
+ src/simulator.test.ts (4 tests | 1 failed)

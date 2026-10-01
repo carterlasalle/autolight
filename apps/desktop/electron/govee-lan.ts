@@ -282,6 +282,52 @@ function sameSubnet(ip: string, ifaceIp: string, netmask: string): boolean {
   }
   return true;
 }
+// T-GOV-16 network hygiene (spec 111): default bind set is private LAN
+// addresses only (RFC 1918). Anything else (public, CGNAT, unclassified) is
+// never bound: the manager refuses WAN interfaces even if selected.
+export function isPrivateIpv4(ip: string): boolean {
+  const a = ip.split(".").map(Number);
+  if (a.length !== 4) return false;
+  for (const o of a) if (!Number.isInteger(o) || o < 0 || o > 255) return false;
+  const b0 = a[0] ?? -1;
+  const b1 = a[1] ?? -1;
+  if (b0 === 10) return true;
+  if (b0 === 172 && b1 >= 16 && b1 <= 31) return true;
+  if (b0 === 192 && b1 === 168) return true;
+  return false;
+}
+
+export function subnetAddress(ip: string, netmask: string): string | null {
+  const a = ip.split(".").map(Number);
+  const m = netmask.split(".").map(Number);
+  if (a.length !== 4 || m.length !== 4) return null;
+  const out: number[] = [];
+  for (let i = 0; i < 4; i++) {
+    const o = a[i] ?? -1;
+    const k = m[i] ?? -1;
+    if (!Number.isInteger(o) || o < 0 || o > 255 || !Number.isInteger(k) || k < 0 || k > 255) return null;
+    out.push(o & k);
+  }
+  return out.join(".");
+}
+
+export function firewallHints(platform: string = process.platform): string[] {
+  if (platform === "darwin") {
+    return [
+      "Allow AutoLight incoming connections: Settings > Network > Firewall.",
+      "Accept the Local Network privacy prompt on first scan; without it discovery replies never arrive.",
+    ];
+  }
+  if (platform === "win32") {
+    return [
+      "Allow UDP ports 4001-4003 inbound and outbound in Windows Defender Firewall.",
+      "The network profile must be Private, not Public; check Settings > Network.",
+    ];
+  }
+  return [
+    "Allow UDP ports 4001-4003 both ways (for example: ufw allow 4001:4003/udp).",
+  ];
+}
 
 const defaultWait = (ms: number): Promise<void> => {
   const { promise, resolve } = Promise.withResolvers<void>();
@@ -329,6 +375,8 @@ export class GoveeLanManager implements StreamTransport {
   private saveTimer: NodeJS.Timeout | null = null;
   private lastIfaceSig = "";
   private scanRounds = 0;
+  private refusedWan: { name: string; address: string }[] = [];
+  private multicastOk = new Map<string, boolean>();
 
   constructor(opts: GoveeManagerOptions = {}) {
     const d = GOVEE_DEFAULTS;
@@ -405,7 +453,10 @@ export class GoveeLanManager implements StreamTransport {
       for (const iface of ifaces) {
         try {
           sock.addMembership(MULTICAST, iface.address);
-        } catch { /* no multicast route on this interface; other rungs cover it */ }
+          this.multicastOk.set(iface.address, true);
+        } catch {
+          this.multicastOk.set(iface.address, false);
+        }
       }
       try {
         (electron as { powerMonitor?: { on: (event: string, fn: () => void) => void } }).powerMonitor?.on("resume", () => {
@@ -457,6 +508,7 @@ export class GoveeLanManager implements StreamTransport {
       } catch { /* already closed */ }
       this.replySock = null;
     }
+    this.multicastOk.clear();
     this.started = false;
   }
 
@@ -484,6 +536,104 @@ export class GoveeLanManager implements StreamTransport {
       devices: this.devices.size,
       retryDelayMs: this.retryDelayMs,
       warnings: [...this.warnings].slice(-20),
+    };
+  }
+
+  // -- network hygiene and trust status (T-GOV-16, spec 111) --------------------
+  //
+  // The single source the Diagnostics network tab renders: bound interfaces,
+  // subnets, multicast health per interface, refused WAN interfaces, the
+  // client-isolation signal, the SignalRGB checklist, and firewall hints.
+  networkTrust(): {
+    interfaces: { name: string; address: string; netmask: string; subnet: string | null; broadcast: string | null }[];
+    refusedWan: { name: string; address: string }[];
+    multicastOk: { address: string; ok: boolean }[];
+    isolationSuspects: { mac: string; ip: string; subnet: string | null }[];
+    checklist: { id: string; label: string; state: "ok" | "suspect" | "manual"; detail: string }[];
+    firewallHints: string[];
+  } {
+    const ifaces = this.eligibleInterfaces();
+    const bound = ifaces.map((i) => ({
+      name: i.name,
+      address: i.address,
+      netmask: i.netmask,
+      subnet: subnetAddress(i.address, i.netmask),
+      broadcast: i.broadcast,
+    }));
+    const onBoundSubnet = (ip: string): string | null => {
+      for (const i of ifaces) {
+        if (sameSubnet(ip, i.address, i.netmask)) {
+          return subnetAddress(i.address, i.netmask);
+        }
+      }
+      return null;
+    };
+    const isolationSuspects: { mac: string; ip: string; subnet: string | null }[] = [];
+    for (const entry of this.devices.values()) {
+      if (!entry.ip) continue;
+      const subnet = onBoundSubnet(entry.ip);
+      if (subnet === null) continue;
+      if (entry.health === "offline" && this.scanRounds > 0) {
+        isolationSuspects.push({ mac: entry.mac, ip: entry.ip, subnet });
+      }
+    }
+    const multicastOk = bound.map((b) => ({
+      address: b.address,
+      ok: this.multicastOk.get(b.address) ?? false,
+    }));
+    const multicastFailed = multicastOk.some((m) => !m.ok);
+    const sameSubnetOk = bound.length > 0;
+    const firstHint = firewallHints()[0] ?? "Allow UDP ports 4001-4003 inbound and outbound.";
+    return {
+      interfaces: bound,
+      refusedWan: [...this.refusedWan],
+      multicastOk,
+      isolationSuspects,
+      checklist: [
+        {
+          id: "lan-toggle",
+          label: "LAN control enabled in Govee Home for each device",
+          state: "manual",
+          detail: "Govee Home > device > settings > LAN control must be on; discovery never sees a device with it off.",
+        },
+        {
+          id: "same-subnet",
+          label: "Host and lights on the same subnet",
+          state: sameSubnetOk ? "ok" : "suspect",
+          detail: sameSubnetOk
+            ? `Bound to ${bound.map((b) => `${b.address}/${b.subnet ?? "?"}`).join(", ")}.`
+            : "No private LAN interface bound; check the cable or Wi-Fi and govee.lan.interfaces.",
+        },
+        {
+          id: "multicast",
+          label: "Multicast discovery works",
+          state: multicastFailed ? "suspect" : "ok",
+          detail: multicastFailed
+            ? "A multicast join failed on at least one interface; directed broadcast and scan list still cover discovery."
+            : "Joined 239.255.255.250 on every bound interface.",
+        },
+        {
+          id: "guest-network",
+          label: "Not a guest network",
+          state: "manual",
+          detail: "Guest networks usually block LAN device traffic even on the same SSID name; use the main network.",
+        },
+        {
+          id: "client-isolation",
+          label: "AP and client isolation off",
+          state: isolationSuspects.length > 0 ? "suspect" : "ok",
+          detail: isolationSuspects.length > 0
+            ? `${isolationSuspects.length} known device(s) on a bound subnet stop answering unicast: check AP/client isolation on the router or move to a travel router.`
+            : "Every known device on a bound subnet answers unicast.",
+        },
+        {
+          id: "firewall",
+          label: "Firewall allows UDP 4001-4003 both ways",
+          state: "manual",
+          detail: firstHint,
+        },
+      ],
+      firewallHints: firewallHints(),
     };
   }
 
@@ -985,6 +1135,11 @@ export class GoveeLanManager implements StreamTransport {
     const step = num(p.testChaseStepMs, 0);
     if (step !== null) this.o.testChaseStepMs = step;
     if (Array.isArray(p.scanList)) this.o.scanList = [...p.scanList];
+    if (Array.isArray(p.interfaces)) {
+      this.o.interfaces = [...p.interfaces];
+      this.lastIfaceSig = "";
+      this.retryDelayMs = this.o.retryInitialMs;
+    }
   }
 
   saveRegistryNow(): void {
@@ -1189,6 +1344,13 @@ export class GoveeLanManager implements StreamTransport {
         const loopback = a.internal || a.address.startsWith("127.");
         const linkLocal = a.address.startsWith("169.254.");
         if (!this.o.loopbackScan && (loopback || linkLocal)) continue;
+        if (this.o.loopbackScan && linkLocal) continue;
+        if (!isPrivateIpv4(a.address) && !loopback) {
+          if (!this.refusedWan.some((r) => r.name === name && r.address === a.address)) {
+            this.refusedWan.push({ name, address: a.address });
+          }
+          continue;
+        }
         out.push({ name, address: a.address, netmask: a.netmask, broadcast: directedBroadcast(a.address, a.netmask) });
       }
     }

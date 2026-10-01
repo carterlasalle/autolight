@@ -19,11 +19,18 @@ import {
 import { migrate, migratorStatus, schemaVersion, tableNames } from "./migrate.js";
 
 export * from "./cache.js";
+export * from "./consent.js";
 export * from "./driver.js";
 export * from "./fastpath.js";
+export * from "./keys.js";
+export * from "./logging.js";
+export * from "./metrics.js";
 export * from "./migrate.js";
+export * from "./netaudit.js";
 export * from "./perf.js";
 export * from "./replay.js";
+export * from "./session.js";
+export * from "./validation.js";
 
 // schema.sql is the readable snapshot of the head schema, used by the
 // migration parity test. The path resolves lazily: importing this module must

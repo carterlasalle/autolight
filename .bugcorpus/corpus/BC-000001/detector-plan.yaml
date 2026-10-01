@@ -1,0 +1,38 @@
+bug: BC-000001
+family: ''
+related: []
+recommended_engine: custom
+rationale: purpose-built searcher; document minimum semantic model
+evidence:
+  id: BC-000001
+  title: 'Runtime clock age divided by 1000: nanosecond state age read as milliseconds'
+  invariant: 'runtime.health.extrapolateMs and runtime.health.holdMs are milliseconds:
+    a bigint-nanosecond delta must be divided by 1e6 before any comparison.'
+  root_cause: Nanosecond timestamps were divided by MS_PER_SECOND (1000) instead of
+    1e6, so the value compared against the millisecond thresholds was microseconds.
+  symptom: 'show-runtime tickWorld computed ageMs as Number(nowNs - receivedAtNs)
+    / 1000, so a 300 ms provider gap reported 300000 milliseconds. clockHealth sat
+    below runtime.health.extrapolateMs and runtime.health.holdMs for gaps up to 1000x
+    too long: no extrapolation window, no hold, no adaptive clock, and the status
+    bar stayed "live" through a dead provider.'
+  signature: {}
+  symbols: []
+  calls: []
+  family: ''
+  original.diff: ''
+  fix.diff: ''
+  fixtures:
+    positive: []
+    negative: []
+    adversarial: []
+checklist:
+- minimize reproducer
+- positive fixture
+- fixed negative fixture
+- neighboring negatives
+- synthesize detector
+- verify fixtures
+- adversarial variants
+- scan repo
+- evaluation report
+- recommend promotion (shadow first)

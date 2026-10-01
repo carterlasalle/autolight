@@ -11,6 +11,7 @@ import {
   exceedsSeekThreshold,
   estimatePosition,
   type BeatObservation,
+  type EstimateResult,
   type EstimatorOptions,
   type ObservationQuality,
 } from "@autolight/dj-core";
@@ -18,7 +19,7 @@ import {
 export type { DeckState, ShowCue, ShowPlan, TrackModel };
 export { estimatePosition };
 
-// Show runtime (T-RUN-01 to T-RUN-05, T-RUN-07).
+// Show runtime (T-RUN-01 to T-RUN-07).
 //
 // Everything here runs in the show host, never in React. The fixed tick order
 // is: ingest, estimate, per-deck evaluation, director, mixer, overrides,
@@ -28,7 +29,7 @@ export { estimatePosition };
 
 export const DEFAULT_BPM = 120;
 export const MAX_DECKS = 4;
-const MS_PER_SECOND = 1000;
+const NS_PER_MS = 1e6;
 
 // ---------------------------------------------------------------------------
 // Cursor and plan evaluation (spec 58: random access, never a replay)
@@ -314,7 +315,7 @@ export function advanceOverride(state: OverrideState, beat: number): { state: Ov
 }
 
 // ---------------------------------------------------------------------------
-// Clock health (T-RUN-06 owns the adaptive clock; the staging lives here)
+// Clock health and the adaptive fallback clock (T-RUN-06, spec 105, DS-23)
 
 export type ClockHealth = "live" | "extrapolating" | "holding" | "degraded";
 
@@ -335,6 +336,147 @@ export function clockHealth(
   return "degraded";
 }
 
+/** Motion floor while the clock holds or runs on the adaptive clock. */
+export const HOLD_MOTION_FLOOR = 0.25;
+
+// Motion factor for the director and the renderer: full while the provider
+// clock is live or extrapolating, faded while the estimate is held, and
+// restrained on the adaptive clock (spec 105: hold the estimate, fade motion).
+export function motionFactor(health: ClockHealth, msSinceLastUpdate: number): number {
+  if (health === "live" || health === "extrapolating") return 1;
+  const span = Math.max(1, HEALTH_HOLD_MS - HEALTH_EXTRAPOLATE_MS);
+  const fade = Math.min(1, Math.max(0, (msSinceLastUpdate - HEALTH_EXTRAPOLATE_MS) / span));
+  return 1 - (1 - HOLD_MOTION_FLOOR) * fade;
+}
+
+/** Where the beat of a tick came from (T-RUN-06). */
+export type ClockSource = "provider" | "hold" | "adaptive";
+
+export type AdaptiveClockMode = "dj-bpm" | "audio-onset" | "blend";
+
+/** DS-23 default: blend of the DJ tempo and the live audio tempo. */
+export const ADAPTIVE_CLOCK_DEFAULT: AdaptiveClockMode = "blend";
+
+export interface AdaptiveClockInputs {
+  /** Last known DJ tempo and phase (`dj-bpm`). */
+  djBpm: number | null;
+  djBeat: number | null;
+  djAnchorNs: bigint | null;
+  /** Live tempo from the onset detector (`audio-onset`, T-AUD-02). */
+  audioBpm: number | null;
+  audioBeat: number | null;
+  audioAnchorNs: bigint | null;
+  /** 0 to 1 confidence from the tempo estimate; weights the blend. */
+  audioConfidence: number;
+}
+
+export interface AdaptiveBeat {
+  beat: number;
+  /** The tempo this beat advances at, in BPM. */
+  bpm: number;
+  source: AdaptiveClockMode;
+}
+
+// The adaptive clock extrapolates a phase anchor at a tempo. `dj-bpm` uses the
+// last known provider tempo and phase, `audio-onset` the live tempo from the
+// DSP, and `blend` (default) weights the two tempos by the audio confidence
+// while keeping the provider's phase, so the show never restarts from an
+// unknown origin.
+export function adaptiveBeat(
+  inputs: AdaptiveClockInputs,
+  nowNs: bigint,
+  mode: AdaptiveClockMode = ADAPTIVE_CLOCK_DEFAULT,
+): AdaptiveBeat | null {
+  const elapsedSeconds = (anchorNs: bigint | null): number =>
+    anchorNs === null ? 0 : Math.max(0, Number(nowNs - anchorNs) / 1e9);
+  const atTempo = (beat: number | null, bpm: number | null, anchorNs: bigint | null): number | null =>
+    beat === null || bpm === null || bpm <= 0 || anchorNs === null ? null : beat + elapsedSeconds(anchorNs) * (bpm / 60);
+  const dj = atTempo(inputs.djBeat, inputs.djBpm, inputs.djAnchorNs);
+  const audio = atTempo(inputs.audioBeat, inputs.audioBpm, inputs.audioAnchorNs);
+  if (mode === "dj-bpm") {
+    return dj === null || inputs.djBpm === null ? null : { beat: dj, bpm: inputs.djBpm, source: "dj-bpm" };
+  }
+  if (mode === "audio-onset") {
+    if (audio !== null && inputs.audioBpm !== null) return { beat: audio, bpm: inputs.audioBpm, source: "audio-onset" };
+    // Without an audio phase, follow the provider phase at the live tempo.
+    const fromDjPhase = atTempo(inputs.djBeat, inputs.audioBpm, inputs.djAnchorNs);
+    if (fromDjPhase === null || inputs.audioBpm === null) return null;
+    return { beat: fromDjPhase, bpm: inputs.audioBpm, source: "audio-onset" };
+  }
+  const audioWeight = Math.min(1, Math.max(0, inputs.audioConfidence));
+  if (inputs.djBpm !== null && inputs.audioBpm !== null && inputs.audioBpm > 0 && audioWeight > 0) {
+    const bpm = (inputs.djBpm + inputs.audioBpm * audioWeight) / (1 + audioWeight);
+    const blended = atTempo(inputs.djBeat, bpm, inputs.djAnchorNs);
+    if (blended !== null) return { beat: blended, bpm, source: "blend" };
+    if (audio !== null) return { beat: audio, bpm, source: "blend" };
+  }
+  if (dj !== null && inputs.djBpm !== null) return { beat: dj, bpm: inputs.djBpm, source: "dj-bpm" };
+  if (audio !== null && inputs.audioBpm !== null) return { beat: audio, bpm: inputs.audioBpm, source: "audio-onset" };
+  return null;
+}
+
+/** Live tempo handed to the runtime by the DSP (T-AUD-02, DS-23). */
+export interface AudioTempo {
+  bpm: number;
+  /** 0 to 1 confidence from the tempo estimate. */
+  confidence: number;
+  /** Phase anchor in beats, valid at anchorNs; null when the phase is unknown. */
+  beat: number | null;
+  anchorNs: bigint | null;
+}
+
+export function setAudioTempo(world: DeckWorld, tempo: AudioTempo | null): void {
+  world.audioTempo = tempo;
+}
+
+function adaptiveInputsOf(world: DeckWorld): AdaptiveClockInputs {
+  const known = world.lastKnown;
+  const tempo = world.audioTempo;
+  return {
+    djBpm: known === null ? null : known.beatsPerSecond * 60,
+    djBeat: known?.beat ?? null,
+    djAnchorNs: known?.anchorNs ?? null,
+    audioBpm: tempo?.bpm ?? null,
+    audioBeat: tempo?.beat ?? null,
+    audioAnchorNs: tempo?.anchorNs ?? null,
+    audioConfidence: tempo?.confidence ?? 0,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Device faults (T-RUN-06, spec 107): the runtime receives per-device effective
+// capability and FPS from the govee-manager (T-GOV-06, T-GOV-08) and keeps the
+// logical tick for every other device. A faulted device drops out on its own.
+
+export const LOGICAL_TICK_HZ = 60;
+
+export interface DeviceRuntimeState {
+  deviceId: string;
+  /** Effective transport capability after the manager's fallback. */
+  capability: "segmented" | "single-zone";
+  /** Effective frames per second the manager qualified for this device. */
+  fps: number;
+  /** False while the device is offline (fault) or hard-unavailable. */
+  online: boolean;
+}
+
+/** True when this logical tick produces a frame for the device. */
+export function deviceFrameDue(device: DeviceRuntimeState, tickIndex: number, logicalHz = LOGICAL_TICK_HZ): boolean {
+  if (!device.online || !(device.fps > 0) || tickIndex < 0 || logicalHz <= 0) return false;
+  const before = Math.floor((tickIndex * device.fps) / logicalHz);
+  const after = Math.floor(((tickIndex + 1) * device.fps) / logicalHz);
+  return after > before;
+}
+
+/** The devices due on this tick; each keeps its own effective FPS. */
+export function dueDevicesOnTick(
+  devices: readonly DeviceRuntimeState[],
+  tickIndex: number,
+  logicalHz = LOGICAL_TICK_HZ,
+): DeviceRuntimeState[] {
+  return devices.filter((device) => deviceFrameDue(device, tickIndex, logicalHz));
+}
+
 // ---------------------------------------------------------------------------
 // Deck worlds (T-RUN-01, spec 62)
 
@@ -350,6 +492,10 @@ export interface DeckTick {
   cues: ShowCue[];
   upcoming: ShowCue[];
   clockHealth: ClockHealth;
+  /** Which clock produced this beat (T-RUN-06). */
+  clockSource: ClockSource;
+  /** Motion factor for the director/renderer; fades while the clock holds. */
+  motion: number;
 }
 
 export interface DeckWorld {
@@ -370,6 +516,14 @@ export interface DeckWorld {
   cancelled: ShowCue[];
   override: OverrideState;
   quality: ObservationQuality;
+  /** T-RUN-06: last fresh provider tempo and phase, for the adaptive clock. */
+  lastKnown: { beatsPerSecond: number; beat: number; anchorNs: bigint } | null;
+  /** T-RUN-06: the beat frozen when the clock entered `holding`. */
+  holdBeat: number | null;
+  /** DS-23 mode for the degraded fallback clock. */
+  adaptiveMode: AdaptiveClockMode;
+  /** T-AUD-02 live tempo, set by the show host when features arrive. */
+  audioTempo: AudioTempo | null;
 }
 
 export interface DeckWorldOptions {
@@ -378,6 +532,7 @@ export interface DeckWorldOptions {
   estimator?: Partial<EstimatorOptions>;
   scratch?: Partial<ScratchOptions>;
   quality?: ObservationQuality;
+  adaptiveMode?: AdaptiveClockMode;
 }
 
 export function createDeckWorld(deckId: number, opts: DeckWorldOptions = {}): DeckWorld {
@@ -397,6 +552,10 @@ export function createDeckWorld(deckId: number, opts: DeckWorldOptions = {}): De
     cancelled: [],
     override: initialOverrideState(),
     quality: opts.quality ?? "estimated",
+    lastKnown: null,
+    holdBeat: null,
+    adaptiveMode: opts.adaptiveMode ?? ADAPTIVE_CLOCK_DEFAULT,
+    audioTempo: null,
   };
 }
 
@@ -481,7 +640,40 @@ export function tickWorld(world: DeckWorld, nowNs: bigint, opts: TickOptions = {
     playing: state.playing,
     beatsPerSecond: state.playing ? tempoBps * state.playRate : 0,
   };
-  const estimated = world.estimator.observe(observation);
+  const ageMs = nowNs >= state.receivedAtNs ? Number(nowNs - state.receivedAtNs) / NS_PER_MS : 0;
+  const health = clockHealth(ageMs);
+
+  // Source loss (T-RUN-06, spec 105). A fresh observation feeds the estimator;
+  // one older than the seek threshold cannot be told apart from a transport
+  // jump, so it only extrapolates. Past `runtime.health.extrapolateMs` the
+  // estimate is held and motion fades; past `runtime.health.holdMs` the
+  // adaptive clock (DS-23) takes over from the last known tempo and phase. A
+  // dropped message never blanks the show by itself: every branch still
+  // evaluates the plan at a beat.
+  const fresh = ageMs <= world.estimatorOptions.seekThresholdMs;
+  let estimated: EstimateResult;
+  let adaptive: AdaptiveBeat | null = null;
+  if (fresh) {
+    estimated = world.estimator.observe(observation);
+    world.lastKnown = { beatsPerSecond: observation.beatsPerSecond, beat: observed, anchorNs: state.receivedAtNs };
+    world.holdBeat = null;
+  } else {
+    const extrapolated = world.estimator.advance(nowNs);
+    if (health === "holding") {
+      world.holdBeat = world.holdBeat ?? extrapolated;
+      estimated = { beat: world.holdBeat, seeked: false, corrected: 0, errorMs: 0 };
+    } else if (health === "degraded") {
+      adaptive = adaptiveBeat(adaptiveInputsOf(world), nowNs, world.adaptiveMode);
+      estimated = { beat: adaptive?.beat ?? extrapolated, seeked: false, corrected: 0, errorMs: 0 };
+      world.holdBeat = null;
+    } else {
+      // Extrapolating on a stale observation: keep the last rate, no correction.
+      estimated = { beat: extrapolated, seeked: false, corrected: 0, errorMs: 0 };
+    }
+  }
+  const clockSource: ClockSource = adaptive !== null ? "adaptive" : health === "holding" ? "hold" : "provider";
+  const motion = motionFactor(health, ageMs);
+
   world.scratch = observeRate(world.scratch, state);
   const scratching = scratchDetected(state, world.scratch, world.scratchOptions);
 
@@ -540,7 +732,6 @@ export function tickWorld(world: DeckWorld, nowNs: bigint, opts: TickOptions = {
   world.transients = exclusiveOf(cues);
   world.cursor = { beat, loopPass, scratchHold: world.scratch.holding };
   world.override = advanceOverride(world.override, beat).state;
-  const ageMs = nowNs >= state.receivedAtNs ? Number(nowNs - state.receivedAtNs) / MS_PER_SECOND : 0;
   return {
     deckId: world.deckId,
     generation: world.generation,
@@ -551,7 +742,9 @@ export function tickWorld(world: DeckWorld, nowNs: bigint, opts: TickOptions = {
     transients: world.transients,
     cues,
     upcoming: world.plan === null ? [] : upcomingCues(world.plan, beat, 8),
-    clockHealth: clockHealth(ageMs),
+    clockHealth: health,
+    clockSource,
+    motion,
   };
 }
 
@@ -611,6 +804,11 @@ export class ShowRuntime {
     const world = this.world(deckId);
     world.override = setOverride(world.override, kind, opts);
     return world.override;
+  }
+
+  /** T-AUD-02 features feed the degraded clock (DS-23). */
+  setAudioTempo(deckId: number, tempo: AudioTempo | null): void {
+    setAudioTempo(this.world(deckId), tempo);
   }
 
   tick(nowNs: bigint, opts: TickOptions = {}): DeckTick[] {

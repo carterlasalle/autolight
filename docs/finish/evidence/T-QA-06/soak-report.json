@@ -1,0 +1,42 @@
+{
+  "mode": "fast-self-check (not a soak)",
+  "hours": 0.5,
+  "healthy": {
+    "rssSlopeMbPerHour": 0.5282507339784501,
+    "latencySlopeMsPerHour": -0.06794396673259115,
+    "uiSlopeMsPerHour": 0.16060805548531099,
+    "maxQueue": 1,
+    "drift": 0,
+    "stale": 0,
+    "dead": 0,
+    "checks": {
+      "memSlope": true,
+      "queue": true,
+      "drift": true,
+      "latency": true,
+      "stale": true,
+      "worker": true,
+      "ui": true
+    },
+    "pass": true
+  },
+  "leakyControl": {
+    "rssSlopeMbPerHour": 40.25149549900667,
+    "latencySlopeMsPerHour": 0.24714746627986117,
+    "uiSlopeMsPerHour": -0.02975599468308841,
+    "maxQueue": 1,
+    "drift": 0,
+    "stale": 0,
+    "dead": 0,
+    "checks": {
+      "memSlope": false,
+      "queue": true,
+      "drift": true,
+      "latency": true,
+      "stale": true,
+      "worker": true,
+      "ui": true
+    },
+    "pass": false
+  }
+}

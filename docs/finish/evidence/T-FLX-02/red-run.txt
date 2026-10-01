@@ -1,0 +1,327 @@
+Red run for P-11-flx4-map. Command:
+  yarn workspace @autolight/controller-flx4 test
+With DECK_NOTE_STATUS deck 2 forced to 0x90 (deck separation removed, the
+old channel-blind behaviour) the decoder test fails as shown.
+
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.11 [39m[90m/Users/rocket/autolight/packages/controller-flx4[39m
+
+ [31m❯[39m src/index.test.ts [2m([22m[2m5 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[32m 6[2mms[22m[39m
+     [32m✓[39m scales 7-bit[32m 1[2mms[22m[39m
+     [32m✓[39m classifies known CCs, ignores unknown[32m 0[2mms[22m[39m
+     [32m✓[39m builds composite deck estimate without overriding playhead[32m 0[2mms[22m[39m
+     [32m✓[39m confirms audibility only when both sources agree[32m 0[2mms[22m[39m
+[31m     [31m×[31m keeps the legacy constants on the official values and separates deck 2 by channel[39m[32m 3[2mms[22m[39m
+ [31m❯[39m src/backend.test.ts [2m([22m[2m14 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[32m 13[2mms[22m[39m
+     [32m✓[39m falls back through native, Windows MIDI Services and Web MIDI, reporting each attempt[32m 2[2mms[22m[39m
+     [32m✓[39m reports UNAVAILABLE_ON_THIS_DEVICE when the only backend cannot load[32m 0[2mms[22m[39m
+     [32m✓[39m reports the Rekordbox-holds-the-port remedy for a single-client Windows open failure[32m 0[2mms[22m[39m
+[31m     [31m×[31m reads the same port from two services at once without an exclusive open[39m[32m 6[2mms[22m[39m
+     [32m✓[39m matches ports by name, including a custom pattern[32m 0[2mms[22m[39m
+     [32m✓[39m detects unplug and replug through the hotplug poll[32m 1[2mms[22m[39m
+     [32m✓[39m keeps messages in a bounded ring with a drop counter and ages the last message[32m 0[2mms[22m[39m
+     [32m✓[39m counts unknown messages in the status[32m 0[2mms[22m[39m
+     [32m✓[39m arms and clears the hotplug poll on the injected scheduler[32m 0[2mms[22m[39m
+     [32m✓[39m bounds the ring directly[32m 0[2mms[22m[39m
+     [32m✓[39m reads ports and messages through the native RtMidi surface[32m 0[2mms[22m[39m
+     [32m✓[39m declares WinMM single-client and CoreMIDI shared[32m 0[2mms[22m[39m
+     [32m✓[39m gates Windows MIDI Services to Windows and uses its binding[32m 0[2mms[22m[39m
+     [32m✓[39m uses Web MIDI when the context provides it[32m 0[2mms[22m[39m
+ [31m❯[39m src/signals.test.ts [2m([22m[2m8 tests[22m[2m | [22m[31m2 failed[39m[2m)[22m[32m 10[2mms[22m[39m
+[31m     [31m×[31m raises a scratch only for a jog trace with reversals[39m[32m 4[2mms[22m[39m
+     [32m✓[39m does not claim a scratch from a single reversal or a steady reverse[32m 1[2mms[22m[39m
+[31m     [31m×[31m emits the runtime scratch trace with reversal timestamps[39m[32m 2[2mms[22m[39m
+     [32m✓[39m carries cue holds, hot cues and pad rolls with their pad numbers[32m 1[2mms[22m[39m
+     [32m✓[39m carries loop, beat loop and beat jump lengths[32m 0[2mms[22m[39m
+     [32m✓[39m reloops through the same button when the loop is off[32m 0[2mms[22m[39m
+     [32m✓[39m publishes sync toggles, faders and loads as secondary truth[32m 1[2mms[22m[39m
+     [32m✓[39m marks the deck for deck 2 pads and faders[32m 0[2mms[22m[39m
+ [31m❯[39m src/state.test.ts [2m([22m[2m10 tests[22m[2m | [22m[31m6 failed[39m[2m)[22m[32m 15[2mms[22m[39m
+[31m     [31m×[31m follows LOAD, PLAY, jog touch and release with timestamps and quality[39m[32m 7[2mms[22m[39m
+[31m     [31m×[31m toggles play, sync and master from button presses[39m[32m 1[2mms[22m[39m
+[31m     [31m×[31m keeps SHIFT, pad mode and pressed pads[39m[32m 1[2mms[22m[39m
+     [32m✓[39m records loop state with beat lengths from the beat-loop pads[32m 1[2mms[22m[39m
+[31m     [31m×[31m tracks loop in and out, exit, and reloop on the same button[39m[32m 1[2mms[22m[39m
+[31m     [31m×[31m keeps mixer state from 14-bit pairs[39m[32m 1[2mms[22m[39m
+[31m     [31m×[31m hands out snapshots that do not alias the model[39m[32m 1[2mms[22m[39m
+     [32m✓[39m recovers the range from a simulated provider within 0.5 percent[32m 0[2mms[22m[39m
+     [32m✓[39m refuses underdetermined and noisy samples[32m 0[2mms[22m[39m
+     [32m✓[39m resolves fixed settings and leaves source and wide to the fit[32m 0[2mms[22m[39m
+ [31m❯[39m src/map.test.ts [2m([22m[2m5 tests[22m[2m | [22m[31m2 failed[39m[2m)[22m[32m 58[2mms[22m[39m
+[31m     [31m×[31m decodes every control of the capture with the right deck[39m[32m 6[2mms[22m[39m
+[31m     [31m×[31m covers the whole map: no control without a capture row[39m[32m 4[2mms[22m[39m
+     [32m✓[39m keeps unknown messages as events with raw bytes and counts them[32m 0[2mms[22m[39m
+     [32m✓[39m reconstructs 14-bit pairs monotonically across the full travel[32m 47[2mms[22m[39m
+     [32m✓[39m decodes the jog as a relative value around 0x40[32m 0[2mms[22m[39m
+
+[2m Test Files [22m [1m[31m5 failed[39m[22m[90m (5)[39m
+[2m      Tests [22m [1m[31m12 failed[39m[22m[2m | [22m[1m[32m30 passed[39m[22m[90m (42)[39m
+[2m   Start at [22m 04:05:25
+[2m   Duration [22m 229ms[2m (transform 310ms, setup 0ms, import 395ms, tests 102ms, environment 0ms)[22m
+
+
+[31m⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 12 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m src/backend.test.ts[2m > [22mflx4 backend selection (DS-13)[2m > [22mreads the same port from two services at once without an exclusive open
+[31m[1mAssertionError[22m: expected { type: 'control', …(11) } to match object { type: 'control', id: 'deck1.play' }
+(10 matching properties omitted from actual)[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[2m  {[22m
+[32m-   "id": "deck1.play",[39m
+[31m+   "id": "deck2.play",[39m
+[2m    "type": "control",[22m
+[2m  }[22m
+
+[36m [2m❯[22m src/backend.test.ts:[2m143:38[22m[39m
+    [90m141|[39m     [35mawait[39m second[33m.[39m[34mstart[39m()[33m;[39m
+    [90m142|[39m     driver[33m.[39m[34memit[39m([[34m0x90[39m[33m,[39m [34m0x0b[39m[33m,[39m [34m0x7f[39m])[33m;[39m
+    [90m143|[39m     expect(first.recentEvents(1)[0]).toMatchObject({ type: "control", …
+    [90m   |[39m                                      [31m^[39m
+    [90m144|[39m     expect(second.recentEvents(1)[0]).toMatchObject({ type: "control",…
+    [90m145|[39m     expect(driver.openCalls.every((call) => call.args === 2)).toBe(tru…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/12]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/index.test.ts[2m > [22mflx4[2m > [22mkeeps the legacy constants on the official values and separates deck 2 by channel
+[31m[1mAssertionError[22m: expected false to be true // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- true[39m
+[31m+ false[39m
+
+[36m [2m❯[22m src/index.test.ts:[2m23:127[22m[39m
+    [90m 21|[39m     expect(NOTE).toEqual({ PLAY_1: 0x0b, PLAY_2: 0x0b, CUE_1: 0x0c, CU…
+    [90m 22|[39m     expect(CC).toEqual({ CHANNEL_FADER_1: 0x13, CHANNEL_FADER_2: 0x13,…
+    [90m 23|[39m     expect(FLX4_CONTROLS.some((control) => control.id === "deck2.play"…
+    [90m   |[39m                                                                                                                               [31m^[39m
+    [90m 24|[39m     expect(FLX4_CONTROLS.some((control) => control.id === "deck1.cue" …
+    [90m 25|[39m   })[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/12]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/map.test.ts[2m > [22mflx4 map (P-11-flx4-map)[2m > [22mdecodes every control of the capture with the right deck
+[31m[1mAssertionError[22m: deck1.play 90:b: expected 'deck2.play' to be 'deck1.play' // Object.is equality[39m
+
+Expected: [32m"deck[7m1[27m.play"[39m
+Received: [31m"deck[7m2[27m.play"[39m
+
+[36m [2m❯[22m src/map.test.ts:[2m193:31[22m[39m
+    [90m191|[39m       [35mif[39m (event[33m.[39mtype [33m!==[39m [32m"control"[39m) [35mcontinue[39m[33m;[39m
+    [90m192|[39m       const where = `${row.id} ${row.status.toString(16)}:${row.data1.…
+    [90m193|[39m       [34mexpect[39m(event[33m.[39mid[33m,[39m where)[33m.[39m[34mtoBe[39m(row[33m.[39mid)[33m;[39m
+    [90m   |[39m                               [31m^[39m
+    [90m194|[39m       [34mexpect[39m(event[33m.[39mdeck[33m,[39m where)[33m.[39m[34mtoBe[39m(row[33m.[39mdeck)[33m;[39m
+    [90m195|[39m       [34mexpect[39m(event[33m.[39mshift[33m,[39m where)[33m.[39m[34mtoBe[39m(row[33m.[39mshift)[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/12]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/map.test.ts[2m > [22mflx4 map (P-11-flx4-map)[2m > [22mcovers the whole map: no control without a capture row
+[31m[1mAssertionError[22m: expected [ Array(32) ] to deeply equal [][39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- [][39m
+[31m+ [[39m
+[31m+   "deck2.play 90:b shift=false",[39m
+[31m+   "deck2.play 90:e shift=true",[39m
+[31m+   "deck2.cue 90:c shift=false",[39m
+[31m+   "deck2.cue 90:48 shift=true",[39m
+[31m+   "deck2.shift 90:3f shift=false",[39m
+[31m+   "deck2.jog.touch 90:36 shift=false",[39m
+[31m+   "deck2.jog.touch-shift 90:67 shift=true",[39m
+[31m+   "deck2.sync 90:58 shift=false",[39m
+[31m+   "deck2.sync-master 90:5c shift=false",[39m
+[31m+   "deck2.sync-range 90:60 shift=true",[39m
+[31m+   "deck2.loop-in 90:10 shift=false",[39m
+[31m+   "deck2.loop-in-adjust 90:4c shift=true",[39m
+[31m+   "deck2.loop-out 90:11 shift=false",[39m
+[31m+   "deck2.loop-out-adjust 90:4e shift=true",[39m
+[31m+   "deck2.loop-exit 90:4d shift=false",[39m
+[31m+   "deck2.loop-exit-shift 90:50 shift=true",[39m
+[31m+   "deck2.loop-halve 90:51 shift=false",[39m
+[31m+   "deck2.loop-halve-shift 90:3e shift=true",[39m
+[31m+   "deck2.loop-double 90:53 shift=false",[39m
+[31m+   "deck2.loop-double-shift 90:3d shift=true",[39m
+[31m+   "deck2.fader-start.play 90:66 shift=false",[39m
+[31m+   "deck2.fader-start.cue 90:52 shift=false",[39m
+[31m+   "deck2.pad-mode.hot-cue 90:1b shift=false",[39m
+[31m+   "deck2.pad-mode.keyboard 90:69 shift=true",[39m
+[31m+   "deck2.pad-mode.pad-fx-1 90:1e shift=false",[39m
+[31m+   "deck2.pad-mode.pad-fx-2 90:6b shift=true",[39m
+[31m+   "deck2.pad-mode.beat-jump 90:20 shift=false",[39m
+[31m+   "deck2.pad-mode.beat-loop 90:6d shift=true",[39m
+[31m+   "deck2.pad-mode.sampler 90:22 shift=false",[39m
+[31m+   "deck2.pad-mode.key-shift 90:6f shift=true",[39m
+[31m+   "mixer.deck2.head-cue 90:54 shift=false",[39m
+[31m+   "mixer.deck2.head-cue-shift 90:68 shift=true",[39m
+[31m+ ][39m
+
+[36m [2m❯[22m src/map.test.ts:[2m208:21[22m[39m
+    [90m206|[39m       (control) => !captured.has(`${control.status}:${control.data1}:$…
+    [90m207|[39m     ).map((control) => `${control.id} ${control.status.toString(16)}:$…
+    [90m208|[39m     [34mexpect[39m(missing)[33m.[39m[34mtoEqual[39m([])[33m;[39m
+    [90m   |[39m                     [31m^[39m
+    [90m209|[39m   })[33m;[39m
+    [90m210|[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/12]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/signals.test.ts[2m > [22mflx4 runtime signals[2m > [22mraises a scratch only for a jog trace with reversals
+[31m[1mAssertionError[22m: expected undefined to be defined[39m
+[36m [2m❯[22m src/signals.test.ts:[2m39:19[22m[39m
+    [90m 37|[39m     const start = scratch.find((signal) => signal.kind === "scratch-st…
+    [90m 38|[39m     const end = scratch.find((signal) => signal.kind === "scratch-end"…
+    [90m 39|[39m     [34mexpect[39m(start)[33m.[39m[34mtoBeDefined[39m()[33m;[39m
+    [90m   |[39m                   [31m^[39m
+    [90m 40|[39m     [34mexpect[39m(end)[33m.[39m[34mtoBeDefined[39m()[33m;[39m
+    [90m 41|[39m     [34mexpect[39m([34mkinds[39m(scratch))[33m.[39m[34mtoEqual[39m([[32m"scratch-start"[39m[33m,[39m [32m"scratch-end"[39m])[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/12]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/signals.test.ts[2m > [22mflx4 runtime signals[2m > [22memits the runtime scratch trace with reversal timestamps
+[31m[1mAssertionError[22m: expected false to be true // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- true[39m
+[31m+ false[39m
+
+[36m [2m❯[22m src/signals.test.ts:[2m82:26[22m[39m
+    [90m 80|[39m     }
+    [90m 81|[39m     [35mconst[39m trace [33m=[39m deriver[33m.[39m[34mscratchTrace[39m(model[33m.[39m[34msnapshot[39m()[33m,[39m [34m1[39m)[33m;[39m
+    [90m 82|[39m     [34mexpect[39m(trace[33m.[39mactive)[33m.[39m[34mtoBe[39m([35mtrue[39m)[33m;[39m
+    [90m   |[39m                          [31m^[39m
+    [90m 83|[39m     [34mexpect[39m(trace[33m.[39mdirection)[33m.[39m[34mtoBe[39m([34m1[39m)[33m;[39m
+    [90m 84|[39m     [34mexpect[39m(trace[33m.[39mreversalNs)[33m.[39m[34mtoEqual[39m([[34m31_000_000n[39m[33m,[39m [34m41_000_000n[39m])[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/12]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/state.test.ts[2m > [22mflx4 state model[2m > [22mfollows LOAD, PLAY, jog touch and release with timestamps and quality
+[31m[1mAssertionError[22m: expected { on: false, atNs: null, …(1) } to deeply equal { on: true, atNs: 3000000n, …(1) }[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[2m  {[22m
+[32m-   "atNs": 3000000n,[39m
+[32m-   "on": true,[39m
+[31m+   "atNs": null,[39m
+[31m+   "on": false,[39m
+[2m    "quality": "estimated",[22m
+[2m  }[22m
+
+[36m [2m❯[22m src/state.test.ts:[2m34:23[22m[39m
+    [90m 32|[39m     [34mexpect[39m(deck[33m.[39mloads[33m.[39mcount)[33m.[39m[34mtoBe[39m([34m1[39m)[33m;[39m
+    [90m 33|[39m     [34mexpect[39m(deck[33m.[39mloads[33m.[39mlastAtNs)[33m.[39mnot[33m.[39m[34mtoBeNull[39m()[33m;[39m
+    [90m 34|[39m     expect(deck.play).toEqual({ on: true, atNs: 3_000_000n, quality: "…
+    [90m   |[39m                       [31m^[39m
+    [90m 35|[39m     [34mexpect[39m(deck[33m.[39mcue[33m.[39mon)[33m.[39m[34mtoBe[39m([35mfalse[39m)[33m;[39m
+    [90m 36|[39m     [34mexpect[39m(deck[33m.[39mjog[33m.[39mtouched)[33m.[39m[34mtoBe[39m([35mfalse[39m)[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/12]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/state.test.ts[2m > [22mflx4 state model[2m > [22mtoggles play, sync and master from button presses
+[31m[1mAssertionError[22m: expected null to be false // Object.is equality[39m
+
+[32m- Expected:[39m
+false
+
+[31m+ Received:[39m
+null
+
+[36m [2m❯[22m src/state.test.ts:[2m56:31[22m[39m
+    [90m 54|[39m     [35mconst[39m deck [33m=[39m model[33m.[39m[34msnapshot[39m()[33m.[39mdecks[[34m1[39m][33m;[39m
+    [90m 55|[39m     [34mexpect[39m(deck[33m.[39mplay[33m.[39mon)[33m.[39m[34mtoBe[39m([35mfalse[39m)[33m;[39m
+    [90m 56|[39m     [34mexpect[39m(deck[33m.[39msync[33m.[39menabled)[33m.[39m[34mtoBe[39m([35mfalse[39m)[33m;[39m
+    [90m   |[39m                               [31m^[39m
+    [90m 57|[39m     [34mexpect[39m(deck[33m.[39msync[33m.[39mmaster)[33m.[39m[34mtoBe[39m([35mtrue[39m)[33m;[39m
+    [90m 58|[39m     [34mexpect[39m(deck[33m.[39msync[33m.[39mquality)[33m.[39m[34mtoBe[39m([32m"estimated"[39m)[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/12]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/state.test.ts[2m > [22mflx4 state model[2m > [22mkeeps SHIFT, pad mode and pressed pads
+[31m[1mAssertionError[22m: expected null to be 'hot-cue' // Object.is equality[39m
+
+[32m- Expected:[39m
+"hot-cue"
+
+[31m+ Received:[39m
+null
+
+[36m [2m❯[22m src/state.test.ts:[2m73:26[22m[39m
+    [90m 71|[39m     [35mconst[39m deck [33m=[39m model[33m.[39m[34msnapshot[39m()[33m.[39mdecks[[34m1[39m][33m;[39m
+    [90m 72|[39m     [34mexpect[39m(deck[33m.[39mshift)[33m.[39m[34mtoBe[39m([35mfalse[39m)[33m;[39m
+    [90m 73|[39m     [34mexpect[39m(deck[33m.[39mpadMode)[33m.[39m[34mtoBe[39m([32m"hot-cue"[39m)[33m;[39m
+    [90m   |[39m                          [31m^[39m
+    [90m 74|[39m     [34mexpect[39m(deck[33m.[39mpadModeAtNs)[33m.[39m[34mtoBe[39m([34m3_000_000n[39m)[33m;[39m
+    [90m 75|[39m     [34mexpect[39m(deck[33m.[39mpadsDown)[33m.[39m[34mtoEqual[39m([[34m1[39m])[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/12]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/state.test.ts[2m > [22mflx4 state model[2m > [22mtracks loop in and out, exit, and reloop on the same button
+[31m[1mAssertionError[22m: expected null to be true // Object.is equality[39m
+
+[32m- Expected:[39m
+true
+
+[31m+ Received:[39m
+null
+
+[36m [2m❯[22m src/state.test.ts:[2m111:25[22m[39m
+    [90m109|[39m     ])[33m;[39m
+    [90m110|[39m     [35mconst[39m loop [33m=[39m model[33m.[39m[34msnapshot[39m()[33m.[39mdecks[[34m1[39m][33m.[39mloop[33m;[39m
+    [90m111|[39m     [34mexpect[39m(loop[33m.[39mactive)[33m.[39m[34mtoBe[39m([35mtrue[39m)[33m;[39m
+    [90m   |[39m                         [31m^[39m
+    [90m112|[39m     [34mexpect[39m(loop[33m.[39mlastAction)[33m.[39m[34mtoBe[39m([32m"reloop"[39m)[33m;[39m
+    [90m113|[39m     [34mfeed[39m(model[33m,[39m [
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/12]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/state.test.ts[2m > [22mflx4 state model[2m > [22mkeeps mixer state from 14-bit pairs
+[31m[1mAssertionError[22m: expected { '1': false, '2': true } to deeply equal { '1': true, '2': true }[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[2m  {[22m
+[32m-   "1": true,[39m
+[31m+   "1": false,[39m
+[2m    "2": true,[22m
+[2m  }[22m
+
+[36m [2m❯[22m src/state.test.ts:[2m144:36[22m[39m
+    [90m142|[39m     [34mexpect[39m(snapshot[33m.[39mdecks[[34m1[39m][33m.[39meqHigh)[33m.[39m[34mtoBeCloseTo[39m(centre[33m,[39m [34m12[39m)[33m;[39m
+    [90m143|[39m     expect(snapshot.decks[1].eqLow).toBeCloseTo(127 / FOURTEEN_BIT_STE…
+    [90m144|[39m     [34mexpect[39m(snapshot[33m.[39mmixer[33m.[39mheadCue)[33m.[39m[34mtoEqual[39m({ [34m1[39m[33m:[39m [35mtrue[39m[33m,[39m [34m2[39m[33m:[39m [35mtrue[39m })[33m;[39m
+    [90m   |[39m                                    [31m^[39m
+    [90m145|[39m   })[33m;[39m
+    [90m146|[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/12]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/state.test.ts[2m > [22mflx4 state model[2m > [22mhands out snapshots that do not alias the model
+[31m[1mAssertionError[22m: expected false to be true // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- true[39m
+[31m+ false[39m
+
+[36m [2m❯[22m src/state.test.ts:[2m154:37[22m[39m
+    [90m152|[39m     first[33m.[39mdecks[[34m1[39m][33m.[39mjog[33m.[39mreversals[33m.[39m[34mpush[39m([34m1n[39m)[33m;[39m
+    [90m153|[39m     [35mconst[39m second [33m=[39m model[33m.[39m[34msnapshot[39m()[33m;[39m
+    [90m154|[39m     [34mexpect[39m(second[33m.[39mdecks[[34m1[39m][33m.[39mplay[33m.[39mon)[33m.[39m[34mtoBe[39m([35mtrue[39m)[33m;[39m
+    [90m   |[39m                                     [31m^[39m
+    [90m155|[39m     expect(second.decks[1].jog.reversals).toEqual(first.decks[1].jog.r…
+    [90m156|[39m   })[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/12]⎯[22m[39m
+

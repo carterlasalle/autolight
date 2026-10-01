@@ -147,7 +147,11 @@ export function useLiveCursor(): void {
         beatRef.current = { a: Math.min(nextA, grid.length || nextA), b: beatRef.current.b + 0.02 };
         const live = buildLive(decks, fixturesRef.current, st.style, st.blinder);
         if (live) {
-          set({ live, bpm: live.bpm, reactiveLevel: Math.min(1, reactive * 0.2) });
+          set({ live, bpm: live.bpm, reactiveLevel: Math.min(1, reactive * 0.2), liveBeat: live.beat ?? 0 });
+          if (st.pendingStyle !== null && st.pendingStyle !== st.style) {
+            const boundary = Math.ceil((live.beat ?? 0) / 32) * 32;
+            if ((live.beat ?? 0) >= boundary) set({ style: st.pendingStyle, pendingStyle: null });
+          }
         }
       });
     }, 250);

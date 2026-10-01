@@ -1,9 +1,15 @@
 // FLX4 telemetry is secondary truth: never overrides DJ playhead (§11).
-// CC/note numbers per official map; expressive hints only (filter sweep,
-// pad roll, fader rise, loop shrink) inform the director, never STROBE().
+// Expressive hints only (filter sweep, pad roll, fader rise, loop shrink)
+// inform the director, never STROBE().
+//
+// `CC` and `NOTE` are the legacy channel-blind 7-bit view kept for the hint
+// path; their values now match the official list's Data 1 column for each
+// control. Deck separation is the MIDI channel, which this view cannot
+// express, so deck 1 and deck 2 values are identical here: use
+// `decodeMessage` / `FLX4_CONTROLS` in ./map.js for deck-aware events.
 
-export const CC = { CHANNEL_FADER_1: 0x13, CHANNEL_FADER_2: 0x14, CROSSFADER: 0x1f, FILTER_1: 0x17, FILTER_2: 0x18, TEMPO_1: 0x10, TEMPO_2: 0x11 } as const;
-export const NOTE = { PLAY_1: 0x0b, PLAY_2: 0x0c, CUE_1: 0x0a, CUE_2: 0x0d, SYNC_1: 0x0e, SYNC_2: 0x0f } as const;
+export const CC = { CHANNEL_FADER_1: 0x13, CHANNEL_FADER_2: 0x13, CROSSFADER: 0x1f, FILTER_1: 0x17, FILTER_2: 0x18, TEMPO_1: 0x00, TEMPO_2: 0x00 } as const;
+export const NOTE = { PLAY_1: 0x0b, PLAY_2: 0x0b, CUE_1: 0x0c, CUE_2: 0x0c, SYNC_1: 0x58, SYNC_2: 0x58 } as const;
 
 export type Flx4Hint =
   | { kind: "fader-rise"; channel: 1 | 2; value: number }
@@ -56,8 +62,15 @@ export function compositeDeckState(input: CompositeDeckInput): {
 }
 
 // Fader confirmation (§63, §10): MIDI faders corroborate DJ-software weight
-// but never create audibility alone — both sources must agree the deck is live.
+// but never create audibility alone; both sources must agree the deck is live.
 export function confirmAudible(midiFader: number | null, djWeight: number): boolean {
   if (midiFader === null) return djWeight > 0;
   return midiFader > 0.02 && djWeight > 0;
 }
+
+// Deck-aware map and decoder (T-FLX-02), controller state (T-FLX-03),
+// runtime signals (T-FLX-04) and the MIDI backends (T-FLX-01).
+export * from "./map.js";
+export * from "./state.js";
+export * from "./signals.js";
+export * from "./backend.js";

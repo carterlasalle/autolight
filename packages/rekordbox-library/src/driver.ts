@@ -9,7 +9,9 @@
 //
 // No handle exposes a write method; the raw handle is kept only for the
 // read-only self check (an attempted write must throw) and is never handed to
-// services or the UI. A checkpoint is a write, so nothing here runs one.
+// services or the UI. query_only is read back after it is set, so a handle
+// that refuses the lock fails the open instead of running silently writable.
+// A checkpoint is a write, so nothing here runs one.
 import { existsSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 
@@ -104,12 +106,20 @@ async function openWithCipher(dbPath: string, key: string): Promise<ReadOnlyDb |
     handle.pragma("cipher='sqlcipher'");
     handle.pragma("legacy=4");
     handle.pragma(`key='${key}'`);
+    // The key must decrypt before the read-only lock lands: a wrong key
+    // fails here as a SQLCipher error, never as a silently unreadable handle.
+    handle.prepare("SELECT count(*) AS n FROM sqlite_master").get({});
     // Read committed-but-uncheckpointed rows written by Rekordbox's own handle.
     handle.pragma("read_uncommitted=true");
     handle.pragma("query_only=ON");
-    handle.prepare("SELECT count(*) AS n FROM sqlite_master").get({});
-  } catch {
+    const lockRow = handle.prepare("PRAGMA query_only").get({});
+    const lockValue = lockRow === undefined ? undefined : "query_only" in lockRow ? lockRow["query_only"] : Object.values(lockRow)[0];
+    if (lockValue !== 1 && lockValue !== "1") {
+      throw new LibraryDbError(`${dbPath} refused the query_only lock`, "driver-failed");
+    }
+  } catch (error) {
     handle.close();
+    if (error instanceof LibraryDbError) throw error;
     return undefined;
   }
   return adapter(
@@ -138,9 +148,15 @@ function openWithNodeSqlite(dbPath: string): ReadOnlyDb {
   };
   try {
     handle.exec("PRAGMA query_only=ON");
+    const lockRow = prepare("PRAGMA query_only").get({});
+    const lockValue = lockRow === undefined ? undefined : "query_only" in lockRow ? lockRow["query_only"] : Object.values(lockRow)[0];
+    if (lockValue !== 1 && lockValue !== "1") {
+      throw new LibraryDbError(`${dbPath} refused the query_only lock`, "driver-failed");
+    }
     prepare("SELECT count(*) AS n FROM sqlite_master").get({});
   } catch (error) {
     handle.close();
+    if (error instanceof LibraryDbError) throw error;
     throw new LibraryDbError(`${dbPath} is not a readable SQLite file: ${describe(error)}`, "not-a-database");
   }
   return adapter(

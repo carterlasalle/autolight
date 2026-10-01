@@ -1,5 +1,33 @@
-import type { Fixture, FixtureCalibration } from "@autolight/contracts";
-export type { Fixture, FixtureCalibration };
+import type { Fixture } from "@autolight/contracts";
+import { applyLogicalOrder, fitRunMapping, logicalToPhysical, orderLogical, rotateLogicalZero, topologyForRuns } from "./placement.js";
+import type { MappedCell } from "./placement.js";
+import { computeFields, fieldCellsFromMap, pointCells, projectToOutline, runPointAt } from "./fields.js";
+import type { FieldCell } from "./fields.js";
+import { derivedGroups, resolveSelector, splitWeights, zoneWeights } from "./groups.js";
+import { mirrorCheck, runWizardOnSim } from "./wizard.js";
+import { exportVenue, importVenue, outlineRuns, setLogicalZero } from "./venue.js";
+import type { Venue } from "./venue.js";
+import { normalizeOutline, perimeterLength, polygonArea, polygonCentroid, rectangleRoom, samplePath, validateRoom } from "./room.js";
+import { clubRectangle, curvedRoom, fieldCellsForReference, lRoom, referenceById, squareChunks, squareMirrored, squareRoom } from "./reference.js";
+
+export {
+  applyLogicalOrder, fitRunMapping, logicalToPhysical, orderLogical, rotateLogicalZero, topologyForRuns,
+  computeFields, fieldCellsFromMap, pointCells, projectToOutline, runPointAt,
+  derivedGroups, resolveSelector, splitWeights, zoneWeights,
+  mirrorCheck, runWizardOnSim,
+  exportVenue, importVenue, outlineRuns, setLogicalZero,
+  normalizeOutline, perimeterLength, polygonArea, polygonCentroid, rectangleRoom, samplePath, validateRoom,
+  clubRectangle, curvedRoom, fieldCellsForReference, lRoom, referenceById, squareChunks, squareMirrored, squareRoom, REFERENCE_ROOMS,
+};
+export type { MappedCell, FieldCell, Venue };
+export type { Point2, Point3, Room, RoomAnchors, DjAnchor, CustomAnchor, Opening, SplineGeom, PerimeterZero, PerimeterDirection, MarkerKind } from "./room.js";
+export type { Placement, Run, CellMap, CellAnchor, CellPosition, Topology, FixtureTransform, FixtureCapability, VenueFixture } from "./placement.js";
+export type { VenueFields, FieldCell as VenueFieldCell, FieldOptions } from "./fields.js";
+export type { SplitDef, ZoneDef, Selector, DerivedGroups, RoleGroups } from "./groups.js";
+export type { WizardDirection, RunTopology, SimStrip, WizardFit } from "./wizard.js";
+export type { Venue as VenueModel, VenueFile, VenueTemplate } from "./venue.js";
+export type { ReferenceRoom } from "./reference.js";
+
 export const DEFAULT_GROUPS = ["ALL","LEFT","RIGHT","CENTER","BACK","FRONT","VERTICALS","HORIZONTALS","PRIMARY","SECONDARY","ACCENT","AMBIENT"] as const;
 
 export interface OrderedCell { fixtureId: string; cellIndex: number }
@@ -10,8 +38,9 @@ export function globalCellOrder(fixtures: Fixture[]): OrderedCell[] {
     .map(({ fixtureId, cellIndex }) => ({ fixtureId, cellIndex }));
 }
 
-// Semantic target → cells (§41, §75): group names route to fixture groups,
-// LEFT/RIGHT/CENTER split venue thirds, SIDE comes from mixer translation.
+export interface FixtureCellRef { fixtureId: string; cellIndex: number }
+export interface PlacedCell extends FixtureCellRef { x: number; y: number }
+
 export function resolveTarget(fixtures: Fixture[], target: string): FixtureCellRef[] {
   if (target === "ALL") return globalCellOrder(fixtures);
   const order = globalCellOrder(fixtures);
@@ -23,10 +52,6 @@ export function resolveTarget(fixtures: Fixture[], target: string): FixtureCellR
     .flatMap((f) => f.cells.map((c) => ({ fixtureId: f.id, cellIndex: c.index })));
 }
 
-export interface FixtureCellRef { fixtureId: string; cellIndex: number }
-export interface PlacedCell extends FixtureCellRef { x: number; y: number }
-
-// Shared venue coords: chase math lives here, never per-device (§40, §77).
 export function placeFixtures(fixtures: Fixture[]): PlacedCell[] {
   return globalCellOrder(fixtures).map((ref) => {
     const f = fixtures.find((x) => x.id === ref.fixtureId)!;
@@ -35,19 +60,15 @@ export function placeFixtures(fixtures: Fixture[]): PlacedCell[] {
   });
 }
 
-// Orientation confirm: physical "reverse" flips logical segment order (§42, §52 step 11).
 export function applyOrientation(cells: FixtureCellRef[], orientation: "forward" | "reverse"): FixtureCellRef[] {
   return orientation === "forward" ? [...cells] : [...cells].reverse();
 }
 
-// Highest stable resolution meeting refresh target (§53).
 export function selectResolution(candidates: { zones: number; stableFps: number }[], targetFps: number): number | null {
   const ok = candidates.filter((c) => c.stableFps >= targetFps).sort((a, b) => b.zones - a.zones);
   return ok[0]?.zones ?? null;
 }
 
-// Qualification wizard (§52): ordered steps with per-step pass/fail; unknown
-// firmware warns but control continues (§147) until the stream test passes.
 export const QUALIFICATION_STEPS = [
   "discover", "identify", "power", "brightness", "rgb", "stream",
   "segment-count", "segment-order", "arm-settle", "fps", "latency", "reconnect",

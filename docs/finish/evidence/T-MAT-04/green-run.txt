@@ -1,0 +1,7 @@
+
+ Test Files  4 passed (4)
+      Tests  26 passed (26)
+   Start at  04:05:21
+   Duration  182ms (transform 164ms, setup 0ms, import 213ms, tests 18ms, environment 0ms)
+
+TSC-CLEAN

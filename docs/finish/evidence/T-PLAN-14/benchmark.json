@@ -1,0 +1,1 @@
+{"machine":"darwin arm64 reference Mac, node 22","track":"real-track-1 (18 sections, 586-beat grid)","compiles":20,"p50Ms":1.2637500000000017,"p95Ms":2.322958,"maxMs":7.2223749999999995,"budgetMs":2000,"cacheMissThenHit":true,"cacheHitMs":0.0028749999999888587,"stats":{"hits":1,"misses":1,"size":1}}

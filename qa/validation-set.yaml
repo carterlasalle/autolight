@@ -1,0 +1,26 @@
+# T-QA-09 curated visual validation set: manifest (spec 116, F-ANA-26, F-QA-13).
+# Audio is never committed; this manifest plus generated artifact summaries are.
+# Owner confirms every track (OD-10); until then all entries are candidates.
+# At least qa.validation.minPerCategory (3) tracks per category.
+minPerCategory: 3
+categories:
+  - house
+  - tech-house
+  - edm
+  - bass-music
+  - hip-hop
+  - pop
+  - rock
+  - disco
+  - fake-drops
+  - long-breakdowns
+  - tempo-changes
+  - weak-intros
+  - irregular-structure
+tracks: []
+# Candidate rows (owner to confirm; TrackId plus library path each):
+# - trackId: TBD-owner-pick-01
+#   path: TBD
+#   category: house
+#   status: candidate
+#   why: steady four on the floor, full phrase stack

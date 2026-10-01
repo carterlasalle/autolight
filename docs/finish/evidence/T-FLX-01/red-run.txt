@@ -1,0 +1,21 @@
+Red run for the Windows single-client reporting path. Command:
+  yarn workspace @autolight/controller-flx4 test
+With the single-client Windows branch removed (heldSingleClient forced
+false, the previous silent behaviour) the remedy test fails as shown.
+
+[41m[1m FAIL [22m[49m src/backend.test.ts[2m > [22mflx4 backend selection (DS-13)[2m > [22mreports the Rekordbox-holds-the-port remedy for a single-client Windows open failure
+[31m[1mAssertionError[22m: expected 'install the @julusian/midi addon for …' to be 'Rekordbox is holding the FLX4 input; …' // Object.is equality[39m
+
+Expected: [32m"Rekordbox is holding the FLX4 input; install Windows MIDI Services or use a Rekordbox source that does not need the controller"[39m
+Received: [31m"install the @julusian/midi addon for this platform and rebuild it for Electron (T-OPS-05)"[39m
+
+[36m [2m❯[22m src/backend.test.ts:[2m119:34[22m[39m
+    [90m117|[39m     expect(windowsStatus.connection).toBe("unavailable-on-this-device"…
+    [90m118|[39m     expect(windowsStatus.reason).toBe("the input port is in use by ano…
+    [90m119|[39m     [34mexpect[39m(windowsStatus[33m.[39mremedy)[33m.[39m[34mtoBe[39m(
+    [90m   |[39m                                  [31m^[39m
+    [90m120|[39m       "Rekordbox is holding the FLX4 input; install Windows MIDI Servi…
+    [90m121|[39m     )[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+

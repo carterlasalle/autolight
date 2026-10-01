@@ -5,19 +5,6 @@ export function applyOverlay(planned: number, energy: number, reactiveAmount: nu
   return Math.min(1, planned + clamped * MAX_OVERLAY_GAIN);
 }
 
-// AGC + rise/decay smoothing (LedFx concepts, independent implementation §68).
-export interface AgcState { gain: number; smoothed: number }
-export function agcStep(prev: AgcState, input: number, opts: { rise?: number; decay?: number; target?: number } = {}): AgcState {
-  const rise = opts.rise ?? 0.3;
-  const decay = opts.decay ?? 0.05;
-  const target = opts.target ?? 0.5;
-  const gain = prev.gain + (target - Math.min(1, input * prev.gain)) * 0.01;
-  const smoothed = input > prev.smoothed
-    ? prev.smoothed + (input - prev.smoothed) * rise
-    : prev.smoothed + (input - prev.smoothed) * decay;
-  return { gain: Math.min(4, Math.max(0.25, gain)), smoothed };
-}
-
 // Adaptive director (§71): phrase-length looks with cooldowns, not beat reactions.
 export type AdaptiveLook = "hold" | "swell" | "dip" | "shift";
 export interface DirectorState {
@@ -41,3 +28,11 @@ export function nextLook(state: DirectorState, energyHigh: boolean, seed: number
     },
   };
 }
+
+// Live audio surfaces: capture host (T-AUD-01), independent DSP (T-AUD-02)
+// including the AGC, timing alignment (T-AUD-04) and the overlay rules
+// (T-AUD-03).
+export * from "./capture.js";
+export * from "./dsp.js";
+export * from "./overlay.js";
+export * from "./timing.js";

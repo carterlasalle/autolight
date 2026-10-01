@@ -119,3 +119,15 @@ export function tempoRegionsToBeats(regions: SeratoTempoRegion[]): { index: numb
   });
   return out;
 }
+
+// T-SER-01/04/05 surface: the Remote provider and its setup assistant, the
+// scripted peer and capture proxy, the library/crate/smart-crate readers with
+// the DS-35 watcher, and the fixture replay harness. Fixture writers stay out
+// of the public surface on purpose: this package reads DJ data, never writes
+// it (T-SEC-04).
+export * from "./remote-provider.js";
+export * from "./setup.js";
+export * from "./emulator.js";
+export * from "./capture.js";
+export * from "./library.js";
+export * from "./replay.js";

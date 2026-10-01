@@ -1,11 +1,12 @@
 // Rekordbox library reader over the read-only SQLCipher handle (T-RBL-01 and
-// T-RBL-02; spec 4.1, §5, §12, §9.5).
+// T-RBL-02; spec 4.1, 5, 12, 9.5).
 //
 // One normalization for every reader mode: both the SQLite reader here and the
 // pyrekordbox sidecar return `c.*`-shaped raw rows from the same joins, and
 // `mapTrackRow` turns them into `LibraryTrack`. Reading only; there is no write
-// path, and the handle underneath is opened read-only (a checkpoint is a write,
-// so nothing here checkpoints either).
+// path, and the handle underneath is opened read-only (T-SEC-04 reads the
+// query_only lock back after setting it, so a silently writable handle fails
+// the open; a checkpoint is a write, so nothing here checkpoints either).
 import { resolveAnlzSet, type AnlzResolution, type StatFile } from "./anlz.js";
 import { attemptWrite, openReadOnly, type DbDriverName, type ReadOnlyDb, type SqlParams, type SqlRow } from "./driver.js";
 

@@ -1,89 +1,505 @@
 {
   "schemaVersion": 1,
-  "plannerVersion": "0.1.0",
+  "plannerVersion": "0.2.0",
   "trackId": "golden-ref",
   "styleId": "club",
-  "seed": "a1e36381",
+  "seed": "dcecb3d8",
   "cues": [
+    {
+      "type": "pulse",
+      "startBeat": 32,
+      "durationBeats": 0.5,
+      "intensity": 0.5202000000000001,
+      "target": "PRIMARY",
+      "priority": 60
+    },
     {
       "type": "build-ramp",
       "startBeat": 32,
-      "durationBeats": 32,
-      "intensity": 0.6,
-      "target": "ALL",
+      "durationBeats": 6.4,
+      "intensity": 0.4488,
+      "target": "PRIMARY",
       "priority": 50
     },
     {
       "type": "section-look",
       "startBeat": 32,
       "durationBeats": 32,
-      "intensity": 0.8,
+      "intensity": 0.5485714285714286,
       "target": "PRIMARY",
       "priority": 10
     },
     {
-      "type": "chase-flip",
-      "startBeat": 40,
-      "durationBeats": 8,
+      "type": "strobe-burst",
+      "startBeat": 32.5,
+      "durationBeats": 0.5,
+      "intensity": 0.9,
+      "target": "ALL",
+      "priority": 92
+    },
+    {
+      "type": "pulse",
+      "startBeat": 34,
+      "durationBeats": 0.5,
+      "intensity": 0.5202000000000001,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "pulse",
+      "startBeat": 36,
+      "durationBeats": 0.5,
+      "intensity": 0.5202000000000001,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "dip",
+      "startBeat": 36,
+      "durationBeats": 1.2,
+      "intensity": 0.6,
+      "target": "AMBIENT",
+      "priority": 35
+    },
+    {
+      "type": "pulse",
+      "startBeat": 38,
+      "durationBeats": 0.5,
+      "intensity": 0.5202000000000001,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "build-ramp",
+      "startBeat": 38.4,
+      "durationBeats": 6.4,
+      "intensity": 0.5476,
+      "target": "SECONDARY",
+      "priority": 50
+    },
+    {
+      "type": "chase",
+      "startBeat": 38.666666666666664,
+      "durationBeats": 6.666666666666667,
       "intensity": 0.8,
       "target": "RIGHT",
       "priority": 11
     },
     {
-      "type": "chase-flip",
-      "startBeat": 48,
-      "durationBeats": 8,
+      "type": "pulse",
+      "startBeat": 40,
+      "durationBeats": 0.5,
+      "intensity": 0.5202000000000001,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "phrase-turn",
+      "startBeat": 40,
+      "durationBeats": 2,
+      "intensity": 0.5,
+      "target": "PRIMARY",
+      "priority": 52
+    },
+    {
+      "type": "pulse",
+      "startBeat": 42,
+      "durationBeats": 0.5,
+      "intensity": 0.5202000000000001,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "pulse",
+      "startBeat": 44,
+      "durationBeats": 0.5,
+      "intensity": 0.5202000000000001,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "build-ramp",
+      "startBeat": 44.8,
+      "durationBeats": 6.4,
+      "intensity": 0.6464,
+      "target": "PRIMARY",
+      "priority": 50
+    },
+    {
+      "type": "chase",
+      "startBeat": 45.33333333333333,
+      "durationBeats": 6.666666666666667,
       "intensity": 0.8,
       "target": "LEFT",
       "priority": 11
     },
     {
-      "type": "chase-flip",
-      "startBeat": 56,
-      "durationBeats": 8,
+      "type": "pulse",
+      "startBeat": 46,
+      "durationBeats": 0.5,
+      "intensity": 0.5202000000000001,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "pulse",
+      "startBeat": 48,
+      "durationBeats": 0.5,
+      "intensity": 0.5202000000000001,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "phrase-turn",
+      "startBeat": 48,
+      "durationBeats": 2,
+      "intensity": 0.6,
+      "target": "SECONDARY",
+      "priority": 52
+    },
+    {
+      "type": "pulse",
+      "startBeat": 50,
+      "durationBeats": 0.5,
+      "intensity": 0.5202000000000001,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "build-ramp",
+      "startBeat": 51.2,
+      "durationBeats": 6.4,
+      "intensity": 0.7452,
+      "target": "SECONDARY",
+      "priority": 50
+    },
+    {
+      "type": "chase",
+      "startBeat": 51.99999999999999,
+      "durationBeats": 6.666666666666667,
       "intensity": 0.8,
       "target": "RIGHT",
       "priority": 11
     },
     {
+      "type": "pulse",
+      "startBeat": 52,
+      "durationBeats": 0.5,
+      "intensity": 0.5202000000000001,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "pulse",
+      "startBeat": 54,
+      "durationBeats": 0.5,
+      "intensity": 0.5202000000000001,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "pulse",
+      "startBeat": 56,
+      "durationBeats": 0.5,
+      "intensity": 0.5202000000000001,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "phrase-turn",
+      "startBeat": 56,
+      "durationBeats": 2,
+      "intensity": 0.7,
+      "target": "PRIMARY",
+      "priority": 52
+    },
+    {
+      "type": "build-ramp",
+      "startBeat": 57.6,
+      "durationBeats": 6.4,
+      "intensity": 0.844,
+      "target": "PRIMARY",
+      "priority": 50
+    },
+    {
+      "type": "pulse",
+      "startBeat": 58,
+      "durationBeats": 0.5,
+      "intensity": 0.5202000000000001,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "chase",
+      "startBeat": 58.66666666666666,
+      "durationBeats": 5.333333333333343,
+      "intensity": 0.8,
+      "target": "LEFT",
+      "priority": 11
+    },
+    {
+      "type": "pulse",
+      "startBeat": 60,
+      "durationBeats": 0.5,
+      "intensity": 0.5202000000000001,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "pulse",
+      "startBeat": 62,
+      "durationBeats": 0.5,
+      "intensity": 0.5202000000000001,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "blackout",
+      "startBeat": 63,
+      "durationBeats": 1,
+      "intensity": 0,
+      "target": "ALL",
+      "priority": 96
+    },
+    {
       "type": "white-hit",
       "startBeat": 64,
-      "durationBeats": 0.25,
+      "durationBeats": 0.192,
       "intensity": 1,
       "target": "ALL",
       "priority": 100
     },
     {
+      "type": "impact",
+      "startBeat": 64,
+      "durationBeats": 1,
+      "intensity": 0.87,
+      "target": "PRIMARY",
+      "priority": 90
+    },
+    {
+      "type": "pulse",
+      "startBeat": 64,
+      "durationBeats": 0.5,
+      "intensity": 0.6,
+      "target": "SECONDARY",
+      "priority": 62
+    },
+    {
+      "type": "pulse",
+      "startBeat": 64,
+      "durationBeats": 0.5,
+      "intensity": 0.585225,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
       "type": "section-look",
       "startBeat": 64,
       "durationBeats": 32,
-      "intensity": 0.9,
+      "intensity": 0.8742857142857143,
       "target": "PRIMARY",
       "priority": 10
     },
     {
-      "type": "chase-flip",
-      "startBeat": 72,
-      "durationBeats": 8,
+      "type": "drop-pattern",
+      "startBeat": 64.192,
+      "durationBeats": 2,
       "intensity": 0.9,
-      "target": "RIGHT",
-      "priority": 11
+      "target": "ALL",
+      "priority": 90
     },
     {
-      "type": "chase-flip",
-      "startBeat": 80,
-      "durationBeats": 8,
+      "type": "pulse",
+      "startBeat": 66,
+      "durationBeats": 0.5,
+      "intensity": 0.585225,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "drop-pattern",
+      "startBeat": 66.192,
+      "durationBeats": 14,
+      "intensity": 0.85,
+      "target": "PRIMARY",
+      "priority": 61
+    },
+    {
+      "type": "pulse",
+      "startBeat": 68,
+      "durationBeats": 0.5,
+      "intensity": 0.585225,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "dip",
+      "startBeat": 68,
+      "durationBeats": 1.2,
+      "intensity": 0.6,
+      "target": "AMBIENT",
+      "priority": 35
+    },
+    {
+      "type": "pulse",
+      "startBeat": 70,
+      "durationBeats": 0.5,
+      "intensity": 0.585225,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "pulse",
+      "startBeat": 70.66666666666667,
+      "durationBeats": 6.666666666666667,
       "intensity": 0.9,
       "target": "LEFT",
       "priority": 11
     },
     {
-      "type": "chase-flip",
-      "startBeat": 88,
-      "durationBeats": 8,
+      "type": "pulse",
+      "startBeat": 72,
+      "durationBeats": 0.5,
+      "intensity": 0.585225,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "phrase-turn",
+      "startBeat": 72,
+      "durationBeats": 2,
+      "intensity": 0.5,
+      "target": "PRIMARY",
+      "priority": 52
+    },
+    {
+      "type": "pulse",
+      "startBeat": 74,
+      "durationBeats": 0.5,
+      "intensity": 0.585225,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "pulse",
+      "startBeat": 76,
+      "durationBeats": 0.5,
+      "intensity": 0.585225,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "pulse",
+      "startBeat": 77.33333333333334,
+      "durationBeats": 6.666666666666667,
       "intensity": 0.9,
       "target": "RIGHT",
       "priority": 11
+    },
+    {
+      "type": "pulse",
+      "startBeat": 78,
+      "durationBeats": 0.5,
+      "intensity": 0.585225,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "pulse",
+      "startBeat": 80,
+      "durationBeats": 0.5,
+      "intensity": 0.585225,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "phrase-turn",
+      "startBeat": 80,
+      "durationBeats": 2,
+      "intensity": 0.6,
+      "target": "SECONDARY",
+      "priority": 52
+    },
+    {
+      "type": "pulse",
+      "startBeat": 82,
+      "durationBeats": 0.5,
+      "intensity": 0.585225,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "pulse",
+      "startBeat": 84,
+      "durationBeats": 0.5,
+      "intensity": 0.585225,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "pulse",
+      "startBeat": 84.00000000000001,
+      "durationBeats": 6.666666666666667,
+      "intensity": 0.9,
+      "target": "LEFT",
+      "priority": 11
+    },
+    {
+      "type": "pulse",
+      "startBeat": 86,
+      "durationBeats": 0.5,
+      "intensity": 0.585225,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "pulse",
+      "startBeat": 88,
+      "durationBeats": 0.5,
+      "intensity": 0.585225,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "phrase-turn",
+      "startBeat": 88,
+      "durationBeats": 2,
+      "intensity": 0.7,
+      "target": "PRIMARY",
+      "priority": 52
+    },
+    {
+      "type": "pulse",
+      "startBeat": 90,
+      "durationBeats": 0.5,
+      "intensity": 0.585225,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "pulse",
+      "startBeat": 90.66666666666669,
+      "durationBeats": 5.333333333333314,
+      "intensity": 0.9,
+      "target": "RIGHT",
+      "priority": 11
+    },
+    {
+      "type": "pulse",
+      "startBeat": 92,
+      "durationBeats": 0.5,
+      "intensity": 0.585225,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "pulse",
+      "startBeat": 94,
+      "durationBeats": 0.5,
+      "intensity": 0.585225,
+      "target": "PRIMARY",
+      "priority": 60
     }
   ]
 }

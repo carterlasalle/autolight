@@ -1,5 +1,5 @@
 import { KEYS, defaultFor } from "./registry.js";
-
+import { isSecretId } from "./secrets.js";
 // Layered resolution (T-CFG-02): built-in default < app < venue < device <
 // style < session. Each layer is a partial map; get() walks highest first.
 export type Scope = "app" | "venue" | "device" | "style" | "session";
@@ -11,6 +11,9 @@ export class ConfigStore {
   };
 
   set(scope: Scope, key: string, value: unknown): void {
+    // Secrets never enter the config layer (T-SEC-01): they live in the
+    // SecretVault behind Electron safeStorage, never in the JSON file.
+    if (isSecretId(key)) throw new Error(`${key}: is a secret id, use the secrets-service (refusing plain-text write)`);
     this.layers[scope].set(key, value);
   }
 
@@ -58,6 +61,10 @@ export class ConfigStore {
     const values = (parsed as { values?: Record<string, unknown> }).values ?? {};
     const bad: string[] = [];
     for (const [k, v] of Object.entries(values)) {
+      if (isSecretId(k)) {
+        bad.push(`${k}: is a secret id, use the secrets-service (fix: remove it from the import)`);
+        continue;
+      }
       const def = KEYS.find((d) => d.key === k);
       if (!def) {
         bad.push(`${k}: unknown key (fix: remove it)`);

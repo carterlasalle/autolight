@@ -235,6 +235,13 @@ export class ProlinkProvider extends ProviderBase {
   }
 
   private applyStatus(buffer: DeviceBuffer, status: ProlinkStatusFrame): void {
+    // T-LIVE-14: a track change ends the old generation. Reset the loop flag
+    // and the beat counter so a loop or position from the previous track
+    // cannot leak into the new generation.
+    if (status.trackId !== null && buffer.trackId !== null && status.trackId !== buffer.trackId) {
+      buffer.loopActive = null;
+      buffer.beatCounter = 0;
+    }
     buffer.playing = status.playing;
     buffer.master = status.master;
     buffer.sync = status.sync;

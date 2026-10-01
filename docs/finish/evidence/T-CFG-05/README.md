@@ -22,3 +22,17 @@ Closes F-UI-17, F-CFG-02 (visibility part).
 
 Delete the Settings route and the sidebar has no Settings entry; delete the
 `KEYS` import and the view goes red at typecheck.
+
+## This slice: diff plus live-safety helpers (data/security/ops support)
+
+- `packages/config/src/compare.ts` (new, shared with T-CFG-07):
+  `compareKeys` diffs two config snapshots (effective vs default, or
+  before vs after an import) for the Settings diff indicator and the
+  "show only changed" filter. Sorted by key; JSON-compared values. The
+  same module's `planLiveChange` supplies the live-safe marker each row
+  renders.
+- Proof: `packages/config/src/compare.test.ts` (3 tests);
+  `yarn workspace @autolight/config exec vitest run src/compare.test.ts`:
+  3 passed.
+- Delete test: delete `compareKeys` and the diff test fails to import;
+  return all keys instead of changed ones and the equality assertion fails.

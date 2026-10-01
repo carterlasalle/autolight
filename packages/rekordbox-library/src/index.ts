@@ -13,6 +13,7 @@ export * from "./driver.js";
 export * from "./options.js";
 export * from "./pssi.js";
 export * from "./service.js";
+export * from "./identity.js";
 export * from "./sidecar.js";
 export * from "./watch.js";
 

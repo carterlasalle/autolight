@@ -1,0 +1,64 @@
+{
+  "seratoVersion": "3.3.5",
+  "platform": "macos",
+  "action": "crossfader",
+  "capture": "L1N0YXR1cy9EZWNrL1NvbmcvRmlsZXBhdGgAACxpcwAAAAAAL211c2ljL2ZpeHR1cmUtYS5tcDMAAAAATKrCrjWxxHbbWmREA71BcC9TdGF0dXMvVmlkZW8vTWl4ZXIvQ3Jvc3NmYWRlcgAALGYAAAAAAABMqsKuNbHEdttaZEQDvUFwL1N0YXR1cy9EZWNrL1BsYXloZWFkAAAALGlmZmYAAAAAAAAAAAAAAD+AAABC+AAATKrCrjWxxHbbWmREA71BcC9TdGF0dXMvVmlkZW8vTWl4ZXIvQ3Jvc3NmYWRlcgAALGYAAD+AAABMqsKuNbHEdttaZEQDvUFw",
+  "frameTimesMs": [
+    0,
+    20,
+    60,
+    120
+  ],
+  "expectedEvents": [
+    {
+      "source": "serato",
+      "deckId": 1,
+      "track": {
+        "id": "/music/fixture-a.mp3",
+        "sourceIds": {
+          "seratoPath": "/music/fixture-a.mp3"
+        },
+        "canonicalPath": "/music/fixture-a.mp3"
+      },
+      "playing": true,
+      "playheadSeconds": 0,
+      "playRate": 1,
+      "effectiveBpm": 124,
+      "loop": {
+        "active": false,
+        "startSeconds": null,
+        "endSeconds": null,
+        "beatLength": null
+      },
+      "channelFader": null,
+      "crossfader": 0.0,
+      "master": null
+    },
+    {
+      "source": "serato",
+      "deckId": 1,
+      "track": {
+        "id": "/music/fixture-a.mp3",
+        "sourceIds": {
+          "seratoPath": "/music/fixture-a.mp3"
+        },
+        "canonicalPath": "/music/fixture-a.mp3"
+      },
+      "playing": true,
+      "playheadSeconds": 0,
+      "playRate": 1,
+      "effectiveBpm": 124,
+      "loop": {
+        "active": false,
+        "startSeconds": null,
+        "endSeconds": null,
+        "beatLength": null
+      },
+      "channelFader": null,
+      "crossfader": 1.0,
+      "master": null
+    }
+  ],
+  "expectedBy": "hand-authored from the action script in packages/serato/src/emulator.ts (T-SER-05)",
+  "provenance": "emulator-generated: scripted peer over loopback TCP; real Serato capture pending HW-SER-01"
+}

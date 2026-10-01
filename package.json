@@ -13,6 +13,7 @@
     "typecheck": "yarn workspaces foreach --all run typecheck",
     "verify:phase1": "yarn workspaces foreach --all run typecheck && uv run --project analysis pytest -q",
     "golden:update": "node scripts/golden-update.mjs",
+    "gates": "node tools/gates/gates.mjs",
     "test:count": "vitest run --reporter=json 2>/dev/null | tail -1",
     "dev": "yarn workspace @autolight/desktop dev",
     "truth": "node docs/finish/tools/check-coverage.mjs && node tools/capabilities-check.mjs && node tools/claim-check.mjs && node tools/forbidden-words.mjs && yarn sg scan --config tools/ast-grep/sgconfig.yml",

@@ -74,11 +74,15 @@ interface ShellState {
   flashMode: "static" | "cycle";
   wheelOn: boolean;
   wheelColor: [number, number, number];
+  customColor: boolean;
+  pendingStyle: string | null;
+  liveBeat: number;
   altOn: boolean;
   altPattern: AltPattern;
   altSpeed: number;
   bpm: number | null;
   reactiveLevel: number;
+  overridesIntensity: number | null;
   audioDevices: { index: number; name: string }[];
   audioDevice: number | null;
   audioLevel: number;
@@ -97,7 +101,7 @@ interface ShellState {
 export const useShell = create<ShellState>((set) => ({
   route: "live",
   followMode: "preview",
-  style: "House",
+  style: "house",
   palette: "ND",
   blinder: true,
   running: true,
@@ -108,11 +112,15 @@ export const useShell = create<ShellState>((set) => ({
   flashMode: "static",
   wheelOn: false,
   wheelColor: [255, 255, 255],
+  customColor: false,
+  pendingStyle: null,
+  liveBeat: 0,
   altOn: false,
   altPattern: "Alternating Flash",
   altSpeed: 500,
   bpm: null,
   reactiveLevel: 0,
+  overridesIntensity: null,
   audioDevices: [],
   audioDevice: null,
   audioLevel: 0,

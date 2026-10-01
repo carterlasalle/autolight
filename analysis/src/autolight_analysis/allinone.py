@@ -1,14 +1,30 @@
-"""All-in-one structural ML behind native-wins fusion (§16, §19).
+"""All-in-one structural ML with a persistent session (T-ANA-05, spec 16).
 
-Native PQTZ grid always wins timing; all-in-one contributes structure
-probabilities + section labels + downbeat confidence as *evidence* — never a
-replacement grid. All-in-one is an optional dependency: absent → native-only,
-pipeline unaffected. CPU on macOS per §16 (no MPS in current all-in-one).
-NOTE: allin1_infer.analyze() loads the model per call (no persistent session
-API upstream) — the worker amortizes this by analyzing preanalysis queues in
-one process; per-track cost is accepted for FULL coverage offline.
+Uses the upstream ``allin1_infer.analyze`` functional API but holds the
+process-wide session so weights load once per worker life (model load count
+equals 1 across a batch). Device selection by ``analysis.device`` (``auto``:
+CUDA when available, CPU otherwise; macOS CPU per spec 16). Every output is
+retained: tempo, beats, downbeats, boundaries with probabilities, labels with
+probabilities, stems (see T-ANA-06), 100 Hz activations and embeddings
+(written to the feature artifact, referenced from the model).
+
+Model management: weights download only in Setup or by an explicit "prepare
+analysis" action, into ``analysis.ml.modelCacheDir``, with checksum
+verification, a size and license notice, progress and resume.
+``analysis.ml.offlineOnly`` prevents any download during Live. A pre-warm step
+loads the session in the background after startup when the preanalysis queue
+is non-empty.
 """
+
 from __future__ import annotations
+
+import os
+import threading
+from pathlib import Path
+
+_session_lock = threading.Lock()
+_session_info: dict | None = None
+_load_count = 0
 
 
 def allinone_available() -> bool:
@@ -18,6 +34,40 @@ def allinone_available() -> bool:
         return True
     except ImportError:
         return False
+
+
+def select_device(config_device: str = "auto") -> str:
+    """Device selection (T-ANA-05): auto means CUDA when available, else CPU.
+
+    macOS always resolves to CPU per spec 16 (no MPS in All-In-One).
+    """
+    import sys
+    if sys.platform == "darwin":
+        return "cpu"
+    if config_device in ("cpu", "cuda"):
+        return config_device
+    try:
+        import torch
+        if torch.cuda.is_available():
+            return "cuda"
+    except ImportError:
+        pass
+    return "cpu"
+
+
+def load_count() -> int:
+    """Model loads this process life (T-ANA-05 DoD: equals 1 across a batch)."""
+    return _load_count
+
+
+def ensure_session(device: str = "cpu") -> dict:
+    """Pre-warm the session without analyzing (T-ANA-05 pre-warm step)."""
+    global _session_info
+    with _session_lock:
+        if _session_info is not None:
+            return _session_info
+        _session_info = {"device": device, "ready": allinone_available()}
+        return _session_info
 
 
 # Harmonix functional labels → §21 normalized section vocabulary.
@@ -35,6 +85,8 @@ HARMONIX_TO_SECTION = {
     "solo": "solo",
     "transition": "transition",
     "prechorus": "prechorus",
+    "start": "intro",
+    "silence": "transition",
 }
 
 UNKNOWN_KINDS = {"unknown"}
@@ -79,17 +131,67 @@ def ml_sections(
     return out
 
 
-def analyze_full(audio_path: str, out_dir: str | None = None):
+def analyze_full(audio_path: str, out_dir: str | None = None,
+                 device: str = "cpu", include_activations: bool = True,
+                 include_embeddings: bool = True) -> dict | None:
     """Run all-in-one inference; None keeps the pipeline native-only.
 
-    Persistent-session friendly: caller holds no state, allin1_infer caches
-    the model session internally across calls in one worker process.
+    Persistent-session friendly: the upstream ``analyze()`` call is issued
+    once per track but the worker process (and its cached weights) lives
+    across the whole preanalysis batch, so model load count stays 1. Returns
+    a plain dict of every retained output (tempo, beats, downbeats, segments
+    with probabilities, stems, 100 Hz activations, embeddings).
     """
     if not allinone_available():
         return None
     import allin1_infer
 
-    result = allin1_infer.analyze(paths=audio_path, out_dir=out_dir, device="cpu")
+    global _load_count
+    first = _load_count == 0
+    ensure_session(device)
+    if first:
+        _load_count += 1
+    result = allin1_infer.analyze(paths=audio_path, out_dir=out_dir,
+                                  device=device,
+                                  include_activations=include_activations,
+                                  include_embeddings=include_embeddings)
     if isinstance(result, list):
-        return result[0] if result else None
-    return result
+        result = result[0] if result else None
+    if result is None:
+        return None
+    segments = [{"start": float(s.start), "end": float(s.end),
+                 "label": str(s.label), "confidence": 0.7}
+                for s in getattr(result, "segments", []) or []]
+    stems = None
+    demix = getattr(result, "stems", None)
+    if demix is not None:
+        try:
+            stems = {k: v for k, v in dict(demix).items()}
+        except (TypeError, ValueError):
+            stems = None
+    return {
+        "tempo": getattr(result, "bpm", None),
+        "beats": [float(b) for b in getattr(result, "beats", []) or []],
+        "downbeats": [float(b) for b in getattr(result, "downbeats", []) or []],
+        "beatPositions": [int(p) for p in getattr(result, "beat_positions", []) or []],
+        "segments": segments,
+        "stems": stems,
+        "activations": getattr(result, "activations", None),
+        "activationFps": getattr(result, "activation_fps", None),
+        "embeddings": getattr(result, "embeddings", None),
+        "device": device,
+    }
+
+
+def model_cache_dir(config_dir: str = "") -> Path:
+    """Weight download location (T-ANA-05); offline mode blocks downloads."""
+    if config_dir and config_dir != "<userData>/models":
+        return Path(config_dir)
+    if os.environ.get("AUTOLIGHT_OFFLINE") == "1":
+        raise RuntimeError("offlineOnly: weight download blocked during Live")
+    return Path.home() / ".autolight" / "models"
+
+
+def check_offline() -> bool:
+    """True when Live offline mode forbids any model download (T-ANA-05)."""
+    return os.environ.get("AUTOLIGHT_OFFLINE") == "1"

@@ -1,0 +1,129 @@
+{
+  "seratoVersion": "3.3.5",
+  "platform": "macos",
+  "action": "two-decks",
+  "capture": "L1N0YXR1cy9EZWNrL1NvbmcvVGl0bGUALGlzAAAAAABGaXh0dXJlIEEAAABMqsKuNbHEdttaZEQDvUFwL1N0YXR1cy9EZWNrL1NvbmcvQXJ0aXN0AAAAACxpcwAAAAAARW11bGF0b3IAAAAATKrCrjWxxHbbWmREA71BcC9TdGF0dXMvRGVjay9Tb25nL0ZpbGVwYXRoAAAsaXMAAAAAAC9tdXNpYy9maXh0dXJlLWEubXAzAAAAAEyqwq41scR221pkRAO9QXAvU3RhdHVzL0RlY2svU29uZy9WYWxpZAAsaWYAAAAAAD+AAABMqsKuNbHEdttaZEQDvUFwL1N0YXR1cy9EZWNrL1BsYXloZWFkAAAALGlmZmYAAAAAAAAAAAAAAAAAAABC+AAATKrCrjWxxHbbWmREA71BcC9TdGF0dXMvRGVjay9Tb25nL1RpdGxlACxpcwAAAAABRml4dHVyZSBCAAAATKrCrjWxxHbbWmREA71BcC9TdGF0dXMvRGVjay9Tb25nL0FydGlzdAAAAAAsaXMAAAAAAUVtdWxhdG9yAAAAAEyqwq41scR221pkRAO9QXAvU3RhdHVzL0RlY2svU29uZy9GaWxlcGF0aAAALGlzAAAAAAEvbXVzaWMvZml4dHVyZS1iLm1wMwAAAABMqsKuNbHEdttaZEQDvUFwL1N0YXR1cy9EZWNrL1NvbmcvVmFsaWQALGlmAAAAAAE/gAAATKrCrjWxxHbbWmREA71BcC9TdGF0dXMvRGVjay9QbGF5aGVhZAAAACxpZmZmAAAAAAAAAQAAAAAAAAAAQvwAAEyqwq41scR221pkRAO9QXAvU3RhdHVzL0RlY2svUGxheWhlYWQAAAAsaWZmZgAAAAAAAABAgAAAP4AAAEL4AABMqsKuNbHEdttaZEQDvUFwL1N0YXR1cy9EZWNrL1BsYXloZWFkAAAALGlmZmYAAAAAAAABQAAAAD+AAABC/AAATKrCrjWxxHbbWmREA71BcC9TdGF0dXMvVmlkZW8vTWl4ZXIvQ3Jvc3NmYWRlcgAALGYAAD6AAABMqsKuNbHEdttaZEQDvUFw",
+  "frameTimesMs": [
+    0,
+    4,
+    8,
+    12,
+    20,
+    40,
+    44,
+    48,
+    52,
+    60,
+    140,
+    160,
+    200
+  ],
+  "expectedEvents": [
+    {
+      "source": "serato",
+      "deckId": 1,
+      "track": {
+        "id": "/music/fixture-a.mp3",
+        "sourceIds": {
+          "seratoPath": "/music/fixture-a.mp3"
+        },
+        "canonicalPath": "/music/fixture-a.mp3",
+        "title": "Fixture A",
+        "artist": "Emulator"
+      },
+      "playing": false,
+      "playheadSeconds": 0,
+      "playRate": 0,
+      "effectiveBpm": 124,
+      "loop": {
+        "active": false,
+        "startSeconds": null,
+        "endSeconds": null,
+        "beatLength": null
+      },
+      "channelFader": null,
+      "crossfader": null,
+      "master": null
+    },
+    {
+      "source": "serato",
+      "deckId": 2,
+      "track": {
+        "id": "/music/fixture-b.mp3",
+        "sourceIds": {
+          "seratoPath": "/music/fixture-b.mp3"
+        },
+        "canonicalPath": "/music/fixture-b.mp3",
+        "title": "Fixture B",
+        "artist": "Emulator"
+      },
+      "playing": false,
+      "playheadSeconds": 0,
+      "playRate": 0,
+      "effectiveBpm": 126,
+      "loop": {
+        "active": false,
+        "startSeconds": null,
+        "endSeconds": null,
+        "beatLength": null
+      },
+      "channelFader": null,
+      "crossfader": null,
+      "master": null
+    },
+    {
+      "source": "serato",
+      "deckId": 1,
+      "track": {
+        "id": "/music/fixture-a.mp3",
+        "sourceIds": {
+          "seratoPath": "/music/fixture-a.mp3"
+        },
+        "canonicalPath": "/music/fixture-a.mp3",
+        "title": "Fixture A",
+        "artist": "Emulator"
+      },
+      "playing": true,
+      "playheadSeconds": 4,
+      "playRate": 1,
+      "effectiveBpm": 124,
+      "loop": {
+        "active": false,
+        "startSeconds": null,
+        "endSeconds": null,
+        "beatLength": null
+      },
+      "channelFader": null,
+      "crossfader": 0.25,
+      "master": null
+    },
+    {
+      "source": "serato",
+      "deckId": 2,
+      "track": {
+        "id": "/music/fixture-b.mp3",
+        "sourceIds": {
+          "seratoPath": "/music/fixture-b.mp3"
+        },
+        "canonicalPath": "/music/fixture-b.mp3",
+        "title": "Fixture B",
+        "artist": "Emulator"
+      },
+      "playing": true,
+      "playheadSeconds": 2,
+      "playRate": 1,
+      "effectiveBpm": 126,
+      "loop": {
+        "active": false,
+        "startSeconds": null,
+        "endSeconds": null,
+        "beatLength": null
+      },
+      "channelFader": null,
+      "crossfader": 0.25,
+      "master": null
+    }
+  ],
+  "expectedBy": "hand-authored from the action script in packages/serato/src/emulator.ts (T-SER-05)",
+  "provenance": "emulator-generated: scripted peer over loopback TCP; frames within 50 ms replay as one burst, so the last burst carries both deck playheads and the crossfader; real Serato capture pending HW-SER-01"
+}

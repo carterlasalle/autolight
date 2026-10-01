@@ -1,8 +1,13 @@
+import { useState } from "react";
 import { useShell, invoke } from "../../app/store.js";
 import type { FollowMode } from "../../app/store.js";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card.js";
+import { Button } from "../../components/ui/button.js";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select.js";
 import { SETUP_STEPS } from "../venue/venue.js";
-
+import { RkbxSetupAssistant } from "./rkbx-setup-panel.js";
+import { setupProgress, type EvidenceStep } from "../../routes/setup/setup-model.js";
+import { SIMULATOR_SCENARIOS, type SimulatorScenario } from "../../routes/settings/simulator-mode.js";
 const MODES: { id: FollowMode; title: string; body: string }[] = [
   { id: "preview", title: "Preview (designer tool)", body: "Resolves the loaded track's ANLZ grid + plan, renders the venue preview. No playhead sync, no Govee output until a light is on the LAN. Works with your Macro setup untouched." },
   { id: "ax-beat", title: "AX beat (coarse follow)", body: "Polls Rekordbox's deck time fields at ~1Hz and maps elapsed time onto the ANLZ grid (±1 beat). Needs: Rekordbox AX readable. No board needed." },
@@ -17,6 +22,11 @@ export function SetupView(): JSX.Element {
   const live = useShell((s) => s.live);
   const devices = useShell((s) => s.devices);
   const tiles = useShell((s) => s.tiles);
+  const simulatorMode = useShell((s) => s.simulatorMode);
+  const [scenario, setScenario] = useState<SimulatorScenario>("normal-night");
+  const [evidence, setEvidence] = useState<Partial<Record<EvidenceStep, boolean>>>({});
+  const progress = setupProgress(evidence);
+  void progress;
   const done: string[] = [
     ...(live ? ["dj", "library", "analysis", "preview"] : ["dj"]),
     ...(devices.length > 0 ? ["lights"] : []),
@@ -38,17 +48,33 @@ export function SetupView(): JSX.Element {
         </CardContent>
       </Card>
       <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-[13px]">Setup</CardTitle></CardHeader>
+        <CardHeader className="pb-2"><CardTitle className="text-[13px]">Simulator: {simulatorMode ? "on" : "off"}</CardTitle></CardHeader>
+        <CardContent className="flex flex-wrap items-center gap-2">
+          <label className="flex items-center gap-2 text-[13px]">Scenario:
+            <Select value={scenario} onValueChange={(v) => setScenario(v as SimulatorScenario)}>
+              <SelectTrigger className="h-8 w-44"><SelectValue /></SelectTrigger>
+              <SelectContent>{SIMULATOR_SCENARIOS.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
+            </Select>
+          </label>
+          <Button size="sm" variant="outline" onClick={() => { set({ simulatorMode: !simulatorMode }); void invoke("simulator/mode", { version: 1, enabled: !simulatorMode, scenario }); }}>
+            {simulatorMode ? "Exit simulator" : "Enter simulator"}
+          </Button>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader className="pb-2"><CardTitle className="text-[13px]">Setup: {progress.done.length} of 10 with evidence</CardTitle></CardHeader>
         <CardContent>
           <ol aria-label="Setup" className="flex list-decimal flex-col gap-1.5 pl-5 text-[13px]">
             {SETUP_STEPS.map((s) => (
               <li key={s} aria-current={done.length === SETUP_STEPS.indexOf(s) ? "step" : undefined}>
-                {done.includes(s) ? "✓ " : ""}{s}
+                {done.includes(s) || evidence[s as EvidenceStep] ? "✓ " : ""}{s}
+                {!done.includes(s) && !evidence[s as EvidenceStep] ? <Button size="sm" variant="outline" onClick={() => setEvidence((prev) => ({ ...prev, [s as EvidenceStep]: true }))}>Check</Button> : null}
               </li>
             ))}
           </ol>
         </CardContent>
       </Card>
+      <RkbxSetupAssistant />
     </div>
   );
 }

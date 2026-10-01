@@ -22,8 +22,20 @@ def test_stem_proxies_cover_bands():
     rate = 44100
     noise = np.random.default_rng(0).standard_normal(rate).astype(np.float32)
     stems = stem_proxies(noise, rate)
-    assert set(stems) == {"bass", "low_mid", "mid", "high", "vocal"}
+    assert {"bass", "drum", "vocal", "other"} <= set(stems)
     assert all(v.size > 0 for v in stems.values())
+
+
+def test_select_stems_labels_source():
+    from autolight_analysis.stems import select_stems
+    rate = 44100
+    noise = np.random.default_rng(1).standard_normal(rate).astype(np.float32)
+    _, source = select_stems(noise, rate, "fusion")
+    assert source == "dsp.stemProxies"
+    fake = {"bass": np.ones(8), "drum": np.ones(8), "vocal": np.ones(8),
+            "other": np.ones(8)}
+    _, source = select_stems(noise, rate, "fusion", fake)
+    assert source == "ml.stems"
 
 
 def test_novelty_quiet_mean_for_steady_tone():

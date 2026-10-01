@@ -1,0 +1,17 @@
+{
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "vitest": "^4.1.11"
+  },
+  "main": "./dist/index.js",
+  "name": "@autolight/failover",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "type": "module",
+  "types": "./dist/index.d.ts",
+  "version": "0.1.0"
+}

@@ -50,6 +50,17 @@ describe("config registry", () => {
   });
 });
 
+describe("secrets boundary (T-SEC-01)", () => {
+  it("refuses secret ids through set and import", () => {
+    const s = new ConfigStore();
+    expect(() => s.set("app", "govee.cloud.apiKey", "PLAIN")).toThrow(/secrets-service/);
+    const bad = s.importJson(JSON.stringify({ version: 1, values: { "govee.cloud.apiKey": "PLAIN" } }));
+    expect(bad.ok).toBe(false);
+    if (!bad.ok) expect(bad.badKeys.join("\n")).toContain("govee.cloud.apiKey");
+    expect(validateImportValues({ "agent.apiToken": "PLAIN" }).join("\n")).toContain("agent.apiToken");
+  });
+});
+
 describe("config persistence (T-CFG-02)", () => {
   it("device-scope value persists across re-instantiation and wins over app", () => {
     const dir = mkdtempSync(join(tmpdir(), "autolight-cfg-"));
