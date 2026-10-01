@@ -1,9 +1,13 @@
-// Keyboard shortcuts for emergency controls (§94): BLACKOUT needs no modal.
-// Space toggles play-pause intent; B blackout, F full, Z freeze, 1-9 intensity.
+// Keyboard shortcuts for emergency controls (spec 94, T-UI-03): BLACKOUT and
+// friends need no modal and work from every screen. Every value names a real
+// typed IPC channel (T-TRU-03 matrix covers each one); intents without a
+// channel yet (manual lane, intensity steps, presets, Space) stay out of the
+// map until their channel exists, so no key silently does nothing.
+// Text inputs keep focus (the shell skips INPUT and TEXTAREA targets).
 export const SHORTCUTS: Record<string, string> = {
   b: "master/blackout",
-  f: "master/full",
-  z: "master/freeze",
+  w: "master/full",
+  f: "master/freeze",
   a: "master/resume",
 };
 

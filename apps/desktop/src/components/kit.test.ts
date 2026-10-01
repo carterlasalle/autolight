@@ -274,3 +274,25 @@ describe("SourceBadge", () => {
     expect(unverified).toContain("SERATO serato-remote UNVERIFIED REKORDBOX VERSION");
   });
 });
+
+describe("emergency controls (T-UI-03)", () => {
+  it("shortcut map fires the four implemented emergency intents", async () => {
+    // Regression for F-APP-17: the palette's Emergency items used to close
+    // the palette without firing anything. Both surfaces share this map, so
+    // the palette's fire() targets (command-palette.tsx) must stay in it.
+    const { SHORTCUTS } = await import("../app/shortcuts.js");
+    expect(SHORTCUTS).toMatchObject({
+      b: "master/blackout",
+      w: "master/full",
+      f: "master/freeze",
+      a: "master/resume",
+    });
+  });
+  it("shortcut map names only implemented channels", async () => {
+    const { SHORTCUTS } = await import("../app/shortcuts.js");
+    const { channels } = await import("@autolight/ipc");
+    for (const channel of Object.values(SHORTCUTS)) {
+      expect(channel in channels).toBe(true);
+    }
+  });
+});
