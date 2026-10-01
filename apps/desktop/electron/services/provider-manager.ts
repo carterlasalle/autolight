@@ -196,3 +196,8 @@ export function getProviderManager(opts: ProviderManagerOptions = {}): ProviderM
   instance ??= new ProviderManager(opts);
   return instance;
 }
+
+export function resetProviderManagerForTest(): void {
+  instance?.stop();
+  instance = null;
+}

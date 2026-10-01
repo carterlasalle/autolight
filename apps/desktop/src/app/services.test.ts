@@ -7,7 +7,7 @@ import { CC, NOTE } from "@autolight/controller-flx4";
 import { channels } from "@autolight/ipc";
 import { AnalysisSupervisor, type AnalysisWorkerPort } from "../../electron/services/analysis-supervisor.js";
 import { CloudService } from "../../electron/services/cloud-service.js";
-import { ConfigService } from "../../electron/services/config-service.js";
+import { ConfigService, getConfigService, resetConfigServiceForTest } from "../../electron/services/config-service.js";
 import { IdentityService } from "../../electron/services/identity-service.js";
 import { IpcRouter, type IpcEventLike, type IpcMainPort } from "../../electron/services/ipc-router.js";
 import { LibraryService, type LibraryChange } from "../../electron/services/library-service.js";
@@ -19,7 +19,11 @@ import {
 } from "../../electron/services/lifecycle.js";
 import { MatterBridge, type MatterProcessPort } from "../../electron/services/matter-bridge.js";
 import { MidiService } from "../../electron/services/midi-service.js";
-import { ProviderManager } from "../../electron/services/provider-manager.js";
+import { ProviderManager, getProviderManager, resetProviderManagerForTest } from "../../electron/services/provider-manager.js";
+import { GoveeLanManager, resetGoveeManager } from "../../electron/govee-lan.js";
+import { getShowService } from "../../electron/show-service.js";
+import * as showService from "../../electron/show-service.js";
+import { GoveeLanSim } from "../../../../packages/simulator/src/govee-lan.js";
 import { closeStorageService, getStorageService, openStorageService } from "../../electron/services/storage-service.js";
 
 // T-ARC-05: every main-process service from 04-target-architecture section 1
@@ -405,5 +409,201 @@ describe("ipc-router", () => {
 
     expect(router.stop().counters["registered"]).toBe(0);
     expect(registered.size).toBe(0);
+  });
+});
+// T-TRU-03: no channel echoes its payload. Every channel runs through the
+// same dispatch path as production (router with a recording port) and each
+// row asserts a channel-specific observable effect or an authoritative read
+// from show-service state, the config file, or the Govee registry snapshot.
+// An echo regression (returning the request payload without touching state)
+// turns its row red because the state read would not have moved.
+describe("ipc handlers have real effects (T-TRU-03)", () => {
+  it("covers every channel with an observable effect or authoritative read", async () => {
+    const dir = tempDir("autolight-tru03-");
+    resetConfigServiceForTest();
+    resetProviderManagerForTest();
+    await getConfigService({ filePath: join(dir, "config.json") });
+    // follow/ax reads the provider manager with stubbed readers: deck 1
+    // readable, deck 2 denied. Production wires osascript plus :50001 here.
+    getProviderManager({
+      readDecks: async () => [
+        { deckId: 1, elapsedSeconds: 12.5, playing: true, readable: true },
+        { deckId: 2, elapsedSeconds: null, playing: null, readable: false },
+      ],
+      watchProlink: () => () => undefined,
+    });
+    const registered = new Map<string, (event: IpcEventLike, payload: unknown) => Promise<unknown>>();
+    const port: IpcMainPort = {
+      handle: (channel, listener) => { registered.set(channel, listener); },
+      removeHandler: (channel) => { registered.delete(channel); },
+    };
+    const router = new IpcRouter(port);
+    router.start();
+    // Every typed channel is exercised: the count guards against a new
+    // channel landing without a side-effect row below.
+    expect(registered.size).toBe(Object.keys(channels).length);
+    const app = { senderFrame: { url: "file:///index.html" } };
+    const call = async (name: string, payload: unknown): Promise<Record<string, unknown>> => {
+      const found = registered.get(name);
+      if (!found) throw new Error(`channel ${name} not registered`);
+      const res = (await found(app, payload)) as Record<string, unknown>;
+      expect(res).toMatchObject({ ok: true });
+      return res;
+    };
+    const svc = getShowService();
+    const seenEvents = svc.recorder.count();
+    try {
+      // Master override channels mutate the override state (T-RUN-07).
+      await call("master/blackout", { version: 1 });
+      expect(svc.overrides.blackout).toBe(true);
+      await call("master/full", { version: 1 });
+      expect(svc.overrides.full).toBe(true);
+      expect(svc.overrides.blackout).toBe(false);
+      await call("master/freeze", { version: 1, frozen: true });
+      expect(svc.overrides.frozen).toBe(true);
+      await call("master/freeze", { version: 1, frozen: false });
+      expect(svc.overrides.frozen).toBe(false);
+      await call("master/intensity", { version: 1, value: 0.5 });
+      expect(svc.overrides.intensity).toBeCloseTo(0.5, 9);
+      await call("master/resume", { version: 1, at: "bar" });
+      expect(svc.overrides).toMatchObject({ blackout: false, full: false, frozen: false });
+      // Show channels mutate director state and record the trigger.
+      await call("show/style", { version: 1, style: "Techno", palette: "Cold" });
+      expect(svc.showStyle).toEqual({ style: "Techno", palette: "Cold" });
+      await call("show/energy", { version: 1, tier: "HIGH" });
+      expect(svc.energyTier).toBe("HIGH");
+      await call("show/trigger-build", { version: 1 });
+      await call("show/trigger-drop", { version: 1 });
+      const state = await call("show/state", { version: 1, deck: 2 });
+      expect(state).toMatchObject({ ok: true, deck: 2 });
+      // Honest empty until providers and plans land (T-LIVE-02, T-RUN-08).
+      const live = await call("show/live", { version: 1 });
+      expect(live).toEqual({ ok: true, decks: [], fixtures: [] });
+      // Follow, venue color, simulator mode mutate service state.
+      await call("follow/mode", { version: 1, mode: "ax" });
+      expect(svc.followMode).toBe("ax");
+      // follow/ax returns the stubbed provider readings (deck 1 readable).
+      const ax = await call("follow/ax", { version: 1 });
+      const readings = ax["readings"] as { deckId: number; readable: boolean }[];
+      expect(readings.find((r) => r.deckId === 1)?.readable).toBe(true);
+      expect(readings.find((r) => r.deckId === 2)?.readable).toBe(false);
+      await call("venue/set-color", { version: 1, rgb: [10, 20, 30] });
+      expect(svc.venueColor).toEqual([10, 20, 30]);
+      // device-action dispatches through the Govee manager to the scanned sim
+      // below; the row lives after the scan so the device is known (an
+      // unknown MAC throws, which the unknown-device probe asserts).
+      expect(svc.deviceIps.size).toBe(0);
+      await call("simulator/mode", { version: 1, enabled: true });
+      expect(svc.simulatorMode).toBe(true);
+      await call("simulator/mode", { version: 1, enabled: false });
+      expect(svc.simulatorMode).toBe(false);
+      // Scan-list-only discovery against a loopback sim: no LAN touched, the
+      // discovered MAC is the observable effect (T-GOV-05 scan ladder).
+      // venue/list is asserted after the scan, against the non-empty registry.
+      // Static imports: the sim source is a workspace file, always present.
+      const sim = new GoveeLanSim({ device: "AA:BB:CC:DD:EE:01", sku: "H6076", zones: 14 });
+      const simPort = await sim.start(0);
+      const lan = new GoveeLanManager({
+        replyPort: 0,
+        scanPort: simPort,
+        controlPort: simPort,
+        multicast: false,
+        perInterfaceBroadcast: false,
+        globalBroadcast: false,
+        scanList: ["127.0.0.1"],
+        backgroundRescanMs: 60000,
+        statusDeadlineMs: 300,
+        statusRetryMs: 50,
+      });
+      try {
+        const found = await lan.scanOnce(400);
+        expect(found.map((d) => d.mac)).toContain("AA:BB:CC:DD:EE:01");
+        // venue/scan, identify, test-chase and device-action run against the
+        // app's own manager rebuilt with the sim's ports: scan-list-only
+        // discovery, no LAN touched (T-GOV-05 ladder over the wire, T-GOV-12
+        // actions). Ports are construction-time (a started manager's reply
+        // socket is already bound), so the app singleton is reset and rebuilt
+        // through show-service's own govee() entry point. Earlier rows already
+        // built the app singleton (venue/list binds the default reply port):
+        // stop and reset it BEFORE stopping the probe lan, otherwise the
+        // probe's stop closes nothing and the stale singleton keeps the port.
+        showService.govee().stop();
+        resetGoveeManager();
+        lan.stop();
+        // show-service's govee() entry rebuilds the singleton from
+        // optionsFromConfig: reset first, then rebuild through that entry so
+        // venue/* handlers and this test share one manager. The scan-list is
+        // seedable (live tunable); the sim's ports are construction-time, so
+        // they ride in through the app config the entry already reads.
+        const cfg = await getConfigService();
+        await cfg.set("app", "govee.lan.ports.scan", simPort);
+        await cfg.set("app", "govee.lan.ports.reply", 0);
+        await cfg.set("app", "govee.lan.ports.control", simPort);
+        await cfg.set("app", "govee.lan.discovery.multicast", false);
+        await cfg.set("app", "govee.lan.discovery.perInterfaceBroadcast", false);
+        await cfg.set("app", "govee.lan.discovery.globalBroadcast", false);
+        // show-service owns a SEPARATE PersistentConfigStore (T-CFG-02), not
+        // the ConfigService: mirror the sim ports there so govee() builds the
+        // same manager the probe above verified. scanList rides in through
+        // the same store because optionsFromConfig reads strings() there
+        // (applyLiveTunables only re-seeds an already-set list).
+        svc.config.set("app", "govee.lan.ports.scan", simPort);
+        svc.config.set("app", "govee.lan.ports.reply", 0);
+        svc.config.set("app", "govee.lan.ports.control", simPort);
+        svc.config.set("app", "govee.lan.discovery.multicast", false);
+        svc.config.set("app", "govee.lan.discovery.perInterfaceBroadcast", false);
+        svc.config.set("app", "govee.lan.discovery.globalBroadcast", false);
+        svc.config.set("app", "govee.lan.discovery.scanList", ["127.0.0.1"]);
+        const appMgr = showService.govee();
+        try {
+          const scanned = await call("venue/scan", { version: 1 });
+          expect((scanned["devices"] as unknown[]).length).toBeGreaterThan(0);
+          // venue/list reads the same registry snapshot (non-empty now).
+          const venue = await call("venue/list", { version: 1 });
+          expect((venue["fixtures"] as unknown[]).length).toBeGreaterThan(0);
+          await call("venue/identify", { version: 1, id: "AA:BB:CC:DD:EE:01" });
+          await call("venue/test-chase", { version: 1, id: "AA:BB:CC:DD:EE:01" });
+          const acted = await call("venue/device-action", { version: 1, id: "AA:BB:CC:DD:EE:01", action: "identify" });
+          expect(acted).toMatchObject({ ok: true, id: "AA:BB:CC:DD:EE:01", action: "identify" });
+          expect(svc.deviceIps.get("AA:BB:CC:DD:EE:01")).toBe("127.0.0.1");
+        } finally {
+          appMgr.stop();
+          resetGoveeManager();
+        }
+      } finally {
+        await sim.stop();
+      }
+      // Audio surface: renderer owns enumeration, main reports none.
+      const devices = await call("audio/devices", { version: 1 });
+      expect(devices).toEqual({ ok: true, devices: [] });
+      const level = await call("audio/level", { version: 1 });
+      expect(level).toEqual({ ok: true, level: 0 });
+      // Diagnostics tab names come from the renderer tab table (spec 101).
+      const diag = await call("diagnostics/get", { version: 1, tab: "Transport" });
+      expect(diag).toMatchObject({ ok: true, tab: "Transport" });
+      const all = await call("diagnostics/all", { version: 1 });
+      expect(typeof all["diagnostics"]).toBe("object");
+      // Config channels round-trip through the file-owning service.
+      const schema = await call("config/schema", { version: 1 });
+      expect(Array.isArray((schema as { keys: unknown[] }).keys)).toBe(true);
+      const tickHz = await call("config/get", { version: 1, key: "runtime.clock.tickHz" });
+      expect(tickHz).toMatchObject({ ok: true, key: "runtime.clock.tickHz", liveSafe: false });
+      await call("config/set", { version: 1, scope: "app", key: "runtime.snapshot.uiRateHz", value: 24 });
+      const reread = await call("config/get", { version: 1, key: "runtime.snapshot.uiRateHz" });
+      expect(reread).toMatchObject({ ok: true, value: 24, layer: "app" });
+      await call("config/reset", { version: 1, scope: "app", key: "runtime.snapshot.uiRateHz" });
+      const afterReset = await call("config/get", { version: 1, key: "runtime.snapshot.uiRateHz" });
+      expect(afterReset).toMatchObject({ ok: true, layer: "default" });
+      const exported = await call("config/export", { version: 1 });
+      expect(typeof exported["json"]).toBe("string");
+      const imported = await call("config/import", { version: 1, json: JSON.stringify({ values: {} }) });
+      expect(imported).toMatchObject({ ok: true, applied: 0 });
+      // Every mutating channel above recorded into the session recorder.
+      expect(svc.recorder.count()).toBeGreaterThan(seenEvents);
+    } finally {
+      resetConfigServiceForTest();
+      resetProviderManagerForTest();
+      router.stop();
+    }
   });
 });
