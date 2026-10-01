@@ -49,10 +49,11 @@ function razerDatagram(frame: Uint8Array): string {
   return JSON.stringify({ msg: { cmd: "razer", data: { pt } } });
 }
 
-// The recording transport is loaded at runtime: it may be absent depending
-// on build order, and a static import would fail this whole file at load
-// instead of failing one probe (same exception as index.test.ts in govee).
-const RECORDING_MODULE = "@autolight/simulator/dist/recording.js";
+// The recording transport loads from the simulator barrel under the workspace
+// alias (a static import would fail this whole file at load instead of one
+// probe, so the dynamic import tries the barrel first, dist fallback second).
+const RECORDING_MODULE_SRC = "@autolight/simulator";
+const RECORDING_MODULE_DIST = "@autolight/simulator/dist/recording.js";
 
 interface RecordingTransportLike {
   readonly records: { kind: string }[];
@@ -61,14 +62,17 @@ interface RecordingTransportLike {
 }
 
 async function loadRecordingTransport(sender: (text: string) => void): Promise<RecordingTransportLike | null> {
-  try {
-    const module = (await import(RECORDING_MODULE)) as {
-      RecordingTransport: new (sender: (text: string) => void) => RecordingTransportLike;
-    };
-    return new module.RecordingTransport(sender);
-  } catch {
-    return null;
+  for (const specifier of [RECORDING_MODULE_SRC, RECORDING_MODULE_DIST]) {
+    try {
+      const module = (await import(specifier)) as {
+        RecordingTransport: new (sender: (text: string) => void) => RecordingTransportLike;
+      };
+      return new module.RecordingTransport(sender);
+    } catch {
+      continue;
+    }
   }
+  return null;
 }
 
 const allowAll: AddonProbe = () => ({ id: "govee-toolkit", available: true, reason: null });
