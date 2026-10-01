@@ -22,6 +22,102 @@ module.exports = {
       from: { path: "packages/show-planner" },
       to: { path: "packages/(govee|venue)", pathNot: "\\.test\\.ts$" },
     },
+
+    // ---- Ownership table: 04-target-architecture section 1 (T-ARC-05) ----
+    // Resource | Owner | Nobody else may ...
+    {
+      name: "ownership-ui-state",
+      comment: "UI state | Renderer | main services and the show host never import renderer sources.",
+      severity: "error",
+      from: { path: "(^packages|apps/desktop/electron)" },
+      to: { path: "apps/desktop/src", pathNot: "\\.test\\.ts$" },
+    },
+    {
+      name: "ownership-show-clock",
+      comment: "Show clock and all show-time state | Show host | main services never import the show runtime.",
+      severity: "error",
+      from: { path: "apps/desktop", pathNot: "\\.test\\.ts$" },
+      to: { path: "packages/show-runtime" },
+    },
+    {
+      name: "ownership-db-single-owner",
+      comment: "Database | main storage-service | no other package or main service opens the DB file.",
+      severity: "error",
+      from: { path: "(^packages|apps/desktop/(src|electron))", pathNot: "(packages/storage|electron/services/storage-service|\\.test\\.ts$)" },
+      to: { path: "packages/storage" },
+    },
+    {
+      name: "ownership-library-single-owner",
+      comment: "Rekordbox and Serato libraries | main library-service | no other main module or renderer opens library files.",
+      severity: "error",
+      from: { path: "apps/desktop/(src|electron)", pathNot: "(electron/services/(library-service|identity-service)|\\.test\\.ts$)" },
+      to: { path: "packages/(rekordbox-library|serato)" },
+    },
+    {
+      name: "ownership-python-single-owner",
+      comment: "Python worker | main analysis-supervisor | nothing else spawns or imports the worker client.",
+      severity: "error",
+      from: { path: "(^packages|apps/desktop/(src|electron))", pathNot: "(electron/services/analysis-supervisor|\\.test\\.ts$)" },
+      to: { path: "packages/analysis-client" },
+    },
+    {
+      name: "ownership-govee-sockets",
+      comment: "Govee LAN sockets (4002 listener, 4001 to 4003 control) | show host govee-manager | no other module opens UDP. The two exceptions are the Govee LAN manager itself and the DJ provider observer (PRO DJ LINK owns :50001, main services).",
+      severity: "error",
+      from: { path: "apps/desktop/electron", pathNot: "(govee-lan|services/provider-manager)\\.ts$" },
+      to: { path: "dgram$" },
+    },
+    {
+      name: "ownership-provider-io-main-only",
+      comment: "DJ provider sockets, OSC, MIDI, AX | main services | the renderer reads no DJ state directly; it renders snapshots. Currently WARN: src/features/live/live.ts and app/resolve-live.ts still import the provider/transport packages (the F-APP-02 spine violation recorded in T-TRU-04, closed by T-RUN-08 and T-REND-01).",
+      severity: "warn",
+      from: { path: "apps/desktop/src", pathNot: "\\.test\\.ts$" },
+      to: { path: "packages/(rekordbox-live|serato|controller-flx4|analysis-client)" },
+    },
+
+    // ---- Spec 155 arrows (the pipeline, upstream to downstream) ----
+    {
+      name: "arrow-planner-upstream-only",
+      comment: "Spec 155: TrackModel to ShowPlanner to ShowPlan; the planner never reaches downstream stages.",
+      severity: "error",
+      from: { path: "packages/show-planner" },
+      to: { path: "packages/(show-runtime|show-mixer|renderer|venue|govee)", pathNot: "\\.test\\.ts$" },
+    },
+    {
+      name: "arrow-runtime-before-mixer",
+      comment: "Spec 155: ShowRuntime feeds the mixer and touches no output or presentation.",
+      severity: "error",
+      from: { path: "packages/show-runtime" },
+      to: { path: "packages/(show-mixer|renderer|venue|govee)", pathNot: "\\.test\\.ts$" },
+    },
+    {
+      name: "arrow-mixer-no-transport",
+      comment: "Spec 155: ShowMixer mixes decks and audio overlay; it never talks to devices, libraries or the database.",
+      severity: "error",
+      from: { path: "packages/show-mixer" },
+      to: { path: "packages/(govee|venue|storage|rekordbox-live|rekordbox-library|serato|controller-flx4|analysis-client)", pathNot: "\\.test\\.ts$" },
+    },
+    {
+      name: "arrow-renderer-to-venue-only",
+      comment: "Spec 155: Renderer maps ShowPlan onto the VenueModel; it never imports transports, analyses or upstream stages.",
+      severity: "error",
+      from: { path: "packages/renderer" },
+      to: { path: "packages/(govee|storage|rekordbox-live|rekordbox-library|serato|controller-flx4|analysis-client|show-planner|show-runtime|show-mixer)", pathNot: "\\.test\\.ts$" },
+    },
+    {
+      name: "arrow-venue-no-transport",
+      comment: "Spec 155: VenueModel resolves cells; frames leave through the Govee manager, never from the venue package.",
+      severity: "error",
+      from: { path: "packages/venue" },
+      to: { path: "packages/(govee|renderer|show-planner|show-runtime|show-mixer|storage)", pathNot: "\\.test\\.ts$" },
+    },
+    {
+      name: "arrow-govee-is-sink",
+      comment: "Spec 155: the Govee local streams are the sink; the package never imports planning, runtime, rendering, or libraries.",
+      severity: "error",
+      from: { path: "packages/govee" },
+      to: { path: "packages/(show-planner|show-runtime|show-mixer|renderer|venue|rekordbox-live|rekordbox-library|serato|analysis-client|track-model|storage)", pathNot: "\\.test\\.ts$" },
+    },
   ],
   options: { doNotFollow: { path: "node_modules" }, tsPreCompilationDeps: true },
 };

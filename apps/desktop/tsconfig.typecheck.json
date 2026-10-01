@@ -6,9 +6,9 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "baseUrl": ".",
-    "paths": { "@/*": ["./src/renderer/*"] },
+    "paths": { "@/*": ["./src/*"] },
     "lib": [
-      "ES2022",
+      "ES2024",
       "DOM"
     ]
   },

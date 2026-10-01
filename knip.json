@@ -3,8 +3,8 @@
   "entry": [
     "apps/desktop/electron/main.ts",
     "apps/desktop/electron/preload.ts",
-    "apps/desktop/src/renderer/main.tsx",
-    "apps/desktop/src/renderer/shell.tsx",
+    "apps/desktop/src/app/main.tsx",
+    "apps/desktop/src/app/shell.tsx",
     "packages/*/src/index.ts"
   ],
   "project": ["packages/*/src/**/*.ts", "apps/desktop/electron/**/*.ts", "apps/desktop/src/**/*.ts", "apps/desktop/src/**/*.tsx"],

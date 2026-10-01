@@ -191,7 +191,7 @@
     - Settings added (T-CFG-05)
     - waveform, corrections, room canvas missing
   implementation:
-    - apps/desktop/src/renderer/
+    - apps/desktop/src/
   entry: Shell routes
   evidence: docs/finish/evidence/T-TRU-05/README.md
 

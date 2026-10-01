@@ -10,7 +10,7 @@
     "declarationMap": false,
     "sourceMap": false,
     "baseUrl": ".",
-    "paths": { "@/*": ["./src/renderer/*"] }
+    "paths": { "@/*": ["./src/*"] }
   },
   "include": [
     "electron"

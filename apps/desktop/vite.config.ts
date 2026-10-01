@@ -14,13 +14,15 @@ const workspaceAlias = Object.fromEntries(
 // Renderer only: main + preload stay on esbuild (scripts/build-main.mjs,
 // scripts/build-preload.mjs). Dev: `vite` → http://localhost:5173, Electron
 // loads it. Prod: `vite build` → dist/renderer/index.html → loadFile.
+// Root is apps/desktop/src (spec 83 layout: app, routes, components,
+// features, styles) with index.html at src/index.html.
 export default defineConfig({
-  root: join(root, "src", "renderer"),
+  root: join(root, "src"),
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
       ...workspaceAlias,
-      "@": join(root, "src", "renderer"),
+      "@": join(root, "src"),
     },
   },
   base: "./",

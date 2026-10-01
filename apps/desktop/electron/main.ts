@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { writeFileSync } from "node:fs";
 import { app, BrowserWindow, session, type WebContents } from "electron";
-import { createIpc } from "./ipc.js";
+import { createIpc } from "./services/ipc-router.js";
 import {
   createShowService,
   getShowService,
@@ -14,6 +14,7 @@ import {
   runShutdown,
   crashRecordPath,
 } from "./show-service.js";
+import { closeStorageService, openStorageService } from "./services/storage-service.js";
 // Startup sequence (§132): DB → show worker → Govee → DJ adapter →
 // library watcher → analysis worker → venue → tracks → plans → arm → READY.
 export type StartupStage =
@@ -181,6 +182,9 @@ export async function boot(): Promise<void> {
   // first requests never race registration.
   createIpc();
   applySessionHardening();
+  // §132 stage 2: the application database opens before anything reads it,
+  // and its driver, pragmas and schema version are logged as they are found.
+  console.info(`[storage] ${openStorageService().statusLine()}`);
   const settings = securitySettings(join(__dirname, "preload.cjs"));
   const win = new BrowserWindow({
     width: 1440,
@@ -236,6 +240,11 @@ export async function boot(): Promise<void> {
   app.on("before-quit", () => {
     void runGracefulShutdown();
   });
+  // The database closes after the shutdown steps so a checkpoint lands before
+  // the process exits.
+  app.on("will-quit", () => {
+    closeStorageService();
+  });
   win.on("close", (event) => {
     if (shuttingDown()) return;
     event.preventDefault();
@@ -273,4 +282,6 @@ export function markShuttingDown(): void {
   setShowAcceptingUi(false);
 }
 
-void boot();
+// Only boot inside the Electron main process: importing this module from the
+// checklist tests (src/app/security.test.ts) must not reject on app.whenReady.
+if (process.versions["electron"] !== undefined) void boot();
