@@ -5,8 +5,10 @@ import { SessionRecorder, emptyMetrics, type Metrics } from "@autolight/diagnost
 import { KEYS as CONFIG_KEYS, PersistentConfigStore, defineKey, type Scope } from "@autolight/config";
 import { scanLan, frameToLan } from "./govee-lan.js";
 import { pollAxDecks, startProlinkWatch } from "./follow.js";
-import { turnCommand } from "@autolight/govee";
-
+import {
+  brightnessCommand,
+  turnCommand,
+} from "@autolight/govee";
 // Show service: owns session/metrics/live-transport state in main (§86, §132).
 // No SQLite here: Electron 33's Node lacks node:sqlite, and nothing in main
 // reads the Store (renderer resolves committed fixtures until the §132
@@ -81,22 +83,44 @@ export function startAxLoop(): void {
 }
 
 // PRO DJ LINK observer: reusePort on :50001, observe-only.
-let stopProlink: (() => void) | null = null;
+let stopProlinkWatch: (() => void) | null = null;
 export function startProlink(): void {
-  if (stopProlink) return;
-  stopProlink = startProlinkWatch((beat, bpm) => {
+  if (stopProlinkWatch) return;
+  stopProlinkWatch = startProlinkWatch((beat, bpm) => {
     const svc = getShowService();
     svc.prolink = { beat, bpm, peerPresent: true };
   });
 }
+export function stopAxLoop(): void {
+  if (axTimer !== null) {
+    clearInterval(axTimer);
+    axTimer = null;
+  }
+}
+
+export function stopProlink(): void {
+  stopProlinkWatch?.();
+  stopProlinkWatch = null;
+}
+
+// T-ARC-03 shutdown step 1 (§133): while false every typed IPC handler still
+// validates and runs, but the renderer treats the app as quitting and stops
+// sending intents. Flipped once, never back, per process lifetime.
+let acceptingUi = true;
+
+export function setShowAcceptingUi(accepting: boolean): void {
+  acceptingUi = accepting;
+}
+
+export function isShowAcceptingUi(): boolean {
+  return acceptingUi;
+}
+
 
 export function quitApp(): void {
   try {
-    if (axTimer !== null) {
-      clearInterval(axTimer);
-      axTimer = null;
-    }
-    stopProlink?.();
+    stopAxLoop();
+    stopProlink();
   } finally {
     app.quit();
   }
@@ -145,6 +169,122 @@ export function testChaseCommand(id: string): { ok: true; id: string } {
 export function pushFrame(ip: string, frame: Uint8Array, brightness: number): void {
   frameToLan(ip, frame, brightness, (msg) => sendToDevice(ip, msg));
 }
+// T-ARC-03 crash policy + §133 steps 2 and 7. applyCrashPolicy sends the
+// safe look: hold the last frame for holdMs (runtime.crash.holdMs), then dim
+// to zero. restartShowHost stops and restarts the AX/prolink observers that
+// feed the host, restoring live transport from the latest provider state.
+export interface CrashPolicyOptions {
+  holdMs: number;
+}
+
+export function crashRecordPath(): string {
+  let dir: string;
+  try {
+    dir = app.getPath("userData");
+  } catch {
+    dir = "/tmp";
+  }
+  return join(dir, "crash-last.json");
+}
+
+export function applyCrashPolicy(opts: CrashPolicyOptions): void {
+  const svc = getShowService();
+  svc.recorder.record("crash/safe-look", { holdMs: opts.holdMs });
+  for (const ip of svc.deviceIps.values()) {
+    sendToDevice(ip, brightnessCommand(100));
+  }
+  if (opts.holdMs > 0) {
+    const timer = setTimeout(() => {
+      clearTimeout(timer);
+      for (const ip of getShowService().deviceIps.values()) {
+        sendToDevice(ip, turnCommand(false));
+      }
+      getShowService().recorder.record("crash/dimmed", {});
+    }, opts.holdMs);
+  } else {
+    for (const ip of svc.deviceIps.values()) {
+      sendToDevice(ip, turnCommand(false));
+    }
+    svc.recorder.record("crash/dimmed", {});
+  }
+}
+
+export function restartShowHost(): void {
+  stopAxLoop();
+  stopProlink();
+  startAxLoop();
+  startProlink();
+  getShowService().recorder.record("crash/host-restarted", {});
+}
+
+export function applyEndingLook(kind: "blackout" | "hold" | "dim"): Promise<void> {
+  const svc = getShowService();
+  svc.recorder.record("shutdown/ending-look", { kind });
+  for (const ip of svc.deviceIps.values()) {
+    if (kind === "blackout") sendToDevice(ip, turnCommand(false));
+    else if (kind === "dim") sendToDevice(ip, brightnessCommand(1));
+  }
+  return Promise.resolve();
+}
+
+// T-ARC-03 shutdown runner (§133): the 9-step order with a per-step timeout
+// from the caller; a step that times out is logged and shutdown continues.
+export interface ShutdownOptions {
+  timeoutMs: number;
+  onStep?: (step: string, ms: number) => void;
+}
+
+export function runShutdown(opts: ShutdownOptions): Promise<void> {
+  const svc = getShowService();
+  setShowAcceptingUi(false);
+  const steps: { name: string; run: () => void | Promise<void> }[] = [
+    { name: "freeze-ui", run: () => setShowAcceptingUi(false) },
+    { name: "ending-look", run: () => applyEndingLook("blackout") },
+    { name: "disarm", run: () => disarmStreams() },
+    { name: "dj-adapters", run: () => { stopAxLoop(); stopProlink(); } },
+    { name: "analysis", run: () => svc.recorder.record("shutdown/analysis-stopped", {}) },
+    { name: "flush-db", run: () => flushConfig() },
+    { name: "workers", run: () => { stopAxLoop(); stopProlink(); } },
+    { name: "exit", run: () => undefined },
+  ];
+  return (async () => {
+    for (const step of steps) {
+      const started = Date.now();
+      try {
+        await Promise.race([
+          Promise.resolve().then(() => step.run()),
+          new Promise<never>((_, reject) => {
+            setTimeout(() => reject(new Error(`shutdown step timeout: ${step.name}`)), opts.timeoutMs);
+          }),
+        ]);
+        opts.onStep?.(step.name, Date.now() - started);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        const timedOut = message.startsWith("shutdown step timeout:");
+        svc.recorder.record(timedOut ? "shutdown/step-timeout" : "shutdown/step-error", { step: step.name, message });
+        opts.onStep?.(step.name, Date.now() - started);
+      }
+    }
+  })();
+}
+
+function disarmStreams(): void {
+  for (const ip of getShowService().deviceIps.values()) {
+    sendToDevice(ip, turnCommand(false));
+  }
+  getShowService().recorder.record("shutdown/streams-disarmed", {});
+}
+
+function flushConfig(): void {
+  try {
+    getShowService().config.save();
+  } catch (err) {
+    getShowService().recorder.record("shutdown/flush-failed", {
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
 
 export async function pollAxCommand(): Promise<{ ok: true; readings: unknown[] }> {
   return { ok: true, readings: await pollAxDecks() };
