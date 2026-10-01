@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { VenueFields } from "@autolight/venue";
-import { isKnownCueType, parsePrimitiveParams } from "../../show-planner/src/primitives.js";
+import { isKnownCueType, parsePrimitiveParams } from "@autolight/show-planner";
 import { envelopeFromMs, envelopeLevel, sampleSpatial, UnknownSpatialError } from "./spatial.js";
 
 function ringFields(n: number): VenueFields {

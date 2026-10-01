@@ -27,7 +27,7 @@ describe("update strategy (T-OPS-04, spec 145)", () => {
     const state = noteUpdateAvailable({ available: null, deferred: false, notice: null }, "2.1.0", true);
     expect(state).toMatchObject({ available: "2.1.0", deferred: true });
     expect(state.notice).toContain("after Live");
-    expect(state.notice).not.toContain("modal");
+    expect(state.notice).not.toContain("dialog");
     const idle = noteUpdateAvailable({ available: null, deferred: false, notice: null }, "2.1.0", false);
     expect(idle.deferred).toBe(false);
   });

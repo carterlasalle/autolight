@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { SPATIAL_PRIMITIVES, parsePrimitiveParams } from "../../show-planner/src/primitives.js";
+import { SPATIAL_PRIMITIVES, parsePrimitiveParams } from "@autolight/show-planner";
 import { envelopeLevel, sampleSpatial } from "./spatial.js";
 import { referenceFrames } from "./goldens.js";
 import { frameHash } from "./index.js";
-import { computeFields } from "../../venue/src/fields.js";
-import { fieldCellsForReference, REFERENCE_ROOMS, referenceById } from "../../venue/src/reference.js";
+import { computeFields } from "@autolight/venue";
+import { fieldCellsForReference, REFERENCE_ROOMS, referenceById } from "@autolight/venue";
 
 describe("T-REND-06 renderer goldens", () => {
   it("renders every spatial primitive without throwing and hashes deterministically", () => {

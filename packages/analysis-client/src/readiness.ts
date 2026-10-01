@@ -62,9 +62,8 @@ export function computeReadiness(inputs: Partial<Record<InputKey, InputEntry>>):
 
 /** Ordered click-through rows for the Library Inspector (spec 137). */
 export function describeInputs(inputs: Partial<Record<InputKey, InputEntry>>): { key: InputKey; status: InputStatus; reason?: string }[] {
-  return INPUT_KEYS.map((key) => ({
-    key,
-    status: statusOf(inputs, key),
-    reason: inputs[key]?.reason,
-  }));
+  return INPUT_KEYS.map((key) => {
+    const reason = inputs[key]?.reason;
+    return reason === undefined ? { key, status: statusOf(inputs, key) } : { key, status: statusOf(inputs, key), reason };
+  });
 }

@@ -38,7 +38,7 @@ export function noteUpdateAvailable(state: UpdateState, version: string, liveAct
     return {
       available: version,
       deferred: true,
-      notice: `update ${version} available; install after Live (no modal, spec 144)`,
+      notice: `update ${version} available; install after Live ends (status notice only, spec 144)`,
     };
   }
   return { available: version, deferred: false, notice: `update ${version} available` };

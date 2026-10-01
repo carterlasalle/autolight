@@ -5,6 +5,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { base85Decode, deobfuscateKey, optionValue, platformPaths, readOptionsFile, resolveLibraryConfig } from "./options.js";
 
@@ -28,8 +29,11 @@ function uvAvailable(): boolean {
 const UV = uvAvailable();
 
 function pythonProbe(script: string, args: string[] = []): string | undefined {
+  // Anchor to this file, not the process cwd: the root vitest run executes
+  // from the repo root, which would resolve to a nonexistent analysis dir.
+  const analysisDir = fileURLToPath(new URL("../../../analysis", import.meta.url));
   try {
-    return execFileSync("uv", ["run", "--project", join(process.cwd(), "..", "..", "analysis"), "python", "-c", script, ...args], {
+    return execFileSync("uv", ["run", "--project", analysisDir, "python", "-c", script, ...args], {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
       timeout: 120_000,

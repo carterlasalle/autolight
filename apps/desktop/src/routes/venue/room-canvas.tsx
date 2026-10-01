@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { rectangleRoom } from "@autolight/venue";
 import type { Room } from "@autolight/venue";
 

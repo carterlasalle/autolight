@@ -8,7 +8,7 @@ import { mirrorCheck, runWizardOnSim } from "./wizard.js";
 import { exportVenue, importVenue, outlineRuns, setLogicalZero } from "./venue.js";
 import type { Venue } from "./venue.js";
 import { normalizeOutline, perimeterLength, polygonArea, polygonCentroid, rectangleRoom, samplePath, validateRoom } from "./room.js";
-import { clubRectangle, curvedRoom, fieldCellsForReference, lRoom, referenceById, squareChunks, squareMirrored, squareRoom } from "./reference.js";
+import { REFERENCE_ROOMS, clubRectangle, curvedRoom, fieldCellsForReference, lRoom, referenceById, squareChunks, squareMirrored, squareRoom } from "./reference.js";
 
 export {
   applyLogicalOrder, fitRunMapping, logicalToPhysical, orderLogical, rotateLogicalZero, topologyForRuns,

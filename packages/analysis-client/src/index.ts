@@ -48,7 +48,7 @@ export interface PendingEntry {
   job: AnalysisJob;
   resolve: (r: AnalyzeResult) => void;
   reject: (e: Error) => void;
-  timer: ReturnType<typeof clearTimeout> | undefined;
+  timer: ReturnType<typeof setTimeout> | undefined;
 }
 
 export interface SupervisorStatus {
@@ -146,23 +146,18 @@ export class AnalysisClient {
         return;
       }
       const routed = frameId(frame);
-      const entry = routed ? this.findEntry(routed) : undefined;
+      if (routed === undefined) return;
+      const entry = this.findEntry(routed);
       if (!entry) return;
-      this.routeFrame(entry, {
+      const routedMsg: { type: string; id: string; artifactPath?: string; error?: string; stage?: string } = {
         type: String(frame.type),
         id: routed,
-        artifactPath:
-          typeof frame["artifactPath"] === "string"
-            ? (frame["artifactPath"] as string)
-            : undefined,
-        error:
-          typeof frame["reason"] === "string"
-            ? (frame["reason"] as string)
-            : typeof frame["error"] === "string"
-              ? (frame["error"] as string)
-              : undefined,
-        stage: typeof frame["stage"] === "string" ? (frame["stage"] as string) : undefined,
-      });
+      };
+      if (typeof frame["artifactPath"] === "string") routedMsg.artifactPath = frame["artifactPath"] as string;
+      if (typeof frame["reason"] === "string") routedMsg.error = frame["reason"] as string;
+      else if (typeof frame["error"] === "string") routedMsg.error = frame["error"] as string;
+      if (typeof frame["stage"] === "string") routedMsg.stage = frame["stage"] as string;
+      this.routeFrame(entry, routedMsg);
       return;
     }
     const legacyId = msg.trackId ?? msg.id;

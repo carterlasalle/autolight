@@ -536,8 +536,11 @@ export class ShowHost {
       result = {
         owner: "a",
         cues: firstMix.cues.map((cue) => ({ ...cue, intensity: cue.intensity * audibleWeight(first.state!) })),
+        dropped: [],
+        weights: { a: 1, b: 0 },
+        blendSpace: "oklab-hue-linear-intensity",
+        layers: [],
       };
-      this.lastWeights = { a: 1, b: 0 };
     } else {
       const second = audible[1]!;
       result = mixDown(firstMix, this.deckMixOf(second));

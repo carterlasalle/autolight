@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@autolight/contracts": "^0.1.0",
+    "@autolight/show-planner": "^0.1.0",
     "@autolight/venue": "^0.1.0"
   },
   "devDependencies": {

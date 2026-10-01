@@ -24,8 +24,8 @@ function loopRun(room: Room, z: number, opts: { closed?: boolean; id?: string; m
   run.id = opts.id ?? run.id;
   run.closed = opts.closed ?? true;
   run.mirroredOf = opts.mirroredOf ?? null;
-  run.gaps = opts.gaps;
-  run.controllerS = opts.controllerS;
+  if (opts.gaps !== undefined) run.gaps = opts.gaps;
+  if (opts.controllerS !== undefined) run.controllerS = opts.controllerS;
   return [run];
 }
 

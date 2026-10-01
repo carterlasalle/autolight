@@ -303,6 +303,7 @@ __metadata:
   resolution: "@autolight/renderer@workspace:packages/renderer"
   dependencies:
     "@autolight/contracts": "npm:^0.1.0"
+    "@autolight/show-planner": "npm:^0.1.0"
     "@autolight/venue": "npm:^0.1.0"
     typescript: "npm:^5.6.3"
     vitest: "npm:^4.1.11"

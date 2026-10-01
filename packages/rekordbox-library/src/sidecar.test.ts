@@ -8,6 +8,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { mapTrackRow, RekordboxReader } from "./db.js";
 import { cipherDriverAvailable, LibraryDbError } from "./driver.js";
@@ -62,7 +63,7 @@ function encryptFixture(root: string, dbPath: string): string {
   const encrypted = join(root, "master-encrypted.db");
   const stdout = execFileSync(
     "uv",
-    ["run", "--project", join(process.cwd(), "..", "..", "analysis"), "python", "-c", EXPORT_SCRIPT, dbPath, encrypted, deobfuscateKey()],
+    ["run", "--project", fileURLToPath(new URL("../../../analysis", import.meta.url)), "python", "-c", EXPORT_SCRIPT, dbPath, encrypted, deobfuscateKey()],
     { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 180_000 },
   );
   expect(stdout).toContain("exported");

@@ -83,17 +83,18 @@ export function frameId(msg: ProtocolFrame): string | undefined {
 let jobSeq = 0;
 
 export function toJob(req: AnalyzeRequest): AnalysisJob {
-  return {
+  const job: AnalysisJob = {
     id: `job-${++jobSeq}`,
     trackId: req.trackId,
     audioPath: req.audioPath,
-    nativeMetadataPath: req.nativeMetadataPath,
     stages: req.stages ?? ["decode", "ml", "dsp", "events", "fusion"],
     configHash: req.configHash ?? "",
     priority: req.priority ?? "preanalysis",
     state: "Queued",
     attempts: 0,
   };
+  if (req.nativeMetadataPath !== undefined) job.nativeMetadataPath = req.nativeMetadataPath;
+  return job;
 }
 
 /** Classify a worker typed failure into an AnalyzeErrorCode (T-ANA-02). */
