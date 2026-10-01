@@ -1,0 +1,70 @@
+{
+  "source": "Deep Symmetry dysentery PRO DJ LINK protocol documentation (field offsets and packet lengths); packets are hand-built byte by byte for this fixture",
+  "note": "The decoder test asserts both the decoded fields and the raw documented offsets, so a decoder or writer regression moves bytes",
+  "vectors": [
+    {
+      "name": "beat packet, 0x60 bytes, port 50001",
+      "kind": "beat",
+      "hex": "5173707431576d4a4f4c0643444a2d32303030000000000000000000000000000003000050c30000a861000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000003201000300",
+      "length": 96,
+      "fields": {
+        "deviceName": "CDJ-2000",
+        "deviceNumber": 3,
+        "nextBeatMs": 500,
+        "secondBeatMs": 250,
+        "pitchRaw": 1048576,
+        "bpm": 128,
+        "beatInBar": 1
+      },
+      "offsets": {
+        "nextBeat100us": { "offset": "0x24", "value": 50000 },
+        "secondBeat100us": { "offset": "0x28", "value": 25000 },
+        "pitch": { "offset": "0x38", "value": 1048576 },
+        "bpmTimes100": { "offset": "0x5a", "value": 12800 },
+        "beatInBar": { "offset": "0x5c", "value": 1 }
+      }
+    },
+    {
+      "name": "status packet, 0x9c bytes, port 50002",
+      "kind": "status",
+      "hex": "5173707431576d4a4f4c0a43444a2d323030300000000000000000000000000000030000000000000100000087d61200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000030000000000300000000000000000000000000000000000000000000000001000000000320200000000000000",
+      "length": 156,
+      "fields": {
+        "deviceName": "CDJ-2000",
+        "deviceNumber": 3,
+        "trackId": 1234567,
+        "trackSlot": 1,
+        "playState": 3,
+        "playing": true,
+        "master": true,
+        "sync": true,
+        "beatInBar": 2
+      },
+      "offsets": {
+        "trackSlot": { "offset": "0x28", "value": 1 },
+        "trackId": { "offset": "0x2c", "value": 1234567 },
+        "playState": { "offset": "0x6f", "value": 3 },
+        "flags": { "offset": "0x75", "value": 48 }
+      }
+    },
+    {
+      "name": "keepalive packet, 0x36 bytes, port 50000",
+      "kind": "keepalive",
+      "hex": "5173707431576d4a4f4c0243444a2d323030300000000000000000000000000000030000000000000000000000000000000000000000",
+      "length": 54,
+      "fields": { "deviceName": "CDJ-2000", "deviceNumber": 3 }
+    },
+    {
+      "name": "reject: 60-byte random datagram (the size the old parser expected)",
+      "kind": "malformed",
+      "hex": "070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707",
+      "length": 60
+    },
+    {
+      "name": "reject: 96 bytes of zeros, no magic header",
+      "kind": "malformed",
+      "hex": "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "length": 96
+    }
+  ]
+}

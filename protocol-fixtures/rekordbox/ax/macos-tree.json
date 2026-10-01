@@ -1,0 +1,30 @@
+{
+  "platform": "macos",
+  "note": "Hand-shaped from Rekordbox's macOS accessibility structure (deck containers with role AXGroup and a deck label, time fields labelled elapsed and remaining, a play/pause button per deck). Not a hardware capture: runbook HW-RB-AX-01 records the real tree and replaces or extends this file.",
+  "root": [
+    {
+      "role": "AXGroup",
+      "position": 0,
+      "label": "Deck 1",
+      "children": [
+        { "role": "AXStaticText", "position": 0, "label": "track title", "value": "Nice For What" },
+        { "role": "AXStaticText", "position": 1, "label": "artist", "value": "octobersveryown" },
+        { "role": "AXStaticText", "position": 2, "label": "elapsed time", "value": "0:12" },
+        { "role": "AXStaticText", "position": 3, "label": "remaining time", "value": "-2:48" },
+        { "role": "AXButton", "position": 4, "label": "pause", "value": "" }
+      ]
+    },
+    {
+      "role": "AXGroup",
+      "position": 1,
+      "label": "Deck 2",
+      "children": [
+        { "role": "AXStaticText", "position": 0, "label": "track title", "value": "Homecoming (feat. Chris Martin)" },
+        { "role": "AXStaticText", "position": 1, "label": "artist", "value": "Kanye West" },
+        { "role": "AXStaticText", "position": 2, "label": "elapsed time", "value": "1:05" },
+        { "role": "AXStaticText", "position": 3, "label": "remaining time", "value": "-0:35" },
+        { "role": "AXButton", "position": 4, "label": "play", "value": "" }
+      ]
+    }
+  ]
+}

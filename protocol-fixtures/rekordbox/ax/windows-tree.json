@@ -1,0 +1,29 @@
+{
+  "platform": "windows",
+  "note": "Hand-shaped from Rekordbox's Windows UI Automation structure (UIA_Pane deck containers, Text elements, Button elements). Not a hardware capture: runbook HW-RB-AX-01 records the real tree and the element dump for the UNAVAILABLE_ON_THIS_DEVICE evidence if the elements are not exposed.",
+  "root": [
+    {
+      "role": "UIA_Pane",
+      "position": 0,
+      "label": "Deck 1",
+      "children": [
+        { "role": "Text", "position": 0, "label": "track title", "value": "Nice For What" },
+        { "role": "Text", "position": 1, "label": "artist", "value": "octobersveryown" },
+        { "role": "Text", "position": 2, "label": "elapsed", "value": "+0:12" },
+        { "role": "Text", "position": 3, "label": "remaining", "value": "-2:48" },
+        { "role": "Button", "position": 4, "label": "Pause", "value": "" }
+      ]
+    },
+    {
+      "role": "UIA_Pane",
+      "position": 1,
+      "label": "Deck 2",
+      "children": [
+        { "role": "Text", "position": 0, "label": "track title", "value": "Homecoming" },
+        { "role": "Text", "position": 1, "label": "artist", "value": "Kanye West" },
+        { "role": "Text", "position": 2, "label": "elapsed", "value": "1:05" },
+        { "role": "Button", "position": 3, "label": "Play", "value": "" }
+      ]
+    }
+  ]
+}

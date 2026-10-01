@@ -1,0 +1,7 @@
+{
+  "platform": "macos",
+  "note": "Hand-shaped: a tree with no deck container, used for the malformed-input path (the provider must reject and count it instead of throwing).",
+  "root": [
+    { "role": "AXUnknown", "position": 0, "value": "" }
+  ]
+}

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { compositeToDeckState, parseFixture, replayFixture, isSupported, unverifiedWarning, axBeatToPlayhead, combineTransport } from "./index.js";
+import { compositeToDeckState, parseFixture, replayFixture, replayFixtureStep, isSupported, unverifiedWarning, axBeatToPlayhead, combineTransport } from "./index.js";
 
 const base: Record<string, unknown> = {
   rekordboxVersion: "7.2.19",
@@ -54,6 +54,20 @@ describe("rekordbox-live", () => {
     const both = parseFixture(JSON.parse(readFileSync(join(dir, "both-decks-loaded", "capture.json"), "utf8")));
     expect(replayFixture(both, 10)).toHaveLength(2);
   });
+  it("replays at 1x, 2x, 10x and step on a virtual clock (§128)", () => {
+    const dir = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "protocol-fixtures", "rekordbox", "7.2.10", "macos");
+    const both = parseFixture(JSON.parse(readFileSync(join(dir, "both-decks-loaded", "capture.json"), "utf8")));
+    const at1 = replayFixture(both, 1, 100);
+    const at2 = replayFixture(both, 2, 100);
+    const at10 = replayFixture(both, 10, 100);
+    expect(at1[1]!.receivedAtNs - at1[0]!.receivedAtNs).toBe(100_000_000n);
+    expect(at2[1]!.receivedAtNs - at2[0]!.receivedAtNs).toBe(50_000_000n);
+    expect(at10[1]!.receivedAtNs - at10[0]!.receivedAtNs).toBe(10_000_000n);
+    expect(at1[1]!.receivedAtNs).toBeGreaterThan(at1[0]!.receivedAtNs);
+    const stepped = [...replayFixtureStep(both, 250)];
+    expect(stepped.map((s) => s.receivedAtNs)).toEqual(replayFixture(both, 1, 250).map((s) => s.receivedAtNs));
+    expect(stepped.every((s) => s.source === "rekordbox")).toBe(true);
+  });
   it("decodes composite snapshots to DeckState (§10, live 7.2.10 tracks)", () => {
     const { state, raw } = compositeToDeckState({
       deckId: 2, row: { rekordboxId: "231828222", title: "Homecoming (feat. Chris Martin)", artist: "Kanye West" },
@@ -65,9 +79,9 @@ describe("rekordbox-live", () => {
     expect(state.effectiveBpm).toBe(173.98);
     expect(raw).toMatchObject({ provider: "composite-flx4" });
   });
-  it("maps AX elapsed onto the ANLZ grid, null when unreadable", () => {
+  it("maps AX elapsed onto the ANLZ grid as fractional beats, null when unreadable", () => {
     const grid = [{ sourceTimeMs: 0 }, { sourceTimeMs: 345 }, { sourceTimeMs: 690 }];
-    expect(axBeatToPlayhead({ deckId: 1, elapsedSeconds: 0.5, playing: true, readable: true, sampledAtNs: 1n }, grid)).toBe(2);
+    expect(axBeatToPlayhead({ deckId: 1, elapsedSeconds: 0.5, playing: true, readable: true, sampledAtNs: 1n }, grid)).toBeCloseTo(2.449, 3);
     expect(axBeatToPlayhead({ deckId: 1, elapsedSeconds: null, playing: null, readable: false, sampledAtNs: 1n }, grid)).toBeNull();
   });
   it("combines prolink > ax > estimator without fabricating", () => {

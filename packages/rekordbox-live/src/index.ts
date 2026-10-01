@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { DeckState } from "@autolight/contracts";
 import { deckStateSchema } from "@autolight/contracts";
 import { rowToIdentity } from "@autolight/rekordbox-library";
+import { axFractionalBeat } from "./ax.js";
 
 // Protocol fixture envelope. Raw capture is required: a fixture with an
 // empty capture fails the fixture lint (T-TRU-15, T-QA-03), and replay
@@ -30,6 +31,12 @@ export function replayFixture(fixture: ProtocolFixture, rate = 1, stepMs = 100):
     ...e,
     receivedAtNs: baseNs + BigInt(Math.round((i * stepMs * 1_000_000) / rate)),
   }));
+}
+
+// Step mode (§128): the same virtual clock, but one event per call so a
+// harness can advance by hand and inspect between events.
+export function* replayFixtureStep(fixture: ProtocolFixture, stepMs = 100): Generator<DeckState> {
+  for (const state of replayFixture(fixture, 1, stepMs)) yield state;
 }
 
 // Unknown-field retention (§9.5): decoder output keeps raw alongside normalized.
@@ -123,13 +130,7 @@ export interface AxBeatSample {
 
 export function axBeatToPlayhead(sample: AxBeatSample, grid: { sourceTimeMs: number }[]): number | null {
   if (!sample.readable || sample.elapsedSeconds === null) return null;
-  const t = sample.elapsedSeconds * 1000;
-  let beat = 1;
-  for (let i = 0; i < grid.length; i++) {
-    if ((grid[i]?.sourceTimeMs ?? Infinity) <= t) beat = i + 1;
-    else break;
-  }
-  return beat;
+  return axFractionalBeat(sample.elapsedSeconds, grid);
 }
 
 // PRO DJ LINK Virtual-CDJ capture (§ADR-001 slice 2, after Deep Symmetry's
@@ -180,3 +181,18 @@ export function combineTransport(opts: {
   }
   return { source: "preview", beat: opts.estimatedBeat, playing: null, bpm: opts.estimatedBpm };
 }
+
+// T-LIVE-01 to T-LIVE-08 surface: provider contract and shared suite, the
+// DS-01 fusion engine and manager, the rkbx_link OSC consumer with its setup
+// verification, the PRO DJ LINK decoder and provider, the AX tree reader and
+// provider, and the Rekordbox agent API client.
+export * from "./providers.js";
+export * from "./contract-suite.js";
+export * from "./fusion.js";
+export * from "./osc.js";
+export * from "./rkbx-osc.js";
+export * from "./prolink.js";
+export * from "./prolink-provider.js";
+export * from "./ax.js";
+export * from "./ax-provider.js";
+export * from "./agent-api.js";
