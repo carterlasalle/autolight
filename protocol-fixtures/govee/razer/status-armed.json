@@ -1,0 +1,13 @@
+{
+  "description": "Undocumented status reply carrying B2=1.",
+  "json": {
+    "msg": {
+      "cmd": "status",
+      "data": {
+        "onOff": 1,
+        "brightness": 80,
+        "pt": "uwABsgEJ"
+      }
+    }
+  }
+}

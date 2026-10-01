@@ -1,0 +1,8 @@
+{
+  "hex": "bb000eb40103ff00000000ff00050000ff09f0",
+  "base64": "uwAOtAED/wAAAAD/AAUAAP8J8A==",
+  "description": "B4 zoned paint, 3 entries, gradient 1.",
+  "opcode": "0xb4",
+  "gradient": 1,
+  "entries": 3
+}

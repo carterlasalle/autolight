@@ -1,0 +1,8 @@
+{
+  "hex": "bb003eb0011400ff000df2351be46a28d79f36c9d443bc0951ae3e5ea1736b94a87986dd867912946b47a15e7cae51b1bc43e6c9361bd72850e41b85f20dbaff00efe0",
+  "base64": "uwA+sAEUAP8ADfI1G+RqKNefNsnUQ7wJUa4+XqFza5SoeYbdhnkSlGtHoV58rlGxvEPmyTYb1yhQ5BuF8g26/wDv4A==",
+  "description": "B0 paint, 20 zones, gradient 1, red ramp.",
+  "opcode": "0xb0",
+  "gradient": 1,
+  "zones": 20
+}

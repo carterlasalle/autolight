@@ -1,0 +1,9 @@
+{
+  "hex": "bb0001b20109",
+  "base64": "uwABsgEJ",
+  "description": "B2 armed status frame.",
+  "opcode": "0xb2",
+  "payload": [
+    1
+  ]
+}

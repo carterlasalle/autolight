@@ -1,0 +1,9 @@
+{
+  "hex": "bb0001b1010a",
+  "base64": "uwABsQEK",
+  "description": "B1 arm on=true. Pinned toolkit vector from wp03 header.",
+  "opcode": "0xb1",
+  "payload": [
+    1
+  ]
+}

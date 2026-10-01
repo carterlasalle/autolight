@@ -1,0 +1,8 @@
+{
+  "hex": "bb0005b0010100ff00f1",
+  "base64": "uwAFsAEBAP8A8Q==",
+  "description": "B0 paint, 1 zones, gradient 1, red ramp.",
+  "opcode": "0xb0",
+  "gradient": 1,
+  "zones": 1
+}

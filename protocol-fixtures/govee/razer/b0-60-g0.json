@@ -1,0 +1,8 @@
+{
+  "hex": "bb00b6b0003c00ff0004fb3509f66a0df29f11eed416e9091ae53e1ee17323dca827d8dd2bd41230cf4734cb7c38c7b13dc2e641be1b45ba5049b6854eb1ba52adef56a9245ba4595fa08e639cc36897f86c932d708f62758a977986cc7d8201827d3686796b8a75a08f70d5936c0a97683f9c6374a05fa9a45bdea95613ad5248b14e7db649b2ba45e7be411cc23d51c73886cb34bbcf30f0d42b25d8275adc238fe11ec4e51af9e9162eee1163f20d98f609cdfb0402ff003791",
+  "base64": "uwC2sAA8AP8ABPs1CfZqDfKfEe7UFukJGuU+HuFzI9yoJ9jdK9QSMM9HNMt8OMexPcLmQb4bRbpQSbaFTrG6Uq3vVqkkW6RZX6COY5zDaJf4bJMtcI9idYqXeYbMfYIBgn02hnlrinWgj3DVk2wKl2g/nGN0oF+ppFveqVYTrVJIsU59tkmyukXnvkEcwj1RxziGyzS7zzDw1Csl2Cda3COP4R7E5Rr56RYu7hFj8g2Y9gnN+wQC/wA3kQ==",
+  "description": "B0 paint, 60 zones, gradient 0, red ramp.",
+  "opcode": "0xb0",
+  "gradient": 0,
+  "zones": 60
+}

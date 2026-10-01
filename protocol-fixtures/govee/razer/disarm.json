@@ -1,0 +1,9 @@
+{
+  "hex": "bb0001b1000b",
+  "base64": "uwABsQAL",
+  "description": "B1 arm on=false.",
+  "opcode": "0xb1",
+  "payload": [
+    0
+  ]
+}

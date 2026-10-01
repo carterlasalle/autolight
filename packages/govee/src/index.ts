@@ -1,17 +1,98 @@
-// LAN opcodes (§46); newest-state-wins coalescing (§51).
+// Razer segment stream (WP03, toolkit lan.md 2.1-2.3). Provenance: govee-toolkit
+// MIT (Damien Thery, v0.5.0): envelope UDP JSON to device:4003
+// {"msg":{"cmd":"razer","data":{"pt":"<base64>"}}}; raw frame
+// BB <len_hi> <len_lo> <opcode> <payload> <xor>, len is the payload length
+// only (16-bit big endian), xor covers every preceding byte including BB.
+// Arm golden vector: bb 00 01 b1 01 0a.
 export const OPCODE = { ARM: 0xb1, RGB_STREAM: 0xb0, ZONED: 0xb4, ARM_STATUS: 0xb2 } as const;
 export const PORTS = { DISCOVER_MCAST: 4001, DISCOVER_RESP: 4002, CONTROL: 4003 } as const;
 
-// XOR checksum over length+opcode+payload (§46 frame family BB <len> <op> <payload> <xor>).
-export function encodeFrame(opcode: number, payload: Uint8Array): Uint8Array {
-  const len = 1 + payload.length + 1;
-  const out = new Uint8Array(2 + len);
-  out[0] = 0xbb; out[1] = len; out[2] = opcode;
-  out.set(payload, 3);
+export function encodeRaw(opcode: number, payload: Uint8Array): Uint8Array {
+  const out = new Uint8Array(1 + 2 + 1 + payload.length + 1);
+  out[0] = 0xbb;
+  out[1] = (payload.length >> 8) & 0xff;
+  out[2] = payload.length & 0xff;
+  out[3] = opcode;
+  out.set(payload, 4);
   let xor = 0;
-  for (let i = 1; i < out.length - 1; i++) xor ^= out[i]!;
-  out[out.length - 1] = xor;
+  for (let i = 0; i < out.length - 1; i++) xor ^= out[i]!;
+  out[out.length - 1] = xor & 0xff;
   return out;
+}
+
+export function decodeRaw(frame: Uint8Array): { opcode: number; payload: Uint8Array } | null {
+  if (frame.length < 5) return null;
+  if (frame[0] !== 0xbb) return null;
+  const len = (((frame[1] ?? 0) << 8) | (frame[2] ?? 0)) & 0xffff;
+  if (frame.length !== 5 + len) return null;
+  let xor = 0;
+  for (let i = 0; i < frame.length - 1; i++) xor ^= frame[i]!;
+  if ((frame[frame.length - 1] ?? -1) !== (xor & 0xff)) return null;
+  return { opcode: frame[3]!, payload: frame.slice(4, 4 + len) };
+}
+
+export function envelope(raw: Uint8Array): string {
+  const b64 = Buffer.from(raw).toString("base64");
+  return JSON.stringify({ msg: { cmd: "razer", data: { pt: b64 } } });
+}
+
+export function arm(on: boolean): Uint8Array {
+  return encodeRaw(OPCODE.ARM, new Uint8Array([on ? 1 : 0]));
+}
+
+export function paint(colors: Uint8Array, gradient = 0): Uint8Array {
+  if (colors.length % 3 !== 0) throw new RangeError(`paint needs 3 bytes per zone, got ${colors.length}`);
+  const n = colors.length / 3;
+  if (n > 255) throw new RangeError(`B0 nbSeg is one byte, got ${n} zones`);
+  const payload = new Uint8Array(2 + colors.length);
+  payload[0] = gradient;
+  payload[1] = n;
+  payload.set(colors, 2);
+  return encodeRaw(OPCODE.RGB_STREAM, payload);
+}
+
+export function paintZoned(entries: { r: number; g: number; b: number; zone: number }[], gradient = 0): Uint8Array {
+  if (entries.length > 255) throw new RangeError(`B4 nbSeg is one byte, got ${entries.length} entries`);
+  const payload = new Uint8Array(2 + entries.length * 4);
+  payload[0] = gradient;
+  payload[1] = entries.length;
+  entries.forEach((e, i) => {
+    payload[2 + i * 4] = e.r;
+    payload[2 + i * 4 + 1] = e.g;
+    payload[2 + i * 4 + 2] = e.b;
+    payload[2 + i * 4 + 3] = e.zone;
+  });
+  return encodeRaw(OPCODE.ZONED, payload);
+}
+export function parseStatus(raw: unknown): { onOff: boolean; brightness: number; armed: boolean } | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  if (!("msg" in raw) || typeof raw.msg !== "object" || raw.msg === null) return null;
+  const msg = raw.msg as { cmd?: unknown; data?: unknown };
+  if (msg.cmd !== "status" || typeof msg.data !== "object" || msg.data === null) return null;
+  const data = msg.data as { onOff?: unknown; brightness?: unknown; pt?: unknown };
+  let armed = false;
+  if (typeof data.pt === "string" && data.pt.length > 0) {
+    let bytes: Uint8Array | null = null;
+    try {
+      bytes = new Uint8Array(Buffer.from(data.pt, "base64"));
+    } catch {
+      bytes = null;
+    }
+    const decoded = bytes ? decodeRaw(bytes) : null;
+    if (decoded !== null && decoded.opcode === OPCODE.ARM_STATUS && decoded.payload.length >= 1) {
+      armed = decoded.payload[0] === 1;
+    }
+  }
+  return {
+    onOff: data.onOff === 1,
+    brightness: typeof data.brightness === "number" ? data.brightness : 0,
+    armed,
+  };
+}
+
+// Legacy alias kept until T-GOV-02 deletes encodeFrame (M1): maps to encodeRaw.
+export function encodeFrame(opcode: number, payload: Uint8Array): Uint8Array {
+  return encodeRaw(opcode, payload);
 }
 
 // Newest-state-wins: keep only latest pending frame (§51, §149).
