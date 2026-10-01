@@ -71,12 +71,12 @@ Milestone contents and exit proofs are in `README.md`.
 | T-GOV-01 | Bring in govee-toolkit | `wp03-govee-lan.md` | M1 | `TODO` | none yet | Closes F-GOV-01 |
 | T-GOV-02 | Native TypeScript razer engine | `wp03-govee-lan.md` | M1 | `TODO` | none yet | Closes F-GOV-02 |
 | T-GOV-03 | Engine switch DS-02 and parity | `wp03-govee-lan.md` | M1 | `TODO` | none yet |  |
-| T-GOV-04 | Persistent sockets | `wp03-govee-lan.md` | M1 | `TODO` | none yet | Closes F-GOV-06, F-GOV-13 |
-| T-GOV-05 | Discovery ladder | `wp03-govee-lan.md` | M1 | `TODO` | none yet | Closes F-GOV-07, F-GOV-25 |
-| T-GOV-06 | Device registry and health | `wp03-govee-lan.md` | M1 | `TODO` | none yet | Closes F-GOV-09, F-GOV-13, F-RUN-10 |
-| T-GOV-07 | Read-back | `wp03-govee-lan.md` | M1 | `TODO` | none yet | Closes F-GOV-08 |
-| T-GOV-08 | Stream lifecycle and newest-frame-wins | `wp03-govee-lan.md` | M1 | `TODO` | none yet | Closes F-GOV-03, F-GOV-13, F-GOV-14, F-GOV-22, F-GOV-23 |
-| T-GOV-09 | Blackout, white, intensity and master brightness policy | `wp03-govee-lan.md` | M1 | `TODO` | none yet | Closes F-GOV-05, F-GOV-16, F-GOV-30 |
+| T-GOV-04 | Persistent sockets | `wp03-govee-lan.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-GOV-04/README.md` | Closes F-GOV-06, F-GOV-13 |
+| T-GOV-05 | Discovery ladder | `wp03-govee-lan.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-GOV-05/README.md` | Closes F-GOV-07, F-GOV-25 |
+| T-GOV-06 | Device registry and health | `wp03-govee-lan.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-GOV-06/README.md` | Closes F-GOV-09, F-GOV-13, F-RUN-10 |
+| T-GOV-07 | Read-back | `wp03-govee-lan.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-GOV-07/README.md` | Closes F-GOV-08 |
+| T-GOV-08 | Stream lifecycle and newest-frame-wins | `wp03-govee-lan.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-GOV-08/README.md` | Closes F-GOV-03, F-GOV-13, F-GOV-14, F-GOV-22, F-GOV-23 |
+| T-GOV-09 | Blackout, white, intensity and master brightness policy | `wp03-govee-lan.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-GOV-09/README.md` | Closes F-GOV-05, F-GOV-16, F-GOV-30 |
 | T-GOV-10 | Capability probe and verified fallback | `wp03-govee-lan.md` | M1 | `TODO` | none yet | Closes F-GOV-04, F-GOV-24, F-X-09 |
 | T-GOV-11 | Qualification wizard runner | `wp03-govee-lan.md` | M1 | `TODO` | none yet | Closes F-GOV-11, F-GOV-12, F-GOV-22, F-GOV-24, F-X-07 |
 | T-GOV-12 | IDENTIFY, TEST CHASE, RECALIBRATE, identify walk | `wp03-govee-lan.md` | M1 | `TODO` | none yet | Closes F-GOV-10 |
