@@ -1,4 +1,15 @@
 {
-  "bugs": [],
+  "bugs": [
+    {
+      "id": "BC-000001",
+      "title": "Runtime clock age divided by 1000: nanosecond state age read as milliseconds",
+      "family": "",
+      "detectors": [],
+      "severity": "medium",
+      "symbols": [],
+      "subsystem": "",
+      "invariant": ""
+    }
+  ],
   "families": []
 }
