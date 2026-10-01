@@ -43,9 +43,9 @@ Milestone contents and exit proofs are in `README.md`.
 | T-TRU-05 | Capability manifest and generated README claims | `wp00-truth-and-gates.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-TRU-05/README.md` | Closes F-DOC-02, F-APP-13, F-QA-14 |
 | T-TRU-06 | Anti-pattern rule pack | `wp00-truth-and-gates.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-TRU-06/README.md` | Closes F-APP-13, F-DOC-02, F-QA-14 |
 | T-TRU-07 | Vitest configuration and coverage | `wp00-truth-and-gates.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-TRU-07/README.md` | Closes F-QA-01, F-QA-08, F-QA-14 |
-| T-TRU-08 | Mutation testing | `wp00-truth-and-gates.md` | M0 | `TODO` | none yet | Closes F-QA-08, F-QA-14 |
-| T-TRU-10 | Security and license scanning | `wp00-truth-and-gates.md` | M0 | `TODO` | none yet | Closes F-QA-14 |
-| T-TRU-11 | CI pipeline rewrite | `wp00-truth-and-gates.md` | M0 | `TODO` | none yet | Closes F-OPS-08, F-QA-06, F-QA-14 |
+| T-TRU-08 | Mutation testing | `wp00-truth-and-gates.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-TRU-08/README.md` | Closes F-QA-08, F-QA-14 |
+| T-TRU-10 | Security and license scanning | `wp00-truth-and-gates.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-TRU-10/README.md` | Closes F-QA-14 |
+| T-TRU-11 | CI pipeline rewrite | `wp00-truth-and-gates.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-TRU-11/README.md` | Closes F-OPS-08, F-QA-06, F-QA-14 |
 | T-TRU-13 | Record the scars in AGENTS.md | `wp00-truth-and-gates.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-TRU-13/README.md` | Closes F-DOC-06 |
 | T-TRU-15 | Replace the fake tests | `wp00-truth-and-gates.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-TRU-15/README.md` | Closes F-QA-02, F-QA-03, F-PLAN-12, F-LIVE-02 |
 | T-TRU-16 | Portable Python tests | `wp00-truth-and-gates.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-TRU-16/README.md` | Closes F-ANA-25 |
