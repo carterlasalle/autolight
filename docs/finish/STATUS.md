@@ -63,7 +63,7 @@ Milestone contents and exit proofs are in `README.md`.
 | --- | --- | --- | --- | --- | --- | --- |
 | T-CFG-06 | Decision switch framework | `03-config-and-decisions.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-CFG-06/README.md` | Closes F-DEC-01 |
 | T-ARC-04 | Snapshots and renderer reload survival | `04-target-architecture.md` | M1 | `TODO` | none yet | Closes F-APP-02 |
-| T-ARC-05 | Main services and layout | `04-target-architecture.md` | M1 | `TODO` | none yet | Closes F-APP-01 |
+| T-ARC-05 | Main services and layout | `04-target-architecture.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-ARC-05/README.md` | Closes F-APP-01 |
 | T-ARC-06 | Clock strategies and jitter measurement | `04-target-architecture.md` | M1 | `TODO` | none yet |  |
 | T-TRU-03 | No echo IPC | `wp00-truth-and-gates.md` | M1 | `TODO` | none yet | Closes F-APP-04 |
 | T-TRU-12 | Runtime invariants | `wp00-truth-and-gates.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-TRU-12/README.md` | Closes F-QA-14 |
