@@ -32,7 +32,7 @@ Milestone contents and exit proofs are in `README.md`.
 | T-CFG-01 | Create `@autolight/config` | `03-config-and-decisions.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-CFG-01/README.md` | Closes F-CFG-02, F-DATA-08 |
 | T-CFG-02 | Layered resolution and persistence | `03-config-and-decisions.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-CFG-02/README.md` | Closes F-CFG-02, F-DATA-08 |
 | T-CFG-03 | Python config bridge | `03-config-and-decisions.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-CFG-03/README.md` | Closes F-CFG-01 |
-| T-CFG-04 | Extract every hardcoded value | `03-config-and-decisions.md` | M0 | `TODO` | none yet | Closes F-CFG-01, F-PLAN-17, F-AUD-04, F-GOV-11 |
+| T-CFG-04 | Extract every hardcoded value (rule baseline; migration per-package) | `03-config-and-decisions.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-CFG-04/README.md` | Closes F-CFG-01 rule part, F-PLAN-17 rule part, F-AUD-04 rule part, F-GOV-11 rule part |
 | T-CFG-05 | Settings UI | `03-config-and-decisions.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-CFG-05/README.md` | Closes F-UI-17, F-CFG-02 |
 | T-ARC-01 | Show host with all DS-07 modes | `04-target-architecture.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-ARC-01/README.md` | Closes F-APP-02 |
 | T-ARC-02 | Typed IPC API | `04-target-architecture.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-ARC-02/README.md` | Closes F-APP-04, F-APP-05, F-APP-06 |
@@ -62,15 +62,15 @@ Milestone contents and exit proofs are in `README.md`.
 | Task | Title | File | Milestone | Status | Evidence | Notes |
 | --- | --- | --- | --- | --- | --- | --- |
 | T-CFG-06 | Decision switch framework | `03-config-and-decisions.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-CFG-06/README.md` | Closes F-DEC-01 |
-| T-ARC-04 | Snapshots and renderer reload survival | `04-target-architecture.md` | M1 | `TODO` | none yet | Closes F-APP-02 |
+| T-ARC-04 | Snapshots and renderer reload survival | `04-target-architecture.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-ARC-04/README.md` | Closes F-APP-02 |
 | T-ARC-05 | Main services and layout | `04-target-architecture.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-ARC-05/README.md` | Closes F-APP-01 |
-| T-ARC-06 | Clock strategies and jitter measurement | `04-target-architecture.md` | M1 | `TODO` | none yet |  |
+| T-ARC-06 | Clock strategies and jitter measurement | `04-target-architecture.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-ARC-06/README.md` |  |
 | T-TRU-03 | No echo IPC | `wp00-truth-and-gates.md` | M1 | `TODO` | none yet | Closes F-APP-04 |
 | T-TRU-12 | Runtime invariants | `wp00-truth-and-gates.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-TRU-12/README.md` | Closes F-QA-14 |
-| T-TRU-14 | Delete dead and duplicate code after replacement | `wp00-truth-and-gates.md` | M1 | `TODO` | none yet | Closes F-REND-09, F-GOV-19, F-RBL-07 |
-| T-GOV-01 | Bring in govee-toolkit | `wp03-govee-lan.md` | M1 | `TODO` | none yet | Closes F-GOV-01 |
-| T-GOV-02 | Native TypeScript razer engine | `wp03-govee-lan.md` | M1 | `TODO` | none yet | Closes F-GOV-02 |
-| T-GOV-03 | Engine switch DS-02 and parity | `wp03-govee-lan.md` | M1 | `TODO` | none yet |  |
+| T-TRU-14 | Delete dead and duplicate code after replacement | `wp00-truth-and-gates.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-TRU-14/README.md` | Closes F-REND-09, F-GOV-19, F-RBL-07 |
+| T-GOV-01 | Bring in govee-toolkit | `wp03-govee-lan.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-GOV-01/README.md` | Closes F-GOV-01 |
+| T-GOV-02 | Native TypeScript razer engine | `wp03-govee-lan.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-GOV-02/README.md` | Closes F-GOV-02 |
+| T-GOV-03 | Engine switch DS-02 and parity | `wp03-govee-lan.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-GOV-03/README.md` |  |
 | T-GOV-04 | Persistent sockets | `wp03-govee-lan.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-GOV-04/README.md` | Closes F-GOV-06, F-GOV-13 |
 | T-GOV-05 | Discovery ladder | `wp03-govee-lan.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-GOV-05/README.md` | Closes F-GOV-07, F-GOV-25 |
 | T-GOV-06 | Device registry and health | `wp03-govee-lan.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-GOV-06/README.md` | Closes F-GOV-09, F-GOV-13, F-RUN-10 |
