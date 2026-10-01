@@ -34,7 +34,7 @@ Milestone contents and exit proofs are in `README.md`.
 | T-CFG-03 | Python config bridge | `03-config-and-decisions.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-CFG-03/README.md` | Closes F-CFG-01 |
 | T-CFG-04 | Extract every hardcoded value | `03-config-and-decisions.md` | M0 | `TODO` | none yet | Closes F-CFG-01, F-PLAN-17, F-AUD-04, F-GOV-11 |
 | T-CFG-05 | Settings UI | `03-config-and-decisions.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-CFG-05/README.md` | Closes F-UI-17, F-CFG-02 |
-| T-ARC-01 | Show host with all DS-07 modes | `04-target-architecture.md` | M0 | `TODO` | none yet | Closes F-APP-02 |
+| T-ARC-01 | Show host with all DS-07 modes | `04-target-architecture.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-ARC-01/README.md` | Closes F-APP-02 |
 | T-ARC-02 | Typed IPC API | `04-target-architecture.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-ARC-02/README.md` | Closes F-APP-04, F-APP-05, F-APP-06 |
 | T-ARC-03 | Startup, shutdown and crash policy | `04-target-architecture.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-ARC-03/README.md` | Closes F-APP-01, F-OPS-03, F-OPS-09 |
 | T-TRU-01 | Coverage tool and status discipline in CI | `wp00-truth-and-gates.md` | M0 | `DONE-VERIFIED` | `docs/finish/evidence/T-TRU-01/README.md` | Closes F-DOC-06 |
