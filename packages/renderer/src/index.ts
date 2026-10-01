@@ -1,76 +1,135 @@
 import type { Fixture, ShowCue, ShowPlan } from "@autolight/contracts";
 import { globalCellOrder, resolveTarget, type OrderedCell } from "@autolight/venue";
+import {
+  cellKey,
+  compositeLayers,
+  layerForCue,
+  linearToSrgbByte,
+  scaleLinear,
+  srgbByteToLinear,
+  type Contribution,
+  type LayerContribution,
+} from "./layers.js";
+
+// The layer stack is the renderer's public compositing surface (T-REND-01).
+export * from "./layers.js";
 
 // Logical frame at arbitrary beat (§58: random-access state function).
-// Blackout = RGB 0,0,0, never power-off (§47). Linear-light intensity scale (§49).
-function linearScale(v: number, intensity: number): number {
-  const lin = Math.pow(v / 255, 2.2) * intensity;
-  return Math.round(Math.pow(Math.max(0, Math.min(1, lin)), 1 / 2.2) * 255);
+// Blackout = RGB 0,0,0, never power-off (§47). Darkness is a first-class layer
+// contribution (T-REND-01): it replaces with black at its alpha instead of
+// competing on brightness.
+
+export interface RenderOverrides {
+  /** Manual override layer: one colour at one intensity, replacing the stack. */
+  manual?: { color: [number, number, number]; intensity: number } | null;
+  /** Master intensity, applied in the renderer's last layer every frame. */
+  masterIntensity?: number;
 }
 
 // Primitive-aware body (§31): each cue type paints its target cells with its
-// own spatial shape. Venue targets route via resolveTarget; the top-priority
-// cue wins per cell, so breakdowns mute chases beneath them.
-function paintCue(
+// own spatial shape and lands on its spec 33 layer.
+function cueLayerContribution(
   cue: ShowCue,
   beat: number,
   fixtures: Fixture[],
-  lit: Map<string, number>,
   orderIndex: Map<string, number>,
   orderLen: number,
-): void {
+  topHue: number,
+  subHue: number,
+  whiteOut: boolean,
+): LayerContribution {
   const cells = resolveTarget(fixtures, cue.target);
   const progress = cue.durationBeats > 0 ? (beat - cue.startBeat) / cue.durationBeats : 0;
+  const isBlackout = cue.type === "blackout";
+  const isDip = cue.type === "dip";
+  const contribution = new Map<string, Contribution>();
   for (const cell of cells) {
-    const key = `${cell.fixtureId}:${cell.cellIndex}`;
+    const key = cellKey(cell.fixtureId, cell.cellIndex);
     const idx = orderIndex.get(key) ?? 0;
     let level = cue.intensity;
-    if (cue.type === "blackout") level = 0;
-    else if (cue.type === "dip") level = cue.intensity * 0.25;
+    if (isBlackout) level = 0;
+    else if (isDip) level = cue.intensity;
     else if (cue.type === "breakdown-look") level = cue.intensity * 0.6;
     else if (cue.type === "build-ramp") level = cue.intensity * Math.min(1, progress + 0.2);
     else if (cue.type === "chase-flip" || cue.type === "impact" || cue.type === "white-hit") {
       const phase = (beat - cue.startBeat + idx / Math.max(1, orderLen)) % 1;
       level = cue.intensity * (phase < 0.5 ? 1 : 0.15);
     }
-    lit.set(key, Math.max(lit.get(key) ?? 0, Math.min(1, level)));
+    const bounded = Math.min(1, Math.max(0, level));
+    const shape = 0.75 + (0.25 * idx) / Math.max(1, orderLen - 1);
+    if (isBlackout) {
+      contribution.set(key, { color: [0, 0, 0], alpha: 1, blend: "replace" });
+      continue;
+    }
+    if (isDip) {
+      // A dip's intensity is the light that remains: multiply in linear space.
+      contribution.set(key, { color: [bounded, bounded, bounded], alpha: 1, blend: "multiply" });
+      continue;
+    }
+    // Restrained palette (§28-29): at most 2 hues + white, alternating cells.
+    const [r, g, b] = whiteOut ? [255, 255, 255] : hsv2rgb(idx % 2 === 0 ? topHue : subHue, 0.85, 1);
+    contribution.set(key, {
+      color: [srgbByteToLinear(r), srgbByteToLinear(g), srgbByteToLinear(b)],
+      alpha: Math.min(1, Math.max(0, bounded * shape)),
+      blend: "over",
+    });
   }
+  return { layer: layerForCue(cue), cells: contribution };
 }
 
-export function renderFrame(plan: ShowPlan, beat: number, fixtures: Fixture[]): Map<string, Uint8Array> {
+function manualLayer(
+  manual: { color: [number, number, number]; intensity: number },
+  order: OrderedCell[],
+): LayerContribution {
+  const alpha = Math.min(1, Math.max(0, manual.intensity));
+  const cells = new Map<string, Contribution>();
+  for (const cell of order) {
+    cells.set(cellKey(cell.fixtureId, cell.cellIndex), {
+      color: [
+        srgbByteToLinear(manual.color[0]),
+        srgbByteToLinear(manual.color[1]),
+        srgbByteToLinear(manual.color[2]),
+      ],
+      alpha,
+      blend: "replace",
+    });
+  }
+  return { layer: "manual", cells };
+}
+
+export function renderFrame(
+  plan: ShowPlan,
+  beat: number,
+  fixtures: Fixture[],
+  overrides: RenderOverrides = {},
+): Map<string, Uint8Array> {
   const out = new Map<string, Uint8Array>();
   for (const f of fixtures) out.set(f.id, new Uint8Array(f.cells.length * 3));
   const active = plan.cues
     .filter((c) => beat >= c.startBeat && beat < c.startBeat + c.durationBeats)
     .sort((a, b) => b.priority - a.priority);
-  if (active.some((c) => c.type === "blackout" && c.target === "ALL")) {
-    return out; // full-room blackout wins over everything (§66 lets mixer narrow it first)
-  }
   const order: OrderedCell[] = globalCellOrder(fixtures);
-  const orderIndex = new Map<string, number>(order.map((c, i) => [`${c.fixtureId}:${c.cellIndex}`, i]));
-  const lit = new Map<string, number>();
-  for (const cue of [...active].reverse()) paintCue(cue, beat, fixtures, lit, orderIndex, order.length);
-  // Restrained palette (§28-29): at most 2 hues + white. Hue is per-section
-  // (seeded by the look's start beat), not per-cell — cells sharing a look
-  // share a color, with left→right brightness shaping for movement feel.
+  const orderIndex = new Map<string, number>(order.map((c, i) => [cellKey(c.fixtureId, c.cellIndex), i]));
   const lookHue = (startBeat: number): number => (Math.floor(startBeat) * 137 + 210) % 360;
   const topHue = active.length ? lookHue(active[active.length - 1]!.startBeat) : 210;
   const subHue = active.length > 1 ? lookHue(active[active.length - 2]!.startBeat) : (topHue + 40) % 360;
-  const entries: [number, OrderedCell][] = [...order.entries()];
-  for (const [i, cell] of entries) {
-    const fix = fixtures.find((f) => f.id === cell.fixtureId)!;
-    const buf = out.get(fix.id)!;
-    const level = lit.get(`${cell.fixtureId}:${cell.cellIndex}`) ?? 0;
-    if (level <= 0) continue;
-    const isTop = (orderIndex.get(`${cell.fixtureId}:${cell.cellIndex}`) ?? 0) % 2 === 0;
-    const whiteOut = active.some((c) => (c.type === "white-hit" || c.type === "impact") && c.target === "ALL");
-    const hue = whiteOut ? -1 : isTop ? topHue : subHue;
-    const shape = 0.75 + (0.25 * i) / Math.max(1, order.length - 1);
-    const [r, g, b] = hue < 0 ? [255, 255, 255] : hsv2rgb(hue, 0.85, 1);
-    const k = (linearScale(255, Math.min(1, level * shape)) / 255);
-    buf[cell.cellIndex * 3] = Math.round(r * k);
-    buf[cell.cellIndex * 3 + 1] = Math.round(g * k);
-    buf[cell.cellIndex * 3 + 2] = Math.round(b * k);
+  const whiteOut = active.some((c) => (c.type === "white-hit" || c.type === "impact") && c.target === "ALL");
+  const layers: LayerContribution[] = [];
+  for (const cue of [...active].reverse()) {
+    layers.push(cueLayerContribution(cue, beat, fixtures, orderIndex, order.length, topHue, subHue, whiteOut));
+  }
+  const manual = overrides.manual;
+  if (manual !== undefined && manual !== null) layers.push(manualLayer(manual, order));
+  const composite = compositeLayers(layers);
+  scaleLinear(composite, overrides.masterIntensity ?? 1);
+  for (const cell of order) {
+    const linear = composite.get(cellKey(cell.fixtureId, cell.cellIndex));
+    if (linear === undefined) continue;
+    const buf = out.get(cell.fixtureId);
+    if (buf === undefined) continue;
+    buf[cell.cellIndex * 3] = linearToSrgbByte(linear[0]);
+    buf[cell.cellIndex * 3 + 1] = linearToSrgbByte(linear[1]);
+    buf[cell.cellIndex * 3 + 2] = linearToSrgbByte(linear[2]);
   }
   return out;
 }
