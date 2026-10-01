@@ -1,0 +1,28 @@
+{
+  "name": "@autolight/show-host",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests",
+    "lint": "tsc --noEmit -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@autolight/contracts": "^0.1.0",
+    "@autolight/dj-core": "^0.1.0",
+    "@autolight/ipc": "^0.1.0",
+    "@autolight/renderer": "^0.1.0",
+    "@autolight/show-mixer": "^0.1.0",
+    "@autolight/show-runtime": "^0.1.0",
+    "@autolight/simulator": "^0.1.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.3",
+    "vitest": "^4.1.11"
+  }
+}
