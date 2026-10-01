@@ -1,0 +1,153 @@
+{
+  "generatedAt": "2026-10-01T01:54:34.626Z",
+  "machine": {
+    "platform": "darwin",
+    "release": "25.5.0",
+    "arch": "arm64",
+    "cpuModel": "Apple M1 Pro",
+    "cpuCount": 10,
+    "totalMemMb": 16384
+  },
+  "runtime": {
+    "node": "22.22.2",
+    "electron": null
+  },
+  "app": {
+    "name": "@autolight/desktop",
+    "version": "0.1.0"
+  },
+  "configHash": "42945e7c69e49294",
+  "command": "vitest run src/perf.test.ts (/Users/rocket/.nvm/versions/node/v22.22.2/bin/node /Users/rocket/autolight/node_modules/vitest/dist/workers/forks.js)",
+  "ciSlack": 3,
+  "thresholds": {
+    "tickJitterP99Ms": 15,
+    "renderP95Ms": 50.099999999999994,
+    "uiFrameP95Ms": 50.099999999999994,
+    "ipcP95Ms": 50.099999999999994,
+    "djProcessP95Ms": 50.099999999999994,
+    "emergencyP99Ms": 300,
+    "maxQueueDepth": 1
+  },
+  "measurements": [
+    {
+      "name": "showHost.tickJitter",
+      "unit": "ms",
+      "measured": true,
+      "reason": null,
+      "samples": 121,
+      "p50": 0.604458999999963,
+      "p95": 1.2362919999999917,
+      "p99": 1.26665899999997,
+      "max": 1.2897919999999772,
+      "mean": 0.6091690495867603,
+      "threshold": 15,
+      "statistic": "p99",
+      "pass": true
+    },
+    {
+      "name": "showHost.tickJitterWith20msStall",
+      "unit": "ms",
+      "measured": true,
+      "reason": null,
+      "samples": 201,
+      "p50": 0.6569999999999823,
+      "p95": 11.131416999999999,
+      "p99": 19.130499999999984,
+      "max": 21.125042000000008,
+      "mean": 1.6930379452736275,
+      "threshold": 15,
+      "statistic": "p99",
+      "pass": false
+    },
+    {
+      "name": "render.perTick2000Cells",
+      "unit": "ms",
+      "measured": true,
+      "reason": null,
+      "samples": 200,
+      "p50": 1.2396459999999934,
+      "p95": 1.7535125000000378,
+      "p99": 3.0611953300000083,
+      "max": 4.908415999999988,
+      "mean": 1.3465047949999984,
+      "threshold": 50.099999999999994,
+      "statistic": "p95",
+      "pass": true
+    },
+    {
+      "name": "ipc.roundTrip",
+      "unit": "ms",
+      "measured": true,
+      "reason": null,
+      "samples": 200,
+      "p50": 0.0061670000000049185,
+      "p95": 0.010562799999985367,
+      "p99": 0.11629032999994206,
+      "max": 0.31104199999992943,
+      "mean": 0.009586950000000342,
+      "threshold": 50.099999999999994,
+      "statistic": "p95",
+      "pass": true
+    },
+    {
+      "name": "dj.messageProcessing",
+      "unit": "ms",
+      "measured": true,
+      "reason": null,
+      "samples": 500,
+      "p50": 0.00012500000002546585,
+      "p95": 0.00016700000003311288,
+      "p99": 0.00033509000006801934,
+      "max": 0.0377090000000635,
+      "mean": 0.00023133600000073784,
+      "threshold": 50.099999999999994,
+      "statistic": "p95",
+      "pass": true
+    },
+    {
+      "name": "emergency.requestToSend",
+      "unit": "ms",
+      "measured": true,
+      "reason": null,
+      "samples": 200,
+      "p50": 0.002124999999978172,
+      "p95": 0.005222600000035976,
+      "p99": 0.055819169999964335,
+      "max": 0.13183300000002873,
+      "mean": 0.003732469999999353,
+      "threshold": 300,
+      "statistic": "p99",
+      "pass": true
+    },
+    {
+      "name": "queue.maxDepth",
+      "unit": "frames",
+      "measured": true,
+      "reason": null,
+      "samples": 1,
+      "p50": 1,
+      "p95": 1,
+      "p99": 1,
+      "max": 1,
+      "mean": 1,
+      "threshold": 1,
+      "statistic": "max",
+      "pass": true
+    },
+    {
+      "name": "ui.frameTimeLive",
+      "unit": "ms",
+      "measured": false,
+      "reason": "requires a renderer frame source (Electron window or browser); measured by the E2E harness on the packaged app",
+      "samples": 0,
+      "p50": 0,
+      "p95": 0,
+      "p99": 0,
+      "max": 0,
+      "mean": 0,
+      "threshold": 50.099999999999994,
+      "statistic": "p95",
+      "pass": false
+    }
+  ]
+}
