@@ -61,7 +61,7 @@ Milestone contents and exit proofs are in `README.md`.
 
 | Task | Title | File | Milestone | Status | Evidence | Notes |
 | --- | --- | --- | --- | --- | --- | --- |
-| T-CFG-06 | Decision switch framework | `03-config-and-decisions.md` | M1 | `TODO` | none yet | Closes F-DEC-01 |
+| T-CFG-06 | Decision switch framework | `03-config-and-decisions.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-CFG-06/README.md` | Closes F-DEC-01 |
 | T-ARC-04 | Snapshots and renderer reload survival | `04-target-architecture.md` | M1 | `TODO` | none yet | Closes F-APP-02 |
 | T-ARC-05 | Main services and layout | `04-target-architecture.md` | M1 | `TODO` | none yet | Closes F-APP-01 |
 | T-ARC-06 | Clock strategies and jitter measurement | `04-target-architecture.md` | M1 | `TODO` | none yet |  |
@@ -80,11 +80,11 @@ Milestone contents and exit proofs are in `README.md`.
 | T-GOV-10 | Capability probe and verified fallback | `wp03-govee-lan.md` | M1 | `TODO` | none yet | Closes F-GOV-04, F-GOV-24, F-X-09 |
 | T-GOV-11 | Qualification wizard runner | `wp03-govee-lan.md` | M1 | `TODO` | none yet | Closes F-GOV-11, F-GOV-12, F-GOV-22, F-GOV-24, F-X-07 |
 | T-GOV-12 | IDENTIFY, TEST CHASE, RECALIBRATE, identify walk | `wp03-govee-lan.md` | M1 | `TODO` | none yet | Closes F-GOV-10 |
-| T-RBL-01 | Rekordbox library readers behind DS-15 | `wp06-rekordbox-library-identity.md` | M1 | `TODO` | none yet | Closes F-RBL-01 |
-| T-RBL-02 | Library service and ANLZ path resolution | `wp06-rekordbox-library-identity.md` | M1 | `TODO` | none yet | Closes F-RBL-01, F-RBL-08 |
-| T-RBL-03 | Beat origin, units and beat to time mapping | `wp06-rekordbox-library-identity.md` | M1 | `TODO` | none yet | Closes F-RBL-06, F-RBL-09 |
-| T-RBL-05 | One definition for PSSI labels and section normalization | `wp06-rekordbox-library-identity.md` | M1 | `TODO` | none yet | Closes F-RBL-07 |
-| T-RBL-06 | Library change detection and selective invalidation | `wp06-rekordbox-library-identity.md` | M1 | `TODO` | none yet | Closes F-RBL-10 |
+| T-RBL-01 | Rekordbox library readers behind DS-15 | `wp06-rekordbox-library-identity.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-RBL-01/README.md` | Closes F-RBL-01 |
+| T-RBL-02 | Library service and ANLZ path resolution | `wp06-rekordbox-library-identity.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-RBL-02/README.md` | Closes F-RBL-01, F-RBL-08 |
+| T-RBL-03 | Beat origin, units and beat to time mapping | `wp06-rekordbox-library-identity.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-RBL-03/README.md` | Closes F-RBL-06, F-RBL-09 |
+| T-RBL-05 | One definition for PSSI labels and section normalization | `wp06-rekordbox-library-identity.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-RBL-05/README.md` | Closes F-RBL-07 |
+| T-RBL-06 | Library change detection and selective invalidation | `wp06-rekordbox-library-identity.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-RBL-06/README.md` | Closes F-RBL-10 |
 | T-LIVE-01 | Provider contract, generation token and the shared contract suite | `wp07-rekordbox-live.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-LIVE-01/README.md` | Closes F-LIVE-13 |
 | T-LIVE-02 | Provider manager and the fusion provider (DS-01) | `wp07-rekordbox-live.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-LIVE-02/README.md` | Closes F-LIVE-14, F-APP-08 |
 | T-LIVE-03 | rkbx_link OSC provider (`rkbx-osc`) | `wp07-rekordbox-live.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-LIVE-03/README.md` | Closes F-LIVE-03 |
@@ -92,13 +92,13 @@ Milestone contents and exit proofs are in `README.md`.
 | T-LIVE-05 | PRO DJ LINK provider (`prolink`, DS-29) | `wp07-rekordbox-live.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-LIVE-05/README.md` | Closes F-LIVE-04 |
 | T-LIVE-06 | Accessibility provider (`ax`) on macOS and Windows | `wp07-rekordbox-live.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-LIVE-06/README.md` | Closes F-LIVE-05, F-APP-10, F-QA-06 |
 | T-LIVE-08 | Rekordbox local agent API (port 30001) | `wp07-rekordbox-live.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-LIVE-08/README.md` | Closes F-LIVE-09 |
-| T-RUN-01 | Deck worlds in the show host | `wp12-runtime-mixer-renderer.md` | M1 | `TODO` | none yet | Closes F-APP-02 |
-| T-RUN-02 | State estimator with smooth correction | `wp12-runtime-mixer-renderer.md` | M1 | `TODO` | none yet | Closes F-RUN-01, F-APP-09 |
-| T-RUN-03 | Seek as random access | `wp12-runtime-mixer-renderer.md` | M1 | `TODO` | none yet | Closes F-RUN-01 |
-| T-RUN-04 | Loops and rolls | `wp12-runtime-mixer-renderer.md` | M1 | `TODO` | none yet | Closes F-RUN-02 |
-| T-RUN-05 | Reverse and scratch | `wp12-runtime-mixer-renderer.md` | M1 | `TODO` | none yet | Closes F-RUN-03 |
-| T-RUN-07 | Manual overrides and emergency path | `wp12-runtime-mixer-renderer.md` | M1 | `TODO` | none yet | Closes F-RUN-04, F-RUN-07, F-APP-04, F-APP-19 |
-| T-REND-01 | Eight-layer stack with real compositing | `wp12-runtime-mixer-renderer.md` | M1 | `TODO` | none yet | Closes F-REND-01, F-REND-08 |
+| T-RUN-01 | Deck worlds in the show host | `wp12-runtime-mixer-renderer.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-RUN-01/README.md` | Closes F-APP-02 |
+| T-RUN-02 | State estimator with smooth correction | `wp12-runtime-mixer-renderer.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-RUN-02/README.md` | Closes F-RUN-01, F-APP-09 |
+| T-RUN-03 | Seek as random access | `wp12-runtime-mixer-renderer.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-RUN-03/README.md` | Closes F-RUN-01 |
+| T-RUN-04 | Loops and rolls | `wp12-runtime-mixer-renderer.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-RUN-04/README.md` | Closes F-RUN-02 |
+| T-RUN-05 | Reverse and scratch | `wp12-runtime-mixer-renderer.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-RUN-05/README.md` | Closes F-RUN-03 |
+| T-RUN-07 | Manual overrides and emergency path | `wp12-runtime-mixer-renderer.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-RUN-07/README.md` | Closes F-RUN-04, F-RUN-07, F-APP-04, F-APP-19 |
+| T-REND-01 | Eight-layer stack with real compositing | `wp12-runtime-mixer-renderer.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-REND-01/README.md` | Closes F-REND-01, F-REND-08 |
 | T-UI-03 | Emergency controls and shortcuts | `wp13-ui.md` | M1 | `TODO` | none yet | Closes F-UI-02, F-APP-17 |
 | T-DATA-01 | Storage service and drivers (DS-06) | `wp14-data-security-ops.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-DATA-01/README.md` | Closes F-DATA-01, F-DATA-02, F-APP-15 |
 | T-DATA-02 | Schema and migrations | `wp14-data-security-ops.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-DATA-02/README.md` | Closes F-DATA-03 |
@@ -240,12 +240,12 @@ Milestone contents and exit proofs are in `README.md`.
 | T-ID-03 | Key the UI and cache by TrackId | `wp06-rekordbox-library-identity.md` | M5 | `TODO` | none yet | Closes F-ID-03 |
 | T-FLX-05 | Expressive hints for the director and mixer | `wp08-flx4.md` | M5 | `TODO` | none yet | Closes F-FLX-04 |
 | T-RUN-09 | Adaptive director | `wp12-runtime-mixer-renderer.md` | M5 | `TODO` | none yet | Closes F-RUN-06 |
-| T-MIX-01 | Audible weight | `wp12-runtime-mixer-renderer.md` | M5 | `TODO` | none yet | Closes F-MIX-01, F-MIX-08 |
-| T-MIX-02 | Base mixing in perceptual and linear space | `wp12-runtime-mixer-renderer.md` | M5 | `TODO` | none yet | Closes F-MIX-02, F-MIX-05, F-PLAN-13 |
-| T-MIX-03 | Exclusive impact ownership | `wp12-runtime-mixer-renderer.md` | M5 | `TODO` | none yet | Closes F-MIX-07 |
-| T-MIX-04 | Transition-aware blackout translation | `wp12-runtime-mixer-renderer.md` | M5 | `TODO` | none yet | Closes F-MIX-03, F-QA-09 |
-| T-MIX-05 | Incoming deck introduction by layer | `wp12-runtime-mixer-renderer.md` | M5 | `TODO` | none yet | Closes F-MIX-06 |
-| T-MIX-06 | One path to pixels | `wp12-runtime-mixer-renderer.md` | M5 | `TODO` | none yet | Closes F-MIX-04, F-MIX-05, F-APP-07, F-UI-05 |
+| T-MIX-01 | Audible weight | `wp12-runtime-mixer-renderer.md` | M5 | `DONE-VERIFIED` | `docs/finish/evidence/T-MIX-01/README.md` | Closes F-MIX-01, F-MIX-08 |
+| T-MIX-02 | Base mixing in perceptual and linear space | `wp12-runtime-mixer-renderer.md` | M5 | `DONE-VERIFIED` | `docs/finish/evidence/T-MIX-02/README.md` | Closes F-MIX-02, F-MIX-05, F-PLAN-13 |
+| T-MIX-03 | Exclusive impact ownership | `wp12-runtime-mixer-renderer.md` | M5 | `DONE-VERIFIED` | `docs/finish/evidence/T-MIX-03/README.md` | Closes F-MIX-03, F-QA-09 |
+| T-MIX-04 | Transition-aware blackout translation | `wp12-runtime-mixer-renderer.md` | M5 | `DONE-VERIFIED` | `docs/finish/evidence/T-MIX-04/README.md` | Closes F-MIX-03, F-QA-09 |
+| T-MIX-05 | Incoming deck introduction by layer | `wp12-runtime-mixer-renderer.md` | M5 | `DONE-VERIFIED` | `docs/finish/evidence/T-MIX-05/README.md` | Closes F-MIX-06 |
+| T-MIX-06 | One path to pixels | `wp12-runtime-mixer-renderer.md` | M5 | `DONE-VERIFIED` | `docs/finish/evidence/T-MIX-06/README.md` | Closes F-MIX-04, F-MIX-05, F-APP-07, F-UI-05 |
 | T-REND-07 | Renderer performance | `wp12-runtime-mixer-renderer.md` | M5 | `TODO` | none yet |  |
 | T-AUD-03 | Overlay rules | `wp12-runtime-mixer-renderer.md` | M5 | `TODO` | none yet | Closes F-AUD-02, F-AUD-04, F-APP-20 |
 | T-UI-02 | Live screen | `wp13-ui.md` | M5 | `TODO` | none yet | Closes F-UI-03, F-UI-04, F-UI-05, F-UI-15 |
