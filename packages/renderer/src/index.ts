@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import type { Fixture, ShowCue, ShowPlan } from "@autolight/contracts";
 import { globalCellOrder, resolveTarget, type OrderedCell } from "@autolight/venue";
 

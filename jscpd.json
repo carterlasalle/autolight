@@ -1,0 +1,16 @@
+{
+  "$schema": "https://github.com/kucherenko/jscpd",
+  "threshold": 5,
+  "reporters": ["console"],
+  "mode": "mild",
+  "format": ["typescript", "python"],
+  "ignore": [
+    "**/dist/**",
+    "**/node_modules/**",
+    "**/*.test.ts",
+    "test-fixtures/**",
+    "protocol-fixtures/**",
+    ".bughunt/**"
+  ],
+  "path": ["packages/*/src/**/*.ts", "analysis/src/**/*.py"]
+}

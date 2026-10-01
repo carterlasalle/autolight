@@ -1,16 +1,11 @@
 """Native/ML fusion with provenance (§19). Native grid always wins timing."""
 from __future__ import annotations
 
+from autolight_analysis.metrical import grid_warning as grid_warning
+
 
 def fuse(label: str, evidence: list[str], confidence: float) -> dict:
     return {"type": label, "evidence": evidence, "confidence": confidence}
-
-
-def grid_warning(native_beats: list[float], ml_beats: list[float], tol: float = 0.05) -> bool:
-    """True when ML grid disagrees with native → GRID_WARNING, never silent replace (§17)."""
-    if not native_beats or not ml_beats:
-        return False
-    return abs(native_beats[0] - ml_beats[0]) > tol
 
 
 # Contract mirror: TS trackModelSchema owns truth; keep field-by-field parity.

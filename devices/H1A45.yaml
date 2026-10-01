@@ -1,0 +1,85 @@
+# govee-toolkit device profile: H1A45 (our fork, T-GOV-13, spec 43 and 45).
+#
+# Defaults for new units of this SKU. Spec 43 is explicit that this strip's
+# effective topology has to be discovered from the actual unit, because product
+# length, cut-to-fit state and firmware all change it, so every value here is
+# either a product-material fact or a receipt pointing at the wizard step that
+# measures the unit.
+#
+# Nothing here is a measurement of the owner's strip. No unit has been on
+# hardware yet. Receipts are mandatory: the loader in
+# packages/govee/src/profiles.ts rejects a number without one.
+schema: govee-toolkit/device-profile@fork-1
+sku: H1A45
+name: Govee Strip Light 2, 20 m
+family: lan-razer
+qualification_required: true
+modes:
+  - rgb-segmented
+  - lan-json-colorwc
+  - ble-single
+product_material_segments:
+  value: null
+  source: product-material
+  receipt: spec 43 records no published segment count for the 20 m strip. Govee product material describes segmented RGBWWIC control, so the count comes from wizard step 9 on the installed length, never from the SKU.
+length_m:
+  value: 20
+  source: product-material
+  receipt: spec 43 names this SKU as the 20 m / 65.6 foot version of Strip Light 2. The installed length after cutting differs per unit, so the wizard records the installed length with the band count.
+capabilities:
+  segmented:
+    value: null
+    source: unmeasured
+    receipt: the razer segmented channel is proved per unit by the T-GOV-10 probe (status, arm, settle, B2 read-back, two-colour paint, B4) before a single frame is streamed.
+  lan_razer:
+    value: null
+    source: unmeasured
+    receipt: same probe as capabilities.segmented. A strip whose firmware ignores paint shows the SINGLE-ZONE (fallback) badge instead of streaming.
+  lan_json_control:
+    value: true
+    source: product-material
+    receipt: the official Govee WLAN guide lists the H1A45 among LAN-capable SKUs (wp03-govee-lan.md lines 16 to 17), so turn, brightness, devStatus and colorwc are expected. Wizard steps 5 to 7 verify them by read-back on the unit.
+  ble:
+    value: true
+    source: product-material
+    receipt: the scan reply carries BLE version fields for this SKU family. T-GOV-10 offers BLE as the alternative when a unit answers no LAN at all (F-GOV-24).
+  matter:
+    value: null
+    source: unmeasured
+    receipt: govee.matter.enabled defaults to false and is an owner decision per device.
+segment_chain:
+  value: null
+  source: unmeasured
+  receipt: a cut strip can fold back on itself (toolkit lan.md 2.3), and spec 43 makes the chain a per-unit question. Wizard step 9 and step 10 record the band count and the direction the strip runs.
+native_pixels_per_meter:
+  value: null
+  source: unmeasured
+  receipt: derived from the measured native segment count and the measured installed length, neither of which exists for any unit yet.
+measurements:
+  arm_settle_ms:
+    value: 50
+    source: toolkit-default
+    receipt: govee-toolkit lan.md section 1 gives about 50 ms as the default arm settle. Unmeasured on any H1A45. Wizard step 12 replaces it with the first sweep delay that lands a paint.
+  fallback_hz:
+    value: 10
+    source: toolkit-default
+    receipt: govee-toolkit FALLBACK_HZ, surfaced as govee.lan.stream.fallbackHz. Units with no measured ceiling stream at this rate (wp03-govee-lan.md lines 43 to 44).
+  max_hz_by_zones:
+    value:
+      "20": 40
+      "60": 25
+      "120": 20
+    source: toolkit-measured-other-sku
+    receipt: the toolkit measured 40 Hz clean at 20 zones, 25 at 60 and 20 at 120 on an H61A0, not on an H1A45. Wizard step 13 sweeps the rate on the real strip and its table replaces this one.
+  turn_ends_channel:
+    value: true
+    source: toolkit-default
+    receipt: toolkit lan.md section 1 records that turn can end the razer channel, so the show path never sends it while armed (T-GOV-08). Wizard step 8 records whether this unit answers status while armed.
+  white_ends_channel:
+    value: null
+    source: unmeasured
+    receipt: spec 43 says this strip is RGBWWIC and spec 48 forbids show-time CCT mode; the policy default is DS-27 rgb-white (T-GOV-09). The white-channel experiment exists only as a qualification experiment and is never enabled without a passing record for the unit.
+  answers_status_while_armed:
+    value: null
+    source: toolkit-default
+    receipt: toolkit lan.md section 1 records that a unit may not answer status or devStatus while armed, so silence during a stream is not a failure. Wizard steps 8 and 15 record what this unit does.

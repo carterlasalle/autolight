@@ -1,0 +1,86 @@
+# govee-toolkit device profile: H6076 (our fork, T-GOV-13, spec 42 and 45).
+#
+# Defaults for new units of this SKU. Every unit is still qualified: the wizard
+# in packages/govee/src/qualification.ts counts the segments, direction, arm
+# settle, rate ceiling, latency and reconnect of the unit in front of the user,
+# and the T-GOV-10 probe decides whether the segmented razer channel exists on
+# that firmware at all.
+#
+# Nothing here is a measurement of the owner's lamps. No unit has been on
+# hardware yet, so receipts name the toolkit default, the product claim, or the
+# measurement that replaces the value for a unit. A number without a receipt is
+# rejected by the loader in packages/govee/src/profiles.ts.
+schema: govee-toolkit/device-profile@fork-1
+sku: H6076
+name: Govee RGBICW Floor Lamp
+family: lan-razer
+qualification_required: true
+modes:
+  - rgb-segmented
+  - lan-json-colorwc
+  - ble-single
+product_material_segments:
+  value: null
+  source: product-material
+  receipt: spec 42 records that Govee product material describes 14 segmented controls for the H6076. That is a claim about the product line, not a count of any unit, and the app must not assume it: wizard step 9 counts bands per unit.
+length_m:
+  value: null
+  source: unmeasured
+  receipt: spec 42 publishes no lamp length. The physical length is measured per unit before native pixels per metre can be derived.
+capabilities:
+  segmented:
+    value: null
+    source: unmeasured
+    receipt: the razer segmented channel is proved per unit by the T-GOV-10 probe (status, arm, settle, B2 read-back, two-colour paint, B4) before a single frame is streamed. F-X-09 records that both the ignores-razer story and the count story are unverified.
+  lan_razer:
+    value: null
+    source: unmeasured
+    receipt: same probe as capabilities.segmented. A unit whose firmware ignores paint shows the SINGLE-ZONE (fallback) badge instead of streaming.
+  lan_json_control:
+    value: true
+    source: product-material
+    receipt: the official Govee WLAN guide lists the H6076 among LAN-capable SKUs (wp03-govee-lan.md lines 16 to 17), so turn, brightness, devStatus and colorwc are expected. Wizard steps 5 to 7 verify them by read-back on the unit.
+  ble:
+    value: true
+    source: product-material
+    receipt: the scan reply carries BLE version fields for this SKU family. T-GOV-10 offers BLE as the alternative when a unit answers no LAN at all (F-GOV-24).
+  matter:
+    value: null
+    source: unmeasured
+    receipt: govee.matter.enabled defaults to false and is an owner decision per device.
+segment_chain:
+  value: null
+  source: unmeasured
+  receipt: a segmented chain can fold back on itself (toolkit lan.md 2.3). The wizard's stripe count and changepoint sweep (step 9) records what this unit does.
+native_pixels_per_meter:
+  value: null
+  source: unmeasured
+  receipt: derived from the measured native segment count and the measured physical length, neither of which exists for any unit yet.
+measurements:
+  arm_settle_ms:
+    value: 50
+    source: toolkit-default
+    receipt: govee-toolkit lan.md section 1 gives about 50 ms as the default arm settle. Unmeasured on any H6076. Wizard step 12 replaces it with the first sweep delay that lands a paint.
+  fallback_hz:
+    value: 10
+    source: toolkit-default
+    receipt: govee-toolkit FALLBACK_HZ, surfaced as govee.lan.stream.fallbackHz. Units with no measured ceiling stream at this rate (wp03-govee-lan.md lines 43 to 44).
+  max_hz_by_zones:
+    value:
+      "20": 40
+      "60": 25
+      "120": 20
+    source: toolkit-measured-other-sku
+    receipt: the toolkit measured 40 Hz clean at 20 zones, 25 at 60 and 20 at 120 on an H61A0, not on an H6076. Wizard step 13 sweeps the rate on the real unit and its table replaces this one.
+  turn_ends_channel:
+    value: true
+    source: toolkit-default
+    receipt: toolkit lan.md section 1 records that turn can end the razer channel, so the show path never sends it while armed (T-GOV-08). Wizard step 8 records whether this unit answers status while armed.
+  white_ends_channel:
+    value: true
+    source: toolkit-default
+    receipt: toolkit lan.md section 1 records that a white colorwc can end the razer channel, so white hits stay RGB white scaled (spec 48, T-GOV-09).
+  answers_status_while_armed:
+    value: null
+    source: toolkit-default
+    receipt: toolkit lan.md section 1 records that a unit may not answer status or devStatus while armed, so silence during a stream is not a failure. Wizard steps 8 and 15 record what this unit does.

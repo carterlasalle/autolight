@@ -1,4 +1,5 @@
-from autolight_analysis.fusion import fuse, grid_warning, build_track_model
+from autolight_analysis.fusion import fuse, build_track_model
+from autolight_analysis.metrical import grid_warning
 import pytest
 
 
