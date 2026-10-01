@@ -65,7 +65,7 @@ Milestone contents and exit proofs are in `README.md`.
 | T-ARC-04 | Snapshots and renderer reload survival | `04-target-architecture.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-ARC-04/README.md` | Closes F-APP-02 |
 | T-ARC-05 | Main services and layout | `04-target-architecture.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-ARC-05/README.md` | Closes F-APP-01 |
 | T-ARC-06 | Clock strategies and jitter measurement | `04-target-architecture.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-ARC-06/README.md` |  |
-| T-TRU-03 | No echo IPC | `wp00-truth-and-gates.md` | M1 | `TODO` | none yet | Closes F-APP-04 |
+| T-TRU-03 | No echo IPC | `wp00-truth-and-gates.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-TRU-03/README.md` | Closes F-APP-04 |
 | T-TRU-12 | Runtime invariants | `wp00-truth-and-gates.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-TRU-12/README.md` | Closes F-QA-14 |
 | T-TRU-14 | Delete dead and duplicate code after replacement | `wp00-truth-and-gates.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-TRU-14/README.md` | Closes F-REND-09, F-GOV-19, F-RBL-07 |
 | T-GOV-01 | Bring in govee-toolkit | `wp03-govee-lan.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-GOV-01/README.md` | Closes F-GOV-01 |
