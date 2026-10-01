@@ -1,3 +1,4 @@
+import { once } from "node:events";
 import { describe, expect, it } from "vitest";
 import {
   LINK_DEFAULT_QUANTUM,
@@ -33,9 +34,14 @@ describe("Ableton Link participation (T-LIVE-12, DS-36)", () => {
   it("tracks tempo and phase from a scripted sidecar over a real socket", async () => {
     const sidecar = await startFakeSidecar();
     try {
+      // Wait for the server side to accept before sending. The client
+      // connect event can fire before the fake sidecar registers the
+      // socket, and an immediate send is then lost on the floor.
+      const accepted = once(sidecar.server, "connection");
       const transport = new SidecarLinkTransport({ host: "127.0.0.1", port: sidecar.port });
       expect(transport.getStatus().state).toBe("unavailable");
       await transport.start();
+      await accepted;
       const seen = Promise.withResolvers<void>();
       transport.onTempo((tempo) => {
         if (tempo.beat === 32) seen.resolve();

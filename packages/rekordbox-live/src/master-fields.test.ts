@@ -94,6 +94,21 @@ describe("master deck, loop, pitch, SYNC, hotcue and roll (T-LIVE-14)", () => {
     if (!compositeDeck || !prolinkDeck2) throw new Error("scripted provider emitted no deck");
     engine.ingest("composite-flx4", compositeDeck);
     engine.ingest("prolink", prolinkDeck2);
+    // Hysteresis: the higher-authority challenger does not flip the field
+    // on the first packet. It must stay fresh past live.fusion.switchHoldMs.
+    expect(engine.fused(1)?.loopRoll?.active).toBe(true);
+    expect(engine.fused(1)?.fieldSources.loopRoll).toBe("composite-flx4");
+    now += 600n * 1_000_000n;
+    prolink.update({
+      deckId: 1, track: { id: "rb:9", title: "Loop" }, playing: true,
+      playheadSeconds: 40, effectiveBpm: 120,
+      loopRoll: { active: false, beatLength: null },
+      quality: { loopRoll: "exact" },
+      atNs: now,
+    });
+    const prolinkFresh = prolink.getDecks()[0];
+    if (!prolinkFresh) throw new Error("scripted provider emitted no deck");
+    engine.ingest("prolink", prolinkFresh);
     expect(engine.fused(1)?.loopRoll?.active).toBe(false);
     expect(engine.fused(1)?.fieldSources.loopRoll).toBe("prolink");
   });
