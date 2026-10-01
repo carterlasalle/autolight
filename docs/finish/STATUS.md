@@ -66,7 +66,7 @@ Milestone contents and exit proofs are in `README.md`.
 | T-ARC-05 | Main services and layout | `04-target-architecture.md` | M1 | `TODO` | none yet | Closes F-APP-01 |
 | T-ARC-06 | Clock strategies and jitter measurement | `04-target-architecture.md` | M1 | `TODO` | none yet |  |
 | T-TRU-03 | No echo IPC | `wp00-truth-and-gates.md` | M1 | `TODO` | none yet | Closes F-APP-04 |
-| T-TRU-12 | Runtime invariants | `wp00-truth-and-gates.md` | M1 | `TODO` | none yet | Closes F-QA-14 |
+| T-TRU-12 | Runtime invariants | `wp00-truth-and-gates.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-TRU-12/README.md` | Closes F-QA-14 |
 | T-TRU-14 | Delete dead and duplicate code after replacement | `wp00-truth-and-gates.md` | M1 | `TODO` | none yet | Closes F-REND-09, F-GOV-19, F-RBL-07 |
 | T-GOV-01 | Bring in govee-toolkit | `wp03-govee-lan.md` | M1 | `TODO` | none yet | Closes F-GOV-01 |
 | T-GOV-02 | Native TypeScript razer engine | `wp03-govee-lan.md` | M1 | `TODO` | none yet | Closes F-GOV-02 |
