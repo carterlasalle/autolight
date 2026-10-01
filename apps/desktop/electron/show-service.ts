@@ -1,19 +1,14 @@
 import { app } from "electron";
 import { join } from "node:path";
-import { execFile } from "node:child_process";
 import { SessionRecorder, emptyMetrics, type Metrics } from "@autolight/diagnostics";
 import { KEYS as CONFIG_KEYS, PersistentConfigStore, defineKey, type Scope } from "@autolight/config";
-import { scanLan, frameToLan } from "./govee-lan.js";
-import { pollAxDecks, startProlinkWatch } from "./follow.js";
-import {
-  brightnessCommand,
-  turnCommand,
-} from "@autolight/govee";
+import { getGoveeManager, optionsFromConfig, registryFilePath } from "./govee-lan.js";
+import { pollAxDecks, startProlinkWatch } from "./services/provider-manager.js";
+import { scaleChannel } from "@autolight/govee";
 // Show service: owns session/metrics/live-transport state in main (§86, §132).
-// No SQLite here: Electron 33's Node lacks node:sqlite, and nothing in main
-// reads the Store (renderer resolves committed fixtures until the §132
-// watcher streams DeckState). Renderer asks over typed IPC; the loop never
-// blocks on UI (§108).
+// The application database lives in the storage service
+// (electron/services/storage-service.ts), which opens userData/autolight.db
+// with the DS-06 driver policy (§80); the show loop never blocks on it (§108).
 export interface ShowServiceState {
   recorder: SessionRecorder;
   metrics: Metrics;
@@ -62,6 +57,26 @@ export function createShowService(): ShowServiceState {
 export function getShowService(): ShowServiceState {
   if (!service) service = createShowService();
   return service;
+}
+
+// The govee-manager singleton behind the venue commands below (T-GOV-04).
+// Options come from the layered config (3.6) with the manager defaults as
+// fallback; the registry persists beside config.json until the storage
+// service owns device tables (T-DATA-02). Options that are safe to change
+// live re-apply on every command; interface and port changes need restart.
+export function govee() {
+  const svc = getShowService();
+  let userData = "";
+  try {
+    userData = app.getPath("userData");
+  } catch {
+    userData = "";
+  }
+  const manager = getGoveeManager({
+    ...optionsFromConfig((key: string) => svc.config.get(key)),
+    ...(userData ? { registryPath: registryFilePath(userData) } : {}),
+  });
+  return manager;
 }
 
 
@@ -130,49 +145,64 @@ export function quitApp(): void {
 
 export async function scanLanCommand(): Promise<{ ok: true; devices: unknown[] }> {
   const svc = getShowService();
-  const replies = await scanLan({ unicastIps: svc.rememberedIps });
-  for (const r of replies) {
-    svc.deviceIps.set(r.device, r.ip);
-    if (!svc.rememberedIps.includes(r.ip)) svc.rememberedIps.push(r.ip);
+  const found = await govee().scanOnce(1500);
+  for (const d of found) {
+    svc.deviceIps.set(d.mac, d.ip);
+    if (!svc.rememberedIps.includes(d.ip)) svc.rememberedIps.push(d.ip);
   }
-  svc.recorder.record("venue/scan", { found: replies.length });
-  return { ok: true, devices: replies.map((r) => ({ address: r.ip, name: `${r.sku} — ${r.device}` })) };
+  svc.recorder.record("venue/scan", { found: found.length });
+  return {
+    ok: true,
+    devices: found.map((d) => ({
+      id: d.mac,
+      address: d.ip,
+      name: `${d.sku} — ${d.mac}`,
+      rung: d.rung,
+    })),
+  };
 }
 
-function sendToDevice(ip: string, msg: string): void {
-  execFile("node", ["-e", `require("dgram").createSocket("udp4").send(${JSON.stringify(msg)}, 4003, ${JSON.stringify(ip)})`], () => undefined);
-}
-
-export function identifyCommand(id: string): { ok: true; id: string } {
+export async function identifyCommand(id: string): Promise<{ ok: true; id: string }> {
   const svc = getShowService();
-  const ip = svc.deviceIps.get(id);
-  if (ip) {
-    // IDENTIFY: full-white 1s flash, then restore. Real UDP, never preview-only.
-    sendToDevice(ip, turnCommand(true));
-  }
+  await govee().identify(id);
   svc.recorder.record("venue/identify", { id });
   return { ok: true, id };
 }
 
-export function testChaseCommand(id: string): { ok: true; id: string } {
+export async function testChaseCommand(id: string): Promise<{ ok: true; id: string }> {
   const svc = getShowService();
-  const ip = svc.deviceIps.get(id);
-  if (ip) {
-    // TEST CHASE: 3-step brightness ramp proving per-device delivery.
-    sendToDevice(ip, JSON.stringify({ msg: { cmd: "brightness", data: { value: 100 } } }));
-  }
+  await govee().testChase(id);
   svc.recorder.record("venue/test-chase", { id });
   return { ok: true, id };
 }
 
-// Rendered frame → LAN: collapse to whole-device color + brightness.
-export function pushFrame(ip: string, frame: Uint8Array, brightness: number): void {
-  frameToLan(ip, frame, brightness, (msg) => sendToDevice(ip, msg));
+// Rendered frame → LAN: the segmented razer stream owns the frame
+// (T-GOV-08 newest-frame-wins, T-GOV-10 verified capability); global
+// brightness travels only the slow rate-limited path (T-GOV-09), so the
+// per-frame brightness argument scales RGB in linear light instead.
+// Linear-light RGB scale for the per-frame intensity argument (spec 49):
+// one shared helper, not a copy of the renderer math.
+function scaleFrame(frame: Uint8Array, intensity: number): Uint8Array {
+  if (!(intensity < 1)) return frame;
+  const out = frame.slice();
+  for (let i = 0; i < out.length; i++) out[i] = scaleChannel(out[i] ?? 0, intensity);
+  return out;
 }
-// T-ARC-03 crash policy + §133 steps 2 and 7. applyCrashPolicy sends the
-// safe look: hold the last frame for holdMs (runtime.crash.holdMs), then dim
-// to zero. restartShowHost stops and restarts the AX/prolink observers that
-// feed the host, restoring live transport from the latest provider state.
+
+export function pushFrame(id: string, frame: Uint8Array, intensity = 1): void {
+  const manager = govee();
+  void (async () => {
+    const zones = Math.floor(frame.length / 3);
+    if (zones > 0) {
+      // Intensity lives in the RGB scaling above; the brightness wire stays
+      // quiet so a beat never becomes a brightness command (T-GOV-09).
+      await manager.pushFrame(id, scaleFrame(frame, intensity));
+    }
+  })();
+}
+// T-ARC-03 crash policy + §133 steps 2 and 7. applyCrashPolicy holds the
+// safe look for holdMs (runtime.crash.holdMs), then dims to zero. restartShowHost
+// stops and restarts the AX/prolink observers that feed the host.
 export interface CrashPolicyOptions {
   holdMs: number;
 }
@@ -190,21 +220,25 @@ export function crashRecordPath(): string {
 export function applyCrashPolicy(opts: CrashPolicyOptions): void {
   const svc = getShowService();
   svc.recorder.record("crash/safe-look", { holdMs: opts.holdMs });
-  for (const ip of svc.deviceIps.values()) {
-    sendToDevice(ip, brightnessCommand(100));
-  }
+  const manager = govee();
+  // Hold the last frame: streams keep their newest frame, no power commands.
+  void (async () => {
+    for (const mac of [...svc.deviceIps.keys()]) {
+      await manager.setBrightness(mac, 100);
+    }
+  })();
   if (opts.holdMs > 0) {
     const timer = setTimeout(() => {
       clearTimeout(timer);
-      for (const ip of getShowService().deviceIps.values()) {
-        sendToDevice(ip, turnCommand(false));
-      }
+      void (async () => {
+        await getGoveeManager().blackoutAll();
+      })();
       getShowService().recorder.record("crash/dimmed", {});
     }, opts.holdMs);
   } else {
-    for (const ip of svc.deviceIps.values()) {
-      sendToDevice(ip, turnCommand(false));
-    }
+    void (async () => {
+      await getGoveeManager().blackoutAll();
+    })();
     svc.recorder.record("crash/dimmed", {});
   }
 }
@@ -220,10 +254,9 @@ export function restartShowHost(): void {
 export function applyEndingLook(kind: "blackout" | "hold" | "dim"): Promise<void> {
   const svc = getShowService();
   svc.recorder.record("shutdown/ending-look", { kind });
-  for (const ip of svc.deviceIps.values()) {
-    if (kind === "blackout") sendToDevice(ip, turnCommand(false));
-    else if (kind === "dim") sendToDevice(ip, brightnessCommand(1));
-  }
+  const manager = getGoveeManager();
+  if (kind === "blackout") return manager.blackoutAll();
+  if (kind === "dim") return (async () => { await manager.dimAll(); })();
   return Promise.resolve();
 }
 
@@ -269,22 +302,20 @@ export function runShutdown(opts: ShutdownOptions): Promise<void> {
 }
 
 function disarmStreams(): void {
-  for (const ip of getShowService().deviceIps.values()) {
-    sendToDevice(ip, turnCommand(false));
-  }
+  getGoveeManager().disarmAll();
   getShowService().recorder.record("shutdown/streams-disarmed", {});
 }
 
 function flushConfig(): void {
   try {
     getShowService().config.save();
+    getGoveeManager().saveRegistryNow();
   } catch (err) {
     getShowService().recorder.record("shutdown/flush-failed", {
       message: err instanceof Error ? err.message : String(err),
     });
   }
 }
-
 
 export async function pollAxCommand(): Promise<{ ok: true; readings: unknown[] }> {
   return { ok: true, readings: await pollAxDecks() };
@@ -301,13 +332,26 @@ export function readAudioLevel(): { ok: true; level: number } {
 
 export function readDiagnostics(): { ok: true; diagnostics: Record<string, unknown> } {
   const svc = getShowService();
+  const found = govee().registrySnapshot();
+  const fps: Record<string, number> = {};
+  const latency: Record<string, number> = {};
+  for (const d of found) {
+    fps[d.mac] = d.fps;
+    if (d.rttMs !== null) latency[d.mac] = d.rttMs;
+  }
+  const ports = govee().portStatus();
+  const stats = govee().discoveryStats();
+  const verified = found.filter((d) => d.observed !== null).length;
   return {
     ok: true,
     diagnostics: {
-      metrics: { ...svc.metrics, deviceFps: {}, deviceLatencyMs: {} },
+      metrics: { ...svc.metrics, deviceFps: fps, deviceLatencyMs: latency },
       ax: svc.ax,
       prolink: svc.prolink,
-      devices: [...svc.deviceIps.entries()].map(([id, ip]) => ({ id, ip })),
+      devices: found,
+      portStatus: ports,
+      discovery: { rounds: stats.rounds, warnings: stats.warnings },
+      readBackVerified: verified,
       events: svc.recorder.count(),
       overrides: svc.overrides,
       followMode: svc.followMode,
@@ -396,7 +440,9 @@ export function readShowState(deck: number): { ok: true; deck: number } {
 
 export function readVenueList(): { ok: true; fixtures: unknown[] } {
   const svc = getShowService();
-  return { ok: true, fixtures: [...svc.deviceIps.entries()].map(([id, ip]) => ({ id, ip })) };
+  const found = govee().registrySnapshot();
+  for (const d of found) svc.deviceIps.set(d.mac, d.ip);
+  return { ok: true, fixtures: found.map((d) => ({ id: d.mac, ip: d.ip })) };
 }
 
 export function setVenueColor(rgb: [number, number, number]): { ok: true; rgb: [number, number, number] } {
@@ -408,8 +454,8 @@ export function setVenueColor(rgb: [number, number, number]): { ok: true; rgb: [
 
 export function deviceAction(id: string, action: string): { ok: true; id: string; action: string } {
   getShowService().recorder.record("venue/device-action", { id, action });
-  if (action === "identify") identifyCommand(id);
-  else if (action === "test-chase") testChaseCommand(id);
+  if (action === "identify") void identifyCommand(id);
+  else if (action === "test-chase") void testChaseCommand(id);
   return { ok: true, id, action };
 }
 
