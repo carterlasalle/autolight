@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { performanceScenario, soak, gateFrame, makeFixture } from "@autolight/simulator";
-import { liveViewModel } from "../src/renderer/live.js";
+import { liveViewModel } from "../src/features/live/live.js";
 import { makeDeck } from "@autolight/simulator";
 
 // Qualification (§125): full-performance rehearsal — every frame renders,

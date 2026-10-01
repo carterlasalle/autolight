@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { trackModelSchema, showStyleSchema } from "@autolight/contracts";
 import { planShow, BUILT_IN_STYLES } from "@autolight/show-planner";
-import { liveViewModel } from "../src/renderer/live.js";
+import { liveViewModel } from "../src/features/live/live.js";
 import { makeDeck, makeFixture } from "@autolight/simulator";
 import { parseFixture } from "@autolight/rekordbox-live";
 
