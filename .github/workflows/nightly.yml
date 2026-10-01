@@ -1,0 +1,111 @@
+# Nightly CI (T-TRU-11): full mutation, protocol fuzzing, timing harness,
+# 4-hour SIM soak. Subjects that do not exist yet fail visibly naming the task
+# that turns them green.
+
+name: nightly
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: nightly-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  mutation-full:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: yarn install --immutable
+      - run: yarn workspaces foreach --all run build
+      - name: Stryker full run (T-TRU-08)
+        run: |
+          for PKG in contracts show-runtime show-mixer renderer show-planner venue govee rekordbox-live controller-flx4; do
+            mkdir -p "/tmp/stryker-$PKG"
+            cat > "/tmp/stryker-$PKG/stryker.config.json" <<EOF
+            {
+              "testRunner": "vitest",
+              "coverageAnalysis": "perTest",
+              "tsconfigFile": "tsconfig.json",
+              "thresholds": { "high": 85, "low": 85, "break": 85 },
+              "mutate": ["src/index.ts"]
+            }
+            EOF
+            yarn stryker run --configFile "/tmp/stryker-$PKG/stryker.config.json" --project packages/$PKG
+          done
+      - name: Mutation survivors in the safety-critical list (T-TRU-08)
+        run: node -e '
+          const fs = require("fs");
+          const list = JSON.parse(fs.readFileSync("tools/mutation/critical.json", "utf8"));
+          const missing = list.critical.filter((e) => e.status === "present" && !fs.existsSync(e.module));
+          const pending = list.critical.filter((e) => e.status === "pending");
+          if (missing.length || pending.length) {
+            console.error("critical list unresolved:");
+            for (const m of missing) console.error("  missing module " + m.id + " -> " + m.module);
+            for (const p of pending) console.error("  pending " + p.id + " owned by " + p.ownerTask);
+            process.exit(1);
+          }
+          console.log("mutation-critical: clear");
+        '
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --project analysis --frozen --all-groups
+      - name: mutmut full run (T-TRU-08)
+        run: uv run --project analysis mutmut run --paths-to-mutate="src/autolight_analysis/{events,structure,fusion,features,stems}.py"
+        working-directory: analysis
+
+  fuzz:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: yarn install --immutable
+      - name: Protocol parser fuzzing (T-QA-12)
+        run: |
+          echo "::error::property-test suite (fast-check / Hypothesis) missing; fuzz stage owned by T-QA-12"
+          exit 1
+
+  timing:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: yarn install --immutable
+      - run: yarn workspaces foreach --all run build
+      - name: Timing harness (T-QA-05)
+        run: |
+          if [ -f tools/timing-harness.mjs ] || [ -f scripts/timing-harness.mjs ]; then
+            node tools/timing-harness.mjs 2>/dev/null || node scripts/timing-harness.mjs
+          else
+            echo "::error::timing harness missing; timing stage owned by T-QA-05"
+            exit 1
+          fi
+
+  soak:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: yarn install --immutable
+      - run: yarn workspace @autolight/desktop build
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+      - name: 4-hour SIM soak (T-QA-06)
+        run: |
+          echo "::error::wall-clock 4h SIM soak suite missing (the old accelerated rehearsal is not a soak); soak stage owned by T-QA-06"
+          exit 1

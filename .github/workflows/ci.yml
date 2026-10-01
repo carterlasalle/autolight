@@ -1,12 +1,252 @@
+# CI pipeline (T-TRU-11 rewrite). Staged, fail fast, every stage a job.
+# Stages whose subject does not exist yet fail visibly naming the task that
+# turns them green (T-TRU-11 DoD).
+
 name: ci
+
 on:
   push:
   pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  verify:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: yarn install --immutable
+      # Python formatting (T-TRU-09): the analysis tree is format-checked.
+      # TypeScript formatting has no configured formatter yet; the stage must
+      # stay visibly red until a task owns it (T-QA-02 listed in STATUS.md).
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --project analysis --frozen --all-groups
+      - run: uv run --project analysis ruff format --check .
+        working-directory: analysis
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: yarn install --immutable
+      # ESLint flat config is not committed yet; fail visibly naming the
+      # owner instead of silently skipping the JavaScript half of the stage.
+      - name: ESLint (missing config, owned by T-TRU-06)
+        run: |
+          if [ -f eslint.config.mjs ] || [ -f eslint.config.js ] || [ -f eslint.config.ts ]; then
+            yarn eslint .
+          else
+            echo "::error::eslint.config.{mjs,js,ts} missing; ESLint stage owned by T-TRU-06, add config and a green run"
+            exit 1
+          fi
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --project analysis --frozen --all-groups
+      - run: uv run --project analysis ruff check .
+        working-directory: analysis
+
+  types:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: yarn install --immutable
+      - run: yarn workspaces foreach --all --exclude autolight run typecheck
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --project analysis --frozen --all-groups
+      - run: uv run --project analysis pyright
+        working-directory: analysis
+
+  dead-code:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: yarn install --immutable
+      - run: yarn knip
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --project analysis --frozen --all-groups
+      # Vulture via uvx: not yet added to the analysis dev group (T-TRU-04
+      # owns the Python dead-code gate); run it live so coverage is real.
+      - run: uvx vulture src --min-confidence 80
+        working-directory: analysis
+
+  architecture:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: yarn install --immutable
+      - run: yarn depcruise --config .dependency-cruiser.cjs packages apps/desktop/src apps/desktop/electron
+
+  truth:
+    needs: [architecture]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: yarn install --immutable
+      - run: yarn truth
+
+  unit-coverage:
+    needs: [truth]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: yarn install --immutable
+      - run: yarn workspaces foreach --all run build
+      - run: yarn vitest run --coverage
+      - name: Coverage gates (T-TRU-07 thresholds)
+        run: yarn vitest run --coverage --coverage.thresholds.lines 85 --coverage.thresholds.statements 85 --coverage.thresholds.functions 90 --coverage.thresholds.branches 80
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --project analysis --frozen --all-groups
+      - run: uv run --project analysis pytest --cov=autolight_analysis --cov-report=term-missing
+        working-directory: analysis
+      - name: Unique test count (S18)
+        run: yarn test:count
+
+  mutation-fast:
+    needs: [unit-coverage]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: yarn install --immutable
+      - run: yarn workspaces foreach --all run build
+      # Changed-files filter: PR mutation runs on changed files only; the
+      # nightly full run covers everything (nightly.yml). Stryker config is
+      # generated inline because no committed config exists yet (T-TRU-08).
+      - name: Stryker on changed TypeScript packages
+        run: |
+          BASE="${{ github.event.pull_request.base.sha || github.event.before || 'HEAD~1' }}"
+          CHANGED=$(git diff --name-only "$BASE" HEAD | grep -E '^packages/[^/]+/src/.*\.ts$' | cut -d/ -f2 | sort -u | tr '\n' ' ')
+          if [ -z "$CHANGED" ]; then
+            echo "no changed package sources; mutation-fast skipped"
+            exit 0
+          fi
+          for PKG in $CHANGED; do
+            case "$PKG" in
+              contracts|show-runtime|show-mixer|renderer|show-planner|venue|govee|rekordbox-live|controller-flx4) ;;
+              *) echo "package $PKG not in the mutation scope (T-TRU-08 modules); skipping" ; continue ;;
+            esac
+            mkdir -p "/tmp/stryker-$PKG"
+            cat > "/tmp/stryker-$PKG/stryker.config.json" <<EOF
+            {
+              "testRunner": "vitest",
+              "coverageAnalysis": "perTest",
+              "tsconfigFile": "tsconfig.json",
+              "thresholds": { "high": 85, "low": 85, "break": 85 },
+              "mutate": ["src/index.ts"]
+            }
+            EOF
+            yarn stryker run --configFile "/tmp/stryker-$PKG/stryker.config.json" --project packages/$PKG
+          done
+      - name: Mutation survivors in the safety-critical list (T-TRU-08)
+        run: node tools/mutation/check-critical.mjs
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --project analysis --frozen --all-groups
+      - name: mutmut on changed Python modules (T-TRU-08)
+        run: |
+          BASE="${{ github.event.pull_request.base.sha || github.event.before || 'HEAD~1' }}"
+          CHANGED=$(git diff --name-only "$BASE" HEAD | grep -E '^analysis/src/.*\.py$' | sed 's#analysis/src/autolight_analysis/##; s#\.py$##' | sort -u | tr '\n' ' ')
+          if [ -z "$CHANGED" ]; then
+            echo "no changed analysis sources; mutmut skipped"
+            exit 0
+          fi
+          uv run --project analysis mutmut run --paths-to-mutate="src/autolight_analysis/*.py"
+        working-directory: analysis
+
+  replay:
+    needs: [mutation-fast]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: yarn install --immutable
+      # Fixture replay harness (T-QA-03) does not exist yet: replay today
+      # runs the committed decoder tests that decode the raw captures.
+      - run: yarn workspace @autolight/rekordbox-live test
+      - run: yarn workspace @autolight/serato test
+      - name: T-QA-03 full replay harness is pending
+        run: |
+          if grep -q "replayFixture" packages/rekordbox-live/src/index.ts; then
+            exit 0
+          else
+            echo "::error::T-QA-03 replay harness missing; this stage must grow to replay every protocol fixture, owned by T-QA-03"
+            exit 1
+          fi
+
+  integration:
+    needs: [replay]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: yarn install --immutable
+      - run: yarn workspaces foreach --all run build
+      # Show host with simulators + analysis worker (T-TRU-11 stage). The
+      # application-level integration suite lands with T-QA-04; until then
+      # the show-host unit suite proves the host pipeline against in-memory
+      # doubles, and the stage fails visibly when the suite is absent.
+      - run: yarn workspace @autolight/show-host test
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --project analysis --frozen --all-groups
+      - run: uv run --project analysis pytest tests/test_worker.py -q
+        working-directory: analysis
+      - name: T-QA-04 application-level integration suite is pending
+        run: |
+          if ls apps/desktop/e2e/*.spec.ts >/dev/null 2>&1; then
+            exit 0
+          else
+            echo "::error::application-level integration suite missing, owned by T-QA-04"
+            exit 1
+          fi
+
+  e2e:
+    needs: [integration]
     strategy:
+      fail-fast: false
       matrix:
         os: [macos-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            xvfb: true
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -14,23 +254,92 @@ jobs:
         with:
           node-version: 22
       - run: corepack enable
-      # each.mjs shells out to `yarn` per workspace; corepack shims are not
-      # on PATH for child processes on Windows, so build from the repo root.
       - run: yarn install --immutable
-      - run: yarn workspaces foreach --all --topological-dev --exclude autolight run build
-      - run: yarn workspaces foreach --all run typecheck
-      - run: yarn workspaces foreach --all run test
-      - if: runner.os == 'macOS'
-        run: brew install ffmpeg
-      - if: runner.os == 'Windows'
-        run: choco install ffmpeg -y
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - uses: astral-sh/setup-uv@v5
-      - run: uv run --project analysis pytest -q
-        working-directory: .
+      - run: yarn workspace @autolight/desktop build
       - run: yarn playwright install chromium
         working-directory: apps/desktop
-      - run: yarn run test:e2e
-        working-directory: apps/desktop
+      - if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+      - run: yarn workspace @autolight/desktop test:e2e
+        env:
+          AUTOLIGHT_TEST_BUILD: "1"
+      - if: matrix.xvfb
+        run: xvfb-run -a yarn workspace @autolight/desktop test:e2e
+        env:
+          AUTOLIGHT_TEST_BUILD: "1"
+
+  conformance:
+    needs: [e2e]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: yarn install --immutable
+      - run: node tools/capabilities-check.mjs
+      - run: node tools/claim-check.mjs
+      - name: Probe report (2-conformance-matrix probes, owned by T-QA-01)
+        run: |
+          if [ -f tools/conformance-report.mjs ]; then
+            node tools/conformance-report.mjs
+          else
+            echo "::error::probe report generation missing, owned by T-QA-01"
+            exit 1
+          fi
+
+  licenses:
+    needs: [truth]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: yarn install --immutable
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --project analysis --frozen --all-groups
+      # pip-licenses is not in the analysis dev group yet (T-TRU-10 will add
+      # it with uv add --dev); use the uvx cache for today.
+      - run: uvx pip-licenses --format=json > /tmp/pip-licenses.json
+      - run: node tools/license-check.mjs
+
+  security-codeql:
+    needs: [truth]
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript, python
+          config-file: .github/codeql/codeql-config.yml
+      - uses: github/codeql-action/autobuild@v3
+      - uses: github/codeql-action/analyze@v3
+
+  package:
+    needs: [unit-coverage]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Packaging subject missing (T-OPS-05)
+        run: |
+          echo "::error::no electron-builder config or dist:package script; package stage owned by T-OPS-05"
+          exit 1
+
+  smoke-install:
+    needs: [package]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install subject missing (T-OPS-06)
+        run: |
+          echo "::error::no installer artifact to smoke-test; smoke-install stage owned by T-OPS-06"
+          exit 1

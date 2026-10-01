@@ -1,0 +1,474 @@
+{
+  "generated": "2026-10-01",
+  "yarn": [],
+  "pip": [
+    {
+      "name": "Jinja2",
+      "version": "3.1.6",
+      "license": "BSD License"
+    },
+    {
+      "name": "MarkupSafe",
+      "version": "3.0.3",
+      "license": "BSD-3-Clause"
+    },
+    {
+      "name": "PyYAML",
+      "version": "6.0.3",
+      "license": "MIT License"
+    },
+    {
+      "name": "Pygments",
+      "version": "2.21.0",
+      "license": "BSD-2-Clause"
+    },
+    {
+      "name": "SQLAlchemy",
+      "version": "2.1.1",
+      "license": "MIT"
+    },
+    {
+      "name": "all-in-one-infer",
+      "version": "3.1.0",
+      "license": "MIT License"
+    },
+    {
+      "name": "annotated-types",
+      "version": "0.8.0",
+      "license": "MIT"
+    },
+    {
+      "name": "antlr4-python3-runtime",
+      "version": "4.9.3",
+      "license": "BSD"
+    },
+    {
+      "name": "anyio",
+      "version": "4.15.1",
+      "license": "MIT"
+    },
+    {
+      "name": "autolight-analysis",
+      "version": "0.1.0",
+      "license": "UNKNOWN"
+    },
+    {
+      "name": "beat-this",
+      "version": "1.1.0",
+      "license": "MIT"
+    },
+    {
+      "name": "bidict",
+      "version": "0.24.1",
+      "license": "MPL-2.0"
+    },
+    {
+      "name": "certifi",
+      "version": "2026.7.22",
+      "license": "Mozilla Public License 2.0 (MPL 2.0)"
+    },
+    {
+      "name": "cffi",
+      "version": "2.1.1",
+      "license": "MIT-0"
+    },
+    {
+      "name": "charset-normalizer",
+      "version": "3.5.1",
+      "license": "MIT"
+    },
+    {
+      "name": "click",
+      "version": "8.5.0",
+      "license": "BSD-3-Clause"
+    },
+    {
+      "name": "cloudpickle",
+      "version": "3.1.2",
+      "license": "BSD License"
+    },
+    {
+      "name": "construct",
+      "version": "2.10.70",
+      "license": "MIT License"
+    },
+    {
+      "name": "contourpy",
+      "version": "1.4.0",
+      "license": "BSD-3-Clause"
+    },
+    {
+      "name": "coverage",
+      "version": "7.16.2",
+      "license": "Apache-2.0"
+    },
+    {
+      "name": "cycler",
+      "version": "0.12.1",
+      "license": "BSD License"
+    },
+    {
+      "name": "decorator",
+      "version": "5.3.1",
+      "license": "BSD-2-Clause"
+    },
+    {
+      "name": "demucs-infer",
+      "version": "4.2.2",
+      "license": "MIT License"
+    },
+    {
+      "name": "einops",
+      "version": "0.8.2",
+      "license": "MIT License"
+    },
+    {
+      "name": "filelock",
+      "version": "4.0.6",
+      "license": "MIT"
+    },
+    {
+      "name": "fonttools",
+      "version": "4.66.1",
+      "license": "MIT"
+    },
+    {
+      "name": "fsspec",
+      "version": "2026.9.0",
+      "license": "BSD-3-Clause"
+    },
+    {
+      "name": "h11",
+      "version": "0.16.0",
+      "license": "MIT License"
+    },
+    {
+      "name": "hf-xet",
+      "version": "1.6.0",
+      "license": "Apache-2.0"
+    },
+    {
+      "name": "httpcore2",
+      "version": "2.13.1",
+      "license": "BSD-3-Clause"
+    },
+    {
+      "name": "httpx2",
+      "version": "2.13.1",
+      "license": "BSD-3-Clause"
+    },
+    {
+      "name": "huggingface_hub",
+      "version": "2.0.0",
+      "license": "Apache Software License"
+    },
+    {
+      "name": "hydra-core",
+      "version": "1.3.7",
+      "license": "MIT License"
+    },
+    {
+      "name": "idna",
+      "version": "3.20",
+      "license": "BSD-3-Clause"
+    },
+    {
+      "name": "iniconfig",
+      "version": "2.3.0",
+      "license": "MIT"
+    },
+    {
+      "name": "joblib",
+      "version": "1.6.0",
+      "license": "BSD-3-Clause"
+    },
+    {
+      "name": "julius",
+      "version": "0.2.8",
+      "license": "MIT License"
+    },
+    {
+      "name": "kiwisolver",
+      "version": "1.5.1",
+      "license": "BSD License"
+    },
+    {
+      "name": "lazy-loader",
+      "version": "0.6",
+      "license": "BSD-3-Clause"
+    },
+    {
+      "name": "librosa",
+      "version": "1.0.0",
+      "license": "ISC License (ISCL)"
+    },
+    {
+      "name": "llvmlite",
+      "version": "0.49.0",
+      "license": "BSD-2-Clause AND Apache-2.0 WITH LLVM-exception"
+    },
+    {
+      "name": "madmom-infer",
+      "version": "0.2.0",
+      "license": "BSD License"
+    },
+    {
+      "name": "matplotlib",
+      "version": "3.11.2",
+      "license": "Python Software Foundation License"
+    },
+    {
+      "name": "mpmath",
+      "version": "1.3.0",
+      "license": "BSD License"
+    },
+    {
+      "name": "msgpack",
+      "version": "1.2.3",
+      "license": "Apache-2.0"
+    },
+    {
+      "name": "narwhals",
+      "version": "2.26.0",
+      "license": "MIT"
+    },
+    {
+      "name": "networkx",
+      "version": "3.7",
+      "license": "BSD-3-Clause"
+    },
+    {
+      "name": "nodeenv",
+      "version": "1.11.0",
+      "license": "BSD License"
+    },
+    {
+      "name": "numba",
+      "version": "0.67.0",
+      "license": "BSD License"
+    },
+    {
+      "name": "numpy",
+      "version": "2.5.3",
+      "license": "BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0"
+    },
+    {
+      "name": "omegaconf",
+      "version": "2.3.1",
+      "license": "BSD License"
+    },
+    {
+      "name": "packaging",
+      "version": "26.3",
+      "license": "Apache-2.0 OR BSD-2-Clause"
+    },
+    {
+      "name": "pillow",
+      "version": "12.3.0",
+      "license": "MIT-CMU"
+    },
+    {
+      "name": "platformdirs",
+      "version": "4.12.2",
+      "license": "MIT"
+    },
+    {
+      "name": "pluggy",
+      "version": "1.6.0",
+      "license": "MIT License"
+    },
+    {
+      "name": "pooch",
+      "version": "1.9.0",
+      "license": "BSD-3-Clause"
+    },
+    {
+      "name": "psutil",
+      "version": "7.2.2",
+      "license": "BSD-3-Clause"
+    },
+    {
+      "name": "pycparser",
+      "version": "3.0",
+      "license": "BSD-3-Clause"
+    },
+    {
+      "name": "pydantic",
+      "version": "2.13.5",
+      "license": "MIT"
+    },
+    {
+      "name": "pydantic_core",
+      "version": "2.46.5",
+      "license": "MIT"
+    },
+    {
+      "name": "pyparsing",
+      "version": "3.3.3",
+      "license": "MIT"
+    },
+    {
+      "name": "pyrekordbox",
+      "version": "0.4.4",
+      "license": "MIT License"
+    },
+    {
+      "name": "pyright",
+      "version": "1.1.414",
+      "license": "MIT"
+    },
+    {
+      "name": "pytest",
+      "version": "9.1.1",
+      "license": "MIT"
+    },
+    {
+      "name": "pytest-cov",
+      "version": "7.1.0",
+      "license": "MIT"
+    },
+    {
+      "name": "python-dateutil",
+      "version": "2.9.0.post0",
+      "license": "Apache Software License; BSD License"
+    },
+    {
+      "name": "requests",
+      "version": "2.34.2",
+      "license": "Apache Software License"
+    },
+    {
+      "name": "rotary-embedding-torch",
+      "version": "0.9.1",
+      "license": "MIT License"
+    },
+    {
+      "name": "ruff",
+      "version": "0.16.9",
+      "license": "MIT"
+    },
+    {
+      "name": "scikit-learn",
+      "version": "1.9.1",
+      "license": "BSD-3-Clause"
+    },
+    {
+      "name": "scipy",
+      "version": "1.18.1",
+      "license": "BSD License"
+    },
+    {
+      "name": "six",
+      "version": "1.17.0",
+      "license": "MIT License"
+    },
+    {
+      "name": "soundfile",
+      "version": "0.14.0",
+      "license": "BSD License"
+    },
+    {
+      "name": "soxr",
+      "version": "1.1.0",
+      "license": "LGPL-2.1-or-later"
+    },
+    {
+      "name": "sqlcipher3-wheels",
+      "version": "0.5.7",
+      "license": "zlib/libpng"
+    },
+    {
+      "name": "sympy",
+      "version": "1.14.0",
+      "license": "BSD License"
+    },
+    {
+      "name": "threadpoolctl",
+      "version": "3.7.0",
+      "license": "BSD-3-Clause"
+    },
+    {
+      "name": "torch",
+      "version": "2.14.0",
+      "license": "Apache-2.0 AND Apache-2.0 WITH LLVM-exception AND BSD-2-Clause AND BSD-3-Clause AND BSL-1.0 AND MIT"
+    },
+    {
+      "name": "torchaudio",
+      "version": "2.11.0",
+      "license": "BSD License"
+    },
+    {
+      "name": "tqdm",
+      "version": "4.70.1",
+      "license": "MPL-2.0 AND MIT"
+    },
+    {
+      "name": "truststore",
+      "version": "0.10.4",
+      "license": "MIT"
+    },
+    {
+      "name": "typing-inspection",
+      "version": "0.4.4",
+      "license": "MIT"
+    },
+    {
+      "name": "typing_extensions",
+      "version": "4.16.0",
+      "license": "PSF-2.0"
+    },
+    {
+      "name": "urllib3",
+      "version": "2.8.0",
+      "license": "MIT"
+    }
+  ],
+  "hand": [
+    {
+      "name": "FFmpeg",
+      "kind": "bundled binary",
+      "license": "LGPL-2.1-or-later (unmodified binary; T-OPS-05 bundles it)",
+      "version": "system (brew/choco today)"
+    },
+    {
+      "name": "uv",
+      "kind": "bundled binary",
+      "license": "MIT OR Apache-2.0",
+      "version": "pinned by astral-sh/setup-uv"
+    },
+    {
+      "name": "Python 3.12",
+      "kind": "runtime",
+      "license": "PSF-2.0",
+      "version": "3.12 (setup-python)"
+    },
+    {
+      "name": "Node.js 22 (Electron bundles its own)",
+      "kind": "runtime",
+      "license": "MIT",
+      "version": "engines >=22.12"
+    },
+    {
+      "name": "all-in-one-infer weights",
+      "kind": "model weights",
+      "license": "UNLICENSED until owner decides (OD-09); not bundled today",
+      "version": "not bundled"
+    },
+    {
+      "name": "beat-this weights",
+      "kind": "model weights",
+      "license": "UNLICENSED until owner decides (OD-09); not bundled today",
+      "version": "not bundled"
+    }
+  ],
+  "policy": {
+    "denylist": [
+      "GPL",
+      "AGPL",
+      "unlicensed",
+      "unknown"
+    ],
+    "rkbx_link": "never a dependency",
+    "skipBartSeqLight": "no files, weights, or datasets (research inspiration only)"
+  }
+}
