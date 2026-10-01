@@ -100,13 +100,13 @@ Milestone contents and exit proofs are in `README.md`.
 | T-RUN-07 | Manual overrides and emergency path | `wp12-runtime-mixer-renderer.md` | M1 | `TODO` | none yet | Closes F-RUN-04, F-RUN-07, F-APP-04, F-APP-19 |
 | T-REND-01 | Eight-layer stack with real compositing | `wp12-runtime-mixer-renderer.md` | M1 | `TODO` | none yet | Closes F-REND-01, F-REND-08 |
 | T-UI-03 | Emergency controls and shortcuts | `wp13-ui.md` | M1 | `TODO` | none yet | Closes F-UI-02, F-APP-17 |
-| T-DATA-01 | Storage service and drivers (DS-06) | `wp14-data-security-ops.md` | M1 | `TODO` | none yet | Closes F-DATA-01, F-DATA-02, F-APP-15 |
-| T-DATA-02 | Schema and migrations | `wp14-data-security-ops.md` | M1 | `TODO` | none yet | Closes F-DATA-03 |
-| T-DATA-03 | Cache versioning and selective invalidation | `wp14-data-security-ops.md` | M1 | `TODO` | none yet | Closes F-DATA-03 |
-| T-DATA-04 | Fast path loader | `wp14-data-security-ops.md` | M1 | `TODO` | none yet | Closes F-DATA-04, F-RUN-09 |
+| T-DATA-01 | Storage service and drivers (DS-06) | `wp14-data-security-ops.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-DATA-01/README.md` | Closes F-DATA-01, F-DATA-02, F-APP-15 |
+| T-DATA-02 | Schema and migrations | `wp14-data-security-ops.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-DATA-02/README.md` | Closes F-DATA-03 |
+| T-DATA-03 | Cache versioning and selective invalidation | `wp14-data-security-ops.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-DATA-03/README.md` | Closes F-DATA-03 |
+| T-DATA-04 | Fast path loader | `wp14-data-security-ops.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-DATA-04/README.md` | Closes F-DATA-04, F-RUN-09 |
 | T-SEC-04 | Read-only access enforced by construction | `wp14-data-security-ops.md` | M1 | `TODO` | none yet | Closes F-SEC-02 |
-| T-QA-03 | Protocol replay harness | `wp15-verification-qualification.md` | M1 | `TODO` | none yet | Closes F-QA-11, F-LIVE-02 |
-| T-QA-05 | Performance harness | `wp15-verification-qualification.md` | M1 | `TODO` | none yet | Closes F-QA-05 |
+| T-QA-03 | Protocol replay harness | `wp15-verification-qualification.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-QA-03/README.md` | Closes F-QA-11, F-LIVE-02 |
+| T-QA-05 | Performance harness | `wp15-verification-qualification.md` | M1 | `DONE-VERIFIED` | `docs/finish/evidence/T-QA-05/README.md` | Closes F-QA-05 |
 
 ## Tasks in M2
 
