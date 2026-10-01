@@ -40,19 +40,7 @@ jobs:
             yarn stryker run --configFile "/tmp/stryker-$PKG/stryker.config.json" --project packages/$PKG
           done
       - name: Mutation survivors in the safety-critical list (T-TRU-08)
-        run: node -e '
-          const fs = require("fs");
-          const list = JSON.parse(fs.readFileSync("tools/mutation/critical.json", "utf8"));
-          const missing = list.critical.filter((e) => e.status === "present" && !fs.existsSync(e.module));
-          const pending = list.critical.filter((e) => e.status === "pending");
-          if (missing.length || pending.length) {
-            console.error("critical list unresolved:");
-            for (const m of missing) console.error("  missing module " + m.id + " -> " + m.module);
-            for (const p of pending) console.error("  pending " + p.id + " owned by " + p.ownerTask);
-            process.exit(1);
-          }
-          console.log("mutation-critical: clear");
-        '
+        run: node tools/mutation/check-critical.mjs
       - uses: astral-sh/setup-uv@v5
       - run: uv sync --project analysis --frozen --all-groups
       - name: mutmut full run (T-TRU-08)

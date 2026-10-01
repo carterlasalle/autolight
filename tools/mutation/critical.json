@@ -55,7 +55,7 @@
     { "id": "restraint-validate", "safetyItem": "restraint budgets", "module": "packages/show-planner/src/index.ts", "symbol": "validatePlan", "status": "present" },
     { "id": "restraint-diagnose", "safetyItem": "restraint budgets", "module": "packages/show-planner/src/index.ts", "symbol": "evaluatePlan", "status": "present" },
     { "id": "restraint-generate", "safetyItem": "restraint budgets", "module": "packages/show-planner/src/index.ts", "symbol": "planShow", "status": "present" },
-    { "id": "config-validate", "safetyItem": "config validator", "module": "packages/config/src/index.ts", "symbol": "ConfigStore.importJson", "status": "present" },
+    { "id": "config-validate", "safetyItem": "config validator", "module": "packages/config/src/base.ts", "symbol": "ConfigStore.importJson", "status": "present" },
     { "id": "config-key", "safetyItem": "config validator", "module": "packages/config/src/registry.ts", "symbol": "defineKey", "status": "present" },
     { "id": "config-default", "safetyItem": "config validator", "module": "packages/config/src/registry.ts", "symbol": "defaultFor", "status": "present" },
     { "id": "ipc-channels", "safetyItem": "IPC validators", "module": "packages/ipc/src/index.ts", "symbol": "channels", "status": "present" },

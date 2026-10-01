@@ -81,9 +81,9 @@ jobs:
       - run: yarn knip
       - uses: astral-sh/setup-uv@v5
       - run: uv sync --project analysis --frozen --all-groups
-      # Vulture via uvx: not yet added to the analysis dev group (T-TRU-04
-      # owns the Python dead-code gate); run it live so coverage is real.
-      - run: uvx vulture src --min-confidence 80
+      # Vulture: T-TRU-04 owns the Python dead-code gate; run the live tool
+      # with --with (no pyproject line yet) so coverage is real.
+      - run: uv run --project analysis --with vulture vulture src --min-confidence 80
         working-directory: analysis
 
   architecture:
@@ -303,9 +303,7 @@ jobs:
       - run: yarn install --immutable
       - uses: astral-sh/setup-uv@v5
       - run: uv sync --project analysis --frozen --all-groups
-      # pip-licenses is not in the analysis dev group yet (T-TRU-10 will add
-      # it with uv add --dev); use the uvx cache for today.
-      - run: uvx pip-licenses --format=json > /tmp/pip-licenses.json
+      - run: uv run --project analysis --with pip-licenses pip-licenses --format=json > /tmp/pip-licenses.json
       - run: node tools/license-check.mjs
 
   security-codeql:
