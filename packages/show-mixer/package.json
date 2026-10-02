@@ -15,10 +15,10 @@
     "@autolight/dj-core": "^0.1.0",
     "@autolight/renderer": "^0.1.0",
     "@autolight/show-planner": "^0.1.0",
-    "@autolight/simulator": "^0.1.0",
     "@autolight/storage": "^0.1.0"
   },
   "devDependencies": {
+    "@autolight/simulator": "^0.1.0",
     "typescript": "^5.6.3",
     "vitest": "^4.1.11"
   }

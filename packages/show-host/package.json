@@ -17,10 +17,10 @@
     "@autolight/renderer": "^0.1.0",
     "@autolight/show-mixer": "^0.1.0",
     "@autolight/show-runtime": "^0.1.0",
-    "@autolight/simulator": "^0.1.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@autolight/simulator": "^0.1.0",
     "@types/node": "^22.0.0",
     "typescript": "^5.6.3",
     "vitest": "^4.1.11"

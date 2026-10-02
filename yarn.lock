@@ -228,7 +228,6 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@autolight/govee@workspace:packages/govee"
   dependencies:
-    "@autolight/simulator": "npm:^0.1.0"
     govee-toolkit: "npm:0.5.0"
     typescript: "npm:^5.6.3"
     vitest: "npm:^4.1.11"

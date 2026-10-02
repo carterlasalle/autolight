@@ -120,6 +120,11 @@ jobs:
           node-version: 22
       - run: corepack enable
       - run: yarn install --immutable
+      # trackmodel-drift.mjs shells to `uv run` for the Python validator,
+      # so the uv toolchain plus the synced venv must exist here too.
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --frozen --all-groups
+        working-directory: analysis
       - run: yarn truth
 
   unit-coverage:
