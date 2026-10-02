@@ -30,3 +30,13 @@ def test_vocab_covers_contract():
     assert "drop-continuation" in EVENT_TYPES
     assert "bass-re-entry" in EVENT_TYPES
     assert len(EVENT_TYPES) == 19
+
+
+def test_parity_fixture_parses_both_sides():
+    import json, pathlib
+    path = (pathlib.Path(__file__).parent.parent.parent
+            / "test-fixtures" / "analysis" / "trackmodel-v2.fixture.json")
+    model = json.loads(path.read_text())
+    assert validate_track_model(model) == []
+    assert json.dumps(model, sort_keys=True) == json.dumps(
+        json.loads(json.dumps(model, sort_keys=True)), sort_keys=True)

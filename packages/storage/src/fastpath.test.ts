@@ -84,7 +84,7 @@ describe("fast path loader (T-DATA-04, spec 138)", () => {
     const dir = mkdtempSync(join(tmpdir(), "autolight-fastpath-"));
     const bogus = join(dir, "bogus.json");
     try {
-      writeFileSync(bogus, JSON.stringify({ schemaVersion: 1 }));
+      writeFileSync(bogus, JSON.stringify({ schemaVersion: 2 }));
       const store = storeWith(bogus, JSON.stringify(showPlan));
       try {
         const result = loadFastPath(store, request());

@@ -165,6 +165,8 @@ export function planEvent(
         reason: "breakdown opens a low narrow look",
         moved,
       };
+    case "bass-re-entry":
+    case "drum-re-entry":
     case "bass-reentry":
     case "drum-reentry":
     case "bass_reentry":
@@ -257,6 +259,8 @@ export function planEvent(
         reason: "outro releases the energy",
         moved,
       };
+    case "major-section-transition":
+    case "minor-phrase-transition":
     case "section-transition":
       return {
         beat,

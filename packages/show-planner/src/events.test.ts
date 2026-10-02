@@ -11,7 +11,7 @@ const style = BUILT_IN_STYLES["club"]!;
 
 function trackWith(type: string, confidence: number, strength?: number): TrackModel {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     analyzerVersion: "t",
     identity: { id: `ev-${type}`, sourceIds: {} },
     durationSeconds: 200,
@@ -27,16 +27,49 @@ function trackWith(type: string, confidence: number, strength?: number): TrackMo
       },
     ],
     analysisCoverage: "full",
+    readinessLevel: "full",
+    analysisCoverage2: {
+      level: "full",
+      inputs: {
+        "source.audio": { status: "absent" },
+        "native.rekordbox.grid": { status: "present" },
+        "native.rekordbox.pssi": { status: "present" },
+        "native.rekordbox.cues": { status: "absent" },
+        "native.rekordbox.waveforms": { status: "absent" },
+        "native.rekordbox.vocal": { status: "absent" },
+        "native.serato.grid": { status: "absent" },
+        "native.serato.markers": { status: "absent" },
+        "ml.allinone.structure": { status: "absent" },
+        "ml.allinone.metrical": { status: "absent" },
+        "ml.allinone.activations": { status: "absent" },
+        "ml.allinone.embeddings": { status: "absent" },
+        "ml.stems": { status: "absent" },
+        "ml.beatthis": { status: "absent" },
+        "dsp.features": { status: "absent" },
+        "dsp.stemProxies": { status: "absent" },
+        "events.detectors": { status: "absent" },
+        "fusion.structure": { status: "present" },
+        "plan.generated": { status: "absent" },
+      },
+    },
+    gridWarnings: [],
+    beatFeatures: [],
+    phrases: [],
   } as unknown as TrackModel;
 }
 
 const EXPECTED: Record<string, string> = {
+  "major-section-transition": "phrase-turn",
+  "minor-phrase-transition": "phrase-turn",
   "build-start": "build-ramp",
   "build-intensification": "build-ramp",
   predrop: "dip",
   drop: "impact",
   "fake-drop": "blackout",
+  "drop-continuation": "drop-pattern",
   breakdown: "breakdown-look",
+  "bass-re-entry": "impact",
+  "drum-re-entry": "impact",
   fill: "fill-accent",
   silence: "blackout",
   "vocal-entry": "vocal-focus",
@@ -44,7 +77,7 @@ const EXPECTED: Record<string, string> = {
   "final-hit": "final-hit",
   "outro-release": "outro-release",
   "section-transition": "phrase-turn",
-  transient: "bump",
+  "large-transient": "bump",
   pause: "blackout",
 };
 

@@ -195,7 +195,7 @@ describe("show runtime", () => {
 
   it("holds the look during a scratch and resyncs at the next bar (P-61-scratch)", () => {
     const model: TrackModel = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       analyzerVersion: "test",
       identity: { id: "t", sourceIds: {} },
       durationSeconds: 300,
@@ -211,6 +211,34 @@ describe("show runtime", () => {
       sections: [{ kind: "drop", startBeat: 256, endBeat: 320, confidence: 1 }],
       musicalEvents: [{ type: "drop", beat: 256, confidence: 1 }],
       analysisCoverage: "full",
+      readinessLevel: "full",
+      analysisCoverage2: {
+        level: "full",
+        inputs: {
+          "source.audio": { status: "absent" },
+          "native.rekordbox.grid": { status: "present" },
+          "native.rekordbox.pssi": { status: "present" },
+          "native.rekordbox.cues": { status: "absent" },
+          "native.rekordbox.waveforms": { status: "absent" },
+          "native.rekordbox.vocal": { status: "absent" },
+          "native.serato.grid": { status: "absent" },
+          "native.serato.markers": { status: "absent" },
+          "ml.allinone.structure": { status: "absent" },
+          "ml.allinone.metrical": { status: "absent" },
+          "ml.allinone.activations": { status: "absent" },
+          "ml.allinone.embeddings": { status: "absent" },
+          "ml.stems": { status: "absent" },
+          "ml.beatthis": { status: "absent" },
+          "dsp.features": { status: "absent" },
+          "dsp.stemProxies": { status: "absent" },
+          "events.detectors": { status: "absent" },
+          "fusion.structure": { status: "present" },
+          "plan.generated": { status: "absent" },
+        },
+      },
+      gridWarnings: [],
+      beatFeatures: [],
+      phrases: [],
     };
     const world = deckWorld(1, 200);
     installModel(world, 1, model);
@@ -252,7 +280,7 @@ describe("show runtime", () => {
 
   it("applies every manual override and resume mode (T-RUN-07, spec 134)", () => {
     const model: TrackModel = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       analyzerVersion: "test",
       identity: { id: "t", sourceIds: {} },
       durationSeconds: 300,
@@ -268,6 +296,34 @@ describe("show runtime", () => {
       sections: [{ kind: "chorus", startBeat: 96, endBeat: 128, confidence: 1 }],
       musicalEvents: [],
       analysisCoverage: "full",
+      readinessLevel: "full",
+      analysisCoverage2: {
+        level: "full",
+        inputs: {
+          "source.audio": { status: "absent" },
+          "native.rekordbox.grid": { status: "present" },
+          "native.rekordbox.pssi": { status: "present" },
+          "native.rekordbox.cues": { status: "absent" },
+          "native.rekordbox.waveforms": { status: "absent" },
+          "native.rekordbox.vocal": { status: "absent" },
+          "native.serato.grid": { status: "absent" },
+          "native.serato.markers": { status: "absent" },
+          "ml.allinone.structure": { status: "absent" },
+          "ml.allinone.metrical": { status: "absent" },
+          "ml.allinone.activations": { status: "absent" },
+          "ml.allinone.embeddings": { status: "absent" },
+          "ml.stems": { status: "absent" },
+          "ml.beatthis": { status: "absent" },
+          "dsp.features": { status: "absent" },
+          "dsp.stemProxies": { status: "absent" },
+          "events.detectors": { status: "absent" },
+          "fusion.structure": { status: "present" },
+          "plan.generated": { status: "absent" },
+        },
+      },
+      gridWarnings: [],
+      beatFeatures: [],
+      phrases: [],
     };
     const grid = resumeGridFromModel(model);
     expect(grid.barBeats.slice(0, 3)).toEqual([0, 4, 8]);

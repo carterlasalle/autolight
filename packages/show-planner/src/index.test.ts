@@ -3,7 +3,7 @@ import { planShow, blendRgb, sectionEnergy, motifVariant, validatePlan, evaluate
 import type { TrackModel, ShowStyle } from "@autolight/contracts";
 
 const track = {
-  schemaVersion: 1, analyzerVersion: "t", identity: { id: "trk1", sourceIds: {} },
+  schemaVersion: 2, analyzerVersion: "t", identity: { id: "trk1", sourceIds: {} },
   durationSeconds: 200, beatGrid: { version: 1, beats: [{ index: 0, beatInBar: 1, sourceTimeMs: 0, bpm: 128 }] },
   sections: [
     { kind: "build", rawLabel: "Up 1", startBeat: 32, endBeat: 64, confidence: 0.9 },
@@ -17,6 +17,34 @@ const track = {
     { type: "drop", beat: 66, confidence: 0.9 },
   ],
   analysisCoverage: "full",
+  readinessLevel: "full",
+  analysisCoverage2: {
+    level: "full",
+    inputs: {
+      "source.audio": { status: "absent" },
+      "native.rekordbox.grid": { status: "present" },
+      "native.rekordbox.pssi": { status: "present" },
+      "native.rekordbox.cues": { status: "absent" },
+      "native.rekordbox.waveforms": { status: "absent" },
+      "native.rekordbox.vocal": { status: "absent" },
+      "native.serato.grid": { status: "absent" },
+      "native.serato.markers": { status: "absent" },
+      "ml.allinone.structure": { status: "absent" },
+      "ml.allinone.metrical": { status: "absent" },
+      "ml.allinone.activations": { status: "absent" },
+      "ml.allinone.embeddings": { status: "absent" },
+      "ml.stems": { status: "absent" },
+      "ml.beatthis": { status: "absent" },
+      "dsp.features": { status: "absent" },
+      "dsp.stemProxies": { status: "absent" },
+      "events.detectors": { status: "absent" },
+      "fusion.structure": { status: "present" },
+      "plan.generated": { status: "absent" },
+    },
+  },
+  gridWarnings: [],
+  beatFeatures: [],
+  phrases: [],
 } as unknown as TrackModel;
 const style = { id: "club", intensityRange: [0.2, 1], darknessPreference: 0.3, reactiveAmount: 0.15, whiteHitFrequency: 1, strobeFrequency: 0.2 } as ShowStyle;
 

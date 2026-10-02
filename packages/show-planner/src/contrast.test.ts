@@ -9,7 +9,7 @@ import { DEFAULT_VENUE_CLASS } from "./types.js";
 
 function model(): TrackModel {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     analyzerVersion: "t",
     identity: { id: "contrast", sourceIds: {} },
     durationSeconds: 600,
@@ -27,6 +27,34 @@ function model(): TrackModel {
       { type: "drop", beat: 302, confidence: 0.9, strength: 0.7 },
     ],
     analysisCoverage: "full",
+    readinessLevel: "full",
+    analysisCoverage2: {
+      level: "full",
+      inputs: {
+        "source.audio": { status: "absent" },
+        "native.rekordbox.grid": { status: "present" },
+        "native.rekordbox.pssi": { status: "present" },
+        "native.rekordbox.cues": { status: "absent" },
+        "native.rekordbox.waveforms": { status: "absent" },
+        "native.rekordbox.vocal": { status: "absent" },
+        "native.serato.grid": { status: "absent" },
+        "native.serato.markers": { status: "absent" },
+        "ml.allinone.structure": { status: "absent" },
+        "ml.allinone.metrical": { status: "absent" },
+        "ml.allinone.activations": { status: "absent" },
+        "ml.allinone.embeddings": { status: "absent" },
+        "ml.stems": { status: "absent" },
+        "ml.beatthis": { status: "absent" },
+        "dsp.features": { status: "absent" },
+        "dsp.stemProxies": { status: "absent" },
+        "events.detectors": { status: "absent" },
+        "fusion.structure": { status: "present" },
+        "plan.generated": { status: "absent" },
+      },
+    },
+    gridWarnings: [],
+    beatFeatures: [],
+    phrases: [],
   } as TrackModel;
 }
 

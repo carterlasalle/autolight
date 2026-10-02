@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   beatToSourceSeconds,
@@ -7,6 +10,7 @@ import {
   trackModelSchema,
   type BeatGrid,
 } from "./index.js";
+const fixtureDir = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "test-fixtures", "analysis");
 
 // T-QA-12 contract validation properties (T-DATA-05).
 // Invalid objects of each kind must be rejected with a precise error path.
@@ -50,12 +54,48 @@ describe("contract validation properties", () => {
   });
 
   it("rejects bad sections, events, and coverage levels", () => {
+    const inputs = {
+      "source.audio": { status: "present" },
+      "native.rekordbox.grid": { status: "present" },
+      "native.rekordbox.pssi": { status: "present" },
+      "native.rekordbox.cues": { status: "absent" },
+      "native.rekordbox.waveforms": { status: "absent" },
+      "native.rekordbox.vocal": { status: "absent" },
+      "native.serato.grid": { status: "absent" },
+      "native.serato.markers": { status: "absent" },
+      "ml.allinone.structure": { status: "present" },
+      "ml.allinone.metrical": { status: "absent" },
+      "ml.allinone.activations": { status: "absent" },
+      "ml.allinone.embeddings": { status: "absent" },
+      "ml.stems": { status: "absent" },
+      "ml.beatthis": { status: "absent" },
+      "dsp.features": { status: "present" },
+      "dsp.stemProxies": { status: "absent" },
+      "events.detectors": { status: "present" },
+      "fusion.structure": { status: "present" },
+      "plan.generated": { status: "present" },
+    };
     const model = {
-      schemaVersion: 1, analyzerVersion: "t", identity: { id: "t", sourceIds: {} },
+      schemaVersion: 2, analyzerVersion: "t", identity: { id: "t", sourceIds: {} },
       durationSeconds: 200, beatGrid: grid(64),
-      sections: [{ kind: "build", startBeat: 0, endBeat: 16, confidence: 0.9 }],
-      musicalEvents: [{ type: "drop", beat: 16, confidence: 0.9 }],
+      sections: [{ kind: "build", startBeat: 0, endBeat: 16, confidence: 0.9, evidence: ["rekordbox:PSSI:Up"] }],
+      musicalEvents: [{ type: "drop", beat: 16, confidence: 0.9, evidence: ["energy:peak"] }],
       analysisCoverage: "full",
+      readinessLevel: "full",
+      analysisCoverage2: { level: "full", inputs },
+      gridWarnings: [],
+      beatFeatures: [{ beat: 1, rms: 0.5 }],
+      phrases: [{ kind: "build", rawLabel: "Up", startBeat: 0, endBeat: 16, confidence: 0.9, mood: 1, bank: 1, fill: false, raw: { kind: 2, k1: 0, k2: 0, k3: 0 } }],
+      frameFeatures: { artifactPath: "/tmp/x.features.json", stemSource: "dsp.stemProxies", activationFps: 10 },
+      musicalKey: { key: "A", mode: "minor", confidence: 0.8 },
+      tempo: 128,
+      nativeAnalysis: {
+        rekordbox: {
+          cues: [],
+          waveformFlags: { hasWaveform: true, hasColorWaveform: false, has3Band: false, hasVocals: false },
+          outcomes: [{ tag: "PQTZ", file: "ANLZ0000.DAT", status: "ok" }],
+        },
+      },
     };
     expect(trackModelSchema.safeParse(model).success).toBe(true);
     expect(trackModelSchema.safeParse({ ...model, analysisCoverage: "nope" }).success).toBe(false);
@@ -66,6 +106,26 @@ describe("contract validation properties", () => {
       ...model, musicalEvents: [{ type: "nope", beat: 1, confidence: 1 }],
     }).success).toBe(false);
     expect(trackModelSchema.safeParse({ ...model, beatGrid: { version: 1, beats: [] } }).success).toBe(false);
+    expect(trackModelSchema.safeParse({ ...model, schemaVersion: 1 }).success).toBe(false);
+    expect(trackModelSchema.safeParse({ ...model, extraField: 1 }).success).toBe(false);
+    const { ["plan.generated"]: _dropped, ...shortInputs } = inputs;
+    expect(trackModelSchema.safeParse({
+      ...model, analysisCoverage2: { level: "full", inputs: shortInputs },
+    }).success).toBe(false);
+    expect(trackModelSchema.safeParse({
+      ...model, analysisCoverage: "adaptive", beatGrid: grid(4),
+    }).success).toBe(false);
+    expect(trackModelSchema.safeParse({
+      ...model, analysisCoverage: "adaptive", beatGrid: { version: 1, beats: [] },
+    }).success).toBe(true);
+  });
+  it("parses the v2 parity fixture both sides agree on (T-ANA-12 P-20)", () => {
+    const raw = readFileSync(join(fixtureDir, "trackmodel-v2.fixture.json"), "utf8");
+    const parsed = trackModelSchema.safeParse(JSON.parse(raw));
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(JSON.stringify(parsed.data)).toBe(JSON.stringify(JSON.parse(raw)));
+    }
   });
 
   it("accepts a well-formed plan and rejects a bad cue", () => {
