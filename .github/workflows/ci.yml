@@ -137,14 +137,16 @@ jobs:
       - run: corepack enable
       - run: yarn install --immutable
       - run: yarn workspaces foreach --all --topological-dev --exclude autolight run build
+      # uv first: the PSSI drift probe shells to `uv run` inside vitest, so
+      # the toolchain plus synced venv must exist before the test runs.
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --frozen --all-groups
+        working-directory: analysis
       # Timing benchmarks run without the V8 coverage profiler, which slows
       # the P-74 million-mapping benchmark ~10x (587 ms vs 46 ms reference).
       # Coverage still collects every test; the gate below enforces thresholds.
       - run: yarn vitest run
       - run: yarn vitest run --coverage --coverage.thresholds.lines 85 --coverage.thresholds.statements 85 --coverage.thresholds.functions 90 --coverage.thresholds.branches 80
-      - uses: astral-sh/setup-uv@v5
-      - run: uv sync --frozen --all-groups
-        working-directory: analysis
       - run: uv run pytest --cov=autolight_analysis --cov-report=term-missing
         working-directory: analysis
       - name: Unique test count (S18)
