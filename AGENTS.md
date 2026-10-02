@@ -3031,13 +3031,35 @@ TBD.
 
 ## Open questions / unclear behavior
 
-TBD.
+- `reference-track.json` (one-beat grid, sections at beats 32 to 96) cannot
+  become v2 by field addition alone; Python semantic validation rejects
+  events beyond the grid. A v2 planner-golden input needs a full grid.
+- `capabilities.yaml` analysis entry still lists pre-v2 gaps as missing
+  after T-ANA-12 landed; manifest refresh is a separate task.
 
 ---
 
 ## Durable learnings
 
-TBD.
+- TrackModel v2 (2026-10-01): Zod owns the TS shape, Python mirrors it by
+  hand; the drift check is the parity fixture
+  (`test-fixtures/analysis/trackmodel-v2.fixture.json`) plus the mirror
+  tests on both sides. No JSON-Schema export or datamodel-code-generator
+  step exists yet.
+- Contract upgrades fan out: bumping `trackModelSchema` broke 5 fixture
+  files and 17 test literals plus typecheck. Regenerate fixtures through
+  `fusion.build_track_model` (never hand-bump `schemaVersion`) and fix the
+  bogus-artifact literal (`fastpath.test.ts`) alongside.
+- `node docs/finish/tools/make-status.mjs` rewrites the whole STATUS.md and
+  is lossy (truncates titles, mangles spacing, zeroes nothing it should not
+  recompute). Never run it to fix the summary header; edit the 7 count rows
+  by hand and re-run `check-coverage.mjs`.
+- `docs/finish/evidence/T-QA-05/measurement.json` is rewritten by the perf
+  harness on every run; revert it unless the measurement itself is the
+  deliverable.
+- e2e `m1-slice.journey.ts` fails on the clean tree (Electron window never
+  paints `#root`); unrelated slices verify it via `git stash`, never by
+  re-running the full e2e suite repeatedly.
 
 ---
 
