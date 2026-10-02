@@ -1,8 +1,19 @@
 import { z } from "zod";
 import type { DeckState } from "@autolight/contracts";
 import { deckStateSchema } from "@autolight/contracts";
-import { rowToIdentity } from "@autolight/rekordbox-library";
 import { axFractionalBeat } from "./ax.js";
+
+// Library row identity inline (§12 resolution starts at native ID plus path).
+// Inlined here so the live package never imports the file-reading library
+// plane (pssi labels, sidecar, watchers pull node:fs into the renderer
+// bundle). The canonical resolver lives in @autolight/track-identity.
+function rowToIdentity(row: { rekordboxId: string; canonicalPath?: string; title?: string; artist?: string }): { rekordboxId: string; canonicalPath?: string; title?: string; artist?: string } {
+  const out: { rekordboxId: string; canonicalPath?: string; title?: string; artist?: string } = { rekordboxId: row.rekordboxId };
+  if (row.canonicalPath !== undefined && row.canonicalPath !== "") out.canonicalPath = row.canonicalPath;
+  if (row.title !== undefined && row.title !== "") out.title = row.title;
+  if (row.artist !== undefined && row.artist !== "") out.artist = row.artist;
+  return out;
+}
 
 // Protocol fixture envelope. Raw capture is required: a fixture with an
 // empty capture fails the fixture lint (T-TRU-15, T-QA-03), and replay
