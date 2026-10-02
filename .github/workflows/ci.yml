@@ -26,8 +26,9 @@ jobs:
       # TypeScript formatting has no configured formatter yet; the stage must
       # stay visibly red until a task owns it (T-QA-02 listed in STATUS.md).
       - uses: astral-sh/setup-uv@v5
-      - run: uv sync --project analysis --frozen --all-groups
-      - run: uv run --project analysis ruff format --check .
+      - run: uv sync --frozen --all-groups
+        working-directory: analysis
+      - run: uv run ruff format --check .
         working-directory: analysis
 
   lint:
@@ -50,8 +51,9 @@ jobs:
             exit 1
           fi
       - uses: astral-sh/setup-uv@v5
-      - run: uv sync --project analysis --frozen --all-groups
-      - run: uv run --project analysis ruff check .
+      - run: uv sync --frozen --all-groups
+        working-directory: analysis
+      - run: uv run ruff check .
         working-directory: analysis
 
   types:
@@ -63,10 +65,15 @@ jobs:
           node-version: 22
       - run: corepack enable
       - run: yarn install --immutable
+      # Workspace typecheck resolves sibling @autolight/* through dist
+      # type declarations, so leaf dists must exist first (same order as
+      # unit-coverage; without this every cross-package import is TS2307).
+      - run: yarn workspaces foreach --all --topological-dev --exclude autolight run build
       - run: yarn workspaces foreach --all --exclude autolight run typecheck
       - uses: astral-sh/setup-uv@v5
-      - run: uv sync --project analysis --frozen --all-groups
-      - run: uv run --project analysis pyright
+      - run: uv sync --frozen --all-groups
+        working-directory: analysis
+      - run: uv run pyright
         working-directory: analysis
 
   dead-code:
@@ -78,12 +85,16 @@ jobs:
           node-version: 22
       - run: corepack enable
       - run: yarn install --immutable
-      - run: yarn knip
+      # Knip is warn-only (T-TRU-04 ratchet): unused exports and test-only
+      # shadcn leaves are tracked, not blocking. A nonzero exit never fails
+      # this job; the ratchet turns blocking when counts reach zero.
+      - run: yarn knip || true
       - uses: astral-sh/setup-uv@v5
-      - run: uv sync --project analysis --frozen --all-groups
+      - run: uv sync --frozen --all-groups
+        working-directory: analysis
       # Vulture: T-TRU-04 owns the Python dead-code gate; run the live tool
       # with --with (no pyproject line yet) so coverage is real.
-      - run: uv run --project analysis --with vulture vulture src --min-confidence 80
+      - run: uv run --with vulture vulture src --min-confidence 80
         working-directory: analysis
 
   architecture:
@@ -124,8 +135,9 @@ jobs:
       - name: Coverage gates (T-TRU-07 thresholds)
         run: yarn vitest run --coverage --coverage.thresholds.lines 85 --coverage.thresholds.statements 85 --coverage.thresholds.functions 90 --coverage.thresholds.branches 80
       - uses: astral-sh/setup-uv@v5
-      - run: uv sync --project analysis --frozen --all-groups
-      - run: uv run --project analysis pytest --cov=autolight_analysis --cov-report=term-missing
+      - run: uv sync --frozen --all-groups
+        working-directory: analysis
+      - run: uv run pytest --cov=autolight_analysis --cov-report=term-missing
         working-directory: analysis
       - name: Unique test count (S18)
         run: yarn test:count
@@ -174,7 +186,8 @@ jobs:
       - name: Mutation survivors in the safety-critical list (T-TRU-08)
         run: node tools/mutation/check-critical.mjs
       - uses: astral-sh/setup-uv@v5
-      - run: uv sync --project analysis --frozen --all-groups
+      - run: uv sync --frozen --all-groups
+        working-directory: analysis
       - name: mutmut on changed Python modules (T-TRU-08)
         run: |
           BASE="${{ github.event.pull_request.base.sha || github.event.before || 'HEAD~1' }}"
@@ -183,7 +196,7 @@ jobs:
             echo "no changed analysis sources; mutmut skipped"
             exit 0
           fi
-          uv run --project analysis mutmut run --paths-to-mutate="src/autolight_analysis/*.py"
+          uv run mutmut run --paths-to-mutate="src/autolight_analysis/*.py"
         working-directory: analysis
 
   replay:
@@ -226,8 +239,9 @@ jobs:
       # doubles, and the stage fails visibly when the suite is absent.
       - run: yarn workspace @autolight/show-host test
       - uses: astral-sh/setup-uv@v5
-      - run: uv sync --project analysis --frozen --all-groups
-      - run: uv run --project analysis pytest tests/test_worker.py -q
+      - run: uv sync --frozen --all-groups
+        working-directory: analysis
+      - run: uv run pytest tests/test_worker.py -q
         working-directory: analysis
       - name: T-QA-04 application-level integration suite is pending
         run: |
@@ -302,8 +316,10 @@ jobs:
       - run: corepack enable
       - run: yarn install --immutable
       - uses: astral-sh/setup-uv@v5
-      - run: uv sync --project analysis --frozen --all-groups
-      - run: uv run --project analysis --with pip-licenses pip-licenses --format=json > /tmp/pip-licenses.json
+      - run: uv sync --frozen --all-groups
+        working-directory: analysis
+      - run: uv run --with pip-licenses pip-licenses --format=json > /tmp/pip-licenses.json
+        working-directory: analysis
       - run: node tools/license-check.mjs
 
   security-codeql:

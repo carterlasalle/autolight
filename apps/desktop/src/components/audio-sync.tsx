@@ -24,7 +24,6 @@ export function AudioSyncCard(): JSX.Element {
       cancelAnimationFrame(rafRef.current);
       streamRef.current?.getTracks().forEach((t) => t.stop());
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -37,7 +36,6 @@ export function AudioSyncCard(): JSX.Element {
         if (s.audioDevice === null) s.set({ audioDevice: inputs[0]?.index ?? 0 });
       }
     }).catch(() => { s.set({ audioPermission: "denied" }); });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const start = async (): Promise<void> => {

@@ -39,11 +39,16 @@ def is_fake_drop(gap_beats: float, silence: bool) -> bool:
     return silence and 1 <= gap_beats <= 4
 
 
-def build_score(window_energies: list[float], drum_slope: float = 0.0,
-                pssi_up: bool = False, centroid_slope: float = 0.0,
-                onset_slope: float = 0.0, bass_movement: float = 0.0,
-                boundary_confidence: float = 0.0,
-                tension_slope: float = 0.0) -> dict:
+def build_score(
+    window_energies: list[float],
+    drum_slope: float = 0.0,
+    pssi_up: bool = False,
+    centroid_slope: float = 0.0,
+    onset_slope: float = 0.0,
+    bass_movement: float = 0.0,
+    boundary_confidence: float = 0.0,
+    tension_slope: float = 0.0,
+) -> dict:
     """Candidate build at window end (spec 23: all nine features).
 
     Slope is normalized by mean level so loud-sustained sections don't read as
@@ -76,8 +81,11 @@ def build_score(window_energies: list[float], drum_slope: float = 0.0,
     if tension_slope > 0:
         evidence.append("harmony:tension-rising")
         confidence += 0.05
-    return {"strength": strength, "confidence": min(1.0, confidence),
-            "evidence": evidence}
+    return {
+        "strength": strength,
+        "confidence": min(1.0, confidence),
+        "evidence": evidence,
+    }
 
 
 def drop_score(
@@ -93,11 +101,20 @@ def drop_score(
     pssi_transition: bool = False,
 ) -> dict:
     """Converging-signal drop (spec 24: every listed input, no single threshold)."""
-    votes = sum([
-        bass_jump > 0, drum_jump > 0, energy_jump > 0,
-        preceded_by_build, preceded_by_dip, on_downbeat, section_boundary,
-        onset_peak, novelty_peak, pssi_transition,
-    ])
+    votes = sum(
+        [
+            bass_jump > 0,
+            drum_jump > 0,
+            energy_jump > 0,
+            preceded_by_build,
+            preceded_by_dip,
+            on_downbeat,
+            section_boundary,
+            onset_peak,
+            novelty_peak,
+            pssi_transition,
+        ]
+    )
     strength = min(1.0, max(0.0, (bass_jump + drum_jump + energy_jump) / 3.0))
     confidence = min(1.0, votes / 7.0)
     evidence = []
@@ -121,5 +138,9 @@ def drop_score(
         evidence.append("novelty:peak")
     if pssi_transition:
         evidence.append("rekordbox:PSSI:transition")
-    return {"strength": strength, "confidence": confidence, "votes": votes,
-            "evidence": evidence}
+    return {
+        "strength": strength,
+        "confidence": confidence,
+        "votes": votes,
+        "evidence": evidence,
+    }

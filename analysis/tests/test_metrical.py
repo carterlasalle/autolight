@@ -1,4 +1,4 @@
-from autolight_analysis.metrical import grid_warning, beat_this_available
+from autolight_analysis.metrical import beat_this_available, grid_warning
 
 
 def test_grid_warning_only_on_disagreement():

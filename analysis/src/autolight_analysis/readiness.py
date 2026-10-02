@@ -40,8 +40,9 @@ FAILED = "failed"
 SKIPPED = "skipped"
 
 
-def input_entry(status: str, reason: str = "", version: str = "",
-                duration_ms: float = 0.0) -> dict:
+def input_entry(
+    status: str, reason: str = "", version: str = "", duration_ms: float = 0.0
+) -> dict:
     entry: dict = {"status": status}
     if reason:
         entry["reason"] = reason
@@ -74,8 +75,10 @@ def compute_readiness(inputs: dict) -> str:
     STRUCTURED: DJ grid + native structure (PSSI), without accessible audio
     or without ML. ADAPTIVE: everything else.
     """
-    has_grid = _get(inputs, "native.rekordbox.grid") == PRESENT or \
-        _get(inputs, "native.serato.grid") == PRESENT
+    has_grid = (
+        _get(inputs, "native.rekordbox.grid") == PRESENT
+        or _get(inputs, "native.serato.grid") == PRESENT
+    )
     has_audio = _get(inputs, "source.audio") == PRESENT
     has_native_structure = (
         _get(inputs, "native.rekordbox.pssi") == PRESENT
@@ -86,8 +89,15 @@ def compute_readiness(inputs: dict) -> str:
     has_dsp = _get(inputs, "dsp.features") == PRESENT
     has_events = _get(inputs, "events.detectors") == PRESENT
     has_plan = _get(inputs, "plan.generated") == PRESENT
-    if (has_grid and has_audio and has_native_structure and has_ml
-            and has_dsp and has_events and has_plan):
+    if (
+        has_grid
+        and has_audio
+        and has_native_structure
+        and has_ml
+        and has_dsp
+        and has_events
+        and has_plan
+    ):
         return "full"
     if has_grid and has_native_structure:
         return "structured"
@@ -96,5 +106,7 @@ def compute_readiness(inputs: dict) -> str:
 
 def describe_inputs(inputs: dict) -> list[dict]:
     """Ordered click-through rows for the Library Inspector (spec 137)."""
-    return [{"key": key, **inputs.get(key, input_entry(ABSENT, "unknown"))}
-            for key in INPUT_KEYS]
+    return [
+        {"key": key, **inputs.get(key, input_entry(ABSENT, "unknown"))}
+        for key in INPUT_KEYS
+    ]

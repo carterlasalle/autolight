@@ -140,8 +140,13 @@ def _cue_from_entry(tag: str, entry) -> dict:
     """Full cue fields (§5.3): position, loop, type, hotcue, RGB, comment, quantize."""
     color_id = getattr(entry, "color_id", None)
     color_code = getattr(entry, "color_code", None)
-    red, green, blue = getattr(entry, "color_red", None), getattr(entry, "color_green", None), getattr(entry, "color_blue", None)
-    rgb = {"r": red, "g": green, "b": blue} if isinstance(red, int) and isinstance(green, int) and isinstance(blue, int) else None
+    red = getattr(entry, "color_red", None)
+    green = getattr(entry, "color_green", None)
+    blue = getattr(entry, "color_blue", None)
+    if isinstance(red, int) and isinstance(green, int) and isinstance(blue, int):
+        rgb: dict | None = {"r": red, "g": green, "b": blue}
+    else:
+        rgb = None
     return {
         "source": tag,
         "hotcue": int(getattr(entry, "hot_cue", 0)),
@@ -162,13 +167,28 @@ def _pssi_raw_hex(entry) -> str:
     g = lambda name: int(getattr(entry, name, 0) or 0)  # noqa: E731
     return struct.pack(
         ">HHHBBBBBBHHHBBBBH",
-        g("index"), g("beat"), g("kind"), g("u1"), g("k1"), g("u2"),
-        g("k2"), g("u3"), g("b"), g("beat_2"), g("beat_3"), g("beat_4"),
-        g("u4"), g("k3"), g("u5"), g("fill"), g("beat_fill"),
+        g("index"),
+        g("beat"),
+        g("kind"),
+        g("u1"),
+        g("k1"),
+        g("u2"),
+        g("k2"),
+        g("u3"),
+        g("b"),
+        g("beat_2"),
+        g("beat_3"),
+        g("beat_4"),
+        g("u4"),
+        g("k3"),
+        g("u5"),
+        g("fill"),
+        g("beat_fill"),
     ).hex()
 
+
 def _waveform_columns(tag: str, value) -> tuple[list, dict]:
-    """Column arrays plus shape/encoding metadata (§5.4). Raw kept, truncated flagged."""
+    """Column arrays plus shape/encoding metadata (§5.4)."""
     meta: dict = {"tag": tag}
     flat: list = []
     entries = getattr(value, "entries", None)
@@ -176,32 +196,34 @@ def _waveform_columns(tag: str, value) -> tuple[list, dict]:
         try:
             flat = [int(v) for v in list(entries)]
             meta.update({"shape": [len(flat)], "dtype": "int"})
-        except Exception:
+        except (TypeError, ValueError):
             flat = []
     if not flat:
         try:
-            import numpy as _np  # noqa: PLC0415 - optional heavy dep, local to metadata
+            import numpy as _np
 
             arr = _np.asarray(value)
             meta.update({"shape": list(arr.shape), "dtype": str(arr.dtype)})
             flat = arr.ravel().tolist()
-        except Exception:
+        except (TypeError, ValueError):
             try:
                 flat = [int(v) for v in list(value)]
                 meta.update({"shape": [len(flat)], "dtype": "int"})
-            except Exception:
+            except (TypeError, ValueError):
                 meta.update({"shape": [], "dtype": "unknown"})
     encoding = {
-        "PWAV": "int8-column", "PWV2": "int8-column", "PWV3": "int8-detail",
-        "PWV4": "rgb-bytes", "PWV5": "int16-detail",
-        "PWV6": "three-band-preview", "PWV7": "three-band-detail",
+        "PWAV": "int8-column",
+        "PWV2": "int8-column",
+        "PWV3": "int8-detail",
+        "PWV4": "rgb-bytes",
+        "PWV5": "int16-detail",
+        "PWV6": "three-band-preview",
+        "PWV7": "three-band-detail",
     }.get(tag, "raw")
     meta["encoding"] = encoding
     cap = 4096 if tag in ("PWV6", "PWV7") else 2048
     meta["truncated"] = len(flat) > cap
     return flat[:cap], meta
-
-
 
 
 def extract_anlz(anlz_dir: str | Path) -> dict:
@@ -225,7 +247,9 @@ def extract_anlz(anlz_dir: str | Path) -> dict:
         except Exception as e:  # noqa: BLE001 - EXT variants raise ConstError; per-file fallback
             files[name] = None
             exists = (root / name).exists()
-            outcomes.append(_outcome(name, name, "failed" if exists else "absent", f"{type(e).__name__}: {e}" if exists else None))
+            status = "failed" if exists else "absent"
+            error = f"{type(e).__name__}: {e}" if exists else None
+            outcomes.append(_outcome(name, name, status, error))
     dat, ext, ex2 = files["ANLZ0000.DAT"], files["ANLZ0000.EXT"], files["ANLZ0000.2EX"]
     if dat is None:
         raise FileNotFoundError(f"no readable ANLZ0000.DAT in {root}")
@@ -250,13 +274,26 @@ def extract_anlz(anlz_dir: str | Path) -> dict:
         outcomes.append(_outcome(tag, file, "ok"))
         return value
 
-    grid = guarded("PQTZ", "ANLZ0000.DAT", dat, lambda secs: beat_grid_from_pqtz(secs[0][0], secs[0][1], secs[0][2])) or []
+    grid = (
+        guarded(
+            "PQTZ",
+            "ANLZ0000.DAT",
+            dat,
+            lambda secs: beat_grid_from_pqtz(secs[0][0], secs[0][1], secs[0][2]),
+        )
+        or []
+    )
     pssi_raw = guarded("PSSI", "ANLZ0000.EXT", ext, lambda secs: secs[0])
     phrases: list[dict] = []
     if pssi_raw is not None:
         try:
             entries = list(pssi_raw.entries)
-            phrases = phrases_from_pssi(int(pssi_raw.mood), int(pssi_raw.bank), int(pssi_raw.end_beat), entries)
+            phrases = phrases_from_pssi(
+                int(pssi_raw.mood),
+                int(pssi_raw.bank),
+                int(pssi_raw.end_beat),
+                entries,
+            )
             for phrase, entry in zip(phrases, entries):
                 phrase["endBeatNative"] = int(pssi_raw.end_beat)
                 try:
@@ -264,7 +301,8 @@ def extract_anlz(anlz_dir: str | Path) -> dict:
                 except Exception as e:  # noqa: BLE001 - hex is diagnostics, never load-bearing
                     phrase["rawHexError"] = f"{type(e).__name__}: {e}"
         except Exception as e:  # noqa: BLE001 - keep raw header fields even when entries fail
-            outcomes.append(_outcome("PSSI-entries", "ANLZ0000.EXT", "failed", f"{type(e).__name__}: {e}"))
+            detail = f"{type(e).__name__}: {e}"
+            outcomes.append(_outcome("PSSI-entries", "ANLZ0000.EXT", "failed", detail))
             phrases = []
 
     cues: list[dict] = []
@@ -277,13 +315,20 @@ def extract_anlz(anlz_dir: str | Path) -> dict:
                 try:
                     cues.append(_cue_from_entry(tag, entry))
                 except Exception as e:  # noqa: BLE001 - one bad cue never loses the list
-                    outcomes.append(_outcome(f"{tag}-entry", "ANLZ0000.EXT", "failed", f"{type(e).__name__}: {e}"))
+                    detail = f"{type(e).__name__}: {e}"
+                    outcomes.append(
+                        _outcome(f"{tag}-entry", "ANLZ0000.EXT", "failed", detail)
+                    )
 
     waveforms: dict = {}
     for tag, file, src in (
-        ("PWAV", "ANLZ0000.DAT", dat), ("PWV2", "ANLZ0000.DAT", dat),
-        ("PWV3", "ANLZ0000.EXT", ext), ("PWV4", "ANLZ0000.EXT", ext), ("PWV5", "ANLZ0000.EXT", ext),
-        ("PWV6", "ANLZ0000.2EX", ex2), ("PWV7", "ANLZ0000.2EX", ex2),
+        ("PWAV", "ANLZ0000.DAT", dat),
+        ("PWV2", "ANLZ0000.DAT", dat),
+        ("PWV3", "ANLZ0000.EXT", ext),
+        ("PWV4", "ANLZ0000.EXT", ext),
+        ("PWV5", "ANLZ0000.EXT", ext),
+        ("PWV6", "ANLZ0000.2EX", ex2),
+        ("PWV7", "ANLZ0000.2EX", ex2),
     ):
         value = guarded(tag, file, src, lambda secs: secs[0])
         if value is None:
@@ -297,14 +342,23 @@ def extract_anlz(anlz_dir: str | Path) -> dict:
     if vocal_raw is not None:
         try:
             data = [int(v) for v in list(vocal_raw.data)]
+            unknown = int(getattr(vocal_raw, "unknown", 0))
             vocal = {
                 "lane": data,
-                "raw": {"unknown": int(getattr(vocal_raw, "unknown", 0)), "data": data},
-                "encoding": "three int16 vocal flags; per-beat mapping unresolved, raw retained (§5.5)",
+                "raw": {"unknown": unknown, "data": data},
+                "encoding": (
+                    "three int16 vocal flags; per-beat mapping "
+                    "unresolved, raw retained (§5.5)"
+                ),
             }
-        except Exception as e:  # noqa: BLE001
-            outcomes.append(_outcome("PWVC-data", "ANLZ0000.2EX", "failed", f"{type(e).__name__}: {e}"))
-            vocal = {"lane": [], "raw": {"unknown": None, "data": []}, "encoding": "undecoded, raw retained (§5.5)"}
+        except Exception as e:  # noqa: BLE001 - vocal decode is best-effort, raw retained
+            detail = f"{type(e).__name__}: {e}"
+            outcomes.append(_outcome("PWVC-data", "ANLZ0000.2EX", "failed", detail))
+            vocal = {
+                "lane": [],
+                "raw": {"unknown": None, "data": []},
+                "encoding": "undecoded, raw retained (§5.5)",
+            }
 
     path = guarded("PPTH", "ANLZ0000.DAT", dat, lambda secs: str(secs[0]))
     return {

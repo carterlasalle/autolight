@@ -25,6 +25,7 @@ RESAMPLERS = ("soxr", "swr")
 
 def _ffmpeg() -> str:
     import shutil
+
     exe = shutil.which("ffmpeg")
     if exe is None:
         raise FileNotFoundError("ffmpeg not found (bundled via T-OPS-05)")
@@ -33,8 +34,9 @@ def _ffmpeg() -> str:
 
 def ffmpeg_version() -> str:
     try:
-        out = subprocess.run([_ffmpeg(), "-version"], check=True,
-                             capture_output=True, text=True)
+        out = subprocess.run(  # noqa: S603 - local ffmpeg binary from _ffmpeg PATH lookup, fixed args
+            [_ffmpeg(), "-version"], check=True, capture_output=True, text=True
+        )
         return out.stdout.splitlines()[0] if out.stdout else "unknown"
     except (OSError, subprocess.CalledProcessError):
         return "unknown"
@@ -54,9 +56,20 @@ def resampler_args(resampler: str = "soxr") -> list[str]:
 
 
 def ffmpeg_args(src: str, dst: str, resampler: str = "soxr") -> list[str]:
-    return ([_ffmpeg(), "-y", "-i", src]
-            + resampler_args(resampler)
-            + ["-ar", str(CANONICAL_RATE), "-f", "f32le", "-ac", "2", dst])
+    return [
+        _ffmpeg(),
+        "-y",
+        "-i",
+        src,
+        *resampler_args(resampler),
+        "-ar",
+        str(CANONICAL_RATE),
+        "-f",
+        "f32le",
+        "-ac",
+        "2",
+        dst,
+    ]
 
 
 def probe_start_offset(src: str | Path) -> float:
@@ -65,14 +78,26 @@ def probe_start_offset(src: str | Path) -> float:
     Parses ffprobe ``start_time``; missing value means zero offset.
     """
     import shutil
+
     ffprobe = shutil.which("ffprobe")
     if ffprobe is None:
         return 0.0
     try:
-        out = subprocess.run(
-            [ffprobe, "-v", "error", "-show_entries", "stream=start_time",
-             "-of", "default=noprint_wrappers=1:nokey=1", str(src)],
-            check=True, capture_output=True, text=True)
+        out = subprocess.run(  # noqa: S603 - local ffprobe binary from PATH lookup, fixed flags
+            [
+                ffprobe,
+                "-v",
+                "error",
+                "-show_entries",
+                "stream=start_time",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                str(src),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
         for line in out.stdout.splitlines():
             value = line.strip()
             if value and value != "N/A":
@@ -82,23 +107,25 @@ def probe_start_offset(src: str | Path) -> float:
     return 0.0
 
 
-def decode(src: str | Path, dst: str | Path,
-           resampler: str = "soxr") -> Path:
+def decode(src: str | Path, dst: str | Path, resampler: str = "soxr") -> Path:
     """Decode to canonical PCM. Raises on FFmpeg failure; never touches src."""
     out = Path(dst)
-    subprocess.run(ffmpeg_args(str(src), str(out), resampler),
-                   check=True, capture_output=True)
+    subprocess.run(  # noqa: S603 - args built by ffmpeg_args from local binary, no shell
+        ffmpeg_args(str(src), str(out), resampler), check=True, capture_output=True
+    )
     return out
 
 
 def decode_key(src: str | Path, resampler: str = "soxr") -> str:
     """Cache key from content hash plus decode settings, not the path."""
     from autolight_analysis.artifacts import source_fingerprint
+
     return source_fingerprint(src, f"f32le44100stereo:{resampler}")[:24]
 
 
-def canonical_pcm(src: str | Path, cache_dir: str | Path,
-                  resampler: str = "soxr") -> tuple[Path, dict]:
+def canonical_pcm(
+    src: str | Path, cache_dir: str | Path, resampler: str = "soxr"
+) -> tuple[Path, dict]:
     """Decode once into the cache; return (raw_path, sidecar metadata).
 
     The mono analysis stream is derived from this decode, never decoded
@@ -131,15 +158,16 @@ def canonical_pcm(src: str | Path, cache_dir: str | Path,
     return raw, meta
 
 
-def mono_from_canonical(raw_path: str | Path, meta: dict | None = None) -> np.ndarray:
+def mono_from_canonical(raw_path: str | Path, _meta: dict | None = None) -> np.ndarray:
     """Stereo mean derived from the canonical decode (T-ANA-03, F-ANA-08)."""
     data = np.fromfile(raw_path, dtype=np.float32)
     stereo = data.reshape(-1, CANONICAL_CHANNELS)
     return stereo.mean(axis=1).astype(np.float32)
 
 
-def canonical_wav(src: str | Path, work_dir: str | Path,
-                  resampler: str = "soxr") -> Path:
+def canonical_wav(
+    src: str | Path, work_dir: str | Path, resampler: str = "soxr"
+) -> Path:
     """Canonical 44.1kHz stereo WAV for ML tools that cannot read raw f32le.
 
     Content-keyed like the raw cache (F-ANA-08: never the path string).
@@ -156,14 +184,15 @@ def canonical_wav(src: str | Path, work_dir: str | Path,
 
 def _write_wav_float(path: Path, stereo: np.ndarray) -> None:
     import struct
-    n = stereo.shape[0]
+
     blob = stereo.astype(np.float32).tobytes()
     with open(path, "wb") as f:
         f.write(b"RIFF")
         f.write(struct.pack("<I", 36 + len(blob)))
         f.write(b"WAVEfmt ")
-        f.write(struct.pack("<IHHIIHH", 16, 3, 2, CANONICAL_RATE,
-                            CANONICAL_RATE * 8, 8, 32))
+        f.write(
+            struct.pack("<IHHIIHH", 16, 3, 2, CANONICAL_RATE, CANONICAL_RATE * 8, 8, 32)
+        )
         f.write(b"data")
         f.write(struct.pack("<I", len(blob)))
         f.write(blob)

@@ -30,6 +30,7 @@ def beat_this_available() -> bool:
     """True when the optional beat-this dependency is importable."""
     try:
         import beat_this.inference  # noqa: F401
+
         return True
     except ImportError:
         return False
@@ -41,6 +42,7 @@ def select_device(config_device: str = "auto") -> str:
         return config_device
     try:
         import torch
+
         if torch.cuda.is_available():
             return "cuda"
     except ImportError:
@@ -72,13 +74,13 @@ def beat_this_beats(audio_path: str, device: str = "cpu") -> dict | None:
             bar_pos = 1
         beat_in_bar.append(bar_pos)
         bar_pos = bar_pos + 1 if bar_pos < 4 else 1
-    return {"beats": beats, "downbeats": sorted(down_set),
-            "beatInBar": beat_in_bar}
+    return {"beats": beats, "downbeats": sorted(down_set), "beatInBar": beat_in_bar}
 
 
 def beat_this_cli(audio_path: str, device: str = "cpu") -> dict | None:
     """Run Beat This through its CLI with the correct flags (``-o``)."""
     import shutil
+
     exe = shutil.which("beat_this")
     if exe is None:
         return None
@@ -87,7 +89,9 @@ def beat_this_cli(audio_path: str, device: str = "cpu") -> dict | None:
         cmd = [exe, "--output", out, audio_path]
         if device == "cuda":
             cmd += ["--gpu", "0"]
-        subprocess.run(cmd, check=True, capture_output=True)
+        subprocess.run(  # noqa: S603 - local beat_this binary from PATH lookup, fixed flags
+            cmd, check=True, capture_output=True
+        )
         beats = []
         for line in Path(out).read_text().splitlines():
             parts = line.split()
@@ -101,8 +105,7 @@ def beat_this_cli(audio_path: str, device: str = "cpu") -> dict | None:
         return {"beats": beats, "downbeats": [], "beatInBar": [0] * len(beats)}
 
 
-def ml_beats(audio_path: str, invoke: str = "api",
-             device: str = "cpu") -> dict | None:
+def ml_beats(audio_path: str, invoke: str = "api", device: str = "cpu") -> dict | None:
     """Beat This via the configured invoke path (T-ANA-07)."""
     if invoke == "cli":
         return beat_this_cli(audio_path, device)
@@ -124,24 +127,34 @@ def grid_warning(native: list[float], ml: list[float], tol: float = 0.05) -> boo
     return abs(native[0] - ml[0]) > tol
 
 
-def compare_grids(native_times: list[float], ml_times: list[float],
-                  tolerance_ms: float | None = None,
-                  min_anchors: int | None = None) -> dict:
+def compare_grids(
+    native_times: list[float],
+    ml_times: list[float],
+    tolerance_ms: float | None = None,
+    min_anchors: int | None = None,
+) -> dict:
     """Full GRID_WARNING comparison over all anchors (T-ANA-08).
 
     Returns ``{warn, medianOffsetMs, p95OffsetMs, driftMs, downbeatAgreement,
     segments}``. Segments name ranges such as a half-beat shift after bar 64.
     """
     from autolight_analysis import config as cfg
-    tolerance_ms = float(tolerance_ms if tolerance_ms is not None
-                         else cfg.get("analysis.gridWarning.toleranceMs", 50))
-    min_anchors = int(min_anchors if min_anchors is not None
-                      else cfg.get("analysis.gridWarning.minAnchors", 32))
+
+    tol_default = cfg.get("analysis.gridWarning.toleranceMs", 50)
+    anchors_default = cfg.get("analysis.gridWarning.minAnchors", 32)
+    tolerance_ms = float(tolerance_ms if tolerance_ms is not None else tol_default)
+    min_anchors = int(min_anchors if min_anchors is not None else anchors_default)
     n = min(len(native_times), len(ml_times))
     if n < min_anchors or n == 0:
-        return {"warn": False, "reason": f"only {n} anchors, need {min_anchors}",
-                "medianOffsetMs": 0.0, "p95OffsetMs": 0.0, "driftMs": 0.0,
-                "downbeatAgreement": 1.0, "segments": []}
+        return {
+            "warn": False,
+            "reason": f"only {n} anchors, need {min_anchors}",
+            "medianOffsetMs": 0.0,
+            "p95OffsetMs": 0.0,
+            "driftMs": 0.0,
+            "downbeatAgreement": 1.0,
+            "segments": [],
+        }
     offsets = np.array([m - v for v, m in zip(native_times[:n], ml_times[:n])])
     ms = np.abs(offsets) * 1000.0
     median = float(np.median(ms))
@@ -160,23 +173,38 @@ def compare_grids(native_times: list[float], ml_times: list[float],
                 end = i if not bad else i + 1
                 if end - run_start >= 8:
                     shift = float(np.median(offsets[run_start:end]) * 1000.0)
-                    segments.append({"startAnchor": run_start, "endAnchor": end,
-                                     "medianShiftMs": round(shift, 2),
-                                     "note": "sustained grid disagreement"})
+                    segments.append(
+                        {
+                            "startAnchor": run_start,
+                            "endAnchor": end,
+                            "medianShiftMs": round(shift, 2),
+                            "note": "sustained grid disagreement",
+                        }
+                    )
                 run_start = None
-    warn = bool((median > tolerance_ms or p95 > tolerance_ms * 2)
-                and (ms > tolerance_ms).sum() >= min(0, min_anchors)
-                and (ms > tolerance_ms).mean() >= 0.25)
-    return {"warn": warn, "medianOffsetMs": round(median, 2),
-            "p95OffsetMs": round(p95, 2), "driftMs": round(drift, 2),
-            "downbeatAgreement": 1.0, "segments": segments}
+    warn = bool(
+        (median > tolerance_ms or p95 > tolerance_ms * 2)
+        and (ms > tolerance_ms).sum() >= min(0, min_anchors)
+        and (ms > tolerance_ms).mean() >= 0.25
+    )
+    return {
+        "warn": warn,
+        "medianOffsetMs": round(median, 2),
+        "p95OffsetMs": round(p95, 2),
+        "driftMs": round(drift, 2),
+        "downbeatAgreement": 1.0,
+        "segments": segments,
+    }
 
 
-def metrical_vote(native_times: list[float],
-                  beat_this: dict | None,
-                  allinone: dict | None,
-                  mode: str = "both", tolerance_ms: float | None = None,
-                  min_anchors: int | None = None) -> dict:
+def metrical_vote(
+    native_times: list[float],
+    beat_this: dict | None,
+    allinone: dict | None,
+    mode: str = "both",
+    tolerance_ms: float | None = None,
+    min_anchors: int | None = None,
+) -> dict:
     """DS-12 agreement vote across the configured metrical sources (T-ANA-07).
 
     Returns ``{warnings, downbeatConfidence, sources}``. Each warning is a
@@ -184,10 +212,11 @@ def metrical_vote(native_times: list[float],
     the grid itself is never altered.
     """
     from autolight_analysis import config as cfg
-    tolerance_ms = float(tolerance_ms if tolerance_ms is not None
-                         else cfg.get("analysis.gridWarning.toleranceMs", 50))
-    min_anchors = int(min_anchors if min_anchors is not None
-                      else cfg.get("analysis.gridWarning.minAnchors", 32))
+
+    tol_default = cfg.get("analysis.gridWarning.toleranceMs", 50)
+    anchors_default = cfg.get("analysis.gridWarning.minAnchors", 32)
+    tolerance_ms = float(tolerance_ms if tolerance_ms is not None else tol_default)
+    min_anchors = int(min_anchors if min_anchors is not None else anchors_default)
     sources = {}
     if mode in ("beat-this", "both") and beat_this:
         sources["beat-this"] = beat_this.get("beats", [])
@@ -197,17 +226,26 @@ def metrical_vote(native_times: list[float],
     for name, times in sources.items():
         cmp = compare_grids(native_times, list(times), tolerance_ms, min_anchors)
         if cmp["warn"]:
-            warnings.append({
-                "source": name,
-                "medianOffsetMs": cmp["medianOffsetMs"],
-                "p95OffsetMs": cmp["p95OffsetMs"],
-                "driftMs": cmp["driftMs"],
-                "evidence": [f"{name}:offset-median-{cmp['medianOffsetMs']}ms",
-                             f"{name}:p95-{cmp['p95OffsetMs']}ms"]
-                + ([f"{name}:drift-{cmp['driftMs']}ms"] if cmp["driftMs"] > tolerance_ms else []),
-                "segments": cmp["segments"],
-                "beatRange": [1, len(native_times)],
-            })
+            base = [
+                f"{name}:offset-median-{cmp['medianOffsetMs']}ms",
+                f"{name}:p95-{cmp['p95OffsetMs']}ms",
+            ]
+            if cmp["driftMs"] > tolerance_ms:
+                base.append(f"{name}:drift-{cmp['driftMs']}ms")
+            warnings.append(
+                {
+                    "source": name,
+                    "medianOffsetMs": cmp["medianOffsetMs"],
+                    "p95OffsetMs": cmp["p95OffsetMs"],
+                    "driftMs": cmp["driftMs"],
+                    "evidence": base,
+                    "segments": cmp["segments"],
+                    "beatRange": [1, len(native_times)],
+                }
+            )
     agree = 1.0 if not warnings else max(0.0, 1.0 - 0.25 * len(warnings))
-    return {"warnings": warnings, "downbeatConfidence": agree,
-            "sources": sorted(sources)}
+    return {
+        "warnings": warnings,
+        "downbeatConfidence": agree,
+        "sources": sorted(sources),
+    }

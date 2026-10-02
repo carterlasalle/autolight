@@ -1,7 +1,7 @@
 from autolight_analysis.allinone import (
     allinone_available,
-    normalize_ml_label,
     ml_sections,
+    normalize_ml_label,
 )
 
 
@@ -18,7 +18,12 @@ def test_ml_sections_anchor_to_native_grid():
     segs = [
         {"start": 0.0, "end": 8.0, "label": "intro", "confidence": 0.9},
         {"start": 8.0, "end": 24.0, "label": "verse", "confidence": 0.7},
-        {"start": 24.0, "end": 24.0, "label": "drop", "confidence": 0.9},  # empty → skipped
+        {
+            "start": 24.0,
+            "end": 24.0,
+            "label": "drop",
+            "confidence": 0.9,
+        },  # empty → skipped
     ]
     out = ml_sections(segs, beat_times)
     assert len(out) == 2

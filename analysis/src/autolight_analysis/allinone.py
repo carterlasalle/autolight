@@ -31,6 +31,7 @@ def allinone_available() -> bool:
     """True when the optional all-in-one-infer dependency is importable."""
     try:
         import allin1_infer  # noqa: F401
+
         return True
     except ImportError:
         return False
@@ -42,12 +43,14 @@ def select_device(config_device: str = "auto") -> str:
     macOS always resolves to CPU per spec 16 (no MPS in All-In-One).
     """
     import sys
+
     if sys.platform == "darwin":
         return "cpu"
     if config_device in ("cpu", "cuda"):
         return config_device
     try:
         import torch
+
         if torch.cuda.is_available():
             return "cuda"
     except ImportError:
@@ -120,20 +123,26 @@ def ml_sections(
         end = bisect.bisect_left(beat_times, float(seg.get("end", 0.0)))
         if end <= start:
             continue
-        out.append({
-            "kind": normalize_ml_label(label),
-            "rawLabel": f"allin1:{label}",
-            "startBeat": start + 1,
-            "endBeat": end + 1,
-            "confidence": min(1.0, max(0.0, conf)),
-            "evidence": ["allin1:boundary"],
-        })
+        out.append(
+            {
+                "kind": normalize_ml_label(label),
+                "rawLabel": f"allin1:{label}",
+                "startBeat": start + 1,
+                "endBeat": end + 1,
+                "confidence": min(1.0, max(0.0, conf)),
+                "evidence": ["allin1:boundary"],
+            }
+        )
     return out
 
 
-def analyze_full(audio_path: str, out_dir: str | None = None,
-                 device: str = "cpu", include_activations: bool = True,
-                 include_embeddings: bool = True) -> dict | None:
+def analyze_full(
+    audio_path: str,
+    out_dir: str | None = None,
+    device: str = "cpu",
+    include_activations: bool = True,
+    include_embeddings: bool = True,
+) -> dict | None:
     """Run all-in-one inference; None keeps the pipeline native-only.
 
     Persistent-session friendly: the upstream ``analyze()`` call is issued
@@ -151,17 +160,26 @@ def analyze_full(audio_path: str, out_dir: str | None = None,
     ensure_session(device)
     if first:
         _load_count += 1
-    result = allin1_infer.analyze(paths=audio_path, out_dir=out_dir,
-                                  device=device,
-                                  include_activations=include_activations,
-                                  include_embeddings=include_embeddings)
+    result = allin1_infer.analyze(
+        paths=audio_path,
+        out_dir=out_dir,
+        device=device,
+        include_activations=include_activations,
+        include_embeddings=include_embeddings,
+    )
     if isinstance(result, list):
         result = result[0] if result else None
     if result is None:
         return None
-    segments = [{"start": float(s.start), "end": float(s.end),
-                 "label": str(s.label), "confidence": 0.7}
-                for s in getattr(result, "segments", []) or []]
+    segments = [
+        {
+            "start": float(s.start),
+            "end": float(s.end),
+            "label": str(s.label),
+            "confidence": 0.7,
+        }
+        for s in getattr(result, "segments", []) or []
+    ]
     stems = None
     demix = getattr(result, "stems", None)
     if demix is not None:

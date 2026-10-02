@@ -17,7 +17,6 @@
     "unresolved": "error",
     "exports": "warn",
     "types": "warn",
-    "enumMembers": "off",
-    "classMembers": "off"
+    "enumMembers": "off"
   }
 }

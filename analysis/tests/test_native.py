@@ -1,10 +1,10 @@
 from autolight_analysis.native import (
+    beat_grid_from_pqtz,
+    extract_anlz,
     high_label,
     normalize_section,
     phrase_label,
-    beat_grid_from_pqtz,
     phrases_from_pssi,
-    extract_anlz,
 )
 
 
@@ -56,6 +56,7 @@ def test_phrases_end_chain_and_fill():
 
 def test_extract_real_anlz():
     import pathlib
+
     sample = pathlib.Path(__file__).parent / "fixtures" / "anlz-sample"
     got = extract_anlz(str(sample))
     assert len(got["beatGrid"]) > 100

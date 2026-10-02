@@ -1,5 +1,11 @@
-from autolight_analysis.features import energy_slope, rms, spectral_flux, silence_probability, beat_aggregate
-from autolight_analysis.events import is_fake_drop, build_score, drop_score
+from autolight_analysis.events import build_score, drop_score, is_fake_drop
+from autolight_analysis.features import (
+    beat_aggregate,
+    energy_slope,
+    rms,
+    silence_probability,
+    spectral_flux,
+)
 
 
 def test_rising_slope_positive():
@@ -37,6 +43,8 @@ def test_build_score_evidence():
 
 def test_drop_needs_convergence():
     weak = drop_score(0.1, 0.0, 0.0)
-    strong = drop_score(0.8, 0.9, 0.7, preceded_by_build=True, on_downbeat=True, section_boundary=True)
+    strong = drop_score(
+        0.8, 0.9, 0.7, preceded_by_build=True, on_downbeat=True, section_boundary=True
+    )
     assert strong["confidence"] > weak["confidence"]
     assert strong["strength"] > weak["strength"]

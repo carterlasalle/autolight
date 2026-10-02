@@ -3,9 +3,9 @@ import pytest
 
 from autolight_analysis.stems import (
     band_envelope,
-    stem_proxies,
-    spectral_novelty,
     resample_to_beats,
+    spectral_novelty,
+    stem_proxies,
 )
 
 
@@ -28,12 +28,17 @@ def test_stem_proxies_cover_bands():
 
 def test_select_stems_labels_source():
     from autolight_analysis.stems import select_stems
+
     rate = 44100
     noise = np.random.default_rng(1).standard_normal(rate).astype(np.float32)
     _, source = select_stems(noise, rate, "fusion")
     assert source == "dsp.stemProxies"
-    fake = {"bass": np.ones(8), "drum": np.ones(8), "vocal": np.ones(8),
-            "other": np.ones(8)}
+    fake = {
+        "bass": np.ones(8),
+        "drum": np.ones(8),
+        "vocal": np.ones(8),
+        "other": np.ones(8),
+    }
     _, source = select_stems(noise, rate, "fusion", fake)
     assert source == "ml.stems"
 
@@ -46,6 +51,7 @@ def test_novelty_quiet_mean_for_steady_tone():
     struck[n // 2 : n // 2 + 2048] += np.hanning(2048).astype(np.float32)  # one onset
     # Onset concentrates change at one frame; steady hiss spreads it everywhere.
     assert spectral_novelty(struck).mean() < spectral_novelty(quiet).mean()
+
 
 def test_resample_to_beats_linear():
     env = np.array([0.0, 10.0])

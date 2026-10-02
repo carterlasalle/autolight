@@ -42,9 +42,10 @@ jobs:
       - name: Mutation survivors in the safety-critical list (T-TRU-08)
         run: node tools/mutation/check-critical.mjs
       - uses: astral-sh/setup-uv@v5
-      - run: uv sync --project analysis --frozen --all-groups
+      - run: uv sync --frozen --all-groups
+        working-directory: analysis
       - name: mutmut full run (T-TRU-08)
-        run: uv run --project analysis mutmut run --paths-to-mutate="src/autolight_analysis/{events,structure,fusion,features,stems}.py"
+        run: uv run mutmut run --paths-to-mutate="src/autolight_analysis/{events,structure,fusion,features,stems}.py"
         working-directory: analysis
 
   fuzz:

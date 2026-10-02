@@ -17,13 +17,29 @@ CANONICAL_RATE = 44100
 
 def load_mono_pcm(path: str, seconds: float | None = None) -> tuple[np.ndarray, int]:
     """Decode via FFmpeg to canonical mono float32. Raises on failure."""
+    import shutil
     import subprocess
 
-    args = ["ffmpeg", "-v", "error", "-i", path, "-ar", str(CANONICAL_RATE),
-            "-ac", "1", "-f", "f32le", "-"]
+    exe = shutil.which("ffmpeg") or "ffmpeg"
+    args = [
+        exe,
+        "-v",
+        "error",
+        "-i",
+        path,
+        "-ar",
+        str(CANONICAL_RATE),
+        "-ac",
+        "1",
+        "-f",
+        "f32le",
+        "-",
+    ]
     if seconds is not None:
         args[3:3] = ["-t", str(seconds)]
-    proc = subprocess.run(args, check=True, capture_output=True)
+    proc = subprocess.run(  # noqa: S603 - local ffmpeg binary from PATH lookup, fixed flags
+        args, check=True, capture_output=True
+    )
     return np.frombuffer(proc.stdout, dtype=np.float32).copy(), CANONICAL_RATE
 
 
@@ -56,8 +72,9 @@ def band_envelope(
     return spec[:, mask].mean(axis=1).astype(np.float64)
 
 
-def stem_proxies(mono: np.ndarray, rate: int = CANONICAL_RATE,
-                 frame: int = 2048, hop: int = 1024) -> dict[str, np.ndarray]:
+def stem_proxies(
+    mono: np.ndarray, rate: int = CANONICAL_RATE, frame: int = 2048, hop: int = 1024
+) -> dict[str, np.ndarray]:
     """FFT band proxies, labelled ``dsp.stemProxies`` (T-ANA-06, DS-10)."""
     return {
         "bass": band_envelope(mono, rate, 20, 150, frame, hop),
@@ -71,7 +88,9 @@ def stem_proxies(mono: np.ndarray, rate: int = CANONICAL_RATE,
     }
 
 
-def spectral_novelty(mono: np.ndarray, hop: int = 1024, frame: int = 2048) -> np.ndarray:
+def spectral_novelty(
+    mono: np.ndarray, hop: int = 1024, frame: int = 2048
+) -> np.ndarray:
     """Log-magnitude positive spectral change, normalized 0..1.
 
     Log domain keeps steady tones quiet: only genuine onsets move.
@@ -85,9 +104,13 @@ def spectral_novelty(mono: np.ndarray, hop: int = 1024, frame: int = 2048) -> np
     return (diff / peak).astype(np.float64) if peak > 0 else np.zeros_like(diff)
 
 
-def resample_to_beats(envelope: np.ndarray, beat_times: list[float] | int,
-                      rate: int = CANONICAL_RATE, hop: int = 1024,
-                      n_beats: int = 0) -> list[float]:
+def resample_to_beats(
+    envelope: np.ndarray,
+    beat_times: list[float] | int,
+    rate: int = CANONICAL_RATE,
+    hop: int = 1024,
+    n_beats: int = 0,
+) -> list[float]:
     """Map a frame envelope onto beat windows from real beat timestamps.
 
     F-ANA-09: each beat window runs from its time to the next beat time and
@@ -103,8 +126,11 @@ def resample_to_beats(envelope: np.ndarray, beat_times: list[float] | int,
     frame_times = np.arange(envelope.size) * hop / rate
     out = []
     for i, start in enumerate(beat_times):
-        end = beat_times[i + 1] if i + 1 < len(beat_times) else start + (
-            beat_times[1] - beat_times[0] if len(beat_times) > 1 else 0.5)
+        end = (
+            beat_times[i + 1]
+            if i + 1 < len(beat_times)
+            else start + (beat_times[1] - beat_times[0] if len(beat_times) > 1 else 0.5)
+        )
         mask = (frame_times >= start) & (frame_times < end)
         out.append(float(envelope[mask].mean()) if mask.any() else 0.0)
     return out
@@ -122,10 +148,12 @@ def _even_split(envelope: np.ndarray, n_beats: int) -> list[float]:
     return (envelope[lo] * (1 - frac) + envelope[hi] * frac).tolist()
 
 
-def select_stems(mono: np.ndarray, rate: int = CANONICAL_RATE,
-                 mode: str = "fusion",
-                 allinone_stems: dict[str, np.ndarray] | None = None
-                 ) -> tuple[dict[str, np.ndarray], str]:
+def select_stems(
+    mono: np.ndarray,
+    rate: int = CANONICAL_RATE,
+    mode: str = "fusion",
+    allinone_stems: dict[str, np.ndarray] | None = None,
+) -> tuple[dict[str, np.ndarray], str]:
     """DS-10 stem source selection (T-ANA-06).
 
     ``allinone-stems``: real separation; ``band-proxies``: FFT bands;

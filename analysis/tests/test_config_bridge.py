@@ -50,12 +50,25 @@ def test_no_hardcoded_analysis_constants_outside_config():
         text = (src / name).read_text()
         for i, line in enumerate(text.split("\n"), 1):
             low = line.lower()
-            if "config" in low or "cfg.get" in line or "tolerance_ms" in low or "min_anchors" in low:
+            if (
+                "config" in low
+                or "cfg.get" in line
+                or "tolerance_ms" in low
+                or "min_anchors" in low
+            ):
                 continue
             if re.search(r"(?<![\w.])\d+\.\d+", line) and any(
-                k in line for k in ("minJump", "minVotes", "minConfidence",
-                                    "minStrength", "tolerance", "minAnchors",
-                                    "gapBeats", "windows")
+                k in line
+                for k in (
+                    "minJump",
+                    "minVotes",
+                    "minConfidence",
+                    "minStrength",
+                    "tolerance",
+                    "minAnchors",
+                    "gapBeats",
+                    "windows",
+                )
             ):
                 offenders.append(f"{name}:{i}: {line.strip()[:80]}")
     assert offenders == [], "tuning constant bypasses config:\n" + "\n".join(offenders)

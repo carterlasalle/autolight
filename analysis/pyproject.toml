@@ -35,4 +35,6 @@ select = ["BLE", "S", "E", "F", "ARG", "I", "SIM", "RUF"]
 # T-TRU-09: tests may open fixture files directly and assert freely.
 # Production (src/) gets the full rule set with zero ignores.
 [tool.ruff.lint.per-file-ignores]
-"tests/*.py" = ["SIM115", "S101", "PLR2004", "ARG"]
+"tests/*.py" = ["SIM115", "S101", "PLR2004", "ARG", "E402"]
+[tool.pyright]
+extraPaths = ["tests", "tests/fixtures"]

@@ -12,14 +12,15 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
+from typing import Any
 
 _DEFAULTS_PATH = Path(__file__).parent / "config_defaults.json"
-_DEFAULTS: dict = json.loads(_DEFAULTS_PATH.read_text())
+_DEFAULTS: dict[str, Any] = json.loads(_DEFAULTS_PATH.read_text())
 
-_overrides: dict = {}
+_overrides: dict[str, Any] = {}
 
 
-def get(key: str, default=None):
+def get(key: str, default: Any = None) -> Any:
     """Read an analysis/qa key: job override wins, then registry default."""
     if key in _overrides:
         return _overrides[key]
@@ -41,9 +42,15 @@ def reset_overrides() -> None:
 def snapshot_hash() -> str:
     """Hash of effective config for artifact identity and job records."""
     effective = {**_DEFAULTS, **_overrides}
-    blob = json.dumps({k: effective[k] for k in sorted(effective)
-                       if k.startswith("analysis.") or k.startswith("qa.")},
-                      sort_keys=True, default=str).encode()
+    blob = json.dumps(
+        {
+            k: effective[k]
+            for k in sorted(effective)
+            if k.startswith("analysis.") or k.startswith("qa.")
+        },
+        sort_keys=True,
+        default=str,
+    ).encode()
     return hashlib.sha256(blob).hexdigest()[:16]
 
 

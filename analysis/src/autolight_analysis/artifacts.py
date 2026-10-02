@@ -9,6 +9,7 @@ and are renamed atomically; the cache directory comes from
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
@@ -22,6 +23,7 @@ def analyzer_version() -> str:
         return metadata.version("autolight-analysis")
     except metadata.PackageNotFoundError:
         from autolight_analysis import __version__
+
         return __version__
 
 
@@ -39,8 +41,9 @@ def source_fingerprint(path: str | Path, decode_settings: str = "") -> str:
     return h.hexdigest()
 
 
-def artifact_name(source_fp: str, schema_v: int, analyzer_v: str,
-                  config_hash: str) -> str:
+def artifact_name(
+    source_fp: str, schema_v: int, analyzer_v: str, config_hash: str
+) -> str:
     seed = hashlib.sha256(
         f"{source_fp}:{schema_v}:{analyzer_v}:{config_hash}".encode()
     ).hexdigest()[:24]
@@ -66,8 +69,7 @@ def atomic_write(path: str | Path, payload: bytes | str) -> Path:
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
     data = payload.encode() if isinstance(payload, str) else payload
-    fd, tmp = tempfile.mkstemp(dir=str(target.parent),
-                               prefix=target.name + ".tmp.")
+    fd, tmp = tempfile.mkstemp(dir=str(target.parent), prefix=target.name + ".tmp.")
     try:
         with os.fdopen(fd, "wb") as f:
             f.write(data)
@@ -75,9 +77,7 @@ def atomic_write(path: str | Path, payload: bytes | str) -> Path:
             os.fsync(f.fileno())
         os.replace(tmp, target)
     except BaseException:
-        try:
+        with contextlib.suppress(OSError):
             os.unlink(tmp)
-        except OSError:
-            pass
         raise
     return target

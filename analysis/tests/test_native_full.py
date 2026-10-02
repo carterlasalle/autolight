@@ -3,11 +3,10 @@
 Every tag in §5.1-5.5 asserted with all fields; the EXT variant that raises
 ConstError falls back per tag, keeping every other tag.
 """
+
 import pathlib
 import shutil
 import tempfile
-
-import pytest
 
 from autolight_analysis.native import (
     _cue_from_entry,
@@ -45,19 +44,48 @@ def test_pssi_full_fields():
     assert first["endBeat"] == got["phrases"][1]["startBeat"]
     assert isinstance(first["rawHex"], str) and len(first["rawHex"]) == 48
     assert first["raw"]["kind"] == 1
-    assert set(first) >= {"startBeat", "endBeat", "rawLabel", "kind", "mood", "bank", "fill", "fillBeat", "raw", "rawHex"}
+    assert set(first) >= {
+        "startBeat",
+        "endBeat",
+        "rawLabel",
+        "kind",
+        "mood",
+        "bank",
+        "fill",
+        "fillBeat",
+        "raw",
+        "rawHex",
+    }
 
 
 def test_pco2_full_cue_fields():
-    entry = E(hot_cue=3, time=12345, loop_time=13000, type=2, color_id=4,
-              color_code=1, color_red=255, color_green=0, color_blue=90,
-              comment="Drop", loop_enumerator=1, loop_denominator=2)
+    entry = E(
+        hot_cue=3,
+        time=12345,
+        loop_time=13000,
+        type=2,
+        color_id=4,
+        color_code=1,
+        color_red=255,
+        color_green=0,
+        color_blue=90,
+        comment="Drop",
+        loop_enumerator=1,
+        loop_denominator=2,
+    )
     cue = _cue_from_entry("PCO2", entry)
     assert cue == {
-        "source": "PCO2", "hotcue": 3, "timeMs": 12345, "loopTimeMs": 13000,
-        "cueType": "2", "colorId": 4, "colorCode": 1,
-        "rgb": {"r": 255, "g": 0, "b": 90}, "comment": "Drop",
-        "loopNumerator": 1, "loopDenominator": 2,
+        "source": "PCO2",
+        "hotcue": 3,
+        "timeMs": 12345,
+        "loopTimeMs": 13000,
+        "cueType": "2",
+        "colorId": 4,
+        "colorCode": 1,
+        "rgb": {"r": 255, "g": 0, "b": 90},
+        "comment": "Drop",
+        "loopNumerator": 1,
+        "loopDenominator": 2,
     }
 
 
@@ -67,7 +95,9 @@ def test_waveforms_retained_with_metadata():
     for tag in ("PWAV", "PWV2", "PWV3", "PWV6", "PWV7"):
         assert tag in waves, f"{tag} missing"
         assert waves[tag]["columns"], f"{tag} has no columns"
-        assert waves[tag]["shape"] and waves[tag]["dtype"], f"{tag} has no shape metadata"
+        assert waves[tag]["shape"] and waves[tag]["dtype"], (
+            f"{tag} has no shape metadata"
+        )
     assert len(waves["PWV6"]["columns"]) == 3600
     assert waves["PWV6"]["encoding"] == "three-band-preview"
     assert waves["PWV7"]["encoding"] == "three-band-detail"
@@ -85,7 +115,19 @@ def test_vocal_lane_with_raw():
 def test_per_tag_outcomes():
     got = extract_anlz(str(SAMPLE))
     by_tag = {o["tag"]: o for o in got["outcomes"]}
-    for tag in ("PQTZ", "PSSI", "PCO2", "PCOB", "PWAV", "PWV2", "PWV3", "PWV6", "PWV7", "PWVC", "PPTH"):
+    for tag in (
+        "PQTZ",
+        "PSSI",
+        "PCO2",
+        "PCOB",
+        "PWAV",
+        "PWV2",
+        "PWV3",
+        "PWV6",
+        "PWV7",
+        "PWVC",
+        "PPTH",
+    ):
         assert by_tag[tag]["status"] == "ok", (tag, by_tag.get(tag))
     assert all(o["status"] in ("ok", "absent", "failed") for o in got["outcomes"])
 

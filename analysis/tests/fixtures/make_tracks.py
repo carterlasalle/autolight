@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import os
 
+import numpy as np
+
 WEAKEN = os.environ.get("WEAKEN") == "1"
 
 N_BEATS = 128
@@ -26,8 +28,14 @@ def suite() -> tuple[dict, list[dict]]:
     n = N_BEATS
     beats = [float(i + 1) for i in range(n)]
     beat_in_bar = [(i % 4) + 1 for i in range(n)]
-    kinds = (["verse"] * 32 + ["build"] * 16 + ["chorus"] * 32
-             + ["breakdown"] * 16 + ["verse"] * 16 + ["outro"] * 16)
+    kinds = (
+        ["verse"] * 32
+        + ["build"] * 16
+        + ["chorus"] * 32
+        + ["breakdown"] * 16
+        + ["verse"] * 16
+        + ["outro"] * 16
+    )
     energy = [0.2] * 32 + [0.2 + 0.7 * i / 15 for i in range(16)]
     energy += [1.0] * 32 + [0.08] * 16 + [0.25] * 16 + [0.25] * 8 + [0.1] * 8
     bass = [0.15] * 48 + [1.0] * 32 + [0.1] * 16 + [0.2] * 32
@@ -86,18 +94,25 @@ def suite() -> tuple[dict, list[dict]]:
         {"type": "outro-release", "beat": 125},
         {"type": "final-hit", "beat": 128},
     ]
-    data = {"beats": beats, "beat_in_bar": beat_in_bar, "kinds": kinds,
-            "energy": energy, "bass": bass, "drum": drum, "vocal": vocal,
-            "novelty": novelty, "onset": onset, "silence": silence,
-            "ml_boundaries": set() if WEAKEN else {65},
-            "fills": [] if WEAKEN else [88]}
+    data = {
+        "beats": beats,
+        "beat_in_bar": beat_in_bar,
+        "kinds": kinds,
+        "energy": energy,
+        "bass": bass,
+        "drum": drum,
+        "vocal": vocal,
+        "novelty": novelty,
+        "onset": onset,
+        "silence": silence,
+        "ml_boundaries": set() if WEAKEN else {65},
+        "fills": [] if WEAKEN else [88],
+    }
     return data, truth
 
 
 def render_wav(path: str, bpm: float = 120.0, sr: int = 44100) -> list[dict]:
     """Render the suite as audio (clicks plus bass plus noise swells)."""
-    import numpy as np
-
     data, truth = suite()
     beat_s = 60.0 / bpm
     total = int(N_BEATS * beat_s * sr)
@@ -105,25 +120,28 @@ def render_wav(path: str, bpm: float = 120.0, sr: int = 44100) -> list[dict]:
     t = np.arange(int(beat_s * sr)) / sr
     for i in range(N_BEATS):
         start = int(i * beat_s * sr)
-        seg = out[start:start + len(t)]
+        seg = out[start : start + len(t)]
         if len(seg) == 0:
             continue
         e = data["energy"][i]
-        click = np.sin(2 * np.pi * 1000 * t[:len(seg)]) * e * 0.4
-        seg += click[:len(seg)]
+        click = np.sin(2 * np.pi * 1000 * t[: len(seg)]) * e * 0.4
+        seg += click[: len(seg)]
         if data["bass"][i] > 0.5:
-            seg += np.sin(2 * np.pi * 55 * t[:len(seg)]) * 0.5
+            seg += np.sin(2 * np.pi * 55 * t[: len(seg)]) * 0.5
         if data["vocal"][i] > 0.4:
-            seg += (np.sin(2 * np.pi * 440 * t[:len(seg)])
-                    + 0.5 * np.sin(2 * np.pi * 880 * t[:len(seg)])) * 0.2
+            seg += (
+                np.sin(2 * np.pi * 440 * t[: len(seg)])
+                + 0.5 * np.sin(2 * np.pi * 880 * t[: len(seg)])
+            ) * 0.2
     peak = np.abs(out).max() or 1.0
     stereo = np.stack([out / peak * 0.8, out / peak * 0.8], axis=1)
     _write_wav(path, stereo.astype(np.float32), sr)
     return truth
 
 
-def _write_wav(path: str, stereo, sr: int) -> None:
+def _write_wav(path: str, stereo: np.ndarray, sr: int) -> None:
     import struct
+
     blob = stereo.astype(np.float32).tobytes()
     with open(path, "wb") as f:
         f.write(b"RIFF")

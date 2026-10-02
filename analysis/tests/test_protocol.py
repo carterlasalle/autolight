@@ -4,8 +4,13 @@ import io
 import json
 import os
 
-from autolight_analysis.protocol import (FrameWriter, ProtocolError,
-                                         error_frame, frame_id, parse_frame)
+from autolight_analysis.protocol import (
+    FrameWriter,
+    ProtocolError,
+    error_frame,
+    frame_id,
+    parse_frame,
+)
 
 
 def test_malformed_frame_is_typed_not_fatal():
@@ -22,6 +27,7 @@ def test_malformed_frame_is_typed_not_fatal():
 
 def test_library_print_line_becomes_typed_error():
     from autolight_analysis.protocol import library_print_line
+
     try:
         parse_frame(library_print_line() + "\n")
         raise AssertionError("must raise")
@@ -35,16 +41,20 @@ def test_frame_id_prefers_id_falls_back_to_track_id():
     assert frame_id({}) is None
 
 
-def test_handle_never_raises_on_bad_job():
+def test_handle_never_raises_on_bad_job(tmp_path):
     from autolight_analysis.worker import handle
-    got = handle({"type": "analyze", "trackId": "t", "audioPath": "/nope.mp3"},
-                 out_dir="/tmp/autolight-protocol-test")
+
+    got = handle(
+        {"type": "analyze", "trackId": "t", "audioPath": "/nope.mp3"},
+        out_dir=str(tmp_path / "protocol-test"),
+    )
     assert got["type"] == "failed"
     assert "audio-missing" in got.get("reason", "")
 
 
 def test_frame_writer_uses_preserved_fd(tmp_path):
     import autolight_analysis.protocol as proto
+
     r, w = os.pipe()
     writer = FrameWriter(fd=w)
     writer.write({"v": 1, "id": "x", "type": "pong"})

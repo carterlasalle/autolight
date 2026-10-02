@@ -11,6 +11,7 @@ pointed at stderr, so any third-party library print cannot corrupt frames.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import sys
@@ -36,10 +37,8 @@ def protect_stdout() -> int:
         return _PROTOCOL_FD
     kept = os.dup(1)
     sys.stdout = sys.stderr  # type: ignore[assignment]
-    try:
+    with contextlib.suppress(OSError):
         os.dup2(2, 1)
-    except OSError:
-        pass
     _PROTOCOL_FD = kept
     return kept
 
@@ -78,8 +77,13 @@ def ok_frame(ident: str | None, **body: object) -> dict:
 
 
 def error_frame(ident: str | None, code: str, detail: str = "") -> dict:
-    return {"v": PROTOCOL_VERSION, "id": ident, "type": "error",
-            "code": code, "detail": detail[:200]}
+    return {
+        "v": PROTOCOL_VERSION,
+        "id": ident,
+        "type": "error",
+        "code": code,
+        "detail": detail[:200],
+    }
 
 
 class FrameWriter:
@@ -98,7 +102,9 @@ class FrameWriter:
 class Heartbeat:
     """Emit heartbeat frames until stopped (T-ANA-01, T-ANA-02 supervision)."""
 
-    def __init__(self, writer: FrameWriter, interval_ms: int = HEARTBEAT_DEFAULT_MS) -> None:
+    def __init__(
+        self, writer: FrameWriter, interval_ms: int = HEARTBEAT_DEFAULT_MS
+    ) -> None:
         self._writer = writer
         self._interval = max(100, interval_ms) / 1000.0
         self._stop = threading.Event()
@@ -107,8 +113,9 @@ class Heartbeat:
     def start(self) -> None:
         if self._thread is not None:
             return
-        self._thread = threading.Thread(target=self._run, daemon=True,
-                                         name="analysis-heartbeat")
+        self._thread = threading.Thread(
+            target=self._run, daemon=True, name="analysis-heartbeat"
+        )
         self._thread.start()
 
     def stop(self) -> None:
@@ -117,8 +124,9 @@ class Heartbeat:
     def _run(self) -> None:
         while not self._stop.wait(self._interval):
             try:
-                self._writer.write({"v": PROTOCOL_VERSION, "type": "heartbeat",
-                                    "ts": time.time()})
+                self._writer.write(
+                    {"v": PROTOCOL_VERSION, "type": "heartbeat", "ts": time.time()}
+                )
             except OSError:
                 return
 

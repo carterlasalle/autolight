@@ -7,6 +7,7 @@ missing field can never silently delete data again (F-ANA-17). Semantic
 validation (sorted unique beats, ordered ranges, events inside duration)
 lives here alongside the shape check.
 """
+
 COVERAGE = ("full", "structured", "adaptive")
 EVENT_TYPES = (
     "major-section-transition",
@@ -29,7 +30,21 @@ EVENT_TYPES = (
     "final-hit",
     "outro-release",
 )
-SECTION_KINDS = ("intro", "verse", "prechorus", "build", "drop", "chorus", "breakdown", "bridge", "instrumental", "solo", "outro", "transition", "unknown")
+SECTION_KINDS = (
+    "intro",
+    "verse",
+    "prechorus",
+    "build",
+    "drop",
+    "chorus",
+    "breakdown",
+    "bridge",
+    "instrumental",
+    "solo",
+    "outro",
+    "transition",
+    "unknown",
+)
 
 SCHEMA_VERSION = 2
 
@@ -69,15 +84,20 @@ def validate_track_model(model: dict) -> list[str]:
                 problems.append(f"event missing {k}")
     if coverage not in COVERAGE:
         problems.append(f"coverage={coverage}")
-    inputs = ((model.get("analysisCoverage2") or {}).get("inputs")
-              if isinstance(model.get("analysisCoverage2"), dict) else None)
+    inputs = (
+        (model.get("analysisCoverage2") or {}).get("inputs")
+        if isinstance(model.get("analysisCoverage2"), dict)
+        else None
+    )
     if inputs is not None:
         from autolight_analysis.readiness import INPUT_KEYS, compute_readiness
+
         missing = [k for k in INPUT_KEYS if k not in inputs]
         if missing:
             problems.append(f"inputs missing {missing[:3]}")
-        level = (model.get("readinessLevel")
-                 or (model.get("analysisCoverage2") or {}).get("level"))
+        level = model.get("readinessLevel") or (
+            model.get("analysisCoverage2") or {}
+        ).get("level")
         if level != compute_readiness(inputs):
             problems.append(f"readiness {level} disagrees with inputs")
     return problems
@@ -85,13 +105,13 @@ def validate_track_model(model: dict) -> list[str]:
 
 def semantic_problems(model: dict) -> list[str]:
     """T-DATA-05 style checks: sorted unique beats, ranges, duration bounds."""
+    import itertools
+
     problems: list[str] = []
     beats = model.get("beatGrid", {}).get("beats", [])
     times = [b.get("sourceTimeMs", 0) for b in beats]
-    if any(t2 <= t1 for t1, t2 in zip(times, times[1:])):
+    if any(t2 <= t1 for t1, t2 in itertools.pairwise(times)):
         problems.append("beats not strictly increasing")
-    duration = model.get("durationSeconds", 0)
-    last = (times[-1] / 1000.0) if times else 0.0
     for e in model.get("musicalEvents", []):
         beat = e.get("beat", 0)
         if isinstance(beat, (int, float)) and beat > len(beats):

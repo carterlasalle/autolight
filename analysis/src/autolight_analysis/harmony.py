@@ -15,13 +15,45 @@ import numpy as np
 NOTE_NAMES = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
 
 # Krumhansl major/minor profiles (documented algorithm, own code).
-KRUMHANSL_MAJOR = (6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88)
-KRUMHANSL_MINOR = (6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17)
+KRUMHANSL_MAJOR = (
+    6.35,
+    2.23,
+    3.48,
+    2.33,
+    4.38,
+    4.09,
+    2.52,
+    5.19,
+    2.39,
+    3.66,
+    2.29,
+    2.88,
+)
+KRUMHANSL_MINOR = (
+    6.33,
+    2.68,
+    3.52,
+    5.38,
+    2.60,
+    3.53,
+    2.54,
+    4.75,
+    3.98,
+    2.69,
+    3.34,
+    3.17,
+)
 
 
-def cqt_chroma(mono: np.ndarray, rate: int = 44100, frame: int = 4096,
-               hop: int = 2048, fmin: float = 55.0, bins_per_octave: int = 12,
-               octaves: int = 6) -> np.ndarray:
+def cqt_chroma(
+    mono: np.ndarray,
+    rate: int = 44100,
+    frame: int = 4096,
+    hop: int = 2048,
+    fmin: float = 55.0,
+    bins_per_octave: int = 12,
+    octaves: int = 6,
+) -> np.ndarray:
     """Constant-Q style chroma: sparse-kernel magnitude to pitch classes.
 
     Upgrade path if this dominates runtime: an FFT + parabolic-mapping chroma
@@ -35,7 +67,7 @@ def cqt_chroma(mono: np.ndarray, rate: int = 44100, frame: int = 4096,
     window = np.hanning(frame)
     chroma = np.zeros((n_frames, 12), dtype=np.float64)
     for n in range(n_frames):
-        seg = mono[n * hop:n * hop + frame].astype(np.float64) * window
+        seg = mono[n * hop : n * hop + frame].astype(np.float64) * window
         for k, f in enumerate(freqs):
             re = float(np.dot(seg, np.cos(2.0 * math.pi * f * t)))
             im = float(np.dot(seg, np.sin(2.0 * math.pi * f * t)))
@@ -54,8 +86,10 @@ def estimate_key(chroma: np.ndarray) -> dict:
     mean = mean / norm
     best: dict = {"key": "C", "mode": "major", "confidence": 0.0}
     for root in range(12):
-        for mode, profile in (("major", KRUMHANSL_MAJOR), ("minor", KRUMHANSL_MINOR)):
-            p = np.array([profile[(i - root) % 12] for i in range(12)], dtype=np.float64)
+        modes = (("major", KRUMHANSL_MAJOR), ("minor", KRUMHANSL_MINOR))
+        for mode, profile in modes:
+            shifted = [profile[(i - root) % 12] for i in range(12)]
+            p = np.array(shifted, dtype=np.float64)
             p = p / float(np.linalg.norm(p))
             corr = float(np.dot(mean, p))
             if corr > best["confidence"]:

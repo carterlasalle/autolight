@@ -41,8 +41,10 @@ def test_analyze_missing_native_is_typed_failure(tmp_path):
     assert got["type"] == "failed"
     assert "audio-missing" in got.get("reason", "")
 
+
 def test_analyze_full_with_real_audio(tmp_path):
     import pathlib
+
     fx = pathlib.Path(__file__).parent / "fixtures"
     got = handle(
         {
@@ -56,6 +58,7 @@ def test_analyze_full_with_real_audio(tmp_path):
     assert got["type"] == "complete"
     model = json.loads(pathlib.Path(got["artifactPath"]).read_text())
     from autolight_analysis.schema import validate_track_model
+
     assert validate_track_model(model) == []
     assert model["analysisCoverage"] in ("full", "structured")
     assert model["analysisCoverage2"]["inputs"]["source.audio"]["status"] == "present"

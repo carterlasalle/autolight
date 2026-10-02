@@ -5,15 +5,18 @@ Same signal encoded as WAV/FLAC/MP3/AAC must decode through one pipeline to
 the mono stream derives from the canonical decode, never separately.
 """
 
+import shutil
+import subprocess
+
 import numpy as np
 import pytest
 
-from autolight_analysis.decode import (canonical_pcm, decode_key,
-                                        mono_from_canonical, resampler_args)
-
-ffmpeg = pytest.importorskip("shutil")
-import shutil
-import subprocess
+from autolight_analysis.decode import (
+    canonical_pcm,
+    decode_key,
+    mono_from_canonical,
+    resampler_args,
+)
 
 if shutil.which("ffmpeg") is None:
     pytest.skip("ffmpeg not available", allow_module_level=True)
@@ -23,6 +26,7 @@ def _tone(path, sr=44100, secs=1.0, freq=440.0):
     t = np.arange(int(sr * secs)) / sr
     stereo = np.stack([0.5 * np.sin(2 * np.pi * freq * t)] * 2, axis=1)
     import struct
+
     blob = stereo.astype(np.float32).tobytes()
     with open(path, "wb") as f:
         f.write(b"RIFF")
@@ -35,17 +39,21 @@ def _tone(path, sr=44100, secs=1.0, freq=440.0):
 
 
 def _transcode(src, dst, *extra):
-    subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(src),
-                    *extra, str(dst)], check=True)
+    exe = shutil.which("ffmpeg") or "ffmpeg"
+    subprocess.run(  # noqa: S603 - test-only local ffmpeg transcoding fixed flags
+        [exe, "-v", "error", "-y", "-i", str(src), *extra, str(dst)], check=True
+    )
 
 
 def test_same_signal_all_codecs_align(tmp_path):
     src = tmp_path / "tone.wav"
     _tone(src)
     variants = {"wav": src}
-    for name, args in (("flac", ["-c:a", "flac"]),
-                       ("mp3", ["-c:a", "libmp3lame", "-b:a", "128k"]),
-                       ("aac", ["-c:a", "aac", "-b:a", "128k"])):
+    for name, args in (
+        ("flac", ["-c:a", "flac"]),
+        ("mp3", ["-c:a", "libmp3lame", "-b:a", "128k"]),
+        ("aac", ["-c:a", "aac", "-b:a", "128k"]),
+    ):
         out = tmp_path / f"tone.{name if name != 'aac' else 'm4a'}"
         try:
             _transcode(src, out, *args)
@@ -91,5 +99,6 @@ def test_mono_derived_from_canonical(tmp_path):
 
 def test_resampler_rejects_unknown():
     import pytest as _p
+
     with _p.raises(ValueError):
         resampler_args("bogus")

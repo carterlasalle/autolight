@@ -66,34 +66,51 @@ def detect_builds(
         for w in wins:
             if n - w < 0:
                 continue
-            seg = energy[n - w:n]
+            seg = energy[n - w : n]
             trim = _rise_start(seg)
             length = len(seg) - trim
             if length < 4:
                 continue
             if seg[-1] <= seg[trim] * 1.05:
                 continue  # no net rise worth calling a build
-            pssi_up = any(k == "build" for k in pssi_kinds[max(0, n - w + trim):n])
+            pssi_up = any(k == "build" for k in pssi_kinds[max(0, n - w + trim) : n])
             s = build_score(
                 seg[trim:],
-                energy_slope(drum[n - w + trim:n]),
+                energy_slope(drum[n - w + trim : n]),
                 pssi_up,
                 centroid_slope=_slope(centroid, n, length),
                 onset_slope=_slope(onset_density, n, length),
                 bass_movement=_slope(bass, n, length),
-                boundary_confidence=(1.0 if (ml_boundaries and any(
-                    abs(beats[n - w + trim + k] - b) <= 4 for k in range(length)
-                    for b in ml_boundaries)) else 0.0),
-                tension_slope=_slope(tension, n, length))
+                boundary_confidence=(
+                    1.0
+                    if (
+                        ml_boundaries
+                        and any(
+                            abs(beats[n - w + trim + k] - b) <= 4
+                            for k in range(length)
+                            for b in ml_boundaries
+                        )
+                    )
+                    else 0.0
+                ),
+                tension_slope=_slope(tension, n, length),
+            )
             rel = s["strength"] * 4.0 / length
             if best is None or (length, rel) > (best["len"], best["rel"]):
-                best = {**s, "rel": rel, "len": length,
-                        "startBeat": beats[n - w + trim], "impactBeat": beats[n]}
-        if best is not None and best["strength"] > min_strength \
-                and best["confidence"] >= min_conf:
+                best = {
+                    **s,
+                    "rel": rel,
+                    "len": length,
+                    "startBeat": beats[n - w + trim],
+                    "impactBeat": beats[n],
+                }
+        if (
+            best is not None
+            and best["strength"] > min_strength
+            and best["confidence"] >= min_conf
+        ):
             prev = best_by_impact.get(best["impactBeat"])
-            if prev is None or (best["len"], best["rel"]) > (prev["len"],
-                                                             prev["rel"]):
+            if prev is None or (best["len"], best["rel"]) > (prev["len"], prev["rel"]):
                 best_by_impact[best["impactBeat"]] = best
     builds = sorted(best_by_impact.values(), key=lambda b: b["startBeat"])
     merged: list[dict] = []
@@ -102,7 +119,8 @@ def detect_builds(
             if (b["len"], b["rel"]) > (merged[-1]["len"], merged[-1]["rel"]):
                 merged[-1] = b
             merged[-1]["endBeat"] = max(
-                merged[-1].get("impactBeat") or 0, b.get("impactBeat") or 0)
+                merged[-1].get("impactBeat") or 0, b.get("impactBeat") or 0
+            )
         else:
             merged.append(b)
     for b in merged:
@@ -119,7 +137,7 @@ def _rel_jump(series: list[float], n: int, span: int = 4) -> float:
 def _slope(series: list[float] | None, n: int, w: int) -> float:
     if not series or n - w < 0:
         return 0.0
-    return energy_slope(list(series[n - w:n]))
+    return energy_slope(list(series[n - w : n]))
 
 
 def _fake_pairs(
@@ -149,20 +167,22 @@ def _fake_pairs(
         if n < 4 or n + 4 >= len(beats):
             continue
         sil = silence[n] if silence and n < len(silence) else 0.0
-        before = max(energy[n - 16:n - 4]) if n >= 16 else max(energy[:n] or [0.0])
-        approach = max(energy[max(0, n - 8):max(1, n - 4)] or [0.0])
+        before = max(energy[n - 16 : n - 4]) if n >= 16 else max(energy[:n] or [0.0])
+        approach = max(energy[max(0, n - 8) : max(1, n - 4)] or [0.0])
         if before < 0.5 * peak or approach < 0.5 * before:
             continue  # spec 25 pair follows a recent build/plateau approach
         withheld = sil > 0.5
         variant = "silence"
         if not withheld and vocal is not None and n < len(vocal):
             vmax = max(vocal) or 1.0
-            if vocal[n] > 0.5 * vmax and energy[n] < 0.6 * peak \
-                    and energy[n] <= before * 1.2:
+            if (
+                vocal[n] > 0.5 * vmax
+                and energy[n] < 0.6 * peak
+                and energy[n] <= before * 1.2
+            ):
                 withheld, variant = True, "vocal-fake"
-        if not withheld:
-            if before >= 0.5 * peak and energy[n] < 0.5 * before:
-                withheld, variant = True, "held-tension"
+        if not withheld and before >= 0.5 * peak and energy[n] < 0.5 * before:
+            withheld, variant = True, "held-tension"
         if not withheld:
             continue
         for m in range(n + 1, min(n + 5, len(beats))):
@@ -177,18 +197,28 @@ def _fake_pairs(
             later = drop_score(bj, dj, ej, on_downbeat=False)
             if later["votes"] < min_votes:
                 continue
-            pairs.append({
-                "type": "fake-drop", "beat": beats[n], "endBeat": beats[m],
-                "confidence": max(0.6, later["confidence"]),
-                "strength": min(1.0, max(bj, dj, ej) / 4.0),
-                "evidence": ["faketype:" + variant, "impact:withheld"],
-                "fakeImpactBeat": beats[n], "actualImpactBeat": beats[m],
-                "variant": variant})
-            pairs.append({
-                "type": "drop", "beat": beats[m],
-                "confidence": later["confidence"],
-                "strength": later["strength"],
-                "evidence": [*later["evidence"], "fakepair:actual"]})
+            pairs.append(
+                {
+                    "type": "fake-drop",
+                    "beat": beats[n],
+                    "endBeat": beats[m],
+                    "confidence": max(0.6, later["confidence"]),
+                    "strength": min(1.0, max(bj, dj, ej) / 4.0),
+                    "evidence": ["faketype:" + variant, "impact:withheld"],
+                    "fakeImpactBeat": beats[n],
+                    "actualImpactBeat": beats[m],
+                    "variant": variant,
+                }
+            )
+            pairs.append(
+                {
+                    "type": "drop",
+                    "beat": beats[m],
+                    "confidence": later["confidence"],
+                    "strength": later["strength"],
+                    "evidence": [*later["evidence"], "fakepair:actual"],
+                }
+            )
             starts.add(n)
             impacts.add(m)
             break
@@ -217,8 +247,9 @@ def detect_drops(
     out: list[dict] = []
     build_beats = {b["impactBeat"] for b in builds}
     ml = ml_boundaries or set()
-    pair_events, pair_starts, pair_impacts = _fake_pairs(
-        list(beats), beat_in_bar, silence, vocal, energy, bass, drum, min_votes)
+    pair_events, pair_starts, _pair_impacts = _fake_pairs(
+        list(beats), beat_in_bar, silence, vocal, energy, bass, drum, min_votes
+    )
     out.extend(pair_events)
     emitted = [float(e["beat"]) for e in pair_events if e["type"] == "drop"]
     for n in downbeats(list(beats), beat_in_bar):
@@ -253,28 +284,51 @@ def detect_drops(
             # still count when the jump itself is decisive.
             if max(bj, dj, ej) < 2.0 or not (on_boundary or ml_hit):
                 continue
-            s = {**s, "votes": max(s["votes"], min_votes),
-                 "confidence": max(s["confidence"], min_conf),
-                 "evidence": [*s["evidence"], "jump:decisive"]}
-        if not (near_build or beats[n] in build_beats or ml_hit or (
-                silence and silence[n - 4] > 0.5)):
-            # A boundary-only jump with no build, dip or ML context needs
-            # decisive agreement (spec 24 lists a preceding build as input).
-            if s["confidence"] < 0.8:
-                continue
+            s = {
+                **s,
+                "votes": max(s["votes"], min_votes),
+                "confidence": max(s["confidence"], min_conf),
+                "evidence": [*s["evidence"], "jump:decisive"],
+            }
+        no_context = not (
+            near_build
+            or beats[n] in build_beats
+            or ml_hit
+            or (silence and silence[n - 4] > 0.5)
+        )
+        # A boundary-only jump with no build, dip or ML context needs
+        # decisive agreement (spec 24 lists a preceding build as input).
+        if no_context and s["confidence"] < 0.8:
+            continue
         if any(abs(beats[n] - d) < 8 for d in emitted):
             continue  # one impact per 8-beat window across pairs and candidates
         emitted.append(float(beats[n]))
-        out.append({
-            "type": "drop", "beat": beats[n],
-            "confidence": s["confidence"], "strength": s["strength"],
-            "evidence": s["evidence"]})
+        out.append(
+            {
+                "type": "drop",
+                "beat": beats[n],
+                "confidence": s["confidence"],
+                "strength": s["strength"],
+                "evidence": s["evidence"],
+            }
+        )
     drop_beats = sorted(float(e["beat"]) for e in out if e["type"] == "drop")
-    fake_beats = {float(e["beat"]) for e in pair_events
-                  if e["type"] == "fake-drop"}
-    out += _secondary_events(beats, beat_in_bar, energy, bass, drum, vocal,
-                             novelty, onset, silence, pssi_kinds, fills,
-                             drop_beats, fake_beats)
+    fake_beats = {float(e["beat"]) for e in pair_events if e["type"] == "fake-drop"}
+    out += _secondary_events(
+        beats,
+        beat_in_bar,
+        energy,
+        bass,
+        drum,
+        vocal,
+        novelty,
+        onset,
+        silence,
+        pssi_kinds,
+        fills,
+        drop_beats,
+        fake_beats,
+    )
     return _dedupe(sorted(out, key=lambda e: e["beat"]))
 
 
@@ -314,11 +368,17 @@ def _secondary_events(
     for n in downs:
         if n >= 4 and n < len(pssi_kinds) and pssi_kinds[n] != pssi_kinds[n - 1]:
             big = pssi_kinds[n] in ("drop", "chorus", "breakdown", "build")
-            out.append({
-                "type": "major-section-transition" if big else "minor-phrase-transition",
-                "beat": beats[n], "confidence": 0.85 if big else 0.7,
-                "strength": 0.8 if big else 0.4,
-                "evidence": [f"rekordbox:PSSI:{pssi_kinds[n]}"]})
+            out.append(
+                {
+                    "type": (
+                        "major-section-transition" if big else "minor-phrase-transition"
+                    ),
+                    "beat": beats[n],
+                    "confidence": 0.85 if big else 0.7,
+                    "strength": 0.8 if big else 0.4,
+                    "evidence": [f"rekordbox:PSSI:{pssi_kinds[n]}"],
+                }
+            )
     # One breakdown per run: the section start, not every downbeat inside it.
     in_breakdown = False
     for n in downs:
@@ -328,84 +388,165 @@ def _secondary_events(
             continue
         if in_breakdown:
             continue
-        seg = energy[n:n + 16]
+        seg = energy[n : n + 16]
         if seg and max(seg) < 0.4 * peak:
-            out.append({
-                "type": "breakdown", "beat": beats[n],
-                "endBeat": beats[min(n + 15, len(beats) - 1)],
-                "confidence": 0.7, "strength": 0.3,
-                "evidence": ["rekordbox:PSSI:breakdown", "energy:low"]})
+            out.append(
+                {
+                    "type": "breakdown",
+                    "beat": beats[n],
+                    "endBeat": beats[min(n + 15, len(beats) - 1)],
+                    "confidence": 0.7,
+                    "strength": 0.3,
+                    "evidence": ["rekordbox:PSSI:breakdown", "energy:low"],
+                }
+            )
         in_breakdown = True
     for stem, etype in ((bass, "bass-re-entry"), (drum, "drum-re-entry")):
         for n in downs:
-            if n >= 8 and max(stem[n - 8:n]) < 0.3 * (max(stem) or 1.0) \
-                    and _rel_jump(stem, n) > 0.5:
-                out.append({"type": etype, "beat": beats[n], "confidence": 0.75,
-                            "strength": 0.6,
-                            "evidence": [f"{etype.split('-')[0]}:re-entry"]})
+            if (
+                n >= 8
+                and max(stem[n - 8 : n]) < 0.3 * (max(stem) or 1.0)
+                and _rel_jump(stem, n) > 0.5
+            ):
+                out.append(
+                    {
+                        "type": etype,
+                        "beat": beats[n],
+                        "confidence": 0.75,
+                        "strength": 0.6,
+                        "evidence": [f"{etype.split('-')[0]}:re-entry"],
+                    }
+                )
     if vocal:
         vmax = max(vocal) or 1.0
         active = [v > 0.4 * vmax for v in vocal]
         for n in downs:
-            if n >= 4 and not any(active[n - 4:n]) and any(active[n:n + 4]):
-                out.append({"type": "vocal-entry", "beat": beats[n],
-                            "confidence": 0.7, "strength": 0.4,
-                            "evidence": ["vocal:entry"]})
-            if n >= 4 and any(active[n - 4:n]) and not any(active[n:n + 4]):
-                out.append({"type": "vocal-exit", "beat": beats[n],
-                            "confidence": 0.7, "strength": 0.4,
-                            "evidence": ["vocal:exit"]})
+            if n >= 4 and not any(active[n - 4 : n]) and any(active[n : n + 4]):
+                out.append(
+                    {
+                        "type": "vocal-entry",
+                        "beat": beats[n],
+                        "confidence": 0.7,
+                        "strength": 0.4,
+                        "evidence": ["vocal:entry"],
+                    }
+                )
+            if n >= 4 and any(active[n - 4 : n]) and not any(active[n : n + 4]):
+                out.append(
+                    {
+                        "type": "vocal-exit",
+                        "beat": beats[n],
+                        "confidence": 0.7,
+                        "strength": 0.4,
+                        "evidence": ["vocal:exit"],
+                    }
+                )
     for n in downs:
         filled = fills is not None and n in fills
-        dense = onset is not None and n >= 4 and \
-            sum(1 for o in onset[n - 4:n] if o > 0.5) >= 3
+        dense = (
+            onset is not None
+            and n >= 4
+            and sum(1 for o in onset[n - 4 : n] if o > 0.5) >= 3
+        )
         if filled or dense:
-            out.append({"type": "fill", "beat": beats[n], "confidence": 0.7,
-                        "strength": 0.5,
-                        "evidence": ["rekordbox:PSSI:fill" if filled
-                                     else "onset:dense"]})
+            out.append(
+                {
+                    "type": "fill",
+                    "beat": beats[n],
+                    "confidence": 0.7,
+                    "strength": 0.5,
+                    "evidence": ["rekordbox:PSSI:fill" if filled else "onset:dense"],
+                }
+            )
     if silence is not None:
         for n in downs:
-            if n + 4 < len(silence) and all(s > 0.8 for s in silence[n:n + 4]):
-                out.append({"type": "silence", "beat": beats[n], "confidence": 0.9,
-                            "strength": 0.5, "evidence": ["energy:silence"]})
+            if n + 4 < len(silence) and all(s > 0.8 for s in silence[n : n + 4]):
+                out.append(
+                    {
+                        "type": "silence",
+                        "beat": beats[n],
+                        "confidence": 0.9,
+                        "strength": 0.5,
+                        "evidence": ["energy:silence"],
+                    }
+                )
                 break
         for n in downs:
-            if n + 2 < len(silence) and all(s > 0.8 for s in silence[n:n + 2]):
-                if not any(e["type"] == "silence" and e["beat"] == beats[n]
-                           for e in out):
-                    out.append({"type": "pause", "beat": beats[n],
-                                "confidence": 0.6, "strength": 0.3,
-                                "evidence": ["energy:pause"]})
+            if n + 2 < len(silence) and all(s > 0.8 for s in silence[n : n + 2]):
+                if not any(
+                    e["type"] == "silence" and e["beat"] == beats[n] for e in out
+                ):
+                    out.append(
+                        {
+                            "type": "pause",
+                            "beat": beats[n],
+                            "confidence": 0.6,
+                            "strength": 0.3,
+                            "evidence": ["energy:pause"],
+                        }
+                    )
                 break
     for n in range(len(beats)):
         if n >= 2 and _rel_jump(novelty, n, span=2) > 1.5:
-            out.append({"type": "large-transient", "beat": beats[n],
-                        "confidence": 0.65, "strength": 0.7,
-                        "evidence": ["novelty:spike"]})
+            out.append(
+                {
+                    "type": "large-transient",
+                    "beat": beats[n],
+                    "confidence": 0.65,
+                    "strength": 0.7,
+                    "evidence": ["novelty:spike"],
+                }
+            )
             break
     kinds = pssi_kinds
     if kinds and kinds[-1] in ("outro", "chorus", "drop") and len(beats) > 8:
-        out.append({"type": "final-hit", "beat": beats[-1], "confidence": 0.6,
-                    "strength": 0.8, "evidence": ["structure:track-end"]})
-        out.append({"type": "outro-release", "beat": beats[-4],
-                    "endBeat": beats[-1], "confidence": 0.6, "strength": 0.4,
-                    "evidence": ["structure:outro"]})
+        out.append(
+            {
+                "type": "final-hit",
+                "beat": beats[-1],
+                "confidence": 0.6,
+                "strength": 0.8,
+                "evidence": ["structure:track-end"],
+            }
+        )
+        out.append(
+            {
+                "type": "outro-release",
+                "beat": beats[-4],
+                "endBeat": beats[-1],
+                "confidence": 0.6,
+                "strength": 0.4,
+                "evidence": ["structure:outro"],
+            }
+        )
     # Predrop: the last downbeat before a real impact, never a fake-drop point.
     for n in downs:
         if beats[n] in fake_beats:
             continue
         if any(beats[n] < d <= beats[n] + 4 for d in drop_beats):
-            out.append({"type": "predrop", "beat": beats[n], "confidence": 0.65,
-                        "strength": 0.5, "evidence": ["drop:imminent"]})
+            out.append(
+                {
+                    "type": "predrop",
+                    "beat": beats[n],
+                    "confidence": 0.65,
+                    "strength": 0.5,
+                    "evidence": ["drop:imminent"],
+                }
+            )
             break
     # Continuation: a real drop followed by sustained energy for 8 beats.
     for d in drop_beats:
         idx = min(range(len(beats)), key=lambda i: abs(beats[i] - d))
-        seg = energy[idx:idx + 8]
+        seg = energy[idx : idx + 8]
         if seg and max(seg) >= 0.75 * peak:
-            out.append({"type": "drop-continuation", "beat": beats[idx],
-                        "endBeat": beats[min(idx + 8, len(beats) - 1)],
-                        "confidence": 0.6, "strength": 0.5,
-                        "evidence": ["drop:sustain"]})
+            out.append(
+                {
+                    "type": "drop-continuation",
+                    "beat": beats[idx],
+                    "endBeat": beats[min(idx + 8, len(beats) - 1)],
+                    "confidence": 0.6,
+                    "strength": 0.5,
+                    "evidence": ["drop:sustain"],
+                }
+            )
     return out

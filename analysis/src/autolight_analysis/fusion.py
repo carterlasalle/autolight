@@ -24,9 +24,12 @@ def fuse(label: str, evidence: list[str], confidence: float) -> dict:
     return {"type": label, "evidence": evidence, "confidence": confidence}
 
 
-def fuse_sections(pssi_sections: list[dict], ml_sections_list: list[dict],
-                  feature_boundaries: list[int] | None = None,
-                  mode: str = "fused") -> list[dict]:
+def fuse_sections(
+    pssi_sections: list[dict],
+    ml_sections_list: list[dict],
+    feature_boundaries: list[int] | None = None,
+    mode: str = "fused",
+) -> list[dict]:
     """Fuse PSSI and ML sections per DS-11 mode (T-ANA-11).
 
     ``fused`` (default): union of boundaries, confidence from agreement and
@@ -39,22 +42,41 @@ def fuse_sections(pssi_sections: list[dict], ml_sections_list: list[dict],
     ml_sections_list = ml_sections_list or []
     boundaries = set(feature_boundaries or [])
     if not pssi_sections:
-        return [{**s, "confidence": min(1.0, s.get("confidence", 0.5) + 0.05),
-                 "evidence": [*s.get("evidence", []), "ml:only-source"]}
-                for s in ml_sections_list]
+        return [
+            {
+                **s,
+                "confidence": min(1.0, s.get("confidence", 0.5) + 0.05),
+                "evidence": [*s.get("evidence", []), "ml:only-source"],
+            }
+            for s in ml_sections_list
+        ]
     if not ml_sections_list:
-        return [{**s, "evidence": [*s.get("evidence", []), "native:only-source"]}
-                for s in pssi_sections]
+        return [
+            {**s, "evidence": [*s.get("evidence", []), "native:only-source"]}
+            for s in pssi_sections
+        ]
     if mode == "pssi-first":
-        return [_with(s, extra=["allin1:corroborated"]
-                      if _overlaps(s, ml_sections_list) else ["allin1:absent"],
-                      boost=0.1 if _overlaps(s, ml_sections_list) else -0.1)
-                for s in pssi_sections]
+        return [
+            _with(
+                s,
+                extra=["allin1:corroborated"]
+                if _overlaps(s, ml_sections_list)
+                else ["allin1:absent"],
+                boost=0.1 if _overlaps(s, ml_sections_list) else -0.1,
+            )
+            for s in pssi_sections
+        ]
     if mode == "ml-first":
-        return [_with(s, extra=["rekordbox:PSSI:corroborated"]
-                      if _overlaps(s, pssi_sections) else ["rekordbox:PSSI:absent"],
-                      boost=0.1 if _overlaps(s, pssi_sections) else -0.1)
-                for s in ml_sections_list]
+        return [
+            _with(
+                s,
+                extra=["rekordbox:PSSI:corroborated"]
+                if _overlaps(s, pssi_sections)
+                else ["rekordbox:PSSI:absent"],
+                boost=0.1 if _overlaps(s, pssi_sections) else -0.1,
+            )
+            for s in ml_sections_list
+        ]
     # fused: union of boundary sets, confidence from agreement.
     out = []
     for s in pssi_sections:
@@ -65,21 +87,30 @@ def fuse_sections(pssi_sections: list[dict], ml_sections_list: list[dict],
             ev.append("allin1:boundary")
         if near_feature:
             ev.append("energy:boundary")
-        conf = min(1.0, max(0.0, s.get("confidence", 0.5)
-                             + (0.15 if agree else 0.0)
-                             + (0.05 if near_feature else 0.0)))
+        conf = min(
+            1.0,
+            max(
+                0.0,
+                s.get("confidence", 0.5)
+                + (0.15 if agree else 0.0)
+                + (0.05 if near_feature else 0.0),
+            ),
+        )
         out.append({**s, "confidence": conf, "evidence": ev})
     for s in ml_sections_list:
         if not any(_spans_overlap(s, p) for p in pssi_sections):
-            out.append({**s, "evidence": [*s.get("evidence", []),
-                                          "fused:ml-only-span"]})
+            out.append(
+                {**s, "evidence": [*s.get("evidence", []), "fused:ml-only-span"]}
+            )
     return sorted(out, key=lambda s: s["startBeat"])
 
 
 def _with(section: dict, extra: list[str], boost: float) -> dict:
-    return {**section,
-            "confidence": min(1.0, max(0.0, section.get("confidence", 0.5) + boost)),
-            "evidence": [*section.get("evidence", []), *extra]}
+    return {
+        **section,
+        "confidence": min(1.0, max(0.0, section.get("confidence", 0.5) + boost)),
+        "evidence": [*section.get("evidence", []), *extra],
+    }
 
 
 def _spans_overlap(a: dict, b: dict) -> bool:
@@ -132,10 +163,16 @@ def build_track_model(
             **({"endBeat": e["endBeat"]} if e.get("endBeat") is not None else {}),
             **({"strength": e["strength"]} if e.get("strength") is not None else {}),
             **({"evidence": e["evidence"]} if e.get("evidence") else {}),
-            **({"fakeImpactBeat": e["fakeImpactBeat"]}
-               if e.get("fakeImpactBeat") is not None else {}),
-            **({"actualImpactBeat": e["actualImpactBeat"]}
-               if e.get("actualImpactBeat") is not None else {}),
+            **(
+                {"fakeImpactBeat": e["fakeImpactBeat"]}
+                if e.get("fakeImpactBeat") is not None
+                else {}
+            ),
+            **(
+                {"actualImpactBeat": e["actualImpactBeat"]}
+                if e.get("actualImpactBeat") is not None
+                else {}
+            ),
         }
         for e in musical_events
     ]
