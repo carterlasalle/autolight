@@ -324,21 +324,6 @@ jobs:
         working-directory: analysis
       - run: node tools/license-check.mjs
 
-  security-codeql:
-    needs: [truth]
-    runs-on: ubuntu-latest
-    permissions:
-      security-events: write
-      actions: read
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-      - uses: github/codeql-action/init@v4
-        with:
-          languages: javascript-typescript, python
-          config-file: .github/codeql/codeql-config.yml
-      - uses: github/codeql-action/autobuild@v4
-      - uses: github/codeql-action/analyze@v4
 
   package:
     needs: [unit-coverage]

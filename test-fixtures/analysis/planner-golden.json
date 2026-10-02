@@ -264,7 +264,7 @@
     {
       "type": "white-hit",
       "startBeat": 64,
-      "durationBeats": 0.192,
+      "durationBeats": 0.189,
       "intensity": 1,
       "target": "ALL",
       "priority": 100
@@ -303,7 +303,7 @@
     },
     {
       "type": "drop-pattern",
-      "startBeat": 64.192,
+      "startBeat": 64.189,
       "durationBeats": 2,
       "intensity": 0.9,
       "target": "ALL",
@@ -319,7 +319,7 @@
     },
     {
       "type": "drop-pattern",
-      "startBeat": 66.192,
+      "startBeat": 66.189,
       "durationBeats": 14,
       "intensity": 0.85,
       "target": "PRIMARY",

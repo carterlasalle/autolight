@@ -19,10 +19,12 @@ Closes spec 112 enforcement, F-QA-14 (CodeQL part).
 - Skip-BART/SeqLight tripwire (spec 112): the checker fails on any file,
   weight, or dataset from the unlicensed 2026 Skip-BART or SeqLight
   repositories. Docs prose may cite them as research; vendored files may not.
-- `security-codeql` job (CI): `github/codeql-action` init with
-  `javascript-typescript, python` plus `security-and-quality`, autobuild,
-  analyze. `.github/codeql/codeql-config.yml` is missing today, so init
-  fails visibly naming T-TRU-10 until the config is committed.
+- CodeQL (CI): removed the `security-codeql` advanced-config job on
+  2026-10-02. The repo has CodeQL default setup enabled (configured,
+  js/ts plus python, extended suite), which rejects SARIF uploads from
+  advanced-config runs. Default setup already scans every push, so the
+  custom job was redundant. Security scanning is covered by default
+  setup, not by a CI job in `ci.yml`.
 - Root devDeps (hand-added entries): `license-checker-rseidelsohn` at
   `^5.0.1`.
 
@@ -51,8 +53,8 @@ the offender. The `licenses` CI job runs the same script and fails the same way.
 
 ## Remaining work (not claimed done)
 
-- `.github/codeql/codeql-config.yml` (T-TRU-10): the CodeQL init step fails
-  visibly until this config is committed.
+- ~~`.github/codeql/codeql-config.yml` (T-TRU-10)~~: superseded. Default
+  setup covers CodeQL; no custom config or job remains.
 - `pip-licenses` as a committed analysis dev dep (T-TRU-10): the CI step and
   the script use a `--with` overlay today; pin it in the dev group instead.
 - `THIRD_PARTY_NOTICES` full regeneration from `T-DOC-04` (notices file with
