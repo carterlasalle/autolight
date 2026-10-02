@@ -33,5 +33,9 @@ export default defineConfig({
       "apps/desktop/journeys/**",
       "apps/desktop/e2e/**",
     ],
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "lcov"],
+    },
   },
 });
