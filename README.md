@@ -98,7 +98,7 @@ Then launch `dist/electron/main.cjs` with Electron. The app is local-first and o
 | --- | --- | --- |
 | Rekordbox live deck follow (live-follow) | PARTIAL | Lighting IPC decoder pending (T-LIVE-09); rkbx_link sidecar owner decision (OD-03); composite provider inputs not acquired (T-LIVE-07); apps/desktop/electron/follow.ts; apps/desktop/electron/show-service.ts |
 | Rekordbox library reader (library) | PARTIAL | master.db reader not in app (T-RBL-01); ANLZ path resolution string math only (T-RBL-02); packages/rekordbox-library/src/index.ts |
-| Analysis worker (analysis) | PARTIAL | supervisor not instantiated (T-ANA-02); ML session unused (T-ANA-05); 14 event types missing (T-ANA-10); evidence stripped (T-ANA-11); analysis/src/autolight_analysis/worker.py |
+| Analysis worker (analysis) | PARTIAL | codegen drift pipeline pending (JSON-Schema export plus datamodel-code-generator; interim drift check tools/trackmodel-drift.mjs in yarn truth); analysis/src/autolight_analysis/worker.py |
 | Show planner (planner) | PARTIAL | 6-level hierarchy missing (T-PLAN-03); restraint 1 of 11 fields (T-PLAN-05); primitives 7 of 27 (T-PLAN-04); packages/show-planner/src/index.ts |
 | Two-deck mixer (mixer) | PARTIAL | crossfader curve wrong (T-MIX-01); blackout ALL unhandled (T-MIX-04); packages/show-mixer/src/index.ts |
 | Layer stack renderer (renderer) | PARTIAL | 8-layer stack missing (T-REND-01); Math.max compositing (T-REND-01); packages/renderer/src/index.ts |
