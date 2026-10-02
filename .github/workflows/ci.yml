@@ -136,6 +136,10 @@ jobs:
           node-version: 22
       - run: corepack enable
       - run: yarn install --immutable
+      # pytest decodes real audio (synth-beats.wav); ubuntu runners have no
+      # ffmpeg without this (decode marks source.audio failed, worker test
+      # asserts present). apt ffmpeg is x64/arm64 portable.
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - run: yarn workspaces foreach --all --topological-dev --exclude autolight run build
       # uv first: the PSSI drift probe shells to `uv run` inside vitest, so
       # the toolchain plus synced venv must exist before the test runs.
