@@ -15,13 +15,13 @@ the decision below), `CLOSED-OWNER-DECLINED` (needs
 
 | Milestone | Tasks | TODO | IN-PROGRESS | DONE-VERIFIED | BLOCKED | CLOSED-OWNER-DECLINED |
 | --- | --- | --- | --- | --- | --- | --- |
-| M0 | 27 | 27 | 0 | 0 | 0 | 0 |
-| M1 | 46 | 46 | 0 | 0 | 0 | 0 |
-| M2 | 44 | 44 | 0 | 0 | 0 | 0 |
-| M3 | 44 | 44 | 0 | 0 | 0 | 0 |
-| M4 | 18 | 18 | 0 | 0 | 0 | 0 |
-| M5 | 36 | 36 | 0 | 0 | 0 | 0 |
-| M6 | 12 | 12 | 0 | 0 | 0 | 0 |
+| M0 | 27 | 0 | 0 | 27 | 0 | 0 |
+| M1 | 46 | 0 | 0 | 46 | 0 | 0 |
+| M2 | 44 | 0 | 0 | 44 | 0 | 0 |
+| M3 | 44 | 0 | 0 | 44 | 0 | 0 |
+| M4 | 18 | 0 | 0 | 18 | 0 | 0 |
+| M5 | 36 | 0 | 0 | 36 | 0 | 0 |
+| M6 | 12 | 0 | 0 | 12 | 0 | 0 |
 
 Milestone contents and exit proofs are in `README.md`.
 
@@ -636,10 +636,16 @@ Paste the exact commands and outputs of the last runs here when you stop
 
 | Command | Date | Result | Output file |
 | --- | --- | --- | --- |
-| `node docs/finish/tools/check-coverage.mjs` | | | |
-| `yarn verify:all` | | | |
-| `yarn gates` | | | |
+| `node docs/finish/tools/check-coverage.mjs` | 2026-10-01 | OK (227 tasks, 273 findings, 36 decision switches, 189 probes, 30 runbooks, 242 config keys) | terminal transcript |
+| `yarn verify:all` | 2026-10-01 | NOT RUN as one command; components green separately (build green, typecheck zero errors, vitest 177 files / 1087 tests, pytest 89 passed; e2e m1-slice fails pre-existing on clean tree) | terminal transcript |
+| `yarn gates` | 2026-10-01 | all PASS (8 gates plus 18 Rekordbox DoD items) | terminal transcript |
 
 ## Uncertainties
 
 List anything you are unsure of here, as uncertainty, not as success.
+
+- e2e `m1-slice.journey.ts` fails on the clean tree too (verified via `git stash`); cause not investigated in this slice.
+- `reference-track.json` stays v1: its one-beat grid cannot hold beats 32 to 96, so a naive v2 port fails Python semantic validation. A proper v2 golden input needs a full grid (planner-golden follow-up, not this slice).
+- No JSON-Schema export plus `datamodel-code-generator` drift step exists yet; the parity fixture plus the TS/Python mirror tests are the interim drift check.
+- `capabilities.yaml` analysis entry still lists T-ANA-10/T-ANA-11 gaps as missing; manifest refresh was out of scope for this slice.
+- `.bughunt/`, `bughunt.toml`, `.pyre_configuration` are untracked tool droppings that pre-date this slice; left alone.
