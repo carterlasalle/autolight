@@ -88,7 +88,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@autolight/analysis-client@workspace:packages/analysis-client":
+"@autolight/analysis-client@npm:^0.1.0, @autolight/analysis-client@workspace:packages/analysis-client":
   version: 0.0.0-use.local
   resolution: "@autolight/analysis-client@workspace:packages/analysis-client"
   dependencies:
@@ -149,11 +149,14 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@autolight/desktop@workspace:apps/desktop"
   dependencies:
+    "@autolight/analysis-client": "npm:^0.1.0"
     "@autolight/config": "npm:^0.1.0"
     "@autolight/contracts": "npm:^0.1.0"
+    "@autolight/controller-flx4": "npm:^0.1.0"
     "@autolight/diagnostics": "npm:^0.1.0"
     "@autolight/dj-core": "npm:^0.1.0"
     "@autolight/govee": "npm:^0.1.0"
+    "@autolight/ipc": "npm:^0.1.0"
     "@autolight/reactive-audio": "npm:^0.1.0"
     "@autolight/rekordbox-live": "npm:^0.1.0"
     "@autolight/renderer": "npm:^0.1.0"
@@ -162,6 +165,8 @@ __metadata:
     "@autolight/show-runtime": "npm:^0.1.0"
     "@autolight/simulator": "npm:^0.1.0"
     "@autolight/storage": "npm:^0.1.0"
+    "@autolight/track-model": "npm:^0.1.0"
+    "@autolight/venue": "npm:^0.1.0"
     "@fontsource-variable/geist": "npm:^5.3.0"
     "@playwright/test": "npm:^1.49.0"
     "@tailwindcss/vite": "npm:^4.3.3"
@@ -303,6 +308,7 @@ __metadata:
   dependencies:
     "@autolight/contracts": "npm:^0.1.0"
     "@autolight/show-planner": "npm:^0.1.0"
+    "@autolight/simulator": "npm:^0.1.0"
     "@autolight/venue": "npm:^0.1.0"
     typescript: "npm:^5.6.3"
     vitest: "npm:^4.1.11"
@@ -405,6 +411,12 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@autolight/storage@workspace:packages/storage"
   dependencies:
+    "@autolight/contracts": "npm:^0.1.0"
+    "@autolight/dj-core": "npm:^0.1.0"
+    "@autolight/govee": "npm:^0.1.0"
+    "@autolight/ipc": "npm:^0.1.0"
+    "@autolight/renderer": "npm:^0.1.0"
+    "@autolight/simulator": "npm:^0.1.0"
     "@types/node": "npm:^22.0.0"
     typescript: "npm:^5.6.3"
     vitest: "npm:^4.1.11"
@@ -421,7 +433,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@autolight/track-model@workspace:packages/track-model":
+"@autolight/track-model@npm:^0.1.0, @autolight/track-model@workspace:packages/track-model":
   version: 0.0.0-use.local
   resolution: "@autolight/track-model@workspace:packages/track-model"
   dependencies:
