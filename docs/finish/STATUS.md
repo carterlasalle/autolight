@@ -578,18 +578,18 @@ else in the task is built and verified first.
 
 | ID | Decision | Options | Measurements to show | Tasks | Answer |
 | --- | --- | --- | --- | --- | --- |
-| OD-01 | Rekordbox version path | Stay on 7.2.10; update to 7.2.17 or 7.2.18 (rkbx_link on macOS); update to 7.2.19+ (Lighting integration); use Windows with a paid rkbx_link license, which covers 7.2.10 | Provider matrix from `T-LIVE-15` with SIM accuracy per provider | T-LIVE-03, T-LIVE-09, T-LIVE-15 | open |
-| OD-02 | SoundSwitch for the one-time Lighting capture | Creative or Professional plan, or trial; or skip Lighting | Capture matrix size and time estimate | T-LIVE-09 | open |
-| OD-03 | Install rkbx_link as a sidecar | Yes (re-sign Rekordbox, run with sudo); no | Accuracy and risk summary | T-LIVE-03, T-LIVE-04 | open |
-| OD-04 | Clean-room memory reader | Enable with consent; do not build further than the test target | Same as OD-03 plus maintenance cost | T-LIVE-11, T-SEC-05 | open |
-| OD-05 | Ship BLE encrypted-link keys | Ship; require the user to supply; disable encrypted link | Which owner units need it | T-BLE-07 | open |
-| OD-06 | Signing spend | Apple Developer ID, Windows certificate, or unsigned builds | Install friction with and without | T-OPS-05 | open |
-| OD-07 | Ableton Link licensing | Sidecar only; request Ableton's license for the SDK | Link value measured in the composite provider | T-LIVE-12 | open |
-| OD-08 | Acoustic fingerprint binary | Bundle LGPL fpcalc; own implementation; pcm-hash only | Re-encode match rate | T-ID-01 | open |
-| OD-09 | ML weights distribution | Bundle where licenses allow; download in Setup | Sizes, licenses | T-ANA-05, T-OPS-05 | open |
-| OD-10 | Validation set tracks | The owner confirms the candidate list per category | Candidate list with analysis hints | T-QA-09 | open |
-| OD-11 | Update mechanism | electron-builder updater; manual downloads | n/a | T-OPS-04 | open |
-| OD-12 | Windows reference machine | Which machine runs Windows qualification | n/a | T-QA-05, T-QA-11 | open |
+| OD-01 | Rekordbox version path | Stay on 7.2.10; update to 7.2.17 or 7.2.18 (rkbx_link on macOS); update to 7.2.19+ (Lighting integration); use Windows with a paid rkbx_link license, which covers 7.2.10 | Provider matrix from `T-LIVE-15` with SIM accuracy per provider | T-LIVE-03, T-LIVE-09, T-LIVE-15 | YES 2026-10-02: update to 7.2.19+ (unlocks rkbx_link on macOS plus Lighting path) |
+| OD-02 | SoundSwitch for the one-time Lighting capture | Creative or Professional plan, or trial; or skip Lighting | Capture matrix size and time estimate | T-LIVE-09 | YES 2026-10-02: owner will get plan/trial and run HW-RB-LIGHT-01, but only after everything else is done |
+| OD-03 | Install rkbx_link as a sidecar | Yes (re-sign Rekordbox, run with sudo); no | Accuracy and risk summary | T-LIVE-03, T-LIVE-04 | YES 2026-10-02: install it |
+| OD-04 | Clean-room memory reader | Enable with consent; do not build further than the test target | Same as OD-03 plus maintenance cost | T-LIVE-11, T-SEC-05 | YES 2026-10-02: enable with consent |
+| OD-05 | Ship BLE encrypted-link keys | Ship; require the user to supply; disable encrypted link | Which owner units need it | T-BLE-07 | 2026-10-02: all three modes, ship vendor keys AND owner-supplied key file AND a disable switch (DS-05 off/on/auto already in code) |
+| OD-06 | Signing spend | Apple Developer ID, Windows certificate, or unsigned builds | Install friction with and without | T-OPS-05 | SKIP 2026-10-02: unsigned builds, no signing spend |
+| OD-07 | Ableton Link licensing | Sidecar only; request Ableton's license for the SDK | Link value measured in the composite provider | T-LIVE-12 | 2026-10-02: sidecar auto, user-installed bridge, no SDK license request |
+| OD-08 | Acoustic fingerprint binary | Bundle LGPL fpcalc; own implementation; pcm-hash only | Re-encode match rate | T-ID-01 | 2026-10-02: own implementation plus pcm-hash (recommendation); fpcalc evaluated as the alternative and stays out of the installer |
+| OD-09 | ML weights distribution | Bundle where licenses allow; download in Setup | Sizes, licenses | T-ANA-05, T-OPS-05 | 2026-10-02: both, bundle where licenses allow plus download the rest in Setup |
+| OD-10 | Validation set tracks | The owner confirms the candidate list per category | Candidate list with analysis hints | T-QA-09 | 2026-10-02: use the owner's Rekordbox library as the source |
+| OD-11 | Update mechanism | electron-builder updater; manual downloads | n/a | T-OPS-04 | YES 2026-10-02: auto-updater (never during Live, per decided rules) |
+| OD-12 | Windows reference machine | Which machine runs Windows qualification | n/a | T-QA-05, T-QA-11 | NONE 2026-10-02: no Windows machine; Windows qualification rows are unavailable on this rig |
 
 ## Hardware and real-software runbook queue
 
