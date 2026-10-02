@@ -147,7 +147,7 @@ jobs:
       # The benchmark already passed in the plain run above; the gate run
       # below re-verifies thresholds on every other test.
       - run: yarn vitest run
-      - run: yarn vitest run --coverage --coverage.thresholds.lines 85 --coverage.thresholds.statements 85 --coverage.thresholds.functions 90 --coverage.thresholds.branches 80 --coverage.exclude '**/beat.test.ts'
+      - run: yarn vitest run --coverage --exclude '**/beat.test.ts' --coverage.thresholds.lines 85 --coverage.thresholds.statements 85 --coverage.thresholds.functions 90 --coverage.thresholds.branches 80
       - run: uv run pytest --cov=autolight_analysis --cov-report=term-missing
         working-directory: analysis
       - name: Unique test count (S18)
