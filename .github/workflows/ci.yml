@@ -130,7 +130,7 @@ jobs:
           node-version: 22
       - run: corepack enable
       - run: yarn install --immutable
-      - run: yarn workspaces foreach --all run build
+      - run: yarn workspaces foreach --all --topological-dev --exclude autolight run build
       - run: yarn vitest run --coverage
       - name: Coverage gates (T-TRU-07 thresholds)
         run: yarn vitest run --coverage --coverage.thresholds.lines 85 --coverage.thresholds.statements 85 --coverage.thresholds.functions 90 --coverage.thresholds.branches 80
@@ -154,7 +154,7 @@ jobs:
           node-version: 22
       - run: corepack enable
       - run: yarn install --immutable
-      - run: yarn workspaces foreach --all run build
+      - run: yarn workspaces foreach --all --topological-dev --exclude autolight run build
       # Changed-files filter: PR mutation runs on changed files only; the
       # nightly full run covers everything (nightly.yml). Stryker config is
       # generated inline because no committed config exists yet (T-TRU-08).
@@ -232,7 +232,7 @@ jobs:
           node-version: 22
       - run: corepack enable
       - run: yarn install --immutable
-      - run: yarn workspaces foreach --all run build
+      - run: yarn workspaces foreach --all --topological-dev --exclude autolight run build
       # Show host with simulators + analysis worker (T-TRU-11 stage). The
       # application-level integration suite lands with T-QA-04; until then
       # the show-host unit suite proves the host pipeline against in-memory

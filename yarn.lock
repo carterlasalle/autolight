@@ -396,6 +396,7 @@ __metadata:
   resolution: "@autolight/simulator@workspace:packages/simulator"
   dependencies:
     "@autolight/contracts": "npm:^0.1.0"
+    "@autolight/govee": "npm:^0.1.0"
     typescript: "npm:^5.6.3"
     vitest: "npm:^4.1.11"
   languageName: unknown

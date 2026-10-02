@@ -232,9 +232,17 @@ try {
 }
 // First-party workspace package: its license comes from the repo, not PyPI metadata.
 const FIRST_PARTY_PIP = new Set(["autolight-analysis"]);
+// Metadata-gap allowlist: packages whose upstream license is known but whose
+// PyPI metadata pip-licenses reports as UNKNOWN. Each entry names the real
+// license and where it was verified. Keep this list to entries verified
+// against the upstream project page or license file.
+const KNOWN_LICENSE = new Map([
+  ["cuda-toolkit", "NVIDIA proprietary EULA (CUDA Toolkit EULA; nvidia.com, torch CUDA wheel dependency; not GPL/AGPL)"],
+]);
 for (const p of pipRows) {
   const name = p.Name ?? p.name ?? "?";
   if (FIRST_PARTY_PIP.has(String(name).toLowerCase())) continue;
+  if (KNOWN_LICENSE.has(String(name).toLowerCase())) continue;
   const lic = p.License ?? p.license ?? "";
   if (denied(normLicense(lic))) fail(`pip ${name} license=${JSON.stringify(lic)}`);
 }
@@ -250,7 +258,11 @@ for (const h of tripwireScan()) fail(`unlicensed Skip-BART/SeqLight artifact: ${
 const report = {
   generated: new Date().toISOString().slice(0, 10),
   yarn: Object.values(yarnMap).map((v) => ({ name: v.name, version: v.version, license: normLicense(v.licenses) })),
-  pip: pipRows.map((p) => ({ name: p.Name ?? p.name, version: p.Version ?? p.version, license: normLicense(p.License ?? p.license) })),
+  pip: pipRows.map((p) => {
+    const nm = String(p.Name ?? p.name ?? "");
+    const known = KNOWN_LICENSE.get(nm.toLowerCase());
+    return { name: p.Name ?? p.name, version: p.Version ?? p.version, license: known ?? normLicense(p.License ?? p.license) };
+  }),
   hand: handList(),
   policy: { denylist: ["GPL", "AGPL", "unlicensed", "unknown"], rkbx_link: "never a dependency", skipBartSeqLight: "no files, weights, or datasets (research inspiration only)" },
 };
