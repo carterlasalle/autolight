@@ -66,11 +66,10 @@ jobs:
       - run: corepack enable
       - run: yarn install --immutable
       # Workspace typecheck resolves sibling @autolight/* through dist
-      # type declarations, so dists must exist first. Flat parallel build
-      # (not topological-dev: the graph has dev-dep test cycles through
-      # simulator, so topological sort cannot order it; tsc emits per
-      # package regardless of order).
-      - run: yarn workspaces foreach --all --exclude autolight run build
+      # type declarations, so leaf dists must exist first. Topological-dev
+      # orders prod-only deps (test-only edges live in devDependencies after
+      # the round-five dep fix, so the graph is acyclic).
+      - run: yarn workspaces foreach --all --topological-dev --exclude autolight run build
       - run: yarn workspaces foreach --all --exclude autolight run typecheck
       - uses: astral-sh/setup-uv@v5
       - run: uv sync --frozen --all-groups
@@ -137,7 +136,7 @@ jobs:
           node-version: 22
       - run: corepack enable
       - run: yarn install --immutable
-      - run: yarn workspaces foreach --all --exclude autolight run build
+      - run: yarn workspaces foreach --all --topological-dev --exclude autolight run build
       - run: yarn vitest run --coverage
       - name: Coverage gates (T-TRU-07 thresholds)
         run: yarn vitest run --coverage --coverage.thresholds.lines 85 --coverage.thresholds.statements 85 --coverage.thresholds.functions 90 --coverage.thresholds.branches 80
@@ -161,7 +160,7 @@ jobs:
           node-version: 22
       - run: corepack enable
       - run: yarn install --immutable
-      - run: yarn workspaces foreach --all --exclude autolight run build
+      - run: yarn workspaces foreach --all --topological-dev --exclude autolight run build
       # Changed-files filter: PR mutation runs on changed files only; the
       # nightly full run covers everything (nightly.yml). Stryker config is
       # generated inline because no committed config exists yet (T-TRU-08).
@@ -239,7 +238,7 @@ jobs:
           node-version: 22
       - run: corepack enable
       - run: yarn install --immutable
-      - run: yarn workspaces foreach --all --exclude autolight run build
+      - run: yarn workspaces foreach --all --topological-dev --exclude autolight run build
       # Show host with simulators + analysis worker (T-TRU-11 stage). The
       # application-level integration suite lands with T-QA-04; until then
       # the show-host unit suite proves the host pipeline against in-memory

@@ -41,7 +41,7 @@ function registerTestApi(): void {
   const stages = (): { name: string; atMs: number }[] =>
     (["db", "show-worker", "govee", "dj-adapter", "library", "analysis", "venue", "tracks", "plans", "arm", "ready"] as const).map((name) => ({ name, atMs: at(name) - t0 }));
   const unavailable = (what: string): never => {
-    throw new Error(`${what} unavailable in this build (qa/recording-frames test channel not yet wired to the service)`);
+    throw new Error(`${what} unavailable in this build (qa/recording-frames test channel pending service wiring)`);
   };
   const api: Record<string, (arg: unknown) => Promise<unknown> | unknown> = {
     stages: () => stages(),

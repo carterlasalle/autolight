@@ -23,7 +23,7 @@ jobs:
           node-version: 22
       - run: corepack enable
       - run: yarn install --immutable
-      - run: yarn workspaces foreach --all --exclude autolight run build
+      - run: yarn workspaces foreach --all --topological-dev --exclude autolight run build
       - name: Stryker full run (T-TRU-08)
         run: |
           for PKG in contracts show-runtime show-mixer renderer show-planner venue govee rekordbox-live controller-flx4; do
@@ -71,7 +71,7 @@ jobs:
           node-version: 22
       - run: corepack enable
       - run: yarn install --immutable
-      - run: yarn workspaces foreach --all --exclude autolight run build
+      - run: yarn workspaces foreach --all --topological-dev --exclude autolight run build
       - name: Timing harness (T-QA-05)
         run: |
           if [ -f tools/timing-harness.mjs ] || [ -f scripts/timing-harness.mjs ]; then
