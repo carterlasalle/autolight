@@ -189,7 +189,7 @@ jobs:
               *) echo "package $PKG not in the mutation scope (T-TRU-08 modules); skipping" ; continue ;;
             esac
             mkdir -p "/tmp/stryker-$PKG"
-            cat > "/tmp/stryker-$PKG/stryker.config.json" <<EOF
+            cat > "/tmp/stryker-$PKG/stryker.config.json" <<'STRYKER_EOF'
             {
               "testRunner": "vitest",
               "coverageAnalysis": "perTest",
@@ -197,7 +197,7 @@ jobs:
               "thresholds": { "high": 85, "low": 85, "break": 85 },
               "mutate": ["src/index.ts"]
             }
-            EOF
+            STRYKER_EOF
             yarn stryker run --configFile "/tmp/stryker-$PKG/stryker.config.json" --project packages/$PKG
           done
       - name: Mutation survivors in the safety-critical list (T-TRU-08)
