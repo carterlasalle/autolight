@@ -198,8 +198,10 @@ jobs:
               "mutate": ["src/index.ts"]
             }
             STRYKER_EOF
-            yarn stryker run --configFile "/tmp/stryker-$PKG/stryker.config.json" --project packages/$PKG
+            yarn stryker run --configFile "/tmp/stryker-$PKG/stryker.config.json" --project packages/$PKG || exit $?
           done
+          # Every changed package was out of scope: nothing mutated, job green.
+          echo "mutation-fast done (in-scope packages mutated, out-of-scope skipped)"
       - name: Mutation survivors in the safety-critical list (T-TRU-08)
         run: node tools/mutation/check-critical.mjs
       - uses: astral-sh/setup-uv@v5
