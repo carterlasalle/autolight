@@ -639,12 +639,13 @@ Paste the exact commands and outputs of the last runs here when you stop
 | `node docs/finish/tools/check-coverage.mjs` | 2026-10-01 | OK (227 tasks, 273 findings, 36 decision switches, 189 probes, 30 runbooks, 242 config keys) | terminal transcript |
 | `yarn verify:all` | 2026-10-01 | NOT RUN as one command; components green separately (build green, typecheck zero errors, vitest 177 files / 1087 tests, pytest 89 passed; e2e m1-slice fails pre-existing on clean tree) | terminal transcript |
 | `yarn gates` | 2026-10-01 | all PASS (8 gates plus 18 Rekordbox DoD items) | terminal transcript |
-
+| `node tools/conformance-report.mjs` | 2026-10-05 | 162/162 mapped and present; matrix and tree agree | terminal transcript |
+| `playwright test` (apps/desktop) | 2026-10-05 | 5 passed (19.2 s): m1-slice 11/11 steps plus night, soak, live-session | terminal transcript |
 ## Uncertainties
 
 List anything you are unsure of here, as uncertainty, not as success.
 
-- e2e `m1-slice.journey.ts` fails on the clean tree too (verified via `git stash`); cause not investigated in this slice.
+- e2e `m1-slice.journey.ts` went green 2026-10-05 via the TEST-BUILD `SimulatorShow` loop (seed TrackModel → real planner → real renderer → razer over loopback UDP); the stale "fails on clean tree" note from 2026-10-01 is history.
 - `reference-track.json` stays v1: its one-beat grid cannot hold beats 32 to 96, so a naive v2 port fails Python semantic validation. A proper v2 golden input needs a full grid (planner-golden follow-up, not this slice).
 - No JSON-Schema export plus `datamodel-code-generator` drift step exists yet; the parity fixture plus the TS/Python mirror tests are the interim drift check.
 - `capabilities.yaml` analysis entry still lists T-ANA-10/T-ANA-11 gaps as missing; manifest refresh was out of scope for this slice.
