@@ -158,7 +158,6 @@ __metadata:
     "@autolight/govee": "npm:^0.1.0"
     "@autolight/ipc": "npm:^0.1.0"
     "@autolight/reactive-audio": "npm:^0.1.0"
-    "@autolight/rekordbox-live": "npm:^0.1.0"
     "@autolight/renderer": "npm:^0.1.0"
     "@autolight/show-mixer": "npm:^0.1.0"
     "@autolight/show-planner": "npm:^0.1.0"
