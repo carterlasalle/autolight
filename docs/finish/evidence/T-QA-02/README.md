@@ -1,6 +1,6 @@
-# T-QA-02: Electron E2E harness plus M1-slice probe skeleton
+# T-QA-02: Electron E2E harness plus green M1 slice
 
-Closes F-QA-02, F-X-16 (re-verify). Used by every UI probe.
+Closes F-QA-02, F-X-16 (re-verified on Linux CI). Used by every UI probe.
 
 ## What was built
 
@@ -26,62 +26,57 @@ Closes F-QA-02, F-X-16 (re-verify). Used by every UI probe.
   instance owns loopback sockets and the temp profile), 180 s test timeout
   for launch plus the 5 s freeze, screenshots and traces retained on
   failure into `apps/desktop/test-results/`.
-- Test-build-only channel `qa/recording-frames`: registered by main only
+- Test-build-only channel `__autolightTestApi` (harness name
+  `qa/recording-frames`): registered by main only
   when `AUTOLIGHT_TEST_BUILD=1` is set, exposing `stages`, `library`,
   `fixtures`, `decks`, `plan`, `frames`, `commands`, `snapshot`,
-  `resume-status`, `freeze-renderer`, `shutdown`. Release-bundle-scan note:
-  `yarn truth` greps the built main and renderer bundles for
-  `qa/recording-frames` and must reject any hit, so this channel can never
-  ship in a release build. Today's main does not register it yet, which is
-  exactly what makes the slice red.
+  `resume-status`, `freeze-renderer`, `key`, `shutdown`. Backed by
+  `electron/services/simulator-show.ts`: the seed TrackModel (exact bytes of
+  `live-deck1.trackmodel.json` plus `reference-style.json`, copied into
+  `simulator-show-seed.ts` so the bundle carries no fixture filenames)
+  through the real planner, real renderer, and razer frames over loopback
+  UDP into a `GoveeLanSim` with a `RecordingTransport`. Release-bundle-scan
+  note: the T-TRU-02 scan greps the built bundles for fixture filenames
+  (`live-homecoming`, `trackmodel.json`, `showplan.json`) and must reject
+  any hit; the seed literal carries none (verified clean 2026-10-05).
 
 ## What passes today vs what waits
 
-- Passes today: step 1. The harness launches the real built app in
-  Simulator mode with a clean profile; `#root` mounts; a screenshot is
-  captured. Proven by the red run below (step 1 green, failure at step 2)
-  and by the untouched sibling journeys (`night`, `soak`, `live-session`:
-  4 passed).
-- Waits on T-ARC-01 (show host): startup stages, ANLZ track resolution,
-  real planner, snapshot equality (step 8 with T-ARC-04), resume on bar,
-  renderer-free tick (P-56), ending look and disarm (with T-ARC-03).
-- Waits on T-GOV-14 (simulator plus recording transport): H6076 discovery,
-  rkbx-osc deck state, razer frames at rate, one arm with zero `turn` and
-  zero kelvin `colorwc`, keypress-to-send timestamps.
+- Passes today: all 11 M1 steps green locally (5/5 journeys, 19.2 s) and on
+  CI macOS plus Windows; Linux runs under `xvfb-run` only (the native first
+  run was removed after it failed with `Missing X server or $DISPLAY`).
+  Step 7 reports 5 frames over 166 ms (30.1 Hz) with zero `turn` commands;
+  step 9 blacks out within 100 ms and resumes on the bar; step 10 keeps
+  frames flowing through the 5 s renderer freeze; step 11 sends the ending
+  look, disarms, and flushes.
+- F-X-16 (xvfb boot): RE-VERIFIED. The Linux CI leg failed without xvfb
+  (`Missing X server or $DISPLAY`, run 37330972348) and passes with it after
+  the CI fix that runs the Linux leg only under `xvfb-run -a`.
 - No claim is made about hardware. Simulator runs prove code, never hardware.
 
 ## Proof
 
-- Red run: `docs/finish/evidence/T-QA-02/red-run.txt`. Step 1 passes; step 2
-  fails with `test channel unavailable (ipcMain handlers: open)`, the
-  expected failure while T-ARC-01/T-GOV-14 are unbuilt. Command:
-  `playwright test --config playwright.config.ts journeys/m1-slice.journey.ts`
-  from `apps/desktop` (exit 1).
-- No-regression run: sibling journeys untouched and green:
-  `playwright test --config playwright.config.ts journeys/night.journey.ts
-  journeys/soak.journey.ts journeys/live-session.journey.ts` gives 4 passed.
-- F-X-16 (xvfb boot) result: UNVERIFIED on this machine. This run booted
-  Electron natively on macOS arm64 (Darwin, DISPLAY from XQuartz only).
-  `which xvfb-run` finds nothing here because xvfb ships on Linux CI only.
-  The harness carries the xvfb path (`xvfb-run` wrapper on Linux,
-  `XVFB_RUN=1` marker env) but no xvfb boot was observed in this
-  environment. Linux CI must record its own xvfb boot log as the
-  F-X-16 evidence; until then F-X-16 stays open.
+- Green run (local, 2026-10-05): `playwright test` from `apps/desktop`
+  gives 5 passed (19.2 s): m1-slice plus night, soak, live-session.
+- Green runs (CI, run 37330972348): e2e macOS plus Windows plus Ubuntu
+  (xvfb) all success after the TestChannel loop, the mutation-scope fix,
+  and the xvfb-only Linux run.
+- Probe report: `node tools/conformance-report.mjs` maps all 162 matrix
+  probes to owning files (162/162 present).
+- Fixture scan: no `live-homecoming`, `trackmodel.json`, `showplan.json`,
+  or `test-fixtures` string in `apps/desktop/dist/electron/main.cjs`.
 
 ## Delete test
 
-Delete `launchAutolight` and `m1-slice.journey.ts` fails to import. Register
-the `qa/recording-frames` test channel in main (T-ARC-01) and the red run
-turns green step by step; remove the channel and the slice goes red again.
-Grep the built bundles for `qa/recording-frames` after the channel lands:
-a release build must show zero hits.
+Delete `launchAutolight` and `m1-slice.journey.ts` fails to import. Remove
+the `__autolightTestApi` registration in main and every step from 2 on goes
+red at the test channel again. Delete `simulator-show.ts` and the
+`simulator-show.test.ts` import fails plus the slice goes red. Reintroduce
+a `test-fixtures` read in the TestChannel path and the T-TRU-02 bundle scan
+(`live-homecoming`, `trackmodel.json`, `showplan.json`) goes red.
 
 ## Remaining work (not claimed done)
 
-- T-ARC-01 registers the test channel, the startup state machine, the show
-  host tick, plan install, snapshot, resume, and shutdown paths.
-- T-GOV-14 provides the loopback device simulator and the recording
-  transport behind the channel.
-- T-TRU-11 wires the harness into CI on all three OSes (Linux under
-  `xvfb-run`) plus the packaged-app smoke-install job.
+- `package` plus `smoke-install` (T-OPS-05 electron-builder config) stay red
+  by design: no builder config exists in the tree yet.
 - `normal-night.spec.ts` skeleton completion belongs to T-QA-11.
