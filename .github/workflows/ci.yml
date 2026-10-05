@@ -249,6 +249,9 @@ jobs:
           node-version: 22
       - run: corepack enable
       - run: yarn install --immutable
+      # test_worker.py decodes real audio; ubuntu runners need apt ffmpeg
+      # (same rationale as the unit-coverage job above).
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - run: yarn workspaces foreach --all --topological-dev --exclude autolight run build
       # Show host with simulators + analysis worker (T-TRU-11 stage). The
       # application-level integration suite lands with T-QA-04; until then
