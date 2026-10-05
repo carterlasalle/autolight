@@ -371,8 +371,7 @@ jobs:
       - run: yarn workspaces foreach --all --topological-dev --exclude autolight run build
       - run: node scripts/fetch-vendor.mjs --platform=${{ matrix.platform }}
         working-directory: apps/desktop
-      - run: yarn dist:package -- --publish never
-        working-directory: apps/desktop
+      - run: yarn workspace @autolight/desktop exec electron-builder --config electron-builder.cjs --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/upload-artifact@v4
