@@ -401,6 +401,7 @@ jobs:
           name: installer-${{ matrix.platform }}
           path: installers
       - name: Smoke the installer artifact (T-OPS-06)
+        shell: bash
         run: |
           ls -la installers/
           test "$(ls installers/ | wc -l)" -gt 0
