@@ -371,7 +371,7 @@ jobs:
       - run: yarn workspaces foreach --all --topological-dev --exclude autolight run build
       - run: node scripts/fetch-vendor.mjs --platform=${{ matrix.platform }}
         working-directory: apps/desktop
-      - run: yarn dlx electron-builder@26 --config apps/desktop/electron-builder.cjs --publish never
+      - run: yarn dlx electron-builder@26 --config electron-builder.cjs --publish never
         working-directory: apps/desktop
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
