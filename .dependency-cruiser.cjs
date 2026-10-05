@@ -10,9 +10,9 @@ module.exports = {
     },
     {
       name: "renderer-no-simulator",
-      comment: "S3: production never imports the simulator except the Simulator mode entry (T-TRU-02).",
+      comment: "S3: production never imports the simulator except the Simulator mode entry (T-TRU-02, T-QA-02 TestChannel): electron/services/simulator-show.ts owns the test-build show loop; production IPC never touches it.",
       severity: "error",
-      from: { path: "apps/desktop/(src|electron)", pathNot: "(services/simulator-mode|\\.test)" },
+      from: { path: "apps/desktop/(src|electron)", pathNot: "(services/simulator-show|\\.test)" },
       to: { path: "packages/simulator", pathNot: "\\.test\\.ts$" },
     },
     {
@@ -62,9 +62,9 @@ module.exports = {
     },
     {
       name: "ownership-govee-sockets",
-      comment: "Govee LAN sockets (4002 listener, 4001 to 4003 control) | show host govee-manager | no other module opens UDP. The two exceptions are the Govee LAN manager itself and the DJ provider observer (PRO DJ LINK owns :50001, main services).",
+      comment: "Govee LAN sockets (4002 listener, 4001 to 4003 control) | show host govee-manager | no other module opens UDP. Exceptions: the Govee LAN manager itself, the DJ provider observer (PRO DJ LINK owns :50001, main services), and the TEST-BUILD simulator show loop (loopback sim + recording sender only, never production IPC).",
       severity: "error",
-      from: { path: "apps/desktop/electron", pathNot: "(govee-lan|services/provider-manager)\\.ts$" },
+      from: { path: "apps/desktop/electron", pathNot: "(govee-lan|services/provider-manager|services/simulator-show)\\.ts$" },
       to: { path: "dgram$" },
     },
     {

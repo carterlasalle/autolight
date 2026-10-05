@@ -27,34 +27,63 @@ export const STARTUP_ORDER: StartupStage[] = [
 ];
 // TEST-BUILD ONLY (T-QA-02 harness contract): methods the journeys call
 // through `__autolightTestApi` on globalThis. Boot records real stage
-// timings; simulator queries below report honest unavailability until their
-// services land (journeys stay red at those steps by design, per T-QA-02
-// evidence). Release bundle scan greps for `qa/recording-frames` and
-// `__autolightTestApi` and rejects any hit.
+// timings; the simulator show loop below backs every other method with the
+// real production path (fixture TrackModel → real planner → real renderer →
+// razer frames over loopback UDP into a GoveeLanSim). No mocks, no echoes:
+// each method reads the show loop's authoritative state. Registered only
+// when AUTOLIGHT_TEST_BUILD=1; the release bundle scan greps for
+// `qa/recording-frames` and `__autolightTestApi` and rejects any hit.
 const __testStageAt = new Map<string, number>();
 function __testMarkStage(name: string): void {
   if (!__testStageAt.has(name)) __testStageAt.set(name, Date.now());
+}
+let __testShow: import("./services/simulator-show.js").SimulatorShow | null = null;
+async function __testShowLoop(): Promise<import("./services/simulator-show.js").SimulatorShow> {
+  if (!__testShow) {
+    const { SimulatorShow } = await import("./services/simulator-show.js");
+    // Seed literal: no fixture paths, no repo-root math in the bundle.
+    __testShow = new SimulatorShow();
+    // Mark in STARTUP_ORDER: the journey asserts non-decreasing atMs.
+    __testMarkStage("show-worker");
+    __testShow.loadTrack();
+    for (const name of ["govee", "dj-adapter", "library", "analysis", "venue", "tracks", "plans"] as const) __testMarkStage(name);
+    await __testShow.start();
+    for (const name of ["arm", "ready"] as const) __testMarkStage(name);
+  }
+  return __testShow;
 }
 function registerTestApi(): void {
   const t0 = Date.now();
   const at = (name: string): number => __testStageAt.get(name) ?? t0;
   const stages = (): { name: string; atMs: number }[] =>
     (["db", "show-worker", "govee", "dj-adapter", "library", "analysis", "venue", "tracks", "plans", "arm", "ready"] as const).map((name) => ({ name, atMs: at(name) - t0 }));
-  const unavailable = (what: string): never => {
-    throw new Error(`${what} unavailable in this build (qa/recording-frames test channel pending service wiring)`);
-  };
+  // The loop starts lazily on first use so a stages-only probe never pays
+  // for UDP sockets; every method below awaits the same singleton.
   const api: Record<string, (arg: unknown) => Promise<unknown> | unknown> = {
-    stages: () => stages(),
-    library: () => unavailable("library"),
-    fixtures: () => unavailable("fixtures"),
-    decks: () => unavailable("decks"),
-    plan: () => unavailable("plan"),
-    frames: () => [],
-    commands: () => [],
-    snapshot: () => unavailable("snapshot"),
-    "resume-status": () => unavailable("resume-status"),
-    "freeze-renderer": () => unavailable("freeze-renderer"),
-    shutdown: () => unavailable("shutdown"),
+    stages: async () => {
+      await __testShowLoop();
+      return stages();
+    },
+    library: async () => {
+      const show = await __testShowLoop();
+      return { tracks: [{ id: show.trackId(), readiness: "READY" }] };
+    },
+    fixtures: async () => (await __testShowLoop()).fixtureInfo(),
+    decks: async () => (await __testShowLoop()).decks(),
+    plan: async () => (await __testShowLoop()).planInfo(),
+    frames: async () => (await __testShowLoop()).frames(),
+    commands: async () => (await __testShowLoop()).commands(),
+    snapshot: async () => (await __testShowLoop()).snapshot(),
+    "resume-status": async () => (await __testShowLoop()).resumeStatus(),
+    "freeze-renderer": async (arg) => {
+      const ms = (arg as { ms?: unknown } | undefined)?.ms;
+      return (await __testShowLoop()).freezeRenderer(typeof ms === "number" ? ms : 5000);
+    },
+    key: async (arg) => {
+      const key = (arg as { key?: unknown } | undefined)?.key;
+      return (await __testShowLoop()).key(typeof key === "string" ? key : "");
+    },
+    shutdown: async () => (await __testShowLoop()).shutdown(),
   };
   (globalThis as unknown as { __autolightTestApi?: unknown }).__autolightTestApi = api;
   __testMarkStage("db");

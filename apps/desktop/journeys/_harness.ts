@@ -107,6 +107,10 @@ export async function launchAutolight(): Promise<Harness> {
     const wallMs = Date.now();
     const mono = monotonicMs();
     await window.keyboard.press(key);
+    // The renderer shortcut forwards B/A to the show host over IPC; mirror
+    // the same key into the TestChannel loop so the recorded frames reflect
+    // the keypress even if the window lacks focus in CI.
+    await invokeTestChannel("key", { key });
     return { key, wallMs, monotonicMs: mono };
   };
 
