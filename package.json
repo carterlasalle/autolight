@@ -28,6 +28,7 @@
     "@stryker-mutator/vitest-runner": "^10.0.0",
     "@vitest/coverage-v8": "^4.1.11",
     "dependency-cruiser": "^18.5.0",
+    "electron-builder": "^26",
     "esbuild": "^0.28.2",
     "eslint": "^10.11.0",
     "knip": "^6.38.0",

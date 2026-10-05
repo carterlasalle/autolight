@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "main": "dist/electron/main.cjs",
   "scripts": {
     "build": "tsc -p tsconfig.json && vite build && node scripts/build-main.mjs && node scripts/build-preload.mjs && rm -rf dist/electron-tmp",
     "build:renderer": "vite build",
@@ -11,15 +12,16 @@
     "dev": "vite",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "lint": "tsc --noEmit -p tsconfig.typecheck.json",
-    "typecheck": "tsc --noEmit -p tsconfig.typecheck.json"
+    "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
+    "fetch-vendor": "node scripts/fetch-vendor.mjs",
+    "dist:package": "yarn build && node scripts/fetch-vendor.mjs && electron-builder --config electron-builder.cjs",
+    "dist:package:dir": "yarn build && electron-builder --config electron-builder.cjs --dir"
   },
   "dependencies": {
     "@autolight/analysis-client": "^0.1.0",
     "@autolight/config": "^0.1.0",
     "@autolight/contracts": "^0.1.0",
     "@autolight/controller-flx4": "^0.1.0",
-    "@autolight/diagnostics": "^0.1.0",
     "@autolight/dj-core": "^0.1.0",
     "@autolight/govee": "^0.1.0",
     "@autolight/ipc": "^0.1.0",

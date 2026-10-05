@@ -13,3 +13,6 @@ __pycache__/
 
 test-results/
 playwright-report/
+# T-OPS-05: packaged outputs plus fetched vendor sidecars never commit.
+apps/desktop/release/
+apps/desktop/vendor/

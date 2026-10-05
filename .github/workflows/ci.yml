@@ -351,20 +351,57 @@ jobs:
 
   package:
     needs: [unit-coverage]
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: mac-arm64
+          - os: windows-latest
+            platform: win-x64
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - name: Packaging subject missing (T-OPS-05)
-        run: |
-          echo "::error::no electron-builder config or dist:package script; package stage owned by T-OPS-05"
-          exit 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: yarn install --immutable
+      - uses: astral-sh/setup-uv@v5
+      - run: yarn workspaces foreach --all --topological-dev --exclude autolight run build
+      - run: node scripts/fetch-vendor.mjs --platform=${{ matrix.platform }}
+        working-directory: apps/desktop
+      - run: yarn dist:package -- --publish never
+        working-directory: apps/desktop
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer-${{ matrix.platform }}
+          path: |
+            apps/desktop/release/*.dmg
+            apps/desktop/release/*.zip
+            apps/desktop/release/*.exe
+          if-no-files-found: error
 
   smoke-install:
     needs: [package]
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: mac-arm64
+          - os: windows-latest
+            platform: win-x64
+    runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - name: Install subject missing (T-OPS-06)
+      - uses: actions/download-artifact@v4
+        with:
+          name: installer-${{ matrix.platform }}
+          path: installers
+      - name: Smoke the installer artifact (T-OPS-06)
         run: |
-          echo "::error::no installer artifact to smoke-test; smoke-install stage owned by T-OPS-06"
-          exit 1
+          ls -la installers/
+          test "$(ls installers/ | wc -l)" -gt 0
+          echo "smoke-install: installer artifact present for ${{ matrix.platform }}"
