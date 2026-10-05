@@ -289,6 +289,9 @@ jobs:
           node-version: 22
       - run: corepack enable
       - run: yarn install --immutable
+      # Desktop typecheck resolves sibling @autolight/* through dist
+      # declarations (same as the types job): leaf dists first.
+      - run: yarn workspaces foreach --all --topological-dev --exclude autolight run build
       - run: yarn workspace @autolight/desktop build
       - run: yarn playwright install chromium
         working-directory: apps/desktop
