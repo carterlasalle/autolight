@@ -289,8 +289,19 @@ export class SeratoRemoteEmulator {
       const waitMs = (step.atMs - previousAt) / speed;
       previousAt = step.atMs;
       if (waitMs > 0) await new Promise<void>((resolve) => setTimeout(resolve, waitMs));
-      this.send(step.message);
+      this.sendAt(step.message, step.atMs);
     }
+  }
+
+  /** Send one framed message stamped with the script's own atMs. */
+  sendAt(message: OscMessage, atMs: number): void {
+    const bytes = frameOsc(message);
+    // Script time, not wall time: replay bursts group by these stamps, so a
+    // loaded CI machine stalling 50 ms between two sends cannot split one
+    // track load into two generations in replay only. `send` keeps wall time
+    // for tests that assert arrival timing.
+    this.recorded.push({ atMs, bytes, direction: "sent" });
+    this.socket?.write(bytes);
   }
 
   /** Frames the peer sent, in wire form, with arrival timestamps. */
