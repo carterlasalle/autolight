@@ -12,7 +12,9 @@ import { deviceScreenRow, withTransportMode, type TransportMode } from "../../ro
 export function VenueView(): JSX.Element {
   const s = useShell();
   const [modes, setModes] = useState<Record<string, TransportMode>>({});
+  const [scanning, setScanning] = useState(false);
   const scan = (): void => {
+    setScanning(true);
     void invoke("venue/scan", { version: 1 }).then((result: unknown) => {
       const envelope = result as { ok?: boolean; devices?: { address: string; name: string }[] } | null;
       const list = envelope && envelope.ok !== false && Array.isArray(envelope.devices) ? envelope.devices : [];
@@ -31,26 +33,29 @@ export function VenueView(): JSX.Element {
           health: "online",
         })),
       });
+      setScanning(false);
     });
   };
   return (
     <div className="flex max-w-5xl flex-col gap-3">
       <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-[13px]">Lights</CardTitle></CardHeader>
-        <CardContent>
+        <CardHeader className="pb-2"><CardTitle className="text-[13px]">Lights{s.devices.length > 0 ? ` · ${s.devices.length} found` : ""}</CardTitle></CardHeader>
+        <CardContent className="flex flex-col gap-2">
           <div className="flex flex-wrap items-center gap-2">
-            <Button size="sm" variant="outline" onClick={scan}>Scan</Button>
-            <span className="text-[13px] text-muted-foreground">
-              {s.devices.length === 0 ? "No lights found — Scan the LAN." : `${s.devices.length} found`}
-            </span>
-            <div className="flex gap-3" role="radiogroup" aria-label="Control target">
-              {(["A", "B", "Both"] as const).map((t) => (
-                <label key={t} className="flex items-center gap-1.5 text-[13px]">
-                  <input type="radio" name="target" checked={s.target === t} onChange={() => { s.set({ target: t }); }} />
-                  {t === "Both" ? "Both" : t}
-                </label>
-              ))}
-            </div>
+            <Button size="sm" variant="outline" onClick={scan} disabled={scanning}>
+              {scanning ? "Scanning…" : s.devices.length === 0 ? "Scan the LAN" : "Rescan"}
+            </Button>
+            {s.devices.length === 0 && !scanning ? (
+              <span className="text-[13px] text-muted-foreground">No lights found yet — power them in LAN mode on this network, then scan.</span>
+            ) : null}
+          </div>
+          <div className="flex items-center gap-2" role="radiogroup" aria-label="Control target">
+            <span className="text-[13px] text-muted-foreground">Target:</span>
+            {(["A", "B", "Both"] as const).map((t) => (
+              <Button key={t} size="sm" variant={s.target === t ? "default" : "outline"} onClick={() => { s.set({ target: t }); }} aria-pressed={s.target === t}>
+                {t}
+              </Button>
+            ))}
           </div>
         </CardContent>
       </Card>
