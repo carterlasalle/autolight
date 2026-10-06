@@ -75,12 +75,16 @@ export function InspectorView(): JSX.Element {
                 </label>
               </div>
               {audition ? <p className="text-[13px] text-muted-foreground">{audition}</p> : null}
-              <div className="flex flex-wrap gap-2">
-                <Button size="sm" variant="outline" onClick={() => correct({ op: "add-drop", beat: 256 })}>Add missing drop at 256</Button>
-                <Button size="sm" variant="outline" onClick={() => correct({ op: "delete-drop", beat: 256 })}>Delete false drop at 256</Button>
-                <Button size="sm" variant="outline" onClick={() => correct({ op: "mark-fake-drop", beat: 256, actualBeat: 288 })}>Mark fake drop 256 to 288</Button>
-                <Button size="sm" variant="outline" onClick={() => correct({ op: "regenerate-section", startBeat: 224, endBeat: 256 })}>Regenerate section 224 to 256</Button>
-                <Button size="sm" variant="outline" onClick={() => correct({ op: "lock-section", startBeat: 224, endBeat: 256 })}>Lock section 224 to 256</Button>
+              <div className="flex flex-col gap-2" role="group" aria-label="Corrections">
+                <div className="flex flex-wrap gap-2" role="group" aria-label="Drop corrections">
+                  <Button size="sm" variant="outline" onClick={() => correct({ op: "add-drop", beat: 256 })}>Add missing drop at 256</Button>
+                  <Button size="sm" variant="outline" onClick={() => correct({ op: "delete-drop", beat: 256 })}>Delete false drop at 256</Button>
+                  <Button size="sm" variant="outline" onClick={() => correct({ op: "mark-fake-drop", beat: 256, actualBeat: 288 })}>Mark fake drop 256 to 288</Button>
+                </div>
+                <div className="flex flex-wrap gap-2" role="group" aria-label="Section corrections">
+                  <Button size="sm" variant="outline" onClick={() => correct({ op: "regenerate-section", startBeat: 224, endBeat: 256 })}>Regenerate section 224 to 256</Button>
+                  <Button size="sm" variant="outline" onClick={() => correct({ op: "lock-section", startBeat: 224, endBeat: 256 })}>Lock section 224 to 256</Button>
+                </div>
               </div>
             </>
           )}

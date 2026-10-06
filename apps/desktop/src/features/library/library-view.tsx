@@ -38,11 +38,11 @@ export function LibraryView(): JSX.Element {
             <table aria-label="Library" className="w-full border-collapse text-[13px]">
               <thead>
                 <tr className="text-left text-xs text-muted-foreground">
-                  <th className="border-b py-1.5 pr-3 font-medium">Track</th>
-                  <th className="border-b py-1.5 pr-3 font-medium">Artist</th>
-                  <th className="border-b py-1.5 pr-3 font-medium">BPM</th>
-                  <th className="border-b py-1.5 pr-3 font-medium">Readiness</th>
-                  <th className="border-b py-1.5 font-medium">Queue</th>
+                  <th scope="col" className="border-b py-1.5 pr-3 font-medium">Track</th>
+                  <th scope="col" className="border-b py-1.5 pr-3 font-medium">Artist</th>
+                  <th scope="col" className="border-b py-1.5 pr-3 font-medium">BPM</th>
+                  <th scope="col" className="border-b py-1.5 pr-3 font-medium">Readiness</th>
+                  <th scope="col" className="border-b py-1.5 font-medium"><span className="sr-only">Queue actions</span></th>
                 </tr>
               </thead>
               <tbody>
