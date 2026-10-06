@@ -5,6 +5,7 @@
 // as measured/configured data or rendered as "unmeasured" (S6): no literal
 // metrics live in component code.
 import type { TrackModel, ShowCue } from "@autolight/contracts";
+import { Button } from "./ui/button.js";
 import { tokens } from "../app/tokens.js";
 import type { DeviceTile as TileData } from "../features/venue/venue.js";
 
@@ -336,23 +337,25 @@ export function masterIntensity(intensity: number | null): string {
 }
 
 // MasterControls: emergency bar (spec 94). Real values from the show host
-// arrive as props; the same intents as the B/W/F/A shortcut keys.
+// arrive as props; the same intents as the B/W/F/A shortcut keys. Blackout
+// is destructive (it kills the room); resume is the primary action.
 export function MasterControls({ state, onIntent }: {
   state: MasterState;
   onIntent: (intent: "blackout" | "full" | "freeze" | "resume") => void;
 }): JSX.Element {
-  const labels: Record<"blackout" | "full" | "freeze" | "resume", string> = {
-    blackout: state.blackout ? "blackout on" : "blackout",
-    full: "full white",
-    freeze: state.frozen ? "frozen" : "freeze",
-    resume: state.auto ? "auto" : "manual",
-  };
   return (
-    <div role="toolbar" aria-label="Master" className={tokens.space.gap}>
-      {(["blackout", "full", "freeze", "resume"] as const).map((i) => (
-        <button key={i} type="button" onClick={() => onIntent(i)}>{labels[i]}</button>
-      ))}
-      <span className={tokens.type.timing + " " + tokens.type.small}>intensity {masterIntensity(state.intensity)}</span>
+    <div role="toolbar" aria-label="Master" className="flex flex-wrap items-center gap-2">
+      <Button size="sm" variant={state.blackout ? "default" : "destructive"} onClick={() => onIntent("blackout")} aria-pressed={state.blackout}>
+        {state.blackout ? "Blackout on" : "Blackout"}
+      </Button>
+      <Button size="sm" variant="outline" onClick={() => onIntent("full")}>Full white</Button>
+      <Button size="sm" variant="outline" onClick={() => onIntent("freeze")} aria-pressed={state.frozen}>
+        {state.frozen ? "Frozen" : "Freeze"}
+      </Button>
+      <Button size="sm" variant="secondary" onClick={() => onIntent("resume")}>
+        {state.auto ? "Auto" : "Resume"}
+      </Button>
+      <span className={tokens.type.timing + " " + tokens.type.small}>Intensity {masterIntensity(state.intensity)}</span>
     </div>
   );
 }

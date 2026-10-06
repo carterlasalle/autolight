@@ -114,13 +114,16 @@ export function LiveView({ live }: { live: LiveState | null }): JSX.Element {
   );
 }
 
-// Below-fold manual lane (§88): every led_party intent, shadcn controls.
+// Below-fold manual lane (§88): every led_party intent, grouped by purpose
+// with one heading each. Same controls and intents, no new behavior.
 export function ControlGrid(): JSX.Element {
   const s = useShell();
   return (
-    <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3">
+    <section aria-label="Manual control">
+      <h2 className="mb-2 text-[13px] font-semibold">Manual</h2>
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3">
       <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-[13px]">Style: seven spec names + custom</CardTitle></CardHeader>
+        <CardHeader className="pb-2"><CardTitle className="text-[13px]">Style</CardTitle></CardHeader>
         <CardContent>
           <label className="flex items-center gap-2 text-[13px]">Style:
             <Select value={s.style} onValueChange={(v) => {
@@ -261,6 +264,7 @@ export function ControlGrid(): JSX.Element {
           </label>
         </CardContent>
       </Card>
-    </div>
+      </div>
+    </section>
   );
 }
