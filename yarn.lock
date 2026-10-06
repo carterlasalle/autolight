@@ -2868,6 +2868,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@oxlint/plugins@npm:1.86.0":
+  version: 1.86.0
+  resolution: "@oxlint/plugins@npm:1.86.0"
+  checksum: 10c0/4eddfc296610b1cdc6117e47b4732c64b1d15a11bce0401c8a64a58575e67fe97ca6ead8b6bf5ea2bcac2971a33e267d7b8ae8acff77df33e398f75a27505a5d
+  languageName: node
+  linkType: hard
+
 "@parcel/watcher-android-arm64@npm:2.6.0":
   version: 2.6.0
   resolution: "@parcel/watcher-android-arm64@npm:2.6.0"
@@ -5850,6 +5857,7 @@ __metadata:
   dependencies:
     "@ast-grep/cli": "npm:^0.45.3"
     "@eslint/js": "npm:^10.0.1"
+    "@oxlint/plugins": "npm:1.86.0"
     "@stryker-mutator/core": "npm:^10.0.0"
     "@stryker-mutator/typescript-checker": "npm:^10.0.0"
     "@stryker-mutator/vitest-runner": "npm:^10.0.0"

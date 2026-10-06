@@ -23,6 +23,7 @@
   "devDependencies": {
     "@ast-grep/cli": "^0.45.3",
     "@eslint/js": "^10.0.1",
+    "@oxlint/plugins": "1.86.0",
     "@stryker-mutator/core": "^10.0.0",
     "@stryker-mutator/typescript-checker": "^10.0.0",
     "@stryker-mutator/vitest-runner": "^10.0.0",
