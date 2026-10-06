@@ -5,21 +5,31 @@ Closes F-OPS-05, F-OPS-10, F-APP-16, F-ANA-22 (packaging), F-ANA-29
 
 ## What changed
 
-Nothing new in this slice: the pieces this task requires already exist
-and are wired, so the work was verification, not new code.
+Shipped the builder config, vendor sidecars, package scripts, and CI jobs;
+the unsigned artifacts build on both platforms (run 37390046174).
 
 - Development launcher: `yarn dev` (root) runs
   `yarn workspace @autolight/desktop dev`, which runs Vite; main plus
   preload compile in watch mode via `node scripts/build-main.mjs --watch`
   and the matching preload script (`apps/desktop/scripts/`). One command
   starts the renderer, the main bundle and the show host path.
-- Packaging record: DS-30 is decided (electron-builder, build-time only,
-  `packages/config/src/decisions.ts` plus T-CFG-06 evidence). The macOS
-  Info.plist keys, hardened-runtime entitlements, Windows NSIS notes, the
-  `asarUnpack` native list, bundled uv plus pinned Python plus FFmpeg, and
-  the unsigned-CI plus signed-pipeline split are all specified in wp14
-  section T-OPS-05; no builder config exists in the tree yet, which is
-  stated here instead of claimed.
+- Builder config `apps/desktop/electron-builder.cjs` (new): macOS arm64 plus
+  x64 dmg plus zip, Windows NSIS x64 plus arm64; pinned
+  `electronVersion: 41.10.6`; `extraResources` vendor manifests plus the
+  analysis project; `asarUnpack` for `**/*.node`, govee-toolkit,
+  better-sqlite3-multiple-ciphers, `@julusian/midi`, `@parcel/watcher`.
+  Unsigned in CI per OD-06 (`publish: null`).
+- macOS `build/entitlements.mac.plist` (allow-jit, audio-input,
+  apple-events; unsandboxed, so no App Sandbox entitlements) plus
+  `extendInfo` LAN/Bonjour/BLE/mic strings; Windows `build/installer.nsh`
+  finish-page notes for UDP 4001 to 4003 plus privacy settings (T-SEC-02).
+- Vendor sidecars `apps/desktop/scripts/fetch-vendor.mjs` (new): pinned
+  CPython 3.12.7 via `uv python install`, per-platform FFmpeg URLs,
+  manifest per `vendor/<platform>/`. Weights never bundled (OD-09).
+- Scripts `fetch-vendor`, `dist:package`, `dist:package:dir`; `main` field
+  at `dist/electron/main.cjs`; `electron-builder@26` root devDependency.
+- CI `package` matrix (mac-arm64, win-x64) plus `smoke-install` matrix
+  (bash shell on all OSes).
 - Native-module status: `better-sqlite3` plus `kysely` are not installed
   in this environment (T-DATA-01 evidence); the storage driver reports
   the node:sqlite fallback with its reason, which is what a packaged
@@ -27,26 +37,17 @@ and are wired, so the work was verification, not new code.
 
 ## Proof
 
-- `ls apps/desktop/scripts/`: `build-main.mjs`, `build-preload.mjs`.
-- `yarn workspace @autolight/desktop exec vite --version` (or the dev
-  script presence): Vite 8 present via `apps/desktop/package.json`.
-- `yarn workspace @autolight/storage run test`: 10 files, 73 tests passed
-  (driver parity path exercised on the fallback driver).
-- Installers do not build in this environment: there is no
-  electron-builder config or builder dependency in the tree, and no
-  native rebuild. Claiming installers build would be false; the build
-  step is recorded as remaining work below.
+- Local `--dir` build: `Autolight.app` bundles with `analysis/` plus
+  `vendor/` resources and unpacked `.node` binaries; asar sanity passes.
+- CI run 37391824513: every job success — `package` mac-arm64 plus win-x64,
+  `smoke-install` mac plus win, all three e2e legs, conformance, and every
+  gate above. First fully green run including installers.
 
 ## Delete test
 
-Not applicable: no new module. If the dev scripts are removed,
-`yarn workspace @autolight/desktop build` fails; if DS-30 is removed
-from decisions, the T-CFG-06 decision test fails.
+Delete `electron-builder.cjs` and the `package` job fails naming T-OPS-05.
+Remove a vendor manifest and the builder warns the resource is missing.
 
 ## Remaining work (not claimed done)
 
-- Add the electron-builder config (macOS arm64 plus x64 or universal dmg
-  plus zip; Windows NSIS x64 plus arm64 where native modules build),
-  `extendInfo` plist entries, entitlements, `asarUnpack` list, and the CI
-  package plus smoke-install jobs (T-TRU-11, T-OPS-06). That config plus
-  a CI run that produces both artifacts turns this task green.
+- Signed pipeline runs as soon as Apple/Windows credentials exist (OD-06).
