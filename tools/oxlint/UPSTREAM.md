@@ -17,7 +17,10 @@ Intentional deviations:
 - Added `.codex/**` plus `.omp/**` to `ignorePatterns` alongside the skill's
   agent-tooling ignores.
 
-Verification status: baseline `oxlint` reports ~8.3k findings (mostly
-`require-readable-spacing` plus `require-safety-comment-for-type-assertion`
-across existing source/tests). No cleanup applied — findings reported only,
-per the skill's no-unsupervised-migration rule.
+Verification status (2026-10-06, commits cc9e078 plus ab3bd45): bare
+`oxlint` exits 1 with 8430 anti-slop errors — mostly
+`require-readable-spacing`, `require-safety-comment-for-type-assertion`,
+`no-runtime-typeof` (272), `no-unsafe-dictionary-type` (86),
+`no-conditional-empty-object-spread` (83) — plus `yarn lint` (the repo's
+workspace typecheck gate) exits 0. No application cleanup applied:
+findings reported only, per the skill's no-unsupervised-migration rule.
