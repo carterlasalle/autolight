@@ -14,7 +14,7 @@ const MARKERS: [Route, string][] = [
   ["venue", "Lights"],
   ["setup", "Follow mode"],
   ["diagnostics", "Diagnostics"],
-  ["settings", "Settings:"],
+  ["settings", "Search settings"],
 ];
 
 describe("routes", () => {

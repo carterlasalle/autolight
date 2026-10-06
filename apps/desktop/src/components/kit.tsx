@@ -377,18 +377,21 @@ export function receiptLabel(receipt: string): "spec" | "measured" | "unmeasured
   return "other";
 }
 
-// ConfigField: renders any config key with value, unit, range, receipt and a
-// live-safe badge (owner requirement: every configuration visible).
+// ConfigField: renders any config key as a definition row: key name, then a
+// quiet value line, then receipt + safety as badges. No raw suffixes glued
+// onto the key (T-UI-11 readability fix).
 export function ConfigField({ def }: { def: ConfigValue }): JSX.Element {
   const receipt = receiptLabel(def.receipt);
   const receiptTone: StatusTone = receipt === "unmeasured" ? "warn" : receipt === "measured" ? "ok" : "neutral";
   return (
-    <div className={tokens.space.gapTight}>
+    <div className="flex min-w-0 flex-1 flex-col gap-0.5">
       <code className={tokens.type.body}>{def.key}</code>
-      <BadgeSpan label={`receipt: ${receipt}`} tone={receiptTone} />
-      {def.liveSafe ? <BadgeSpan label="live-safe" tone="ok" /> : <BadgeSpan label="restart-safe" tone="neutral" />}
       <p className={tokens.type.small + " " + tokens.subtle}>
-        value {def.value} · {def.unit}{def.range.length > 0 ? ` (${def.range})` : ""}
+        {def.value} · {def.unit}{def.range.length > 0 ? ` (${def.range})` : ""}
+      </p>
+      <p className="flex flex-wrap gap-1.5">
+        <BadgeSpan label={receipt} tone={receiptTone} />
+        {def.liveSafe ? <BadgeSpan label="live-safe" tone="ok" /> : <BadgeSpan label="restart-safe" tone="neutral" />}
       </p>
     </div>
   );

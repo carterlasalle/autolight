@@ -198,17 +198,19 @@ describe("MasterControls", () => {
       state: { intensity: 0.8, frozen: false, blackout: false, auto: true },
       onIntent: () => undefined,
     }));
-    expect(html).toContain("blackout");
-    expect(html).toContain("full white");
-    expect(html).toContain("auto");
-    expect(html).toContain("intensity 80%");
+    expect(html).toContain("Blackout");
+    expect(html).toContain("Full white");
+    expect(html).toContain("Auto");
+    expect(html).toContain("Intensity");
+    expect(html).toContain("80%");
   });
   it("labels a missing intensity unmeasured instead of guessing", () => {
     const html = render(createElement(MasterControls, {
       state: { intensity: null, frozen: false, blackout: false, auto: false },
       onIntent: () => undefined,
     }));
-    expect(html).toContain("intensity unmeasured");
+    expect(html).toContain("Intensity");
+    expect(html).toContain("unmeasured");
   });
 });
 
@@ -225,7 +227,7 @@ describe("ConfigField", () => {
       },
     }));
     expect(html).toContain("ui.live.minTimingFontPx");
-    expect(html).toContain("receipt: spec");
+    expect(html).toContain("spec");
     expect(html).toContain("live-safe");
   });
 });
