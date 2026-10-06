@@ -57,9 +57,8 @@ export function SettingsView(): JSX.Element {
   };
   return (
     <div className="flex max-w-5xl flex-col gap-3">
-      <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-[13px]">Settings: {KEYS.length} keys</CardTitle></CardHeader>
-        <CardContent className="flex flex-col gap-2">
+      <Card className="sticky top-0 z-10">
+        <CardContent className="flex flex-col gap-2 pt-4">
           <div className="flex items-center gap-2">
             <Input
               aria-label="Search settings"
@@ -67,12 +66,19 @@ export function SettingsView(): JSX.Element {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
-            <Button variant={changedOnly ? "default" : "outline"} size="sm" onClick={() => setChangedOnly(!changedOnly)}>
+            <Button variant={changedOnly ? "default" : "outline"} size="sm" onClick={() => setChangedOnly(!changedOnly)} aria-pressed={changedOnly}>
               Changed only
             </Button>
           </div>
+          <nav aria-label="Setting groups" className="flex flex-wrap gap-1.5">
+            {groups.map(([group, keys]) => (
+              <a key={group} href={`#settings-${group}`} className="rounded-md border border-border px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground">
+                {group} · {keys.length}
+              </a>
+            ))}
+          </nav>
           {pending.length > 0 ? (
-            <div className="flex flex-col gap-1">
+            <div className="flex flex-wrap items-center gap-2">
               <p className="text-[13px] text-muted-foreground">Pending until Live ends: {pending.length}</p>
               {live === null ? <Button size="sm" variant="outline" onClick={applyPending}>Apply pending</Button> : null}
             </div>
@@ -80,8 +86,9 @@ export function SettingsView(): JSX.Element {
         </CardContent>
       </Card>
       {groups.map(([group, keys]) => (
-        <Card key={group}>
-          <CardHeader className="pb-2"><CardTitle className="text-[13px]">{group}: {keys.length}</CardTitle></CardHeader>
+        <section key={group} id={`settings-${group}`} aria-label={`${group} settings`} className="scroll-mt-24">
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-[13px]">{group} · {keys.length}</CardTitle></CardHeader>
           <CardContent className="flex flex-col gap-2">
             {keys.slice(0, 200).map((k) => (
               <div key={k.key} className="flex flex-wrap items-center gap-2">
@@ -95,6 +102,7 @@ export function SettingsView(): JSX.Element {
             ))}
           </CardContent>
         </Card>
+        </section>
       ))}
     </div>
   );
