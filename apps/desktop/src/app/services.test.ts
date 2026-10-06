@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import type { ConfigChange } from "@autolight/config";
-import { CC, NOTE } from "@autolight/controller-flx4";
+import { CC, NOTE } from "@autolight/controller-flx4/consts";
 import { channels } from "@autolight/ipc";
 import { AnalysisSupervisor, type AnalysisWorkerPort } from "../../electron/services/analysis-supervisor.js";
 import { CloudService } from "../../electron/services/cloud-service.js";

@@ -10,6 +10,14 @@ const workspaceAlias = Object.fromEntries(
     .filter((e) => e.isDirectory())
     .map((e) => [`@autolight/${e.name}`, join(workspaceSrc, e.name, "src", "index.ts")]),
 );
+// Browser-safe subpaths mirror vite.config.ts (T-TRU-04 spine fix): regex
+// first so barrels never swallow `/follow`, `/registry`, `/setup-assistant`.
+const subpathAlias = [
+  {
+    find: /^@autolight\/([^/]+)\/([^/]+)$/,
+    replacement: join(workspaceSrc, "$1", "src", "$2.ts"),
+  },
+];
 
 // Single-project root config (T-TRU-07 follow-up): the per-package workspace
 // projects never activated under `yarn vitest run` (no project names, stale
@@ -20,7 +28,7 @@ const workspaceAlias = Object.fromEntries(
 // stay out (S18); run them with `yarn workspace @autolight/desktop test:e2e`.
 // Analysis stays on uv (`uv run --project analysis pytest -q`).
 export default defineConfig({
-  resolve: { alias: { ...workspaceAlias, "@": join(root, "apps/desktop/src") } },
+  resolve: { alias: [...subpathAlias, ...Object.entries(workspaceAlias).map(([find, replacement]) => ({ find, replacement })), { find: "@", replacement: join(root, "apps/desktop/src") }] },
   test: {
     include: [
       "packages/*/src/**/*.test.ts",

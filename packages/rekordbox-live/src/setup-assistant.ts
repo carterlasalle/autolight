@@ -15,7 +15,7 @@ import {
   checkRkbxSetup,
   parseRkbxOscConfig,
   type RkbxSetupReport,
-} from "./rkbx-osc.js";
+} from "./follow.js";
 
 export const RKBX_LINK_PROJECT_URL = "https://github.com/grufkork/rkbx_link";
 

@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
-import { KEYS } from "@autolight/config";
+// Registry only (pure zod, no node: imports). The barrel re-exports the
+// file-backed store and blank-screens dev the same way dgram did.
+import { KEYS } from "@autolight/config/registry";
 import { useShell, invoke } from "../../app/store.js";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card.js";
 import { Button } from "../../components/ui/button.js";
@@ -7,7 +9,6 @@ import { Badge } from "../../components/ui/badge.js";
 import { Input } from "../../components/ui/input.js";
 import { ConfigField } from "../../components/kit.js";
 import { routeConfigChange, settingsGroup, type PendingChange } from "../../routes/diagnostics/diagnostics-model.js";
-
 // Settings (T-UI-11, T-CFG-05): every registry key visible with effective
 // value, default, unit, range, receipt, live-safe badge, reset, and per-scope
 // editing. Non-live-safe edits queue while Live is active with a visible

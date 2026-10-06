@@ -3,12 +3,14 @@ import { decodeOscDatagram, encodeOscMessage } from "./osc.js";
 import type { ProviderDeckState } from "./providers.js";
 import {
   buildRkbxDatagrams,
+  RkbxOscProvider,
+} from "./rkbx-osc.js";
+import {
   checkRkbxSetup,
   parseRkbxAddress,
   parseRkbxOscConfig,
-  RkbxOscProvider,
   type RkbxSetupInput,
-} from "./rkbx-osc.js";
+} from "./follow.js";
 
 const EXPECTED_DESTINATION = "127.0.0.1:4460";
 

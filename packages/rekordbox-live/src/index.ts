@@ -126,72 +126,17 @@ export function compositeToDeckState(snap: CompositeSnapshot): DecodedMessage {
   };
 }
 
-// AX-beat poller (§ADR-001 slice 1): coarse playhead from the deck's elapsed
-// time field. Main process polls Rekordbox's AX tree (~1Hz); this module maps
-// elapsed seconds onto the ANLZ grid and reports permission state honestly.
-// Accuracy ±1 beat. `readable: false` means AX denied/empty → caller holds
-// preview instead of guessing.
-export interface AxBeatSample {
-  deckId: number;
-  elapsedSeconds: number | null;
-  playing: boolean | null;
-  readable: boolean;
-  sampledAtNs: bigint;
-}
-
-export function axBeatToPlayhead(sample: AxBeatSample, grid: { sourceTimeMs: number }[]): number | null {
-  if (!sample.readable || sample.elapsedSeconds === null) return null;
-  return axFractionalBeat(sample.elapsedSeconds, grid);
-}
-
-// PRO DJ LINK Virtual-CDJ capture (§ADR-001 slice 2, after Deep Symmetry's
-// dysentery analysis + MIT supertimecodeconverter patterns — study-only for
-// EPL beat-link core, never copied). Beat packets (60B, :50001) give
-// beat-accurate position when a link peer emits; Rekordbox-alone sends
-// mixer-style status (master BPM, Bb=0) so full position needs a peer/CDJ.
-export interface ProlinkBeatPacket {
-  deviceNumber: number;
-  nextBeat: number;
-  secondBeat: number;
-  pitchBpm: number | null;
-  receivedAtNs: bigint;
-}
-
-export interface ProlinkStatus {
-  deviceName: string;
-  deviceNumber: number;
-  masterBpm: number | null;
-  beatInBar: number;
-  peerPresent: boolean;
-  receivedAtNs: bigint;
-}
-
-export type FollowSource = "preview" | "ax-beat" | "prolink";
-
-// Combined transport: prolink beats win when a peer emits, AX elapsed wins
-// when readable, otherwise the estimator coasts the last known beat at grid
-// tempo. Never fabricates: `beat: null` means unknown, UI holds preview.
-export interface CombinedTransport {
-  source: FollowSource;
-  beat: number | null;
-  playing: boolean | null;
-  bpm: number | null;
-}
-
-export function combineTransport(opts: {
-  prolink: { beat: number | null; playing: boolean | null; bpm: number | null; peerPresent: boolean };
-  ax: { beat: number | null; playing: boolean | null };
-  estimatedBeat: number | null;
-  estimatedBpm: number | null;
-}): CombinedTransport {
-  if (opts.prolink.peerPresent && opts.prolink.beat !== null) {
-    return { source: "prolink", beat: opts.prolink.beat, playing: opts.prolink.playing, bpm: opts.prolink.bpm ?? opts.estimatedBpm };
-  }
-  if (opts.ax.beat !== null) {
-    return { source: "ax-beat", beat: opts.ax.beat, playing: opts.ax.playing, bpm: opts.estimatedBpm };
-  }
-  return { source: "preview", beat: opts.estimatedBeat, playing: null, bpm: opts.estimatedBpm };
-}
+// AX-beat poller plus combined-transport math live in ./follow.js, the
+// browser-safe module with no node: imports (T-TRU-04 spine fix). The
+// renderer imports that file directly; this re-export keeps existing
+// main-process imports resolving.
+export {
+  axBeatToPlayhead,
+  combineTransport,
+  type AxBeatSample,
+  type CombinedTransport,
+  type FollowSource,
+} from "./follow.js";
 
 // T-LIVE-01 to T-LIVE-08 surface: provider contract and shared suite, the
 // DS-01 fusion engine and manager, the rkbx_link OSC consumer with its setup

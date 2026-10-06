@@ -3,7 +3,10 @@ import type { TrackModel, ShowPlan } from "@autolight/contracts";
 import { planShow, BUILT_IN_STYLES } from "@autolight/show-planner";
 import { liveViewModel } from "../features/live/live.js";
 import type { DeckState, Fixture } from "@autolight/contracts";
-import { axBeatToPlayhead, combineTransport } from "@autolight/rekordbox-live";
+// Browser-safe follow math only (./follow.js has no node: imports). Never
+// import the package barrel here: it re-exports the UDP providers and
+// blank-screens `yarn dev` (node:dgram externalized).
+import { axBeatToPlayhead, combineTransport } from "@autolight/rekordbox-live/follow";
 import { useShell, invoke, type LiveState } from "./store.js";
 // Live deck resolution (T-TRU-02): production path reads DeckState and
 // installed TrackModel plus ShowPlan from the show host over typed IPC.

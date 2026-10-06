@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { summarizeRKBXAssistant } from "@autolight/rekordbox-live";
+import { summarizeRKBXAssistant } from "@autolight/rekordbox-live/setup-assistant";
 import { RkbxSetupPanel } from "./rkbx-setup-panel.js";
 
 describe("RkbxSetupPanel (T-LIVE-04)", () => {

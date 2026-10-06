@@ -1,0 +1,20 @@
+id: no-renderer-provider-barrel
+language: ts
+severity: error
+message: "Renderer imports a provider-package barrel, which drags node: sockets into the browser bundle and blank-screens `yarn dev` (node:dgram/node:fs externalized). Import the browser-safe subpath instead: @autolight/rekordbox-live/follow, @autolight/rekordbox-live/setup-assistant, @autolight/config/registry."
+files:
+  - apps/desktop/src/**
+
+note: "T-TRU-04 spine: the renderer renders snapshots over IPC, never provider packages. Browser-safe subpaths (follow, setup-assistant, registry) are pure modules with no node: imports."
+rule:
+  any:
+    - pattern: "import $N from \"@autolight/rekordbox-live\""
+    - pattern: "import { $N } from \"@autolight/rekordbox-live\""
+    - pattern: "import $N from \"@autolight/serato\""
+    - pattern: "import { $N } from \"@autolight/serato\""
+    - pattern: "import $N from \"@autolight/controller-flx4\""
+    - pattern: "import { $N } from \"@autolight/controller-flx4\""
+    - pattern: "import $N from \"@autolight/analysis-client\""
+    - pattern: "import { $N } from \"@autolight/analysis-client\""
+    - pattern: "import $N from \"@autolight/config\""
+    - pattern: "import { $N } from \"@autolight/config\""

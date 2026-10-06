@@ -17,7 +17,7 @@ import {
   summarizeRKBXAssistant,
   type RkbxAssistantSnapshot,
   type RkbxPlatform,
-} from "@autolight/rekordbox-live";
+} from "@autolight/rekordbox-live/setup-assistant";
 import { invoke } from "../../app/store.js";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card.js";
 import { Button } from "../../components/ui/button.js";

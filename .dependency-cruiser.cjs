@@ -69,7 +69,7 @@ module.exports = {
     },
     {
       name: "ownership-provider-io-main-only",
-      comment: "DJ provider sockets, OSC, MIDI, AX | main services | the renderer reads no DJ state directly; it renders snapshots. Currently WARN: src/features/live/live.ts and app/resolve-live.ts still import the provider/transport packages (the F-APP-02 spine violation recorded in T-TRU-04, closed by T-RUN-08 and T-REND-01).",
+      comment: "DJ provider sockets, OSC, MIDI, AX | main services | the renderer reads no DJ state directly; it renders snapshots. NOTE: depcruiser does not resolve @autolight/* workspace specifiers in this repo (no edges recorded), so this rule cannot fire on barrel imports; the blocking enforcement is the ast-grep no-renderer-provider-barrel rules (ts + tsx), red-run proven. Keep this as warn for resolved-path violations.",
       severity: "warn",
       from: { path: "apps/desktop/src", pathNot: "\\.test\\.ts$" },
       to: { path: "packages/(rekordbox-live|serato|controller-flx4|analysis-client)" },

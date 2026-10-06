@@ -12,7 +12,8 @@ import {
   sampleFromProvider,
   summarizeRKBXAssistant,
 } from "./setup-assistant.js";
-import { buildRkbxDatagrams, checkRkbxSetup, RkbxOscProvider } from "./rkbx-osc.js";
+import { buildRkbxDatagrams, RkbxOscProvider } from "./rkbx-osc.js";
+import { checkRkbxSetup } from "./follow.js";
 import { decodeOscDatagram } from "./osc.js";
 
 const dir = dirname(fileURLToPath(import.meta.url));

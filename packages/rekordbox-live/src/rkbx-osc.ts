@@ -21,6 +21,7 @@
 import { createSocket, type Socket } from "node:dgram";
 import { axFractionalBeat } from "./ax.js";
 import { decodeOscDatagram, encodeOscMessage, type OscArgument, type OscMessage } from "./osc.js";
+import { parseRkbxAddress } from "./follow.js";
 import {
   DeckGenerationMapper,
   ProviderBase,
@@ -94,125 +95,6 @@ function emptyBuffer(): DeckBuffer {
     durationSeconds: null,
     unknownAddresses: [],
   };
-}
-
-export interface RkbxAddress {
-  deck: number | "master";
-  path: string;
-  subdiv: number | null;
-}
-
-// `/<deck>/<path...>` with unknown paths retained verbatim.
-export function parseRkbxAddress(address: string): RkbxAddress | null {
-  const parts = address.split("/").filter((p) => p.length > 0);
-  const deckToken = parts[0];
-  if (deckToken === undefined) return null;
-  const deck = deckToken === "master" ? "master" : /^[1-4]$/.test(deckToken) ? Number(deckToken) : null;
-  if (deck === null) return null;
-  const rest = parts.slice(1).join("/");
-  const subdiv = /^beat\/subdiv\/(\d+)$/.exec(rest);
-  return { deck, path: rest, subdiv: subdiv ? Number(subdiv[1]) : null };
-}
-
-// Tolerant reader for the user's rkbx_link config file: it reports the OSC
-// lines it finds and never guesses at a format it does not recognize.
-export interface RkbxConfigProbe {
-  lines: string[];
-  oscEnabled: boolean | null;
-  destination: string | null;
-}
-
-export function parseRkbxOscConfig(text: string): RkbxConfigProbe {
-  const lines: string[] = [];
-  let oscEnabled: boolean | null = null;
-  let destination: string | null = null;
-  for (const raw of text.split(/\r?\n/)) {
-    const line = raw.trim();
-    if (!/osc/i.test(line)) continue;
-    lines.push(line);
-    const enabled = /osc[a-z_-]*\s*[:=]\s*(true|false|1|0|yes|no|on|off)\b/i.exec(line);
-    if (enabled) oscEnabled = /true|1|yes|on/i.test(enabled[1] ?? "");
-    const dest = /((?:\d{1,3}\.){3}\d{1,3}:\d{2,5})/.exec(line);
-    if (dest) destination = dest[1] ?? null;
-  }
-  return { lines, oscEnabled, destination };
-}
-
-export interface RkbxSetupInput {
-  configFound: boolean;
-  config: RkbxConfigProbe;
-  expectedDestination: string;
-  installedRekordboxVersion: string;
-  supportedVersions: readonly string[];
-  packetsReceived: number;
-  lastAddress: string | null;
-}
-
-export interface RkbxSetupStep {
-  id: string;
-  ok: boolean;
-  detail: string;
-}
-
-export interface RkbxSetupReport {
-  state: "receiving" | "no-packets" | "not-installed" | "osc-disabled" | "wrong-destination" | "unsupported-version";
-  steps: RkbxSetupStep[];
-  remedy: string;
-}
-
-// T-LIVE-04 verification half: the assistant shows the owner what to do and
-// verifies the result; it never re-signs, never uses sudo, never downloads.
-export function checkRkbxSetup(input: RkbxSetupInput): RkbxSetupReport {
-  const steps: RkbxSetupStep[] = [];
-  const installed = input.configFound;
-  steps.push({
-    id: "installed",
-    ok: installed,
-    detail: installed
-      ? "rkbx_link folder selected (live.rkbx.configPath)"
-      : "no rkbx_link folder selected: point live.rkbx.configPath at your rkbx_link install",
-  });
-  const oscEnabled = input.config.oscEnabled === true;
-  steps.push({
-    id: "osc-enabled",
-    ok: oscEnabled,
-    detail: oscEnabled
-      ? "OSC output is enabled in the rkbx_link config"
-      : `OSC output not seen in ${input.config.lines.length} OSC line(s) of the config; enable OSC output`,
-  });
-  const destinationOk = input.config.destination === input.expectedDestination;
-  steps.push({
-    id: "destination",
-    ok: destinationOk,
-    detail: destinationOk
-      ? `OSC destination matches ${input.expectedDestination} (live.rkbx.oscBind)`
-      : `OSC destination is ${input.config.destination ?? "not found"}, expected ${input.expectedDestination}`,
-  });
-  const versionOk = input.supportedVersions.includes(input.installedRekordboxVersion);
-  steps.push({
-    id: "version",
-    ok: versionOk,
-    detail: versionOk
-      ? `Rekordbox ${input.installedRekordboxVersion} has community offsets for rkbx_link on this OS`
-      : `Rekordbox ${input.installedRekordboxVersion} is not a version rkbx_link supports here (re-sign and sudo consequences apply to a version change)`,
-  });
-  const receiving = input.packetsReceived > 0;
-  steps.push({
-    id: "receiving",
-    ok: receiving,
-    detail: receiving
-      ? `${input.packetsReceived} packets; last address ${input.lastAddress ?? "unknown"}`
-      : "no OSC packets received yet on the bound port",
-  });
-  const failed = steps.find((s) => !s.ok);
-  if (!failed) return { state: "receiving", steps, remedy: "" };
-  const state: RkbxSetupReport["state"] =
-    failed.id === "installed" ? "not-installed"
-    : failed.id === "osc-enabled" ? "osc-disabled"
-    : failed.id === "destination" ? "wrong-destination"
-    : failed.id === "version" ? "unsupported-version"
-    : "no-packets";
-  return { state, steps, remedy: failed.detail };
 }
 
 export class RkbxOscProvider extends ProviderBase {
