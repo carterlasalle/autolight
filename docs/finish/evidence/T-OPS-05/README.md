@@ -39,7 +39,7 @@ the unsigned artifacts build on both platforms (run 37390046174).
 
 - Local `--dir` build: `Autolight.app` bundles with `analysis/` plus
   `vendor/` resources and unpacked `.node` binaries; asar sanity passes.
-- CI run 37391824513: every job success — `package` mac-arm64 plus win-x64,
+- CI run 37391824513: every job success: `package` mac-arm64 plus win-x64,
   `smoke-install` mac plus win, all three e2e legs, conformance, and every
   gate above. First fully green run including installers.
 
