@@ -36,7 +36,7 @@ function StepRow({ id, ok, detail }: { id: string; ok: boolean; detail: string }
 export function RkbxSetupPanel({ snapshot }: { snapshot: RkbxAssistantSnapshot }): JSX.Element {
   const { report } = snapshot;
   return (
-    <div className="flex flex-col gap-2 text-[13px]">
+    <div className="flex flex-col gap-2 text-sm">
       <div className="flex flex-wrap items-center gap-2">
         <CapabilityBadge capability="rkbx_link" status={snapshot.capability} />
         <span>State: {report.state}</span>
@@ -105,20 +105,20 @@ export function RkbxSetupAssistant(): JSX.Element {
 
   return (
     <Card>
-      <CardHeader className="pb-2"><CardTitle className="text-[13px]">rkbx_link setup assistant</CardTitle></CardHeader>
+      <CardHeader className="pb-2"><CardTitle className="text-sm">rkbx_link setup assistant</CardTitle></CardHeader>
       <CardContent className="flex flex-col gap-3">
-        <p className="text-[13px] text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           Point the assistant at your rkbx_link folder, paste its config file contents, and it checks
           each step. The app never reads your disk on its own: it only uses the folder you set here.
         </p>
-        <label className="flex flex-col gap-1 text-[13px]">
+        <label className="flex flex-col gap-1 text-sm">
           rkbx_link folder (live.rkbx.configPath)
           <span className="flex items-center gap-2">
             <Input aria-label="rkbx_link folder" value={configPath} onChange={(e) => setConfigPath(e.target.value)} placeholder="/Users/you/rkbx_link" />
             <Button size="sm" onClick={savePath}>Save</Button>
           </span>
         </label>
-        <label className="flex flex-col gap-1 text-[13px]">
+        <label className="flex flex-col gap-1 text-sm">
           rkbx_link config file contents (pasted, never fetched by the app)
           <textarea
             aria-label="rkbx_link config contents"
@@ -126,35 +126,35 @@ export function RkbxSetupAssistant(): JSX.Element {
             onChange={(e) => setConfigText(e.target.value)}
             rows={4}
             data-sample="osc_enabled = true&#10;osc_dest = 127.0.0.1:4460"
-            className="w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-[13px] outline-none sample:text-muted-foreground"
+            className="w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm outline-none sample:text-muted-foreground"
           />
         </label>
         {configPath.trim().length > 0 && configText.length === 0 ? (
-          <p className="text-[13px] text-muted-foreground">Folder set, but no config text pasted yet: the OSC checks below read the pasted text.</p>
+          <p className="text-sm text-muted-foreground">Folder set, but no config text pasted yet: the OSC checks below read the pasted text.</p>
         ) : null}
         <span className="flex flex-wrap items-center gap-2">
-          <label className="flex items-center gap-1 text-[13px]">
+          <label className="flex items-center gap-1 text-sm">
             Rekordbox version
             <Input aria-label="Installed Rekordbox version" value={installedVersion} onChange={(e) => setInstalledVersion(e.target.value)} placeholder="7.2.17" className="w-28" />
           </label>
-          <label className="flex items-center gap-1 text-[13px]">
+          <label className="flex items-center gap-1 text-sm">
             OS
-            <select aria-label="OS" value={platform} onChange={(e) => setPlatform(e.target.value as RkbxPlatform)} className="h-8 rounded-lg border border-input bg-transparent px-2 text-[13px]">
+            <select aria-label="OS" value={platform} onChange={(e) => setPlatform(e.target.value as RkbxPlatform)} className="h-8 rounded-lg border border-input bg-transparent px-2 text-sm">
               <option value="macos">macOS</option>
               <option value="windows">Windows</option>
             </select>
           </label>
         </span>
         <span className="flex flex-wrap items-center gap-2">
-          <label className="flex items-center gap-1 text-[13px]">
+          <label className="flex items-center gap-1 text-sm">
             Packets observed
             <Input aria-label="Packets observed" type="number" value={received} onChange={(e) => setReceived(Number(e.target.value))} className="w-24" />
           </label>
-          <label className="flex items-center gap-1 text-[13px]">
+          <label className="flex items-center gap-1 text-sm">
             Rate (Hz)
             <Input aria-label="Packet rate Hz" type="number" value={updateHz} onChange={(e) => setUpdateHz(Number(e.target.value))} className="w-24" />
           </label>
-          <label className="flex items-center gap-1 text-[13px]">
+          <label className="flex items-center gap-1 text-sm">
             Last address
             <Input aria-label="Last address seen" value={lastAddress} onChange={(e) => setLastAddress(e.target.value)} placeholder="/1/time" className="w-32" />
           </label>

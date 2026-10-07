@@ -36,6 +36,34 @@ export function blendView(styleA: string, styleB: string, mix: number): BlendVie
   return { styleA, styleB, mix: Math.min(1, Math.max(0, mix)) };
 }
 
+// Inspector defaults: the beats the audition and correction controls start on,
+// taken from the installed track instead of hard-coded fixture beats. The
+// screen seeds its editable beat from these values.
+export interface InspectorDefaults {
+  beat: number;
+  dropBeat: number;
+  nextBeat: number;
+  sectionStart: number;
+  sectionEnd: number;
+}
+
+export function inspectorDefaults(track: TrackModel | null): InspectorDefaults {
+  if (track === null) return { beat: 0, dropBeat: 0, nextBeat: 0, sectionStart: 0, sectionEnd: 0 };
+  const eventBeats = track.musicalEvents.map((e) => e.beat).sort((a, b) => a - b);
+  const sectionStarts = track.sections.map((s) => s.startBeat).sort((a, b) => a - b);
+  const beat = eventBeats[0] ?? sectionStarts[0] ?? 0;
+  const dropBeat = track.musicalEvents.find((e) => e.type === "drop")?.beat ?? beat;
+  const nextBeat = eventBeats.find((b) => b > dropBeat) ?? sectionStarts.find((b) => b > dropBeat) ?? dropBeat;
+  const lastSection = track.sections[track.sections.length - 1];
+  return {
+    beat,
+    dropBeat,
+    nextBeat,
+    sectionStart: lastSection?.startBeat ?? 0,
+    sectionEnd: lastSection?.endBeat ?? Math.max(1, beat),
+  };
+}
+
 // Corrections ops (T-UI-07, spec 97): pure op descriptors. The screen sends
 // them over typed IPC; persistence and planner bumps live in T-PLAN-11.
 export type CorrectionOp =

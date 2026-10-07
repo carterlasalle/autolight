@@ -25,11 +25,11 @@ export function VenueView(): JSX.Element {
           sku: d.name.split(" — ")[0] ?? "Govee",
           ip: d.address,
           firmware: "unknown",
-          segments: 14,
-          fps: 30,
+          segments: 0,
+          fps: 0,
           sentFrames: 0,
           supersededFrames: 0,
-          latencyMs: 25,
+          latencyMs: 0,
           health: "online",
         })),
       });
@@ -39,18 +39,18 @@ export function VenueView(): JSX.Element {
   return (
     <div className="flex max-w-5xl flex-col gap-3">
       <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-[13px]">Lights{s.devices.length > 0 ? ` · ${s.devices.length} found` : ""}</CardTitle></CardHeader>
+        <CardHeader className="pb-2"><CardTitle className="text-sm">Lights{s.devices.length > 0 ? ` · ${s.devices.length} found` : ""}</CardTitle></CardHeader>
         <CardContent className="flex flex-col gap-2">
           <div className="flex flex-wrap items-center gap-2">
             <Button size="sm" variant="outline" onClick={scan} disabled={scanning}>
               {scanning ? "Scanning…" : s.devices.length === 0 ? "Scan the LAN" : "Rescan"}
             </Button>
             {s.devices.length === 0 && !scanning ? (
-              <span className="text-[13px] text-muted-foreground">No lights found yet — power them in LAN mode on this network, then scan.</span>
+              <span className="text-sm text-muted-foreground">No lights found yet — power them in LAN mode on this network, then scan.</span>
             ) : null}
           </div>
           <div className="flex items-center gap-2" role="radiogroup" aria-label="Control target">
-            <span className="text-[13px] text-muted-foreground">Target:</span>
+            <span className="text-sm text-muted-foreground">Target:</span>
             {(["A", "B", "Both"] as const).map((t) => (
               <Button key={t} size="sm" variant={s.target === t ? "default" : "outline"} onClick={() => { s.set({ target: t }); }} aria-pressed={s.target === t}>
                 {t}
@@ -73,7 +73,7 @@ export function VenueView(): JSX.Element {
                     else void invoke("venue/device-action", { version: 1, id: t.id, action: "RECALIBRATE" });
                   }}
                 />
-                <label className="flex items-center gap-2 text-[13px]">Transport:
+                <label className="flex items-center gap-2 text-sm">Transport:
                   <Select value={row.transportMode} onValueChange={(v) => {
                     const mode = v as TransportMode;
                     setModes((prev) => ({ ...prev, [t.id]: mode }));
@@ -83,7 +83,7 @@ export function VenueView(): JSX.Element {
                     <SelectContent>{(["hybrid", "lan", "ble"] as const).map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
                   </Select>
                 </label>
-                <p className="text-[13px] text-muted-foreground">
+                <p className="text-sm text-muted-foreground">
                   {row.segments === null ? "segments: unmeasured" : `${row.segments} segments`} · {row.latencySource === "measured" ? `${row.latencyMs}ms measured` : "latency: unmeasured"} · {row.firmware}
                 </p>
               </div>
@@ -93,7 +93,7 @@ export function VenueView(): JSX.Element {
       ) : (
         <Card>
           <CardContent className="pt-4">
-            <p className="text-[13px] text-muted-foreground">No fixtures qualified yet. Scan, then run IDENTIFY + TEST CHASE per light.</p>
+            <p className="text-sm text-muted-foreground">No fixtures qualified yet. Scan, then run IDENTIFY + TEST CHASE per light.</p>
           </CardContent>
         </Card>
       )}

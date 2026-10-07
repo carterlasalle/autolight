@@ -10,7 +10,7 @@
 export namespace tokens {
   // Surface: dense order, deep neutral background, minimal chrome.
   export const surface = "bg-background text-foreground";
-  export const panel = "rounded-md border border-border";
+  export const panel = "rounded-xl bg-card ring-1 ring-foreground/10";
   export const subtle = "text-muted-foreground";
   export const card = "bg-card text-card-foreground";
 
@@ -27,14 +27,12 @@ export namespace tokens {
 
   // Type scale: large timing typography, dense body.
   export const type = {
-    body: "text-[13px]",
+    body: "text-sm",
     small: "text-xs",
-    caption: "text-[11px]",
+    caption: "text-xs",
     timing: "font-timing tabular-nums",
     timingLarge: "font-timing text-5xl font-semibold tabular-nums",
   } as const;
-  export const fontBody = "text-[13px]";
-  export const fontTiming = "font-timing tabular-nums";
 
   // Spacing: dense.
   export const space = {

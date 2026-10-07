@@ -1,8 +1,13 @@
 import { useEffect, useState } from "react";
 import { invoke, useShell } from "../app/store.js";
+import type { Route } from "../app/store.js";
 import {
   CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
 } from "./ui/command.js";
+
+// One source for the palette's Go list: every route, including Settings, so
+// no screen is unreachable from ⌘K.
+const ROUTES: readonly Route[] = ["live", "library", "inspector", "venue", "setup", "diagnostics", "settings"];
 
 // ⌘K palette: jump routes + fire emergency controls without touching the mouse.
 // Emergency items call the same typed intents as the shortcut keys (T-UI-03):
@@ -16,7 +21,7 @@ export function CommandPalette(): JSX.Element {
     window.addEventListener("autolight:palette", onPalette);
     return () => { window.removeEventListener("autolight:palette", onPalette); };
   }, []);
-  const go = (route: "live" | "library" | "inspector" | "venue" | "setup" | "diagnostics"): void => {
+  const go = (route: Route): void => {
     set({ route });
     setOpen(false);
   };
@@ -32,7 +37,7 @@ export function CommandPalette(): JSX.Element {
       <CommandList>
         <CommandEmpty>No results.</CommandEmpty>
         <CommandGroup heading="Go">
-          {(["live", "library", "inspector", "venue", "setup", "diagnostics"] as const).map((r) => (
+          {ROUTES.map((r) => (
             <CommandItem key={r} onSelect={() => { go(r); }}>Go to {r}</CommandItem>
           ))}
         </CommandGroup>

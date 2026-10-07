@@ -21,8 +21,8 @@ export interface EnvironmentOwnerFacts {
 function Row({ label, value }: { label: string; value: string }): JSX.Element {
   return (
     <div className="flex items-baseline justify-between gap-4 py-1">
-      <dt className="text-[12px] text-muted-foreground">{label}</dt>
-      <dd className="font-timing text-[12px] tabular-nums">{value || "unknown"}</dd>
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className="font-timing text-xs tabular-nums">{value || "unknown"}</dd>
     </div>
   );
 }
@@ -37,7 +37,7 @@ export function EnvironmentPanel({
   return (
     <section aria-label="Environment" className="flex flex-col gap-3">
       <div>
-        <h3 className="text-[13px] font-medium">Runtime (detected)</h3>
+        <h3 className="text-sm font-medium">Runtime (detected)</h3>
         <dl className="divide-y divide-border">
           <Row label="Electron" value={facts.electron} />
           <Row label="Node" value={facts.node} />
@@ -48,7 +48,7 @@ export function EnvironmentPanel({
       </div>
       {owner !== undefined ? (
         <div>
-          <h3 className="text-[13px] font-medium">Owner rig (recorded)</h3>
+          <h3 className="text-sm font-medium">Owner rig (recorded)</h3>
           <dl className="divide-y divide-border">
             <Row label="Mac" value={owner.macModel ?? ""} />
             <Row label="Chip" value={owner.macChip ?? ""} />

@@ -16,14 +16,12 @@ export function tileForFixture(f: Fixture, stats: { fps: number; sent: number; s
   };
 }
 
-// Setup wizard steps (§100): dj → controller → library → lights → identify →
-// placement → orientation → qualification → analysis → preview → ready.
-export const SETUP_STEPS = [
-  "dj", "controller", "library", "lights", "identify",
-  "placement", "orientation", "qualification", "analysis", "preview",
-] as const;
-export type SetupStep = (typeof SETUP_STEPS)[number];
+// Setup wizard steps (§100): the canonical list lives in routes/setup/
+// setup-model.ts; this re-export keeps the Venue and Setup screens on one
+// definition instead of a second copy.
+import { SETUP_EVIDENCE_STEPS, type EvidenceStep } from "../../routes/setup/setup-model.js";
+export { SETUP_EVIDENCE_STEPS as SETUP_STEPS, type EvidenceStep as SetupStep } from "../../routes/setup/setup-model.js";
 
-export function nextSetupStep(done: SetupStep[]): SetupStep | "ready" {
-  return SETUP_STEPS.find((s) => !done.includes(s)) ?? "ready";
+export function nextSetupStep(done: EvidenceStep[]): EvidenceStep | "ready" {
+  return SETUP_EVIDENCE_STEPS.find((s) => !done.includes(s)) ?? "ready";
 }

@@ -15,7 +15,7 @@ export function Titlebar(): JSX.Element {
   return (
     <header className="app-drag-region sticky top-0 z-10 flex h-11 items-center gap-2 border-b bg-background/90 px-4 backdrop-blur-xl">
       <span className="w-16 shrink-0" aria-hidden />
-      <span className="text-[13px] font-semibold tracking-tight">AutoLight</span>
+      <span className="text-sm font-semibold tracking-tight">AutoLight</span>
       <Badge variant="secondary" className="app-no-drag">
         {live ? `${live.source.toLowerCase()} ●` : "no decks"}
       </Badge>
@@ -79,7 +79,7 @@ export function Sidebar({ route, onRoute }: {
     <nav aria-label="Routes" className="flex w-44 shrink-0 flex-col gap-4 border-r p-3">
       {groups.map((g) => (
         <div key={g.label} className="flex flex-col gap-0.5">
-          <p className="px-2 text-[11px] font-semibold tracking-wider text-muted-foreground">{g.label}</p>
+          <p className="px-2 text-xs font-semibold tracking-wider text-muted-foreground">{g.label}</p>
           {g.items.map((item) => (
             <Button
               key={item.id}
@@ -105,7 +105,7 @@ export function Panel({ title, children, className }: {
   return (
     <Card className={className}>
       <CardHeader className="pb-2">
-        <CardTitle className="text-[13px]">{title}</CardTitle>
+        <CardTitle className="text-sm">{title}</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-2.5">{children}</CardContent>
     </Card>

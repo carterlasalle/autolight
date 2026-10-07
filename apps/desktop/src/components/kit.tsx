@@ -26,7 +26,7 @@ export function tokenForTone(tone: StatusTone): string {
 export function StatusDot({ tone, label, title }: {
   tone: StatusTone;
   label: string;
-  title?: string;
+  title?: string | undefined;
 }): JSX.Element {
   return (
     <span className="inline-flex items-center gap-1.5" title={title}>
@@ -170,7 +170,7 @@ export function SectionLane({ bands, startBeat, endBeat }: {
         const width = Math.max(0.5, ((s.end - s.start) / span) * 100);
         return (
           <span key={s.start} aria-hidden className="absolute top-0 h-6 bg-muted" style={{ left: `${left}%`, width: `${width}%` }}>
-            <span className="overflow-hidden px-1 text-[10px]">{s.label}</span>
+            <span className="overflow-hidden px-1 text-xs">{s.label}</span>
           </span>
         );
       })}
@@ -247,7 +247,7 @@ export function DeviceTile({ tile, onAction }: {
         <HealthIndicator tone={healthTone} label={`health: ${tile.health}`} />
       </header>
       <div className={tokens.space.padding}>
-        <MetricBadge metric={{ label: "latency", value: String(tile.latencyMs), unit: "ms" }} />
+        <MetricBadge metric={{ label: "latency", value: tile.latencyMs > 0 ? String(tile.latencyMs) : null, unit: "ms" }} />
         <p className={tokens.type.small + " " + tokens.subtle}>
           {tile.segments !== 0 ? `${tile.segments} segments` : "segments: unmeasured"} · {tile.ip ?? "no IP"}
         </p>
@@ -345,15 +345,17 @@ export function MasterControls({ state, onIntent }: {
 }): JSX.Element {
   return (
     <div role="toolbar" aria-label="Master" className="flex flex-wrap items-center gap-2">
-      <Button size="sm" variant={state.blackout ? "default" : "destructive"} onClick={() => onIntent("blackout")} aria-pressed={state.blackout}>
-        {state.blackout ? "Blackout on" : "Blackout"}
+      <Button size="sm" variant={state.blackout ? "default" : "destructive"} onClick={() => onIntent("blackout")} aria-pressed={state.blackout} title="Shortcut: B">
+        {state.blackout ? "Blackout on" : "Blackout"} <kbd className="text-xs opacity-70">B</kbd>
       </Button>
-      <Button size="sm" variant="outline" onClick={() => onIntent("full")}>Full white</Button>
-      <Button size="sm" variant="outline" onClick={() => onIntent("freeze")} aria-pressed={state.frozen}>
-        {state.frozen ? "Frozen" : "Freeze"}
+      <Button size="sm" variant="outline" onClick={() => onIntent("full")} title="Shortcut: W">
+        Full white <kbd className="text-xs opacity-70">W</kbd>
       </Button>
-      <Button size="sm" variant="secondary" onClick={() => onIntent("resume")}>
-        {state.auto ? "Auto" : "Resume"}
+      <Button size="sm" variant="outline" onClick={() => onIntent("freeze")} aria-pressed={state.frozen} title="Shortcut: F">
+        {state.frozen ? "Frozen" : "Freeze"} <kbd className="text-xs opacity-70">F</kbd>
+      </Button>
+      <Button size="sm" variant="secondary" onClick={() => onIntent("resume")} title="Shortcut: A">
+        {state.auto ? "Auto" : "Resume"} <kbd className="text-xs opacity-70">A</kbd>
       </Button>
       <span className={tokens.type.timing + " " + tokens.type.small}>Intensity {masterIntensity(state.intensity)}</span>
     </div>
@@ -461,7 +463,7 @@ export const UNVERIFIED_REKORDBOX_COPY = "UNVERIFIED REKORDBOX VERSION";
 // ---------------------------------------------------------------- shared badge
 function BadgeSpan({ label, tone }: { label: string; tone: StatusTone }): JSX.Element {
   return (
-    <span className={tokens.type.small + " " + tokens.panel}>
+    <span className="inline-flex items-center gap-1.5 rounded-md border border-border px-1.5 py-0.5 text-xs">
       <span aria-hidden className="inline-block size-1.5 rounded-full" style={{ backgroundColor: tokenForTone(tone) }} />
       {label}
     </span>

@@ -36,7 +36,7 @@ export function RoomPreview({ roomId = "square-loop" }: { roomId?: string }): JS
           <circle key={i} cx={sx(c.x)} cy={sy(c.y)} r={5} fill={cellColor(c.level)} />
         ))}
       </svg>
-      <label className="text-[13px]">
+      <label className="text-sm">
         Beat
         <input
           type="number"
