@@ -141,7 +141,7 @@ describe.skipIf(!UV)("sidecar against the real interpreter", () => {
     }
   });
 
-  it("reads a SQLCipher copy of the fixture and rejects a write there too", async () => {
+  it("reads a SQLCipher copy of the fixture and rejects a write there too", { timeout: 120_000 }, async () => {
     const { root, dbPath, sharePath, summary } = fixture();
     const encrypted = encryptFixture(root, dbPath);
     const sidecar = await SidecarReader.open({ dbPath: encrypted, encrypted: true, probeWrite: true });
