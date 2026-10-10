@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { mapTrackRow, RekordboxReader } from "./db.js";
-import { cipherDriverAvailable, LibraryDbError } from "./driver.js";
+import { LibraryDbError } from "./driver.js";
 import { deobfuscateKey } from "./options.js";
 import { readLibraryViaSidecar, SidecarReader } from "./sidecar.js";
 import { readFixturePayload, writeFixtureDb, type FixtureSummary } from "./test-fixtures.js";
@@ -148,9 +148,8 @@ describe.skipIf(!UV)("sidecar against the real interpreter", () => {
     expect(sidecar.counts()).toEqual(summary.counts);
     expect((await sidecar.probeWrite()).rejected).toBe(true);
 
-    const cipherAvailable = await cipherDriverAvailable();
     const opened = RekordboxReader.open({ dbPath: encrypted, sharePath, key: deobfuscateKey() });
-    if (cipherAvailable) {
+    try {
       const reader = await opened;
       try {
         expect(reader.counts()).toEqual(sidecar.counts());
@@ -158,9 +157,11 @@ describe.skipIf(!UV)("sidecar against the real interpreter", () => {
       } finally {
         reader.close();
       }
-    } else {
-      await expect(opened).rejects.toMatchObject({ code: "cipher-module-missing" });
-      await expect(opened).rejects.toBeInstanceOf(LibraryDbError);
+    } catch (error) {
+      // Absent or unloadable native binding (no .node build on this
+      // machine): the typed cipher-module-missing error either way.
+      expect(error).toBeInstanceOf(LibraryDbError);
+      expect((error as LibraryDbError).code).toBe("cipher-module-missing");
     }
     // The share-relative paths in the encrypted copy still resolve.
     const first = sidecar.trackRow("101");
