@@ -69,7 +69,10 @@ describe("beat domain", () => {
     expect(sourceSecondsToBeat(grid, (grid.beats[0]!.sourceTimeMs / 1000) as Seconds)).toBe(1);
   });
 
-  it("round trips 10,000 generated variable-tempo grids within 1e-6 s", () => {
+  // 10k grids x 12 samples through two binary searches: ~6.5 s on this
+  // host. The 5 s default kills it; the property (1e-6 s tolerance) is the
+  // assertion, not the wall time.
+  it("round trips 10,000 generated variable-tempo grids within 1e-6 s", { timeout: 60_000 }, () => {
     const rand = mulberry32(20260930);
     for (let g = 0; g < GRIDS; g++) {
       const beatCount = 4 + Math.floor(rand() * 60);
@@ -125,7 +128,9 @@ describe("beat domain", () => {
     expect(() => sourceSecondsToBeat({ beats: [] }, 0 as Seconds)).toThrow(RangeError);
   });
 
-  it("maps a million points on a 2,000-beat grid within the budget", () => {
+  // Timeout guards hangs (60 s); the 250 ms budget guards speed (86 ms on
+  // this host, P-74-mapping receipt).
+  it("maps a million points on a 2,000-beat grid within the budget", { timeout: 60_000 }, () => {
     const grid = variableTempoGrid(mulberry32(99), BENCH_BEATS, 0);
     const started = performance.now();
     let accumulator = 0;

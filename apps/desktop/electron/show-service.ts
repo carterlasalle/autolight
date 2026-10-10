@@ -342,6 +342,7 @@ export function readDiagnostics(): { ok: true; diagnostics: Record<string, unkno
   const ports = govee().portStatus();
   const stats = govee().discoveryStats();
   const verified = found.filter((d) => d.observed !== null).length;
+  const hostMetrics = readShowHostMetrics();
   return {
     ok: true,
     diagnostics: {
@@ -357,8 +358,41 @@ export function readDiagnostics(): { ok: true; diagnostics: Record<string, unkno
       followMode: svc.followMode,
       showStyle: svc.showStyle,
       simulatorMode: svc.simulatorMode,
+      // §131: show host tick jitter from the isolated worker thread
+      // (intervalP50/P99/max ms, missed ticks/hour). Absent until the
+      // supervisor spawns the worker on the first master intent.
+      ...(hostMetrics !== null ? { showHost: hostMetrics } : {}),
     },
   };
+}
+
+// Latest-wins indirection so show-service never imports the supervisor
+// (which imports this module for the forwarder): the supervisor registers
+// its metrics reader at startup; diagnostics read through it.
+let showHostMetricsReader: (() => unknown) | null = null;
+
+export function setShowHostMetricsReader(read: () => unknown): void {
+  showHostMetricsReader = read;
+}
+
+function readShowHostMetrics(): unknown {
+  try {
+    return showHostMetricsReader?.() ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export type HostIntentForwarder = (channel: string, request: unknown) => void;
+
+let hostForwarder: HostIntentForwarder = () => undefined;
+
+export function setHostIntentForwarder(forward: HostIntentForwarder): void {
+  hostForwarder = forward;
+}
+
+export function resetHostIntentForwarderForTest(): void {
+  hostForwarder = () => undefined;
 }
 
 // T-ARC-02 real handlers: each mutates or reads authoritative service state
@@ -368,6 +402,7 @@ export function setMasterBlackout(): { ok: true; blackout: true } {
   svc.overrides.blackout = true;
   svc.overrides.full = false;
   svc.recorder.record("master/blackout", { at: Date.now() });
+  hostForwarder("master/blackout", { version: 1 });
   return { ok: true, blackout: true };
 }
 
@@ -376,6 +411,7 @@ export function setMasterFull(): { ok: true; full: true } {
   svc.overrides.full = true;
   svc.overrides.blackout = false;
   svc.recorder.record("master/full", { at: Date.now() });
+  hostForwarder("master/full", { version: 1 });
   return { ok: true, full: true };
 }
 
@@ -383,6 +419,7 @@ export function setMasterFreeze(frozen: boolean): { ok: true; frozen: boolean } 
   const svc = getShowService();
   svc.overrides.frozen = frozen;
   svc.recorder.record("master/freeze", { frozen });
+  hostForwarder("master/freeze", { version: 1, frozen });
   return { ok: true, frozen };
 }
 
@@ -390,6 +427,7 @@ export function setMasterIntensity(value: number): { ok: true; value: number } {
   const svc = getShowService();
   svc.overrides.intensity = Math.min(1, Math.max(0, value));
   svc.recorder.record("master/intensity", { value: svc.overrides.intensity });
+  hostForwarder("master/intensity", { version: 1, value: svc.overrides.intensity });
   return { ok: true, value: svc.overrides.intensity };
 }
 
@@ -399,6 +437,7 @@ export function resumeMaster(at: "beat" | "bar" | "phrase" | "immediate"): { ok:
   svc.overrides.full = false;
   svc.overrides.frozen = false;
   svc.recorder.record("master/resume", { at });
+  hostForwarder("master/resume", { version: 1, at });
   return { ok: true, at };
 }
 

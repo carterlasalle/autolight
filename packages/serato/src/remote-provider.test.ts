@@ -212,7 +212,10 @@ describe("serato remote provider (T-SER-01)", () => {
   it("maps playhead, rate, BPM, loop, roll, faders and seeks", async () => {
     const { emulator, watcher } = await startProvider("autolight-fields");
     await emulator.playAction("pitch-plus-8", 20);
-    const playing = await watcher.next(1, (state) => closeTo(state.playRate, 1.08) && state.track !== null);
+    // The first playhead frame carries position 0 (track start); the nonzero
+    // position arrives one frame later. Match on it so a fast loop never
+    // observes the zero frame first.
+    const playing = await watcher.next(1, (state) => closeTo(state.playRate, 1.08) && state.track !== null && state.playheadSeconds > 0);
     expect(playing.track?.sourceIds.seratoPath).toBe("/music/fixture-a.mp3");
     expect(playing.playing).toBe(true);
     expect(playing.playheadSeconds).toBeGreaterThan(0);

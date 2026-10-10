@@ -101,7 +101,15 @@ async function openWithCipher(dbPath: string, key: string): Promise<ReadOnlyDb |
     path: string,
     options: { readonly: boolean; fileMustExist: boolean },
   ) => CipherHandle;
-  const handle = new CipherCtor(dbPath, { readonly: true, fileMustExist: true });
+  let handle: CipherHandle;
+  try {
+    handle = new CipherCtor(dbPath, { readonly: true, fileMustExist: true });
+  } catch {
+    // A present-but-unloadable native binding (missing .node build) is the
+    // same state as absent: the caller falls through to the typed
+    // cipher-module-missing error, never a raw bindings threw.
+    return undefined;
+  }
   try {
     handle.pragma("cipher='sqlcipher'");
     handle.pragma("legacy=4");
