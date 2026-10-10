@@ -40,6 +40,16 @@ function isMetricsMessage(message: unknown): message is { type: "metrics"; metri
   if (!("type" in message) || message.type !== "metrics") return false;
   return "metrics" in message && message.metrics !== null && typeof message.metrics === "object";
 }
+// Node Worker speaks on()/postMessage()/terminate(); the supervisor seam
+// speaks postMessage()/onMessage()/terminate(). One adapter, at the
+// construction boundary only.
+function workerPortFrom(worker: Worker): ShowHostPort {
+  return {
+    postMessage: (message: unknown) => { worker.postMessage(message); },
+    onMessage: (listener: (message: unknown) => void) => { worker.on("message", listener); },
+    terminate: () => worker.terminate(),
+  };
+}
 
 export class ShowHostSupervisor implements Service {
   readonly name = "show-host-supervisor";
@@ -98,14 +108,14 @@ export class ShowHostSupervisor implements Service {
 
   private ensureWorker(): ShowHostPort {
     if (this.worker !== null) return this.worker;
-    const worker: ShowHostPort = this.opts.createWorker?.() ?? new Worker(this.opts.workerEntryUrl, {
+    const worker: ShowHostPort = this.opts.createWorker?.() ?? workerPortFrom(new Worker(this.opts.workerEntryUrl, {
       workerData: {
         mode: "worker-thread",
         ...(this.opts.tickHz !== undefined ? { tickHz: this.opts.tickHz } : {}),
         ...(this.opts.uiRateHz !== undefined ? { uiRateHz: this.opts.uiRateHz } : {}),
         ...(this.opts.maxBytes !== undefined ? { maxBytes: this.opts.maxBytes } : {}),
       },
-    });
+    }));
     try {
       worker.onMessage((message) => {
         if (isMetricsMessage(message)) this.lastMetrics = message.metrics;
