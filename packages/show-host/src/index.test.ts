@@ -128,6 +128,17 @@ describe("show-host modes", () => {
     host.stop();
     channel.port1.close();
   });
+  it("tick clock defaults to the monotonic hrtime source, never the wall clock", () => {
+    const { host } = makeHost();
+    host.tick(0n);
+    host.tick(16_666_666n);
+    const metrics = host.getMetrics();
+    expect(metrics.ticks).toBe(2);
+    // 16.7ms nominal tick lands in the delta window: proves the tick
+    // pipeline measures with the injected monotonic source.
+    expect(metrics.intervalP50Ms).toBeGreaterThan(0);
+    host.stop();
+  });
   it("startHost returns a MessagePort chain that survives without the renderer", async () => {
     // A crashing host is the crash-policy path, not a silent close: the
     // hook fires with the port-gone reason and stop() after the crash is

@@ -186,6 +186,44 @@ describe("analysis-supervisor", () => {
     expect(calls.stops).toBe(1);
   });
 });
+describe("show-host-supervisor", () => {
+  it("spawns the worker lazily and reports jitter metrics (§131)", async () => {
+    const { ShowHostSupervisor } = await import("../../electron/services/show-host-supervisor.js");
+    const posted: unknown[] = [];
+    const listeners: ((message: unknown) => void)[] = [];
+    let terminated = 0;
+    const svc = new ShowHostSupervisor({
+      workerEntryUrl: "test-entry",
+      createWorker: () => ({
+        postMessage: (message: unknown) => { posted.push(message); },
+        onMessage: (listener: (message: unknown) => void) => { listeners.push(listener); },
+        terminate: () => { terminated += 1; },
+      }),
+    });
+    expect(svc.start().state).toBe("running");
+    expect(posted).toHaveLength(0);
+    // start() wires the master-intent forwarder to the worker: firing a
+    // master channel through show-service posts one typed intent message.
+    showService.setMasterBlackout();
+    expect(posted).toEqual([{ type: "intent", channel: "master/blackout", request: { version: 1 } }]);
+    showService.resumeMaster("bar");
+    expect(posted).toHaveLength(2);
+    showService.resetHostIntentForwarderForTest();
+    expect(svc.status().counters["spawned"]).toBe(1);
+    // Jitter metrics arrive over the port and surface in status.
+    for (const listener of listeners) {
+      listener({ type: "metrics", metrics: {
+        ticks: 600, snapshotsPublished: 300, supersededFrames: 0,
+        intervalP50Ms: 16.7, intervalP99Ms: 17.9, intervalMaxMs: 22.1,
+        missedTicksPerHour: 0,
+      } });
+    }
+    expect(svc.metrics()?.intervalP99Ms).toBeCloseTo(17.9, 9);
+    expect(svc.status().counters["intervalP99Ms"]).toBeCloseTo(17.9, 9);
+    expect(svc.stop().state).toBe("stopped");
+    expect(terminated).toBe(1);
+  });
+});
 
 describe("provider-manager", () => {
   it("runs the AX poll loop and the ProLink observer, then stops both", async () => {
@@ -453,9 +491,14 @@ describe("ipc handlers have real effects (T-TRU-03)", () => {
     const svc = getShowService();
     const seenEvents = svc.recorder.count();
     try {
-      // Master override channels mutate the override state (T-RUN-07).
+      // Master override channels mutate the override state (T-RUN-07) and
+      // forward one intent each to the attached show host (issue #5 gap #6:
+      // single override path, no parallel state).
+      const forwarded: { channel: string; request: unknown }[] = [];
+      showService.setHostIntentForwarder((channel, request) => { forwarded.push({ channel, request }); });
       await call("master/blackout", { version: 1 });
       expect(svc.overrides.blackout).toBe(true);
+      expect(forwarded).toEqual([{ channel: "master/blackout", request: { version: 1 } }]);
       await call("master/full", { version: 1 });
       expect(svc.overrides.full).toBe(true);
       expect(svc.overrides.blackout).toBe(false);
@@ -467,6 +510,11 @@ describe("ipc handlers have real effects (T-TRU-03)", () => {
       expect(svc.overrides.intensity).toBeCloseTo(0.5, 9);
       await call("master/resume", { version: 1, at: "bar" });
       expect(svc.overrides).toMatchObject({ blackout: false, full: false, frozen: false });
+      expect(forwarded.map((f) => f.channel)).toEqual([
+        "master/blackout", "master/full", "master/freeze", "master/freeze",
+        "master/intensity", "master/resume",
+      ]);
+      showService.resetHostIntentForwarderForTest();
       // Show channels mutate director state and record the trigger.
       await call("show/style", { version: 1, style: "Techno", palette: "Cold" });
       expect(svc.showStyle).toEqual({ style: "Techno", palette: "Cold" });
