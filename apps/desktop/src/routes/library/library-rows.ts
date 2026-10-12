@@ -67,6 +67,26 @@ function emptyRow(
   };
 }
 
+export interface LiveDeckRow { id: string; title: string; artist: string; readiness: "READY" | "NEEDS ANALYSIS"; bpm: number | null }
+
+// Rows for the decks actually loaded right now (spec 95): title, artist,
+// and readiness come from the resolved deck snapshot, never parsed out of
+// display text. Query matches title or artist.
+export function liveDeckRows(
+  decks: { title: string; artist: string; readiness: "READY" | "NEEDS ANALYSIS" }[],
+  bpm: number | null,
+  query: string,
+): LiveDeckRow[] {
+  const list: LiveDeckRow[] = [
+    { id: "deck-a", title: decks[0]?.title ?? "—", artist: decks[0]?.artist ?? "", readiness: decks[0]?.readiness ?? "NEEDS ANALYSIS", bpm },
+    ...(decks[1] && decks[1].title !== "—"
+      ? [{ id: "deck-b", title: decks[1].title, artist: decks[1].artist, readiness: decks[1].readiness, bpm }]
+      : []),
+  ];
+  const q = query.trim().toLowerCase();
+  if (!q) return list;
+  return list.filter((t) => t.title.toLowerCase().includes(q) || t.artist.toLowerCase().includes(q));
+}
 // Preanalysis queue (spec 139): one entry per queued track. Queue order is
 // the selection order; priority moves entries ahead of same-state entries.
 export interface QueueEntry {

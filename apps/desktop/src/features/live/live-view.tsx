@@ -23,7 +23,7 @@ function masterIntent(intent: "blackout" | "full" | "freeze" | "resume"): void {
 }
 
 function masterClock(bpm: number | null): string {
-  return bpm === null ? "unmeasured" : `${deckBpm(bpm)}0`;
+  return bpm === null ? "unmeasured" : bpm.toFixed(2);
 }
 
 export function LiveView({ live }: { live: LiveState | null }): JSX.Element {

@@ -55,15 +55,21 @@ export function InspectorView(): JSX.Element {
           {!loaded ? (
             <p className="text-[13px] text-muted-foreground">Loading lanes…</p>
           ) : track === null ? (
-            <div className="flex flex-col items-start gap-2">
-              <p className="text-[13px] text-muted-foreground">No track analyzed yet. Lanes for waveform, grid, sections, events, and cues appear after the analysis worker finishes a loaded deck.</p>
-              <Button size="sm" variant="outline" onClick={() => { useShell.getState().set({ route: "setup" }); }}>Open Setup</Button>
-            </div>
+            <InspectorEmpty onSetup={() => { useShell.getState().set({ route: "setup" }); }} />
           ) : (
             <InspectorBody track={track} lanes={lanes} correct={correct} sendToLights={sendToLights} setSendToLights={setSendToLights} blend={blend} setBlend={setBlend} audition={audition} />
           )}
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+export function InspectorEmpty({ onSetup }: { onSetup: () => void }): JSX.Element {
+  return (
+    <div className="flex flex-col items-start gap-2">
+      <p className="text-[13px] text-muted-foreground">No track analyzed yet. Lanes for waveform, grid, sections, events, and cues appear after the analysis worker finishes a loaded deck.</p>
+      <Button size="sm" variant="outline" onClick={onSetup}>Open Setup</Button>
     </div>
   );
 }
@@ -78,9 +84,14 @@ function InspectorBody({ track, lanes, correct, sendToLights, setSendToLights, b
   setBlend: (v: number) => void;
   audition: string | null;
 }): JSX.Element {
-  const lastBeat = Math.max(1, ...track.sections.map((s) => s.endBeat), ...track.musicalEvents.map((e) => e.beat));
-  const dropBeat = track.musicalEvents.find((e) => e.type === "drop")?.beat ?? Math.min(256, lastBeat);
+  const eventBeats = track.musicalEvents.map((e) => e.beat);
+  const finiteMax = (values: number[], floor: number): number =>
+    values.reduce((m, v) => (Number.isFinite(v) ? Math.max(m, v) : m), floor);
+  const lastBeat = finiteMax([...track.sections.map((s) => s.endBeat), ...eventBeats], 1);
+  const firstDrop = track.musicalEvents.find((e) => e.type === "drop")?.beat;
+  const dropBeat = firstDrop ?? Math.min(lastBeat, finiteMax(eventBeats, 0));
   const auditionBeat = Math.min(lastBeat, dropBeat + 1);
+  const addBeat = firstDrop === undefined ? dropBeat : auditionBeat;
   const section = track.sections.find((s) => dropBeat >= s.startBeat && dropBeat < s.endBeat);
   const sectionStart = section?.startBeat ?? Math.max(0, dropBeat - 32);
   const sectionEnd = section?.endBeat ?? lastBeat;
@@ -100,7 +111,7 @@ function InspectorBody({ track, lanes, correct, sendToLights, setSendToLights, b
       {audition ? <p className="text-[13px] text-muted-foreground">{audition}</p> : null}
       <div className="flex flex-col gap-2" role="group" aria-label="Corrections">
         <div className="flex flex-wrap gap-2" role="group" aria-label="Drop corrections">
-          <Button size="sm" variant="outline" onClick={() => correct({ op: "add-drop", beat: dropBeat })}>Add missing drop at {dropBeat}</Button>
+          <Button size="sm" variant="outline" onClick={() => correct({ op: "add-drop", beat: addBeat })}>Add missing drop at {addBeat}</Button>
           <Button size="sm" variant="outline" onClick={() => correct({ op: "delete-drop", beat: dropBeat })}>Delete false drop at {dropBeat}</Button>
           <Button size="sm" variant="outline" onClick={() => correct({ op: "mark-fake-drop", beat: dropBeat, actualBeat: Math.min(lastBeat, dropBeat + 32) })}>Mark fake drop {dropBeat} to {Math.min(lastBeat, dropBeat + 32)}</Button>
         </div>

@@ -9,12 +9,12 @@ import { RkbxSetupAssistant } from "./rkbx-setup-panel.js";
 import { SIMULATOR_SCENARIOS, type SimulatorScenario } from "../../routes/settings/simulator-mode.js";
 const STEP_LABELS: Record<EvidenceStep, { title: string; hint: string; route: "setup" | "library" | "venue" | "inspector" | "live" }> = {
   dj: { title: "DJ link", hint: "Rekordbox or Serato deck state flowing", route: "live" },
-  controller: { title: "Controller", hint: "FLX4 or mapped surface responding", route: "setup" },
+  controller: { title: "Controller", hint: "No controller evidence over IPC yet — stays pending", route: "setup" },
   library: { title: "Library", hint: "At least one track resolved", route: "library" },
   lights: { title: "Lights", hint: "Govee scan found a device on the LAN", route: "venue" },
   identify: { title: "Identify", hint: "IDENTIFY flashed a real fixture", route: "venue" },
-  placement: { title: "Placement", hint: "Room editor has a saved room", route: "venue" },
-  orientation: { title: "Orientation", hint: "DJ anchor facing set in the room", route: "venue" },
+  placement: { title: "Placement", hint: "Room editor has no saved-room record yet — stays pending", route: "venue" },
+  orientation: { title: "Orientation", hint: "DJ anchor facing has no saved-room record yet — stays pending", route: "venue" },
   qualification: { title: "Qualification", hint: "TEST CHASE passed on every tile", route: "venue" },
   analysis: { title: "Analysis", hint: "ANLZ grid plus sections resolved", route: "inspector" },
   preview: { title: "Preview", hint: "Venue preview rendered a show frame", route: "live" },
@@ -36,11 +36,13 @@ export function SetupView(): JSX.Element {
   const simulatorMode = useShell((s) => s.simulatorMode);
   const [scenario, setScenario] = useState<SimulatorScenario>("normal-night");
   // Steps resolve from measured state only: live show, scanned devices,
-  // qualified tiles. No manual check-offs; unmet steps read pending.
+  // qualified tiles. Steps with no renderer-side evidence stay pending and
+  // say so: no MIDI-controller status, room persistence, or identify
+  // receipt flows over IPC yet, so the UI must not report them ready.
   const evidence: Partial<Record<EvidenceStep, boolean>> = {
     dj: live !== null,
-    controller: true,
-    library: live !== null,
+    controller: false,
+    library: live !== null && (live.deckA.title !== "—" || live.deckB.title !== "—"),
     lights: devices.length > 0,
     identify: tiles.some((t) => t.firmware !== "unknown"),
     placement: false,

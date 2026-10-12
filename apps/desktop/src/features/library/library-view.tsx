@@ -5,7 +5,7 @@ import { Input } from "../../components/ui/input.js";
 import { Button } from "../../components/ui/button.js";
 import { MetricBadge, StatusDot, deckBpm } from "../../components/kit.js";
 import { libraryRowKey } from "../../routes/library/track-key.js";
-import { advanceQueue, dropFromQueue, prioritiseQueue, queueEntry, type QueueEntry } from "../../routes/library/library-rows.js";
+import { advanceQueue, dropFromQueue, liveDeckRows, prioritiseQueue, queueEntry, type QueueEntry } from "../../routes/library/library-rows.js";
 
 // Library (spec 95) + readiness (spec 137) + preanalysis queue (spec 139).
 // Rows come from the resolved show: keyed by TrackId via track-key.ts, never
@@ -17,14 +17,9 @@ export function LibraryView(): JSX.Element {
   const selected = useShell((s) => s.selectedTrackId);
   const [query, setQuery] = useState("");
   const [queue, setQueue] = useState<QueueEntry[]>([]);
-  const tracks = useMemo(() => {
-    const list = [
-      live ? { id: "deck-a", title: live.deckA.title, bpm: live.bpm } : null,
-      live && live.deckB.title !== "—" ? { id: "deck-b", title: live.deckB.title, bpm: live.bpm } : null,
-    ].filter((r): r is NonNullable<typeof r> => r !== null);
-    const q = query.trim().toLowerCase();
-    return q ? list.filter((t) => t.title.toLowerCase().includes(q)) : list;
-  }, [live, query]);
+  const tracks = useMemo(() => (
+    live ? liveDeckRows([live.deckA, live.deckB], live.bpm, query) : []
+  ), [live, query]);
   const enqueue = (id: string): void => {
     setQueue((prev) => (prev.some((e) => e.trackId === id) ? prev : [...prev, queueEntry(id)]));
   };
@@ -48,14 +43,13 @@ export function LibraryView(): JSX.Element {
               <tbody>
                 {tracks.map((t) => {
                   const key = t.id === "deck-a" || t.id === "deck-b" ? t.id : libraryRowKey({ trackId: t.id, title: t.title });
-                  const artist = t.title.includes(" - ") ? t.title.split(" - ").slice(1).join(" - ") : "unknown artist";
-                  const ready = t.bpm !== null;
+                  const ready = t.readiness === "READY";
                   return (
                     <tr key={key} className={selected === t.id ? "bg-muted/50" : "cursor-pointer"} onClick={() => { set({ selectedTrackId: t.id }); }}>
                       <td className="border-b py-1.5 pr-3">{t.title || "—"}</td>
-                      <td className="border-b py-1.5 pr-3">{artist}</td>
+                      <td className="border-b py-1.5 pr-3">{t.artist || "unknown artist"}</td>
                       <td className="border-b py-1.5 pr-3"><MetricBadge metric={{ label: "bpm", value: t.bpm === null ? null : deckBpm(t.bpm), unit: "" }} /></td>
-                      <td className="border-b py-1.5 pr-3"><StatusDot tone={ready ? "ok" : "warn"} label={ready ? "READY" : "NEEDS ANALYSIS"} /></td>
+                      <td className="border-b py-1.5 pr-3"><StatusDot tone={ready ? "ok" : "warn"} label={t.readiness} /></td>
                       <td className="border-b py-1.5"><Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); enqueue(t.id); }}>Queue</Button></td>
                     </tr>
                   );

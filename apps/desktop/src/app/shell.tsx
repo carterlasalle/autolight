@@ -26,7 +26,9 @@ export function Shell(): JSX.Element {
         return;
       }
       const ch = shortcutFor(event.key);
-      if (ch) void invoke(ch, ch === "master/freeze" ? { version: 1, frozen: true } : { version: 1 });
+      if (ch === "master/freeze") void invoke(ch, { version: 1, frozen: true });
+      else if (ch === "master/resume") void invoke(ch, { version: 1, at: "bar" });
+      else if (ch) void invoke(ch, { version: 1 });
     };
     window.addEventListener("keydown", onKeyDown);
     return () => { window.removeEventListener("keydown", onKeyDown); };

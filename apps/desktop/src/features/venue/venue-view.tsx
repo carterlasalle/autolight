@@ -6,6 +6,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { DeviceTile } from "../../components/kit.js";
 import { deviceScreenRow, withTransportMode, type TransportMode } from "../../routes/venue/device-screens.js";
 import { RoomVenueRoute } from "../../routes/venue/index.js";
+import type { Room } from "@autolight/venue";
+import { rectangleRoom } from "@autolight/venue";
 
 // Venue (spec 98 ops live in the WP05 room editor under routes/venue/) +
 // Device screen (spec 99): tiles with measured-or-unmeasured fields plus the
@@ -13,6 +15,8 @@ import { RoomVenueRoute } from "../../routes/venue/index.js";
 export function VenueView(): JSX.Element {
   const s = useShell();
   const [tab, setTab] = useState<"lights" | "room">("lights");
+  const [room, setRoom] = useState<Room>(() => rectangleRoom(5, 5));
+  const [roomSaved, setRoomSaved] = useState(false);
   const [modes, setModes] = useState<Record<string, TransportMode>>({});
   const [scanning, setScanning] = useState(false);
   const scan = (): void => {
@@ -47,7 +51,7 @@ export function VenueView(): JSX.Element {
           </Button>
         ))}
       </div>
-      {tab === "room" ? <RoomVenueRoute /> : (<>
+      {tab === "room" ? <RoomVenueRoute room={room} onRoom={setRoom} saved={roomSaved} onSaved={setRoomSaved} /> : (<>
       <Card>
         <CardHeader className="pb-2"><CardTitle className="text-[13px]">Lights{s.devices.length > 0 ? ` · ${s.devices.length} found` : ""}</CardTitle></CardHeader>
         <CardContent className="flex flex-col gap-2">
