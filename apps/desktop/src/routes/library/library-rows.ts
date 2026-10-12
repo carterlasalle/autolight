@@ -69,18 +69,21 @@ function emptyRow(
 
 export interface LiveDeckRow { id: string; title: string; artist: string; readiness: "READY" | "NEEDS ANALYSIS"; bpm: number | null }
 
+export interface LiveDeckSnapshot { title: string; artist: string; readiness: "READY" | "NEEDS ANALYSIS"; bpm: number | null }
+
 // Rows for the decks actually loaded right now (spec 95): title, artist,
-// and readiness come from the resolved deck snapshot, never parsed out of
-// display text. Query matches title or artist.
+// readiness, and BPM come from each deck's own resolved snapshot, never
+// parsed out of display text and never copied across decks. Query matches
+// title or artist.
 export function liveDeckRows(
-  decks: { title: string; artist: string; readiness: "READY" | "NEEDS ANALYSIS" }[],
-  bpm: number | null,
+  decks: LiveDeckSnapshot[],
+  fallbackBpm: number | null,
   query: string,
 ): LiveDeckRow[] {
   const list: LiveDeckRow[] = [
-    { id: "deck-a", title: decks[0]?.title ?? "—", artist: decks[0]?.artist ?? "", readiness: decks[0]?.readiness ?? "NEEDS ANALYSIS", bpm },
+    { id: "deck-a", title: decks[0]?.title ?? "—", artist: decks[0]?.artist ?? "", readiness: decks[0]?.readiness ?? "NEEDS ANALYSIS", bpm: decks[0]?.bpm ?? fallbackBpm },
     ...(decks[1] && decks[1].title !== "—"
-      ? [{ id: "deck-b", title: decks[1].title, artist: decks[1].artist, readiness: decks[1].readiness, bpm }]
+      ? [{ id: "deck-b", title: decks[1].title, artist: decks[1].artist, readiness: decks[1].readiness, bpm: decks[1].bpm ?? fallbackBpm }]
       : []),
   ];
   const q = query.trim().toLowerCase();

@@ -8,8 +8,8 @@ export interface LiveState {
   source: "REKORDBOX" | "SERATO";
   bpm: number | null;
   beat: number | undefined;
-  deckA: { title: string; artist: string; readiness: "READY" | "NEEDS ANALYSIS"; section: string | undefined; countdown: string | undefined };
-  deckB: { title: string; artist: string; readiness: "READY" | "NEEDS ANALYSIS"; section: string | undefined; countdown: string | undefined };
+  deckA: { title: string; artist: string; readiness: "READY" | "NEEDS ANALYSIS"; bpm: number | null; section: string | undefined; countdown: string | undefined };
+  deckB: { title: string; artist: string; readiness: "READY" | "NEEDS ANALYSIS"; bpm: number | null; section: string | undefined; countdown: string | undefined };
   cues: ShowCue[];
   cells: { x: number; color: string }[];
 }

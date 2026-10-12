@@ -6,7 +6,7 @@ import { Slider } from "../../components/ui/slider.js";
 import { InspectorPanel } from "../../components/kit.js";
 import type { TrackModel } from "@autolight/contracts";
 import { useShell, invoke } from "../../app/store.js";
-import { auditionAtBeat, type CorrectionOp } from "../../routes/inspector/inspector-helpers.js";
+import { addDropBeat, auditionAtBeat, type CorrectionOp } from "../../routes/inspector/inspector-helpers.js";
 // state, never refetched per tick. Beat audition renders that beat in the
 // preview; nothing reaches the lights unless send-to-lights is on. Blend A/B
 // viewer and corrections ops sit below the lanes.
@@ -91,7 +91,7 @@ function InspectorBody({ track, lanes, correct, sendToLights, setSendToLights, b
   const firstDrop = track.musicalEvents.find((e) => e.type === "drop")?.beat;
   const dropBeat = firstDrop ?? Math.min(lastBeat, finiteMax(eventBeats, 0));
   const auditionBeat = Math.min(lastBeat, dropBeat + 1);
-  const addBeat = firstDrop === undefined ? dropBeat : auditionBeat;
+  const addBeat = addDropBeat(track.musicalEvents, lastBeat);
   const section = track.sections.find((s) => dropBeat >= s.startBeat && dropBeat < s.endBeat);
   const sectionStart = section?.startBeat ?? Math.max(0, dropBeat - 32);
   const sectionEnd = section?.endBeat ?? lastBeat;
@@ -111,7 +111,11 @@ function InspectorBody({ track, lanes, correct, sendToLights, setSendToLights, b
       {audition ? <p className="text-[13px] text-muted-foreground">{audition}</p> : null}
       <div className="flex flex-col gap-2" role="group" aria-label="Corrections">
         <div className="flex flex-wrap gap-2" role="group" aria-label="Drop corrections">
-          <Button size="sm" variant="outline" onClick={() => correct({ op: "add-drop", beat: addBeat })}>Add missing drop at {addBeat}</Button>
+          {addBeat === null ? (
+            <span className="text-[13px] text-muted-foreground">No drop-free beat available</span>
+          ) : (
+            <Button size="sm" variant="outline" onClick={() => correct({ op: "add-drop", beat: addBeat })}>Add missing drop at {addBeat}</Button>
+          )}
           <Button size="sm" variant="outline" onClick={() => correct({ op: "delete-drop", beat: dropBeat })}>Delete false drop at {dropBeat}</Button>
           <Button size="sm" variant="outline" onClick={() => correct({ op: "mark-fake-drop", beat: dropBeat, actualBeat: Math.min(lastBeat, dropBeat + 32) })}>Mark fake drop {dropBeat} to {Math.min(lastBeat, dropBeat + 32)}</Button>
         </div>

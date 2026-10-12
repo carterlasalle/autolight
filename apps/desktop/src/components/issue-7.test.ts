@@ -46,14 +46,21 @@ describe("issue-7 empty states and venue tabs", () => {
   });
   it("live deck rows carry artist and readiness without parsing titles", () => {
     const rows = liveDeckRows([
-      { title: "Track One", artist: "Artist One", readiness: "READY" },
-      { title: "—", artist: "", readiness: "NEEDS ANALYSIS" },
-    ], 128, "");
+      { title: "Track One", artist: "Artist One", readiness: "READY", bpm: 128 },
+      { title: "—", artist: "", readiness: "NEEDS ANALYSIS", bpm: null },
+    ], 120, "");
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ id: "deck-a", title: "Track One", artist: "Artist One", readiness: "READY", bpm: 128 });
     expect(liveDeckRows([
-      { title: "Track One", artist: "", readiness: "NEEDS ANALYSIS" },
-      { title: "Track Two", artist: "Artist Two", readiness: "READY" },
-    ], null, "artist two")).toMatchObject([{ id: "deck-b", artist: "Artist Two", readiness: "READY", bpm: null }]);
+      { title: "Track One", artist: "", readiness: "NEEDS ANALYSIS", bpm: 124 },
+      { title: "Track Two", artist: "Artist Two", readiness: "READY", bpm: 132 },
+    ], null, "artist two")).toMatchObject([{ id: "deck-b", artist: "Artist Two", readiness: "READY", bpm: 132 }]);
+  });
+  it("live deck rows keep each deck on its own tempo", () => {
+    const rows = liveDeckRows([
+      { title: "A", artist: "", readiness: "READY", bpm: 120 },
+      { title: "B", artist: "", readiness: "READY", bpm: 140 },
+    ], null, "");
+    expect(rows.map((r) => r.bpm)).toEqual([120, 140]);
   });
 });
