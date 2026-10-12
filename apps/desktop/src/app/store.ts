@@ -91,6 +91,9 @@ interface ShellState {
   devices: { address: string; name: string }[];
   target: LightTarget;
   tiles: DeviceTile[];
+  identifiedIds: string[];
+  chasePassedIds: string[];
+  roomSaved: boolean;
   live: LiveState | null;
   selectedTrackId: string | null;
   diagnostics: Record<string, string>;
@@ -129,6 +132,9 @@ export const useShell = create<ShellState>((set) => ({
   devices: [],
   target: "Both",
   tiles: [],
+  identifiedIds: [],
+  chasePassedIds: [],
+  roomSaved: false,
   live: null,
   selectedTrackId: null,
   diagnostics: {},

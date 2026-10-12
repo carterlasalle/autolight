@@ -17,6 +17,10 @@ export function VenueView(): JSX.Element {
   const [tab, setTab] = useState<"lights" | "room">("lights");
   const [room, setRoom] = useState<Room>(() => rectangleRoom(5, 5));
   const [roomSaved, setRoomSaved] = useState(false);
+  const recordRoomSaved = (saved: boolean): void => {
+    setRoomSaved(saved);
+    if (saved) useShell.getState().set({ roomSaved: true });
+  };
   const [modes, setModes] = useState<Record<string, TransportMode>>({});
   const [scanning, setScanning] = useState(false);
   const scan = (): void => {
@@ -51,7 +55,7 @@ export function VenueView(): JSX.Element {
           </Button>
         ))}
       </div>
-      {tab === "room" ? <RoomVenueRoute room={room} onRoom={setRoom} saved={roomSaved} onSaved={setRoomSaved} /> : (<>
+      {tab === "room" ? <RoomVenueRoute room={room} onRoom={setRoom} saved={roomSaved} onSaved={recordRoomSaved} /> : (<>
       <Card>
         <CardHeader className="pb-2"><CardTitle className="text-[13px]">Lights{s.devices.length > 0 ? ` · ${s.devices.length} found` : ""}</CardTitle></CardHeader>
         <CardContent className="flex flex-col gap-2">
@@ -82,9 +86,21 @@ export function VenueView(): JSX.Element {
                 <DeviceTile
                   tile={t}
                   onAction={(a) => {
-                    if (a === "IDENTIFY") void invoke("venue/identify", { version: 1, id: t.id });
-                    else if (a === "TEST CHASE") void invoke("venue/test-chase", { version: 1, id: t.id });
-                    else void invoke("venue/device-action", { version: 1, id: t.id, action: "RECALIBRATE" });
+                    if (a === "IDENTIFY") {
+                      void invoke("venue/identify", { version: 1, id: t.id }).then((result: unknown) => {
+                        const ok = (result as { ok?: boolean } | null)?.ok !== false;
+                        if (ok && !useShell.getState().identifiedIds.includes(t.id)) {
+                          useShell.getState().set({ identifiedIds: [...useShell.getState().identifiedIds, t.id] });
+                        }
+                      });
+                    } else if (a === "TEST CHASE") {
+                      void invoke("venue/test-chase", { version: 1, id: t.id }).then((result: unknown) => {
+                        const ok = (result as { ok?: boolean } | null)?.ok !== false;
+                        if (ok && !useShell.getState().chasePassedIds.includes(t.id)) {
+                          useShell.getState().set({ chasePassedIds: [...useShell.getState().chasePassedIds, t.id] });
+                        }
+                      });
+                    } else void invoke("venue/device-action", { version: 1, id: t.id, action: "RECALIBRATE" });
                   }}
                 />
                 <label className="flex items-center gap-2 text-[13px]">Transport:

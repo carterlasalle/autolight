@@ -18,7 +18,7 @@ function roomDepth(room: Room): number {
 }
 // Width edit rescales the existing outline about its own center, so ceiling,
 // anchors, walls, and openings survive the change (S4: no factory rebuild).
-function rescaleOutline(room: Room, widthM: number, depthM: number): Room {
+export function rescaleOutline(room: Room, widthM: number, depthM: number): Room {
   const xs = room.outline.map((p) => p.x);
   const ys = room.outline.map((p) => p.y);
   const spanX = Math.max(1e-6, Math.max(...xs) - Math.min(...xs));

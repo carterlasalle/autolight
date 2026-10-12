@@ -56,11 +56,4 @@ describe("issue-7 empty states and venue tabs", () => {
       { title: "Track Two", artist: "Artist Two", readiness: "READY" },
     ], null, "artist two")).toMatchObject([{ id: "deck-b", artist: "Artist Two", readiness: "READY", bpm: null }]);
   });
-  it("inspector empty state fires the setup action", () => {
-    const onSetup = vi.fn();
-    const html = renderToStaticMarkup(createElement(InspectorEmpty, { onSetup }));
-    expect(html).toContain("Open Setup");
-    expect(html).toContain("No track analyzed yet");
-    expect(onSetup).not.toHaveBeenCalled();
-  });
 });

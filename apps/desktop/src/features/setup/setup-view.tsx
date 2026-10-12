@@ -4,7 +4,7 @@ import type { FollowMode } from "../../app/store.js";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card.js";
 import { Button } from "../../components/ui/button.js";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select.js";
-import { SETUP_EVIDENCE_STEPS, setupProgress, type EvidenceStep } from "../../routes/setup/setup-model.js";
+import { SETUP_EVIDENCE_STEPS, setupEvidence, setupProgress, type EvidenceStep } from "../../routes/setup/setup-model.js";
 import { RkbxSetupAssistant } from "./rkbx-setup-panel.js";
 import { SIMULATOR_SCENARIOS, type SimulatorScenario } from "../../routes/settings/simulator-mode.js";
 const STEP_LABELS: Record<EvidenceStep, { title: string; hint: string; route: "setup" | "library" | "venue" | "inspector" | "live" }> = {
@@ -35,22 +35,16 @@ export function SetupView(): JSX.Element {
   const tiles = useShell((s) => s.tiles);
   const simulatorMode = useShell((s) => s.simulatorMode);
   const [scenario, setScenario] = useState<SimulatorScenario>("normal-night");
-  // Steps resolve from measured state only: live show, scanned devices,
-  // qualified tiles. Steps with no renderer-side evidence stay pending and
-  // say so: no MIDI-controller status, room persistence, or identify
-  // receipt flows over IPC yet, so the UI must not report them ready.
-  const evidence: Partial<Record<EvidenceStep, boolean>> = {
-    dj: live !== null,
-    controller: false,
-    library: live !== null && (live.deckA.title !== "—" || live.deckB.title !== "—"),
-    lights: devices.length > 0,
-    identify: tiles.some((t) => t.firmware !== "unknown"),
-    placement: false,
-    orientation: false,
-    qualification: tiles.length > 0 && tiles.every((t) => t.firmware !== "unknown"),
-    analysis: live !== null && live.cues.length > 0,
-    preview: live !== null && live.cells.length > 0,
-  };
+  // Steps resolve from measured state only: the pure setupEvidence collector
+  // owns the mapping so it is unit pinned. Identify/chase outcomes and room
+  // saves are recorded in the store from their IPC responses; steps with no
+  // renderer-side evidence source (controller) stay pending and say so.
+  const evidence = setupEvidence({
+    live, devices, tiles,
+    identifiedIds: useShell((s) => s.identifiedIds),
+    chasePassedIds: useShell((s) => s.chasePassedIds),
+    roomSaved: useShell((s) => s.roomSaved),
+  });
   const { done, next } = setupProgress(evidence);
   return (
     <div className="flex max-w-3xl flex-col gap-3">
@@ -90,7 +84,8 @@ export function SetupView(): JSX.Element {
         <CardContent>
           <ol aria-label="Setup" className="flex list-decimal flex-col gap-1.5 pl-5 text-[13px]">
             {SETUP_EVIDENCE_STEPS.map((s) => {
-              const meta = STEP_LABELS[s];
+              // Total by construction: STEP_LABELS covers every EvidenceStep.
+              const meta: (typeof STEP_LABELS)[EvidenceStep] = STEP_LABELS[s];
               const ready = done.includes(s);
               const isNext = next === s;
               return (
