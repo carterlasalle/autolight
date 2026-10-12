@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card.js";
 import { Button } from "../../components/ui/button.js";
 import { Switch } from "../../components/ui/switch.js";
 import { Slider } from "../../components/ui/slider.js";
@@ -48,20 +47,16 @@ export function InspectorView(): JSX.Element {
     setAudition(`correction queued: ${op.op}`);
   };
   return (
-    <div className="flex max-w-5xl flex-col gap-3">
-      <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-sm">Track inspector{selected ? ` — ${selected}` : ""}</CardTitle></CardHeader>
-        <CardContent className="flex flex-col gap-2">
-          {!loaded ? (
-            <p className="text-sm text-muted-foreground">Loading lanes…</p>
-          ) : track === null ? (
-            <InspectorEmpty onSetup={() => { useShell.getState().set({ route: "setup" }); }} />
-          ) : (
-            <InspectorBody track={track} lanes={lanes} correct={correct} sendToLights={sendToLights} setSendToLights={setSendToLights} blend={blend} setBlend={setBlend} audition={audition} />
-          )}
-        </CardContent>
-      </Card>
-    </div>
+    <section className="flex max-w-5xl flex-col gap-2 rounded-xl border border-border bg-card px-4 py-3">
+      <h2 className="min-w-0 truncate text-base font-medium" title={selected ? `Track inspector — ${selected}` : "Track inspector"}>Track inspector{selected ? ` — ${selected}` : ""}</h2>
+      {!loaded ? (
+        <p className="text-sm text-muted-foreground">Loading lanes…</p>
+      ) : track === null ? (
+        <InspectorEmpty onSetup={() => { useShell.getState().set({ route: "setup" }); }} />
+      ) : (
+        <InspectorBody track={track} lanes={lanes} correct={correct} sendToLights={sendToLights} setSendToLights={setSendToLights} blend={blend} setBlend={setBlend} audition={audition} />
+      )}
+    </section>
   );
 }
 
@@ -99,16 +94,16 @@ function InspectorBody({ track, lanes, correct, sendToLights, setSendToLights, b
     <>
       <InspectorPanel track={track} startBeat={0} endBeat={lastBeat} />
       <div className="flex flex-wrap items-center gap-2">
-        <Button size="sm" variant="outline" onClick={() => lanes(auditionBeat)}>Audition beat {auditionBeat}</Button>
-        <label className="flex items-center gap-2 text-sm">
+        <Button size="sm" variant="outline" className="min-w-0 tabular-nums" onClick={() => lanes(auditionBeat)}>Audition beat {auditionBeat}</Button>
+        <label className="flex min-w-0 items-center gap-2 text-sm">
           <Switch checked={sendToLights} onCheckedChange={setSendToLights} /> Send to lights
         </label>
-        <label className="flex items-center gap-2 text-sm">Blend A/B:
+        <label className="flex min-w-0 items-center gap-2 text-sm">Blend A/B:
           <Slider min={0} max={1} step={0.1} value={[blend]} onValueChange={(v) => setBlend(v[0] ?? blend)} aria-label="Blend A/B" className="w-32" />
-          {blend.toFixed(1)}
+          <span className="tabular-nums">{blend.toFixed(1)}</span>
         </label>
       </div>
-      {audition ? <p className="text-sm text-muted-foreground">{audition}</p> : null}
+      {audition ? <p className="min-w-0 text-sm text-muted-foreground">{audition}</p> : null}
       <div className="flex flex-col gap-2" role="group" aria-label="Corrections">
         <div className="flex flex-wrap gap-2" role="group" aria-label="Drop corrections">
           {addBeat === null ? (

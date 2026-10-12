@@ -1,18 +1,17 @@
 import { useEffect, useState } from "react";
 import { useShell, invoke } from "../../app/store.js";
-import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card.js";
 import { Button } from "../../components/ui/button.js";
 import { Input } from "../../components/ui/input.js";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select.js";
-import { DeviceTile } from "../../components/kit.js";
 import { deviceScreenRow, withTransportMode, type TransportMode } from "../../routes/venue/device-screens.js";
 import { RoomVenueRoute } from "../../routes/venue/index.js";
 import type { Room } from "@autolight/venue";
 import { rectangleRoom } from "@autolight/venue";
 
-// Venue (spec 98 ops live in the WP05 room editor under routes/venue/) +
-// Device screen (spec 99): tiles with measured-or-unmeasured fields plus the
-// transport mode dropdown. Empty until Scan finds real lights.
+// Venue, redesigned: one scan section (find lights), one rig section (per
+// light: see it, name it, prove it). Every prior control survives: tabs,
+// scan/rescan, scan-targets, A/B/Both target, per-tile IDENTIFY/TEST
+// CHASE/RECALIBRATE, per-tile transport select, room mapping.
 //
 // Owner Govee units on ND resnet (broadcast-isolated from the dev machine):
 // H6076 goveelamp plus H1A45 carterlights, both LAN Control on, verified
@@ -21,6 +20,7 @@ const KNOWN_SCAN_TARGETS: readonly string[] = [
   "goveelamp.resnet.nd.edu",
   "carterlights.resnet.nd.edu",
 ];
+
 export function VenueView(): JSX.Element {
   const s = useShell();
   const [tab, setTab] = useState<"lights" | "room">("lights");
@@ -42,8 +42,6 @@ export function VenueView(): JSX.Element {
       const saved = envelope && envelope.ok !== false && Array.isArray(envelope.value)
         ? (envelope.value as unknown[]).map((v) => String(v))
         : [];
-      // Owner hardware (verified 2026-10-12): seed the campus FQDNs on a
-      // fresh install so Scan works before the user finds the setting.
       const seeded = saved.length > 0 ? saved : [...KNOWN_SCAN_TARGETS];
       setScanTargets(seeded.join(", "));
       if (saved.length === 0 && seeded.length > 0) {
@@ -53,7 +51,7 @@ export function VenueView(): JSX.Element {
     return () => { cancelled = true; };
   }, []);
   const saveScanTargets = (): void => {
-    const list = scanTargets.split(",").map((s) => s.trim()).filter((s) => s.length > 0);
+    const list = scanTargets.split(",").map((t) => t.trim()).filter((t) => t.length > 0);
     void invoke("config/set", { version: 1, scope: "app", key: "govee.lan.discovery.scanList", value: list }).then(() => setScanSaved(true));
   };
   const scan = (): void => {
@@ -79,8 +77,10 @@ export function VenueView(): JSX.Element {
       setScanning(false);
     });
   };
+  const identified = useShell((st) => st.identifiedIds);
+  const chased = useShell((st) => st.chasePassedIds);
   return (
-    <div className="flex max-w-5xl flex-col gap-3">
+    <div className="flex max-w-5xl flex-col gap-4">
       <div role="tablist" aria-label="Venue sections" className="flex gap-2">
         {(["lights", "room"] as const).map((t) => (
           <Button key={t} size="sm" variant={tab === t ? "default" : "outline"} role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>
@@ -89,84 +89,106 @@ export function VenueView(): JSX.Element {
         ))}
       </div>
       {tab === "room" ? <RoomVenueRoute room={room} onRoom={setRoom} saved={roomSaved} onSaved={recordRoomSaved} /> : (<>
-      <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-sm">Lights{s.devices.length > 0 ? ` · ${s.devices.length} found` : ""}</CardTitle></CardHeader>
-        <CardContent className="flex flex-col gap-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <Button size="sm" variant="outline" onClick={scan} disabled={scanning}>
-              {scanning ? "Scanning…" : s.devices.length === 0 ? "Scan the LAN" : "Rescan"}
-            </Button>
-            {s.devices.length === 0 && !scanning ? (
-              <span className="text-sm text-muted-foreground">No lights found yet — power them in LAN mode on this network, then scan.</span>
-            ) : null}
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <label className="flex flex-1 items-center gap-2 text-sm">
-              <span className="shrink-0 text-muted-foreground">Scan targets:</span>
-              <Input aria-label="Scan targets (IPs or hostnames)" value={scanTargets} onChange={(e) => { setScanTargets(e.target.value); setScanSaved(false); }} placeholder="10.24.253.138, carterlights.resnet.nd.edu" className="h-8" />
-            </label>
-            <Button size="sm" variant="outline" onClick={saveScanTargets}>Save targets</Button>
-            {scanSaved ? <span className="text-sm text-muted-foreground">Saved — next scan tries these directly.</span> : null}
-          </div>
-          <div className="flex items-center gap-2" role="radiogroup" aria-label="Control target">
-            <span className="text-sm text-muted-foreground">Target:</span>
+      <section aria-label="Find lights" className="rounded-xl border border-border bg-card px-4 py-3 text-sm">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <h2 className="text-base font-medium">
+            Find lights{s.devices.length > 0 ? <span className="text-muted-foreground"> · {s.devices.length} on the rig</span> : null}
+          </h2>
+          <span className="flex-1" />
+          <div className="flex items-center gap-1" role="radiogroup" aria-label="Control target">
             {(["A", "B", "Both"] as const).map((t) => (
-              <Button key={t} size="sm" variant={s.target === t ? "default" : "outline"} onClick={() => { s.set({ target: t }); }} aria-pressed={s.target === t}>
+              <Button key={t} size="sm" variant={s.target === t ? "default" : "ghost"} onClick={() => { s.set({ target: t }); }} aria-pressed={s.target === t}>
                 {t}
               </Button>
             ))}
           </div>
-        </CardContent>
-      </Card>
+        </div>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <Button size="sm" onClick={scan} disabled={scanning}>
+            {scanning ? "Scanning…" : s.devices.length === 0 ? "Scan the LAN" : "Rescan"}
+          </Button>
+          <label className="flex min-w-0 flex-1 basis-64 items-center gap-2">
+            <span className="shrink-0 text-xs text-muted-foreground">Targets</span>
+            <Input aria-label="Scan targets (IPs or hostnames)" value={scanTargets} onChange={(e) => { setScanTargets(e.target.value); setScanSaved(false); }} placeholder="10.24.253.138, carterlights.resnet.nd.edu" className="h-8 min-w-0" />
+          </label>
+          <Button size="sm" variant="ghost" onClick={saveScanTargets}>Save</Button>
+          {scanSaved ? <span className="text-xs text-muted-foreground">Saved.</span> : null}
+        </div>
+        {s.devices.length === 0 && !scanning ? (
+          <p className="mt-2 text-xs text-muted-foreground">Power the lights in LAN mode, then scan. Campus networks need targets above; home networks usually answer the broadcast.</p>
+        ) : null}
+      </section>
       {s.tiles.length > 0 ? (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3">
+        <section aria-label="Rig" className="flex flex-col gap-3">
           {s.tiles.map((t) => {
             const row = withTransportMode(deviceScreenRow(t, t.firmware !== "unknown"), modes[t.id] ?? "hybrid");
+            const isIdentified = identified.includes(t.id);
+            const isChased = chased.includes(t.id);
+            const healthTone = t.health === "online" ? "bg-emerald-500" : t.health === "degraded" ? "bg-amber-500" : "bg-red-500";
             return (
-              <div key={t.id} className="flex flex-col gap-2">
-                <DeviceTile
-                  tile={t}
-                  onAction={(a) => {
-                    if (a === "IDENTIFY") {
+              <article key={t.id} aria-label={`${t.sku} ${t.ip ?? t.id}`} className="min-w-0 rounded-xl border border-border bg-card px-4 py-3">
+                <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+                  <span className={`inline-block h-2 w-2 shrink-0 self-center rounded-full ${healthTone}`} aria-hidden />
+                  <h3 className="min-w-0 flex-1 basis-48 truncate text-base font-medium" title={`${t.sku} · ${t.ip ?? t.id}`}>
+                    {t.sku} <span className="font-mono text-xs font-normal text-muted-foreground">{t.ip ?? t.id}</span>
+                  </h3>
+                  <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                    {row.segments === null ? "segments ?" : `${row.segments} seg`} · {row.latencySource === "measured" ? `${row.latencyMs}ms` : "rtt ?"} · {row.firmware}
+                  </span>
+                </div>
+                <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant={isIdentified ? "secondary" : "default"}
+                    onClick={() => {
                       void invoke("venue/identify", { version: 1, id: t.id }).then((result: unknown) => {
                         const ok = (result as { ok?: boolean } | null)?.ok !== false;
                         if (ok && !useShell.getState().identifiedIds.includes(t.id)) {
                           useShell.getState().set({ identifiedIds: [...useShell.getState().identifiedIds, t.id] });
                         }
                       });
-                    } else if (a === "TEST CHASE") {
+                    }}
+                  >
+                    {isIdentified ? "✓ Identified" : "Identify"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={isChased ? "secondary" : "outline"}
+                    onClick={() => {
                       void invoke("venue/test-chase", { version: 1, id: t.id }).then((result: unknown) => {
                         const ok = (result as { ok?: boolean } | null)?.ok !== false;
                         if (ok && !useShell.getState().chasePassedIds.includes(t.id)) {
                           useShell.getState().set({ chasePassedIds: [...useShell.getState().chasePassedIds, t.id] });
                         }
                       });
-                    } else void invoke("venue/device-action", { version: 1, id: t.id, action: "RECALIBRATE" });
-                  }}
-                />
-                <label className="flex items-center gap-2 text-sm">Transport:
-                  <Select value={row.transportMode} onValueChange={(v) => {
-                    const mode = v as TransportMode;
-                    setModes((prev) => ({ ...prev, [t.id]: mode }));
-                    void invoke("config/set", { version: 1, scope: "device", key: "govee.device.<fixtureId>.transportMode", value: mode });
-                  }}>
-                    <SelectTrigger className="h-8 w-28"><SelectValue /></SelectTrigger>
-                    <SelectContent>{(["hybrid", "lan", "ble"] as const).map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
-                  </Select>
-                </label>
-                <p className="text-sm text-muted-foreground">
-                  {row.segments === null ? "segments: unmeasured" : `${row.segments} segments`} · {row.latencySource === "measured" ? `${row.latencyMs}ms measured` : "latency: unmeasured"} · {row.firmware}
-                </p>
-              </div>
+                    }}
+                  >
+                    {isChased ? "✓ Chase passed" : "Test chase"}
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => { void invoke("venue/device-action", { version: 1, id: t.id, action: "RECALIBRATE" }); }}>
+                    Recalibrate
+                  </Button>
+                  <span className="flex-1" />
+                  <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    Transport
+                    <Select value={row.transportMode} onValueChange={(v) => {
+                      const mode = v as TransportMode;
+                      setModes((prev) => ({ ...prev, [t.id]: mode }));
+                      void invoke("config/set", { version: 1, scope: "device", key: "govee.device.<fixtureId>.transportMode", value: mode });
+                    }}>
+                      <SelectTrigger className="h-8 w-24 font-mono text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>{(["hybrid", "lan", "ble"] as const).map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </label>
+                </div>
+              </article>
             );
           })}
-        </div>
+        </section>
       ) : (
-        <Card>
-          <CardContent className="pt-4">
-            <p className="text-sm text-muted-foreground">No fixtures qualified yet. Scan, then run IDENTIFY + TEST CHASE per light.</p>
-          </CardContent>
-        </Card>
+        <section aria-label="Rig" className="rounded-xl border border-dashed border-border px-4 py-6 text-center">
+          <p className="text-sm text-muted-foreground">No fixtures on the rig yet. Scan above, then identify each light so the room knows what flashed.</p>
+        </section>
       )}
       </>)}
     </div>

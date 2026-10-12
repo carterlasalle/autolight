@@ -3,7 +3,6 @@ import { useMemo, useState } from "react";
 // file-backed store and blank-screens dev the same way dgram did.
 import { KEYS } from "@autolight/config/registry";
 import { useShell, invoke } from "../../app/store.js";
-import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card.js";
 import { Button } from "../../components/ui/button.js";
 import { Badge } from "../../components/ui/badge.js";
 import { Input } from "../../components/ui/input.js";
@@ -57,14 +56,15 @@ export function SettingsView(): JSX.Element {
   };
   return (
     <div className="flex max-w-5xl flex-col gap-3">
-      <Card className="sticky top-0 z-10">
-        <CardContent className="flex flex-col gap-2 pt-4">
-          <div className="flex items-center gap-2">
+      <section aria-label="Settings search and filters" className="rounded-xl border border-border bg-card px-4 py-3">
+        <div className="flex flex-col gap-2">
+          <div className="flex min-w-0 items-center gap-2">
             <Input
               aria-label="Search settings"
               placeholder="Search key, unit, or receipt"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
+              className="min-w-0 flex-1"
             />
             <Button variant={changedOnly ? "default" : "outline"} size="sm" onClick={() => setChangedOnly(!changedOnly)} aria-pressed={changedOnly}>
               Changed only
@@ -78,30 +78,28 @@ export function SettingsView(): JSX.Element {
             ))}
           </nav>
           {pending.length > 0 ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="text-sm text-muted-foreground">Pending until Live ends: {pending.length}</p>
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <p className="min-w-0 flex-1 truncate text-sm text-muted-foreground" title={`${pending.length} change(s) pending until Live ends`}>Pending until Live ends: {pending.length}</p>
               {live === null ? <Button size="sm" variant="outline" onClick={applyPending}>Apply pending</Button> : null}
             </div>
           ) : null}
-        </CardContent>
-      </Card>
+        </div>
+      </section>
       {groups.map(([group, keys]) => (
-        <section key={group} id={`settings-${group}`} aria-label={`${group} settings`} className="scroll-mt-24">
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm">{group} · {keys.length}{keys.length > 200 ? " (showing first 200)" : ""}</CardTitle></CardHeader>
-          <CardContent className="flex flex-col gap-2">
+        <section key={group} id={`settings-${group}`} aria-label={`${group} settings`} className="scroll-mt-24 rounded-xl border border-border bg-card px-4 py-3">
+          <h2 className="text-base font-medium">{group} · {keys.length}{keys.length > 200 ? " (showing first 200)" : ""}</h2>
+          <div className="mt-2 flex flex-col gap-2">
             {keys.slice(0, 200).map((k) => (
-              <div key={k.key} className="flex flex-wrap items-center gap-2">
+              <div key={k.key} className="flex min-w-0 flex-wrap items-center gap-2">
                 <Badge variant="secondary">{k.type}</Badge>
                 <Badge variant="outline">{k.scope}</Badge>
                 <ConfigField def={{ key: k.key, value: edits[k.key] ?? k.defaultRaw, unit: k.unit, range: k.range, receipt: k.receipt, liveSafe: k.liveSafe }} />
-                <Input aria-label={`Edit ${k.key}`} placeholder="new value" value={edits[k.key] ?? ""} onChange={(e) => setEdits((prev) => ({ ...prev, [k.key]: e.target.value }))} className="h-8 w-40" />
+                <Input aria-label={`Edit ${k.key}`} placeholder="new value" value={edits[k.key] ?? ""} onChange={(e) => setEdits((prev) => ({ ...prev, [k.key]: e.target.value }))} className="h-8 min-w-0 flex-1" />
                 <Button size="sm" variant="outline" onClick={() => commit(k.key, k.scope, k.liveSafe)}>Set</Button>
                 <Button size="sm" variant="ghost" onClick={() => { void invoke("config/reset", { version: 1, scope: k.scope, key: k.key }); }}>Reset</Button>
               </div>
             ))}
-          </CardContent>
-        </Card>
+          </div>
         </section>
       ))}
     </div>

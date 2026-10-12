@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card.js";
+import { Badge } from "../../components/ui/badge.js";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs.js";
 import { invoke, useShell } from "../../app/store.js";
 import { deckBpm } from "../../components/kit.js";
@@ -92,53 +92,50 @@ export function DiagnosticsView(): JSX.Element {
     { label: "Latency", value: "devStatus read-back verified per command" },
   ];
   return (
-    <div className="flex max-w-5xl flex-col gap-3">
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm">
-            Diagnostics{stale ? " · stale" : ""}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Tabs value={tab} onValueChange={setTab}>
-            <TabsList className="flex-wrap" aria-label="Diagnostic areas">
-              {DIAGNOSTIC_TABS.map((t) => <TabsTrigger key={t} value={t}>{t}</TabsTrigger>)}
-            </TabsList>
-            {DIAGNOSTIC_TABS.map((t) => (
-              <TabsContent key={t} value={t}>
-                {t === "DJ Events" ? (
-                  events.length > 0 ? (
-                    <table aria-label="DJ events" className="w-full border-collapse text-sm">
-                      <thead>
-                        <tr className="text-left text-xs text-muted-foreground">
-                          <th scope="col" className="border-b py-1.5 pr-3 font-medium">Time</th>
-                          <th scope="col" className="border-b py-1.5 pr-3 font-medium">Source</th>
-                          <th scope="col" className="border-b py-1.5 pr-3 font-medium">Deck</th>
-                          <th scope="col" className="border-b py-1.5 font-medium">Event</th>
+    <section className="min-w-0 rounded-xl border border-border bg-card px-4 py-3">
+      <div className="mb-2 flex min-w-0 items-center gap-2">
+        <h2 className="min-w-0 flex-1 truncate text-base font-medium">Diagnostics</h2>
+        {stale ? <Badge variant="secondary">stale</Badge> : null}
+      </div>
+      <Tabs value={tab} onValueChange={setTab}>
+        <TabsList className="flex-wrap" aria-label="Diagnostic areas">
+          {DIAGNOSTIC_TABS.map((t) => <TabsTrigger key={t} value={t}>{t}</TabsTrigger>)}
+        </TabsList>
+        {DIAGNOSTIC_TABS.map((t) => (
+          <TabsContent key={t} value={t}>
+            {t === "DJ Events" ? (
+              events.length > 0 ? (
+                <div className="min-w-0 overflow-x-auto">
+                  <table aria-label="DJ events" className="w-full border-collapse text-sm">
+                    <thead>
+                      <tr className="text-left text-xs text-muted-foreground">
+                        <th scope="col" className="border-b py-1.5 pr-3 font-medium">Time</th>
+                        <th scope="col" className="border-b py-1.5 pr-3 font-medium">Source</th>
+                        <th scope="col" className="border-b py-1.5 pr-3 font-medium">Deck</th>
+                        <th scope="col" className="border-b py-1.5 font-medium">Event</th>
+                      </tr>
+                    </thead>
+                    <tbody className="font-timing tabular-nums">
+                      {events.map((e, i) => (
+                        <tr key={i}>
+                          <td className="border-b py-1.5 pr-3">{new Date(e.timestampMs).toLocaleTimeString()}</td>
+                          <td className="border-b py-1.5 pr-3">{e.source}</td>
+                          <td className="border-b py-1.5 pr-3">{e.deck}</td>
+                          <td className="border-b py-1.5">{e.event}</td>
                         </tr>
-                      </thead>
-                      <tbody className="font-timing tabular-nums">
-                        {events.map((e, i) => (
-                          <tr key={i}>
-                            <td className="border-b py-1.5 pr-3">{new Date(e.timestampMs).toLocaleTimeString()}</td>
-                            <td className="border-b py-1.5 pr-3">{e.source}</td>
-                            <td className="border-b py-1.5 pr-3">{e.deck}</td>
-                            <td className="border-b py-1.5">{e.event}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">No DJ events yet. Load a track and press play — events record to .ndjson.</p>
-                  )
-                ) : (
-                  <TabMetrics tab={t} rows={rows} fallback={diagnostics[t]} sessionEvents={sessionEvents} />
-                )}
-              </TabsContent>
-            ))}
-          </Tabs>
-        </CardContent>
-      </Card>
-    </div>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No DJ events yet. Load a track and press play — events record to .ndjson.</p>
+              )
+            ) : (
+              <TabMetrics tab={t} rows={rows} fallback={diagnostics[t]} sessionEvents={sessionEvents} />
+            )}
+          </TabsContent>
+        ))}
+      </Tabs>
+    </section>
   );
 }
