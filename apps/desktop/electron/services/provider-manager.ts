@@ -26,17 +26,30 @@ function runOsascript(args: string[]): Promise<string> {
 }
 
 export async function pollAxDecks(): Promise<AxDeckReading[]> {
-  // Rekordbox nests the deck clocks inside group 2 of its named window, and
+  // Rekordbox nests the deck clocks inside group 2 of its window, and
   // System Events' `every static text` is NOT recursive, so the old flat
-  // `window 1` query always came back empty (and `window 1` breaks whenever
-  // a transient dialog/tooltip becomes frontmost). Query the named window.
+  // `window 1` query always came back empty. Name resolution (`window
+  // "rekordbox") flakes with -1728 while `every window` by reference holds,
+  // so walk windows by reference (verified live 7.2.19: 102 texts in group 2).
   // Each deck exposes remaining+elapsed as adjacent pairs with the fraction
-  // in its own static text: `-02:56, .8, 00:01, .2` (verified live 7.2.19).
-  // Empty output = unreadable (permissions or layout change), not zero.
-  const out = await runOsascript([
-    "-e",
-    'tell application "System Events" to get value of every static text of group 2 of window "rekordbox" of (first process whose name is "rekordbox")',
-  ]);
+  // in its own static text: `-02:56, .8, 00:01, .2`. Empty output means
+  // unreadable (permissions or layout change), not zero.
+  const script = [
+    'tell application "System Events"',
+    '  set o to ""',
+    '  repeat with w in (every window of (first process whose name is "rekordbox"))',
+    '    try',
+    '      repeat with t in (every static text of group 2 of w)',
+    '        try',
+    '          set v to value of t',
+    '          if v is not missing value then set o to o & v & "|"',
+    '        end try',
+    '      end repeat',
+    '    end try',
+    '  return o',
+    'end tell',
+  ].join("\n");
+  const out = (await runOsascript(["-e", script])).replace(/\|/g, ",");
   const decks = [...out.matchAll(/(-?\d+:\d{2}),\s*\.(\d)\s*,\s*(\d+:\d{2}),\s*\.(\d)/g)].map(
     (m) => ({ remaining: clockToSeconds(m[1] ?? ""), elapsed: clockToSeconds(m[3] ?? "") }),
   );
