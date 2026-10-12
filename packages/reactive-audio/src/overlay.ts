@@ -23,6 +23,7 @@ export const DEFAULT_OVERLAY_CAP = 0.2;
 
 function clamp01(v: number): number {
   if (!Number.isFinite(v)) return 0;
+
   return Math.min(1, Math.max(0, v));
 }
 
@@ -45,7 +46,9 @@ export function applyOverlayScalar(
   cap: number = DEFAULT_OVERLAY_CAP,
 ): number {
   const p = clamp01(planned);
+
   if (p === 0) return 0;
+
   return Math.min(1, p * overlayGain(energy, reactiveAmount, cap));
 }
 
@@ -58,10 +61,14 @@ export function applyOverlayLinear(
   cap: number = DEFAULT_OVERLAY_CAP,
 ): [number, number, number] {
   const gain = overlayGain(energy, reactiveAmount, cap);
+
   const scale = (v: number): number => {
     const c = clamp01(v);
+
     if (c === 0) return 0;
+
     return Math.min(1, c * gain);
   };
+
   return [scale(planned[0]!), scale(planned[1]!), scale(planned[2]!)];
 }

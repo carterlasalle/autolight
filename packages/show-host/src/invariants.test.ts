@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   checkInvariants,
   type InvariantContext,
+  type InvariantTelemetryPayload,
 } from "./invariants.js";
 
 function clean(): InvariantContext {
@@ -93,7 +94,7 @@ describe("runtime invariants (T-TRU-12)", () => {
   });
 
   it("reports via telemetry without ever throwing", () => {
-    const seen: { kind: string; payload: Record<string, unknown> }[] = [];
+    const seen: { kind: string; payload: InvariantTelemetryPayload }[] = [];
     const ctx = clean();
     ctx.pendingPerDevice = { lamp1: 5 };
     const out = checkInvariants(ctx, { record: (kind, payload) => seen.push({ kind, payload }) });
@@ -101,7 +102,7 @@ describe("runtime invariants (T-TRU-12)", () => {
     expect(seen).toHaveLength(1);
     expect(seen[0]!.payload.code).toBe("pending-frames");
     expect(() =>
-      checkInvariants(null as unknown as InvariantContext, {
+      checkInvariants(null, {
         record: () => {
           throw new Error("telemetry down");
         },

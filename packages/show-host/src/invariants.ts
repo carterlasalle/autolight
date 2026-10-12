@@ -11,6 +11,7 @@ export const INVARIANT_CODES = [
   "brightness-rate",
   "no-cloud-frames",
 ] as const;
+
 export type InvariantCode = (typeof INVARIANT_CODES)[number];
 
 export interface InvariantCommand {
@@ -50,9 +51,18 @@ export interface InvariantViolation {
 }
 
 // Structural hook into diagnostics: SessionRecorder satisfies this shape
-// (record(kind, payload)) without importing it here.
+// (record(kind, payload)) without importing it here. The payload is the
+// exact invariant report, not an open dictionary: callers get a concrete
+// contract and SessionRecorder's wider Record<string, unknown> parameter
+// still accepts it (contravariance holds).
+export interface InvariantTelemetryPayload {
+  code: InvariantCode;
+  message: string;
+  deviceId: string | null;
+}
+
 export interface InvariantTelemetry {
-  record: (kind: string, payload: Record<string, unknown>) => void;
+  record: (kind: string, payload: InvariantTelemetryPayload) => void;
 }
 
 function violation(code: InvariantCode, message: string, deviceId?: string): InvariantViolation {
@@ -60,15 +70,20 @@ function violation(code: InvariantCode, message: string, deviceId?: string): Inv
 }
 
 export function checkInvariants(
-  ctx: InvariantContext,
+  // Nullable by contract: JS callers can pass anything; null degrades to a
+  // violation via the try/catch below, never a throw (T-TRU-12).
+  ctx: InvariantContext | null,
   telemetry?: InvariantTelemetry,
 ): InvariantViolation[] {
   let out: InvariantViolation[];
+
   try {
+    if (ctx === null) throw new Error("null context");
     out = runChecks(ctx);
   } catch {
     out = [violation("finite-beats", "invariant check failed internally")];
   }
+
   if (telemetry !== undefined) {
     try {
       for (const v of out) {
@@ -82,6 +97,7 @@ export function checkInvariants(
       // Telemetry must never crash the show.
     }
   }
+
   return out;
 }
 
@@ -95,6 +111,7 @@ function runChecks(ctx: InvariantContext): InvariantViolation[] {
   checkDeckAge(ctx, out);
   checkBrightness(ctx, out);
   checkCloud(ctx, out);
+
   return out;
 }
 
@@ -109,9 +126,11 @@ function checkPending(ctx: InvariantContext, out: InvariantViolation[]): void {
 function checkArmed(ctx: InvariantContext, out: InvariantViolation[]): void {
   for (const cmd of ctx.outgoingCommands) {
     if (ctx.armedDevices[cmd.deviceId] !== true) continue;
+
     if (cmd.kind === "turn" && cmd.on === false) {
       out.push(violation("armed-power", "turn off sent to an armed fixture", cmd.deviceId));
     }
+
     if (cmd.kind === "colorwc" && (cmd.kelvin ?? 0) !== 0) {
       out.push(violation("armed-power", `kelvin colorwc (${cmd.kelvin}K) sent to an armed fixture`, cmd.deviceId));
     }
@@ -121,6 +140,7 @@ function checkArmed(ctx: InvariantContext, out: InvariantViolation[]): void {
 function checkZones(ctx: InvariantContext, out: InvariantViolation[]): void {
   for (const [deviceId, expected] of Object.entries(ctx.expectedZones)) {
     const actual = ctx.frameZones[deviceId];
+
     if (actual !== expected) {
       out.push(
         violation(
@@ -143,6 +163,7 @@ function checkBeats(ctx: InvariantContext, out: InvariantViolation[]): void {
   for (const beat of ctx.beats) {
     if (!Number.isFinite(beat)) {
       out.push(violation("finite-beats", "non-finite beat value in frame context"));
+
       return;
     }
   }
@@ -159,9 +180,11 @@ function checkDeckAge(ctx: InvariantContext, out: InvariantViolation[]): void {
 function checkBrightness(ctx: InvariantContext, out: InvariantViolation[]): void {
   const windowStart = ctx.nowMs - 60_000;
   let count = 0;
+
   for (const t of ctx.brightnessTimestampsMs) {
     if (t > windowStart && t <= ctx.nowMs) count += 1;
   }
+
   if (count > ctx.maxPerMinute) {
     out.push(
       violation("brightness-rate", `${count} brightness commands in the last minute, max ${ctx.maxPerMinute}`),
