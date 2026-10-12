@@ -261,6 +261,38 @@ describe("provider-manager", () => {
     expect(stopped.counters["prolinkRunning"]).toBe(0);
     expect(captured.beat).toBeNull();
   });
+  it("reports composite idle when the board is absent, connected with the hook", async () => {
+    const idle = new ProviderManager({
+      pollMs: 5,
+      readDecks: async () => [],
+      watchProlink: () => () => undefined,
+    });
+    idle.start();
+    expect(idle.providers().find((p) => p.id === "composite-flx4")).toMatchObject({
+      running: false,
+      detail: "FLX4 not present, composite idle",
+    });
+    idle.stop();
+
+    let stopped = false;
+    const svc = new ProviderManager({
+      pollMs: 5,
+      readDecks: async () => [],
+      watchProlink: () => () => undefined,
+      bootComposite: async () => ({ connected: true, portName: "DDJ-FLX4 MIDI 1", detail: "connected on DDJ-FLX4 MIDI 1" }),
+      stopComposite: async () => {
+        stopped = true;
+      },
+    });
+    svc.start();
+    await vi.waitFor(() => {
+      expect(svc.providers().find((p) => p.id === "composite-flx4")?.running).toBe(true);
+    });
+    expect(svc.providers().find((p) => p.id === "composite-flx4")?.detail).toContain("DDJ-FLX4 MIDI 1");
+    svc.stop();
+    expect(stopped).toBe(true);
+    expect(svc.providers().find((p) => p.id === "composite-flx4")?.running).toBe(false);
+  });
 });
 
 describe("midi-service", () => {

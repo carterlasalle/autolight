@@ -4,6 +4,7 @@ import type { ProviderDeckState } from "./providers.js";
 import {
   buildRkbxDatagrams,
   RkbxOscProvider,
+  sendUdpDatagrams,
 } from "./rkbx-osc.js";
 import {
   checkRkbxSetup,
@@ -197,7 +198,6 @@ describe("rkbx_link setup verification (T-LIVE-04 logic, T-LIVE-03 DoD)", () => 
     expect(checkRkbxSetup(input({ installedRekordboxVersion: "7.2.10" })).state).toBe("unsupported-version");
     expect(checkRkbxSetup(input({ packetsReceived: 0, lastAddress: null })).state).toBe("no-packets");
   });
-
   it("explains the unsupported version with the re-sign and sudo consequences", () => {
     const report = checkRkbxSetup(input({ installedRekordboxVersion: "7.2.10" }));
     expect(report.state).toBe("unsupported-version");
@@ -205,5 +205,30 @@ describe("rkbx_link setup verification (T-LIVE-04 logic, T-LIVE-03 DoD)", () => 
     expect(report.remedy).toContain("sudo");
     expect(report.steps.map((s) => s.id)).toEqual(["installed", "osc-enabled", "destination", "version", "receiving"]);
     expect(report.steps.find((s) => s.id === "receiving")?.ok).toBe(true);
+  });
+
+  it("binds the real 127.0.0.1:4460 listener and receives synthetic packets (no sidecar)", async () => {
+    const provider = new RkbxOscProvider({ bind: "127.0.0.1:4460" });
+    await provider.start();
+    try {
+      expect(provider.boundPort).toBe(4460);
+      const seen = Promise.withResolvers<void>();
+      provider.onDeckState((state) => {
+        if (state.playheadSeconds === 12.5) seen.resolve();
+      });
+      const sent = await sendUdpDatagrams(
+        [
+          { atMs: 0, bytes: encodeOscMessage({ address: "/1/time", args: [12.5] }) },
+          { atMs: 1, bytes: encodeOscMessage({ address: "/1/bpm/current", args: [128] }) },
+        ],
+        EXPECTED_DESTINATION,
+      );
+      expect(sent).toBe(2);
+      await seen.promise;
+      expect(provider.getDecks()[0]?.playheadSeconds).toBe(12.5);
+      expect(provider.getStatus().state).toBe("live");
+    } finally {
+      await provider.stop();
+    }
   });
 });

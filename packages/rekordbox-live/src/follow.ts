@@ -155,7 +155,10 @@ export function checkRkbxSetup(input: RkbxSetupInput): RkbxSetupReport {
     ok: versionOk,
     detail: versionOk
       ? `Rekordbox ${input.installedRekordboxVersion} has community offsets for rkbx_link on this OS`
-      : `Rekordbox ${input.installedRekordboxVersion} is not a version rkbx_link supports here (re-sign and sudo consequences apply to a version change)`,
+      : `Rekordbox ${input.installedRekordboxVersion} is not a version rkbx_link supports here` +
+        (input.installedRekordboxVersion.startsWith("7.2.19")
+          ? " (no 7.2.19 offsets upstream as of 2026-10-12; re-sign and sudo consequences apply to a version change)"
+          : " (re-sign and sudo consequences apply to a version change)"),
   });
   const receiving = input.packetsReceived > 0;
   steps.push({

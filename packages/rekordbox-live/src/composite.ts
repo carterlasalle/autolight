@@ -328,6 +328,27 @@ function emptyDeck(): DeckEstimate {
   };
 }
 
+// Fuse a stronger playhead with the MIDI estimate (secondary truth,
+// spec 11): AX elapsed plus the ANLZ grid is authoritative while fresh, so
+// it rebases the anchor directly; otherwise it is ignored and the composite
+// keeps its own estimate. The caller gates on `readable` plus a freshness
+// window; this function only guards null/NaN.
+export function compositeFuseAxPlayhead(input: {
+  anchorPosSeconds: number;
+  anchorAtNs: bigint;
+  axPlayheadSeconds: number | null;
+  atNs: bigint;
+}): { anchorPosSeconds: number; anchorAtNs: bigint; fused: boolean } {
+  if (input.axPlayheadSeconds === null || !Number.isFinite(input.axPlayheadSeconds)) {
+    return { anchorPosSeconds: input.anchorPosSeconds, anchorAtNs: input.anchorAtNs, fused: false };
+  }
+  return {
+    anchorPosSeconds: Math.max(0, input.axPlayheadSeconds),
+    anchorAtNs: input.atNs,
+    fused: true,
+  };
+}
+
 export class CompositeProvider extends ProviderBase {
   private readonly mapper = new DeckGenerationMapper();
   private readonly decks = new Map<CompositeDeck, DeckEstimate>([
@@ -549,7 +570,29 @@ export class CompositeProvider extends ProviderBase {
     this.touch(event.atNs);
     this.emit(this.stateFor(event.deck as CompositeDeck, event.atNs));
   }
-
+  // Fuse a stronger playhead (AX elapsed plus the ANLZ grid, gated
+  // fresh and readable by the caller): rebases the MIDI anchor directly.
+  // Stale or unreadable input returns false and leaves the estimate alone.
+  ingestAxPlayhead(deckId: CompositeDeck, axPlayheadSeconds: number | null, atNs: bigint): boolean {
+    const deck = this.decks.get(deckId);
+    if (!deck) {
+      this.ingestMalformed(`AX fusion for unknown deck ${deckId}`);
+      return false;
+    }
+    const fused = compositeFuseAxPlayhead({
+      anchorPosSeconds: deck.anchorPosSeconds,
+      anchorAtNs: deck.anchorAtNs,
+      axPlayheadSeconds,
+      atNs,
+    });
+    if (!fused.fused) return false;
+    deck.anchorPosSeconds = fused.anchorPosSeconds;
+    deck.anchorAtNs = fused.anchorAtNs;
+    deck.locked = false;
+    this.touch(atNs);
+    this.emit(this.stateFor(deckId, atNs));
+    return true;
+  }
   // Correlate pending LOAD presses with the process open files. The host
   // calls this at `live.composite.openFilePollMs`; tests call it by hand.
   pollOpenFiles(atNs?: bigint): void {

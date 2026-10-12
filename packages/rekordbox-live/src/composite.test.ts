@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   COMPOSITE_PROVIDER_ID,
   CompositeProvider,
+  compositeFuseAxPlayhead,
   correlateEnvelopes,
   estimateTempoRangePercent,
   gridBeatAt,
@@ -254,5 +255,28 @@ describe("composite-flx4 provider (T-LIVE-07)", () => {
     ];
     expect(estimateTempoRangePercent(samples)).toBeCloseTo(10, 6);
     expect(estimateTempoRangePercent([{ fader: 0.5, pitchFraction: 0 }])).toBeNull();
+  });
+  it("fuses a fresh AX playhead without overriding and ignores stale input", () => {
+    let now = 6_000_000_000_000n;
+    const provider = new CompositeProvider({
+      now: () => now,
+      resolveTrack: () => resolution("rb:fuse", false),
+      listOpenFiles: () => ["/music/fuse.mp3"],
+      libraryRoots: ["/music"],
+    });
+    provider.ingestControllerEvent({ deck: 1, control: "load", value: 1, pad: null, atNs: now });
+    now += 5_000_000n;
+    provider.pollOpenFiles(now);
+    provider.ingestControllerEvent({ deck: 1, control: "play", value: 1, pad: null, atNs: now });
+    now += 1_000_000_000n;
+    // Fresh readable AX rebases the MIDI anchor to the stronger playhead.
+    expect(provider.ingestAxPlayhead(1, 12.5, now)).toBe(true);
+    provider.tick(now);
+    expect(provider.getDecks().find((d) => d.deckId === 1)?.playheadSeconds).toBeCloseTo(12.5, 6);
+    // Stale/unreadable AX leaves the estimate alone.
+    expect(provider.ingestAxPlayhead(1, null, now)).toBe(false);
+    provider.tick(now);
+    expect(provider.getDecks().find((d) => d.deckId === 1)?.playheadSeconds).toBeCloseTo(12.5, 6);
+    expect(compositeFuseAxPlayhead({ anchorPosSeconds: 3, anchorAtNs: now, axPlayheadSeconds: Number.NaN, atNs: now }).fused).toBe(false);
   });
 });

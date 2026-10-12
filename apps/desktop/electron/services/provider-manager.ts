@@ -26,28 +26,43 @@ function runOsascript(args: string[]): Promise<string> {
 }
 
 export async function pollAxDecks(): Promise<AxDeckReading[]> {
-  // Rekordbox exposes no scriptable windows list; probe both deck clocks.
+  // Rekordbox nests the deck clocks inside group 2 of its named window, and
+  // System Events' `every static text` is NOT recursive, so the old flat
+  // `window 1` query always came back empty (and `window 1` breaks whenever
+  // a transient dialog/tooltip becomes frontmost). Query the named window.
+  // Each deck exposes remaining+elapsed as adjacent pairs with the fraction
+  // in its own static text: `-02:56, .8, 00:01, .2` (verified live 7.2.19).
   // Empty output = unreadable (permissions or layout change), not zero.
   const out = await runOsascript([
     "-e",
-    'tell application "System Events" to get value of every static text of window 1 of (first process whose name is "rekordbox")',
+    'tell application "System Events" to get value of every static text of group 2 of window "rekordbox" of (first process whose name is "rekordbox")',
   ]);
-  if (!out) {
-    return [
-      { deckId: 1, elapsedSeconds: null, playing: null, readable: false },
-      { deckId: 2, elapsedSeconds: null, playing: null, readable: false },
-    ];
-  }
-  // Parse mm:ss / elapsed tokens; fall back to unreadable per-deck.
-  const times = [...out.matchAll(/(\d+):(\d{2}(?:\.\d+)?)/g)].map((m) =>
-    Number(m[1]) * 60 + Number(m[2]),
+  const decks = [...out.matchAll(/(-?\d+:\d{2}),\s*\.(\d)\s*,\s*(\d+:\d{2}),\s*\.(\d)/g)].map(
+    (m) => ({ remaining: clockToSeconds(m[1] ?? ""), elapsed: clockToSeconds(m[3] ?? "") }),
   );
-  return [1, 2].map((deckId, i) => ({
-    deckId,
-    elapsedSeconds: times[i] ?? null,
-    playing: times[i] !== undefined ? true : null,
-    readable: times[i] !== undefined,
-  }));
+  return [1, 2].map((deckId) => {
+    const deck = decks[deckId - 1];
+    const elapsedSeconds = deck?.elapsed ?? null;
+    // Both clocks at zero is the "Not Loaded" idle state, not a track at
+    // 0:00 (a loaded deck at cue shows remaining=-duration). Report it
+    // unreadable so callers hold preview instead of beat-matching zero.
+    const loaded =
+      elapsedSeconds !== null && !(elapsedSeconds === 0 && (deck?.remaining ?? 0) === 0);
+    return {
+      deckId,
+      elapsedSeconds: loaded ? elapsedSeconds : null,
+      // AX exposes no play-state value; callers diff elapsed across polls.
+      playing: null,
+      readable: loaded,
+    };
+  });
+}
+
+function clockToSeconds(text: string): number | null {
+  const m = /(-?)(\d+):(\d{2})/.exec(text);
+  if (!m) return null;
+  const seconds = Number(m[2]) * 60 + Number(m[3]);
+  return m[1] === "-" ? -seconds : seconds;
 }
 
 // PRO DJ LINK Virtual-CDJ capture (main process, ADR-001 slice 2, after
@@ -77,7 +92,11 @@ export function startProlinkWatch(onBeat: (beat: number, bpm: number | null) => 
         onBeat(nextBeat, bpm);
       }
     });
-    socket.on("error", () => undefined);
+    socket.on("error", (err: Error) => {
+      // EADDRINUSE/ENOTSUP here means Rekordbox owns :50001 without sharing:
+      // the observer is deaf, not broken. Record it where Diagnostics reads.
+      prolinkBindError = err instanceof Error ? err.message : String(err);
+    });
     socket.bind(50001);
   } catch {
     socket?.close();
@@ -90,16 +109,35 @@ export function startProlinkWatch(onBeat: (beat: number, bpm: number | null) => 
   };
 }
 
+// Last :50001 bind failure, when the observer is deaf. Null means the bind
+// held (or was never attempted). Read by providers() so Diagnostics names the
+// cause instead of showing a silent "no link peer".
+let prolinkBindError: string | null = null;
+
+export function prolinkBindFailure(): string | null {
+  return prolinkBindError;
+}
+
 export interface ProviderManagerOptions {
   // AX poll period; the ADR-001 slice runs at 1 Hz.
   pollMs?: number;
   // Test seams: production uses the osascript poller and the :50001 observer.
   readDecks?: () => Promise<AxDeckReading[]>;
   watchProlink?: (onBeat: (beat: number, bpm: number | null) => void) => () => void;
+  // Composite FLX4 boot hook: production wires the plug-and-play host from
+  // ./composite-flx4-boot.js; omitted in tests, which assert the idle report.
+  bootComposite?: () => Promise<CompositeBootResult>;
+  stopComposite?: () => Promise<void>;
+}
+
+export interface CompositeBootResult {
+  connected: boolean;
+  portName: string | null;
+  detail: string;
 }
 
 export interface ProviderReport {
-  id: "rekordbox-ax" | "rekordbox-prolink";
+  id: "rekordbox-ax" | "rekordbox-prolink" | "composite-flx4";
   running: boolean;
   detail: string;
 }
@@ -111,6 +149,8 @@ export class ProviderManager implements Service {
   private stopProlink: (() => void) | null = null;
   private readings: AxDeckReading[] = [];
   private observation: ProlinkObservation = { peerPresent: false, beat: null, playing: null, bpm: null };
+  private composite: CompositeBootResult | null = null;
+  private compositeStarted = false;
   private readonly opts: ProviderManagerOptions;
 
   constructor(opts: ProviderManagerOptions = {}) {
@@ -139,6 +179,19 @@ export class ProviderManager implements Service {
         this.tracker.count("prolinkBeats");
       });
     }
+    if (!this.compositeStarted && this.opts.bootComposite !== undefined) {
+      this.compositeStarted = true;
+      const boot = this.opts.bootComposite;
+      void boot()
+        .then((result) => {
+          this.composite = result;
+          this.tracker.count("compositeBoots");
+        })
+        .catch(() => {
+          // Board absent is steady state: the idle report below covers it.
+          this.compositeStarted = false;
+        });
+    }
     this.tracker.set("running", "AX poll at 1 Hz, ProLink observer on :50001 (observe only)");
     return this.status();
   }
@@ -148,6 +201,12 @@ export class ProviderManager implements Service {
     this.axTimer = null;
     this.stopProlink?.();
     this.stopProlink = null;
+    if (this.opts.stopComposite !== undefined) {
+      const stopComposite = this.opts.stopComposite;
+      void stopComposite().catch(() => undefined);
+    }
+    this.composite = null;
+    this.compositeStarted = false;
     this.tracker.set("stopped");
     return this.status();
   }
@@ -171,8 +230,15 @@ export class ProviderManager implements Service {
       },
       {
         id: "rekordbox-prolink",
-        running: this.stopProlink !== null,
-        detail: this.observation.peerPresent ? `peer present, bpm ${this.observation.bpm ?? "unknown"}` : "no link peer",
+        running: this.stopProlink !== null && prolinkBindFailure() === null,
+        detail: prolinkBindFailure() !== null
+          ? `deaf on :50001 (${prolinkBindFailure()}); Rekordbox owns the port without sharing — use AX beat or rkbx_link OSC`
+          : this.observation.peerPresent ? `peer present, bpm ${this.observation.bpm ?? "unknown"}` : "no link peer",
+      },
+      {
+        id: "composite-flx4",
+        running: this.composite?.connected ?? false,
+        detail: this.composite?.detail ?? "FLX4 not present, composite idle",
       },
     ];
   }

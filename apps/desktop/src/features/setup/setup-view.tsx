@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { SETUP_EVIDENCE_STEPS, setupEvidence, setupProgress, type EvidenceStep } from "../../routes/setup/setup-model.js";
 import { RkbxSetupAssistant } from "./rkbx-setup-panel.js";
 import { SIMULATOR_SCENARIOS, type SimulatorScenario } from "../../routes/settings/simulator-mode.js";
-const STEP_LABELS: Record<EvidenceStep, { title: string; hint: string; route: "setup" | "library" | "venue" | "inspector" | "live" }> = {
+export const STEP_LABELS: Record<EvidenceStep, { title: string; hint: string; route: "setup" | "library" | "venue" | "inspector" | "live" }> = {
   dj: { title: "DJ link", hint: "Rekordbox or Serato deck state flowing", route: "live" },
   controller: { title: "Controller", hint: "No controller evidence over IPC yet — stays pending", route: "setup" },
   library: { title: "Library", hint: "At least one track resolved", route: "library" },
@@ -91,7 +91,7 @@ export function SetupView(): JSX.Element {
             return (
               <li key={s} aria-current={isNext ? "step" : undefined} className="flex min-w-0 flex-wrap items-center gap-2">
                 <span className="min-w-0 flex-1 truncate" title={`${meta.title} — ${ready ? "ready" : meta.hint}`}>{ready ? "✓ " : ""}{meta.title}<span className="text-muted-foreground"> — {ready ? "ready" : meta.hint}</span></span>
-                {!ready ? <Button size="sm" variant="outline" onClick={() => { set({ route: meta.route }); }}>Open {meta.title}</Button> : null}
+                {!ready && meta.route !== "setup" ? <Button size="sm" variant="outline" onClick={() => { set({ route: meta.route }); }}>Open {meta.title}</Button> : null}
               </li>
             );
           })}

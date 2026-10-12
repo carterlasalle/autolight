@@ -25,7 +25,11 @@ export type RkbxPlatform = "macos" | "windows";
 
 // Community offsets reported for rkbx_link (F-LIVE-16, OD-01): macOS Apple
 // Silicon covers 7.2.8, 7.2.17 and 7.2.18. Windows covers 7.2.10 through a
-// paid rkbx_link license. Anything else is unsupported until proven.
+// paid rkbx_link license.
+//
+// 7.2.19 honesty: ~/rkbx_link/data/offsets-macos (checked 2026-10-12) holds
+// sections for 7.2.8, 7.2.17 and 7.2.18 only, so 7.2.19 reports
+// unsupported-version and 7.2.18 stays supported.
 export const RKBX_MACOS_VERSIONS: readonly string[] = ["7.2.8", "7.2.17", "7.2.18"];
 export const RKBX_WINDOWS_VERSIONS: readonly string[] = ["7.2.10"];
 

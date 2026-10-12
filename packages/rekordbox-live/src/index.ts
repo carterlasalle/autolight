@@ -154,3 +154,4 @@ export * from "./ax.js";
 export * from "./ax-provider.js";
 export * from "./agent-api.js";
 export * from "./composite.js";
+export * from "./composite-boot.js";

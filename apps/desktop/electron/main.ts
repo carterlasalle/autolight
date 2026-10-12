@@ -6,6 +6,7 @@ import {
   createShowService,
   getShowService,
   startAxLoop,
+  startCompositeFlx4,
   startProlink,
   quitApp,
   setShowAcceptingUi,
@@ -295,6 +296,7 @@ export async function boot(): Promise<void> {
   createShowService();
   startAxLoop();
   startProlink();
+  startCompositeFlx4();
   // Graceful shutdown (§133): before-quit and window close both run the
   // SHUTDOWN_ORDER steps with per-step timeouts, then quitApp exits.
   const runGracefulShutdown = (): Promise<void> => {

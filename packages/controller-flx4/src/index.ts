@@ -65,8 +65,10 @@ export function confirmAudible(midiFader: number | null, djWeight: number): bool
 }
 
 // Deck-aware map and decoder (T-FLX-02), controller state (T-FLX-03),
-// runtime signals (T-FLX-04) and the MIDI backends (T-FLX-01).
+// runtime signals (T-FLX-04), MIDI backends (T-FLX-01) and the composite
+// feed/wiring seam (T-FLX-06).
 export * from "./map.js";
 export * from "./state.js";
 export * from "./signals.js";
 export * from "./backend.js";
+export * from "./integration.js";

@@ -107,6 +107,18 @@ describe("rkbx_link setup assistant (T-LIVE-04)", () => {
     expect(RKBX_OS_NOTES.windows).toContain("paid");
   });
 
+  it("is honest about 7.2.19: unsupported, 7.2.18 supported, offsets absent as of 2026-10-12", () => {
+    // Observed on the machine: ~/rkbx_link/data/offsets-macos holds sections
+    // for 7.2.8, 7.2.17 and 7.2.18 only.
+    expect(isRKBXVersionSupported("7.2.18", "macos")).toBe(true);
+    expect(isRKBXVersionSupported("7.2.19", "macos")).toBe(false);
+    const snapshot = summarizeRKBXAssistant({ ...baseInput(), installedVersion: "7.2.19" });
+    expect(snapshot.report.state).toBe("unsupported-version");
+    expect(snapshot.capability).toBe("UNAVAILABLE_ON_THIS_DEVICE");
+    const versionStep = snapshot.report.steps.find((s) => s.id === "version");
+    expect(versionStep?.detail).toContain("no 7.2.19 offsets upstream as of 2026-10-12");
+  });
+
   it("explains re-sign and sudo in plain words with the project link", () => {
     expect(RKBX_RESIGN_COPY).toContain("re-sign");
     expect(RKBX_SUDO_COPY).toContain("sudo");

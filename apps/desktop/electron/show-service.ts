@@ -106,6 +106,33 @@ export function startProlink(): void {
     svc.prolink = { beat, bpm, peerPresent: true };
   });
 }
+// Composite FLX4 plug-and-play host: board absent logs idle and boot
+// proceeds to AX/prolink unchanged; plug-in activates via hotplug poll.
+let compositeStarted = false;
+export function startCompositeFlx4(): void {
+  if (compositeStarted) return;
+  compositeStarted = true;
+  void import("@autolight/rekordbox-live").then(
+    (live) =>
+      live
+        .startCompositeFlx4Boot({
+          log: (message: string) => console.info(`[composite-flx4] ${message}`),
+        })
+        .catch(() => {
+          compositeStarted = false;
+        }),
+    () => {
+      compositeStarted = false;
+    },
+  );
+}
+export function stopCompositeFlx4(): void {
+  compositeStarted = false;
+  void import("@autolight/rekordbox-live").then(
+    (live) => live.stopCompositeFlx4Boot().catch(() => undefined),
+    () => undefined,
+  );
+}
 export function stopAxLoop(): void {
   if (axTimer !== null) {
     clearInterval(axTimer);
@@ -136,6 +163,7 @@ export function quitApp(): void {
   try {
     stopAxLoop();
     stopProlink();
+    stopCompositeFlx4();
   } finally {
     app.quit();
   }
@@ -246,8 +274,10 @@ export function applyCrashPolicy(opts: CrashPolicyOptions): void {
 export function restartShowHost(): void {
   stopAxLoop();
   stopProlink();
+  stopCompositeFlx4();
   startAxLoop();
   startProlink();
+  startCompositeFlx4();
   getShowService().recorder.record("crash/host-restarted", {});
 }
 
@@ -274,7 +304,7 @@ export function runShutdown(opts: ShutdownOptions): Promise<void> {
     { name: "freeze-ui", run: () => setShowAcceptingUi(false) },
     { name: "ending-look", run: () => applyEndingLook("blackout") },
     { name: "disarm", run: () => disarmStreams() },
-    { name: "dj-adapters", run: () => { stopAxLoop(); stopProlink(); } },
+    { name: "dj-adapters", run: () => { stopAxLoop(); stopProlink(); stopCompositeFlx4(); } },
     { name: "analysis", run: () => svc.recorder.record("shutdown/analysis-stopped", {}) },
     { name: "flush-db", run: () => flushConfig() },
     { name: "workers", run: () => { stopAxLoop(); stopProlink(); } },

@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { summarizeRKBXAssistant } from "@autolight/rekordbox-live/setup-assistant";
 import { RkbxSetupPanel } from "./rkbx-setup-panel.js";
+import { STEP_LABELS } from "./setup-view.js";
 
 describe("RkbxSetupPanel (T-LIVE-04)", () => {
   it("renders the receiving state with rate, last address, remedy-free copy and the project link", () => {
@@ -20,8 +21,19 @@ describe("RkbxSetupPanel (T-LIVE-04)", () => {
     expect(html).toContain("/1/time");
     expect(html).toContain("https://github.com/grufkork/rkbx_link");
     expect(html).toContain("sudo");
+    // Project link must resolve (curled 200 at author time): single canonical URL.
+    expect(html).toContain('href="https://github.com/grufkork/rkbx_link"');
   });
 
+  it("step buttons route somewhere real: dj goes live, controller has no self-route button", () => {
+    // DJ link routes to the live screen (the deck-state surface); controller has
+    // no IPC evidence source and stays on setup, so the dead-end "Open Controller"
+    // self-route button is suppressed (route guard in setup-view).
+    expect(STEP_LABELS.dj.route).toBe("live");
+    expect(STEP_LABELS.controller.route).toBe("setup");
+    expect(STEP_LABELS.library.route).toBe("library");
+    expect(STEP_LABELS.lights.route).toBe("venue");
+  });
   it("shows the specific missing step and UNAVAILABLE_ON_THIS_DEVICE when blocked", () => {
     const noPackets = summarizeRKBXAssistant({
       configPath: "/Users/owner/rkbx_link",
