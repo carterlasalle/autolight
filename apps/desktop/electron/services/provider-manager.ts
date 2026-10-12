@@ -17,6 +17,8 @@ export interface AxDeckReading {
   readable: boolean;
 }
 
+import { connect } from "node:net";
+
 function runOsascript(args: string[]): Promise<string> {
   const { promise, resolve } = Promise.withResolvers<string>();
   execFile("osascript", args, { timeout: 8000 }, (err, stdout) => {
@@ -25,15 +27,52 @@ function runOsascript(args: string[]): Promise<string> {
   return promise;
 }
 
+// ax-decks-helper (tools/ax-helper): a signed, approvable binary that reads
+// the deck clocks and serves JSON on 127.0.0.1:45994. The Electron dev binary
+// can never appear in Automation approvals, so its osascript calls always
+// fail there; the helper CAN be approved once and serves every backend.
+interface HelperDeck { deckId: number; elapsed: number | null; remaining: number | null }
+
+function pollHelper(port = 45994, timeoutMs = 3000): Promise<HelperDeck[] | null> {
+  const { promise, resolve } = Promise.withResolvers<HelperDeck[] | null>();
+  const sock = connect(port, "127.0.0.1", () => { sock.write("poll\n"); });
+  let buf = "";
+  const done = (v: HelperDeck[] | null): void => {
+    try { sock.destroy(); } catch { /* already closed */ }
+    resolve(v);
+  };
+  const timer = setTimeout(() => done(null), timeoutMs);
+  sock.on("data", (d) => {
+    buf += d.toString();
+    if (!buf.includes("\n")) return;
+    clearTimeout(timer);
+    try {
+      const parsed = JSON.parse(buf.trim()) as unknown;
+      if (!Array.isArray(parsed)) return done(null);
+      done((parsed as Record<string, unknown>[]).map((r) => ({
+        deckId: typeof r["deckId"] === "number" ? r["deckId"] as number : 0,
+        elapsed: typeof r["elapsed"] === "number" ? r["elapsed"] as number : null,
+        remaining: typeof r["remaining"] === "number" ? r["remaining"] as number : null,
+      })));
+    } catch { done(null); }
+  });
+  sock.on("error", () => { clearTimeout(timer); done(null); });
+  return promise;
+}
 export async function pollAxDecks(): Promise<AxDeckReading[]> {
-  // Rekordbox nests the deck clocks inside group 2 of its window, and
-  // System Events' `every static text` is NOT recursive, so the old flat
-  // `window 1` query always came back empty. Name resolution (`window
-  // "rekordbox") flakes with -1728 while `every window` by reference holds,
-  // so walk windows by reference (verified live 7.2.19: 102 texts in group 2).
-  // Each deck exposes remaining+elapsed as adjacent pairs with the fraction
-  // in its own static text: `-02:56, .8, 00:01, .2`. Empty output means
-  // unreadable (permissions or layout change), not zero.
+  // Helper first: the signed ax-decks-helper serves decks the dev binary
+  // can never read itself. osascript stays as the fallback for packaged
+  // builds where the app itself carries the Automation approval.
+  const helped = await pollHelper();
+  if (helped !== null && helped.length > 0) {
+    return [1, 2].map((deckId) => {
+      const deck = helped.find((d) => d.deckId === deckId);
+      const elapsedSeconds = deck?.elapsed ?? null;
+      const loaded = elapsedSeconds !== null && !(elapsedSeconds === 0 && (deck?.remaining ?? 0) === 0);
+      return { deckId, elapsedSeconds: loaded ? elapsedSeconds : null, playing: null, readable: loaded };
+    });
+  }
+  // osascript fallback for packaged builds carrying their own approval.
   const script = [
     'tell application "System Events"',
     '  set o to ""',
