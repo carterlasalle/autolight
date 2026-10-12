@@ -55,8 +55,10 @@ import {
 
 /** Provider id used by the manager and by `live.provider` selection. */
 export const SERATO_REMOTE_PROVIDER_ID = "serato-remote";
+
 /** Config default for `serato.master.inferHoldMs` (unmeasured, wp09 section 4). */
 export const SERATO_MASTER_INFER_HOLD_MS = 750;
+
 /** A playhead sample older than this does not count toward the update rate. */
 const RATE_WINDOW_MS = 2000;
 
@@ -127,13 +129,16 @@ export class SeratoRemoteProvider extends ProviderBase {
   protected override async onStart(): Promise<void> {
     if (this.client) return;
     this.setStatus({ state: "starting" });
+
     const client = this.options.client ?? new SeratoRemoteClient({
       peerName: this.options.peerName ?? "autolight",
       port: this.options.port ?? 0,
       host: this.options.host ?? "0.0.0.0",
     });
+
     this.client = client;
     this.attach(client);
+
     try {
       await client.start();
     } catch (err) {
@@ -142,6 +147,7 @@ export class SeratoRemoteProvider extends ProviderBase {
       this.setStatus({ state: "failed", error: message });
       throw err;
     }
+
     this.setStatus({ state: "live", updateHz: this.updateHz(), ageMs: 0 });
   }
 
@@ -151,6 +157,7 @@ export class SeratoRemoteProvider extends ProviderBase {
     this.advertised = null;
     this.peer = null;
     this.crossfader = null;
+
     if (client) await client.stop();
   }
 
@@ -204,52 +211,70 @@ export class SeratoRemoteProvider extends ProviderBase {
   ingestFrame(bytes: Uint8Array, atNs?: bigint): ProviderDeckState[] {
     const at = atNs ?? this.now();
     let messages: OscMessage[];
+
     try {
       messages = this.frameReader.push(Buffer.from(bytes));
     } catch (err) {
       this.markRejected(err instanceof Error ? err.message : String(err));
+
       return [];
     }
+
     const touched = new Set<number>();
     let mixerTouched = false;
+
     for (const message of messages) {
       const deckId = this.applyStatusMessage(message, at);
+
       if (deckId === "mixer") mixerTouched = true;
       else if (deckId !== null) touched.add(deckId);
     }
+
     if (mixerTouched) for (let deckId = 1; deckId <= NUM_REMOTE_DECKS; deckId += 1) {
       if (this.accumulators.has(deckId)) touched.add(deckId);
     }
+
     const states = [...touched].sort((a, b) => a - b).map((deckId) => this.publish(deckId, at));
+
     if (states.length > 0) this.setStatus({ state: "live", updateHz: this.updateHz(), ageMs: 0 });
+
     return states;
   }
 
   /** Apply one decoded `/Status/...` message; returns the deck or "mixer". */
   applyStatusMessage(message: OscMessage, atNs: bigint): number | "mixer" | null {
     const { address, args } = message;
+
     if (address === "/Status/Video/Mixer/Crossfader") {
       const value = floatArg(args, 0);
+
       if (value === null) return null;
       this.crossfader = value;
+
       return "mixer";
     }
+
     const raw = intArg(args, 0);
+
     if (raw === null || raw < 0 || raw > NUM_REMOTE_DECKS) return null;
     const deckId = raw === NUM_REMOTE_DECKS ? NUM_REMOTE_DECKS : raw + 1;
     const acc = this.accumulatorFor(deckId);
+
     switch (address) {
       case "/Status/Deck/Song/Title":
         acc.track = { ...(acc.track ?? {}), title: stringArg(args, 1) ?? undefined };
         this.noteTrackFieldsChanged(deckId, atNs);
+
         return deckId;
       case "/Status/Deck/Song/Artist":
         acc.track = { ...(acc.track ?? {}), artist: stringArg(args, 1) ?? undefined };
         this.noteTrackFieldsChanged(deckId, atNs);
+
         return deckId;
       case "/Status/Deck/Song/Filepath":
         acc.track = { ...(acc.track ?? {}), filePath: stringArg(args, 1) ?? undefined };
         this.noteTrackFieldsChanged(deckId, atNs);
+
         return deckId;
       case "/Status/Deck/Song/Valid": {
         const valid = boolArg(args, 1);
@@ -257,34 +282,45 @@ export class SeratoRemoteProvider extends ProviderBase {
         // the file path must not linger into the next generation.
         acc.track = valid === false ? { valid: false } : { ...(acc.track ?? {}), valid };
         this.noteTrackFieldsChanged(deckId, atNs);
+
         return deckId;
       }
+
       case "/Status/Deck/Playhead": {
         const position = floatArg(args, 1);
         const rate = floatArg(args, 2);
         const bpm = floatArg(args, 3);
+
         if (position === null || rate === null || bpm === null) return null;
         acc.playhead = { positionSeconds: position, playRate: rate, bpm, raw: [position, rate, bpm] };
         acc.playheadAtNs = atNs;
         const atMs = Number(atNs / 1_000_000n);
         acc.playheadSamplesMs = [...acc.playheadSamplesMs.filter((t) => atMs - t <= RATE_WINDOW_MS), atMs];
+
         return deckId;
       }
+
       case "/Status/Deck/Loop/AutoLoopOn":
         acc.loop = { ...acc.loop, autoLoopOn: boolArg(args, 1) };
+
         return deckId;
       case "/Status/Deck/Loop/BeatLength":
         acc.loop = { ...acc.loop, beatLength: floatArg(args, 1) ?? undefined };
+
         return deckId;
       case "/Status/Deck/Loop/LoopRollOn":
         acc.loop = { ...acc.loop, loopRollOn: boolArg(args, 1) };
+
         return deckId;
       case "/Status/Video/Deck/Mixer/Upfader": {
         const value = floatArg(args, 1);
+
         if (value === null) return null;
         acc.upfader = value;
+
         return deckId;
       }
+
       default:
         return null;
     }
@@ -295,17 +331,21 @@ export class SeratoRemoteProvider extends ProviderBase {
       this.advertised = info;
       this.setStatus({ state: "live", updateHz: this.updateHz(), ageMs: 0 });
     };
+
     const onPeer = (info: SeratoRemotePeerInfo): void => {
       this.peer = info;
     };
+
     const onPeerDisconnected = (): void => {
       this.peer = null;
     };
+
     const onDeckChange = (payload: SeratoRemoteDeckChangePayload): void => {
       this.accumulatorFor(payload.deckId).track = payload.track;
       this.noteTrackFieldsChanged(payload.deckId, this.now());
       this.publish(payload.deckId, this.now());
     };
+
     const onPlayhead = (payload: SeratoRemotePlayheadPayload): void => {
       const acc = this.accumulatorFor(payload.deckId);
       acc.playhead = payload.playhead;
@@ -314,25 +354,32 @@ export class SeratoRemoteProvider extends ProviderBase {
       acc.playheadSamplesMs = [...acc.playheadSamplesMs.filter((t) => atMs - t <= RATE_WINDOW_MS), atMs];
       this.publish(payload.deckId, this.now());
     };
+
     const onLoop = (payload: SeratoRemoteLoopPayload): void => {
       this.accumulatorFor(payload.deckId).loop = { ...payload.loop };
       this.publish(payload.deckId, this.now());
     };
+
     const onMixer = (payload: SeratoRemoteMixerPayload): void => {
       if (payload.mixer.crossfader !== undefined) this.crossfader = payload.mixer.crossfader;
+
       for (let deckId = 1; deckId <= NUM_REMOTE_DECKS; deckId += 1) {
         const value = payload.mixer.upfaders[deckId];
+
         if (value !== undefined) this.accumulatorFor(deckId).upfader = value;
       }
+
       for (let deckId = 1; deckId <= NUM_REMOTE_DECKS; deckId += 1) {
         if (this.accumulators.has(deckId)) this.publish(deckId, this.now());
       }
     };
+
     const onError = (err: Error): void => {
       // A malformed frame or a peer error moves the provider to degraded and is
       // counted; it never reaches the manager as a throw (S5, S26).
       this.markRejected(err.message);
     };
+
     client.on("ready", onReady);
     client.on("peerConnected", onPeer);
     client.on("paired", onPeer);
@@ -362,10 +409,12 @@ export class SeratoRemoteProvider extends ProviderBase {
 
   private accumulatorFor(deckId: number): DeckAccumulator {
     let acc = this.accumulators.get(deckId);
+
     if (!acc) {
       acc = emptyAccumulator();
       this.accumulators.set(deckId, acc);
     }
+
     return acc;
   }
 
@@ -383,12 +432,16 @@ export class SeratoRemoteProvider extends ProviderBase {
     const acc = this.accumulatorFor(deckId);
     const nextId = this.trackHint(acc)?.id ?? null;
     const publishedId = this.decks.get(deckId)?.track?.id ?? null;
+
     if (nextId === publishedId) return;
+
     if (publishedId === null && nextId === null) return;
     const acc2 = this.accumulatorFor(deckId);
+
     const keepFreshPlayhead = nextId !== null
       && acc2.playheadAtNs !== null
       && Number(atNs - acc2.playheadAtNs) / 1e6 <= PLAYHEAD_KEEP_WINDOW_MS;
+
     this.accumulators.set(deckId, {
       ...acc2,
       loop: {},
@@ -400,6 +453,7 @@ export class SeratoRemoteProvider extends ProviderBase {
   private publish(deckId: number, atNs: bigint): ProviderDeckState {
     const acc = this.accumulatorFor(deckId);
     const playhead = acc.playhead;
+
     const hint: UpdateHint = {
       deckId,
       atNs,
@@ -413,7 +467,9 @@ export class SeratoRemoteProvider extends ProviderBase {
       crossfader: this.crossfader,
       quality: { playheadSeconds: "exact", playing: "derived", effectiveBpm: "exact" },
     };
+
     const mapped = this.mapper.update(this.id, hint);
+
     const state: ProviderDeckState = {
       ...mapped,
       source: "serato",
@@ -427,17 +483,22 @@ export class SeratoRemoteProvider extends ProviderBase {
       master: null,
       quality: { ...mapped.quality, playheadSeconds: "exact", playing: "derived", effectiveBpm: "exact" },
     };
+
     this.decks.set(deckId, state);
     this.emit(state);
+
     return state;
   }
 
   private trackHint(acc: DeckAccumulator): TrackHint | null {
     const track = acc.track;
+
     if (!track) return null;
     const filePath = track.filePath === undefined || track.filePath.length === 0 ? null : track.filePath;
+
     if (filePath === null && track.valid === false) return null;
     const id = filePath ?? `serato:${track.title ?? "unknown"}:${track.artist ?? "unknown"}`;
+
     return {
       id,
       ...(filePath ? { canonicalPath: filePath } : {}),
@@ -448,19 +509,24 @@ export class SeratoRemoteProvider extends ProviderBase {
 
   private seratoPathOf(acc: DeckAccumulator): { seratoPath?: string } {
     const filePath = acc.track?.filePath;
+
     return filePath === undefined || filePath.length === 0 ? {} : { seratoPath: filePath };
   }
 
   private updateHz(): number {
     const rates = Array.from({ length: NUM_REMOTE_DECKS }, (_, i) => this.updateHzFor(i + 1)).filter((r) => r > 0);
+
     if (rates.length === 0) return 0;
+
     return rates.reduce((a, b) => a + b, 0) / rates.length;
   }
 
   private updateHzFor(deckId: number): number {
     const samples = this.accumulators.get(deckId)?.playheadSamplesMs ?? [];
+
     if (samples.length < 2) return 0;
     const spanMs = (samples.at(-1) ?? 0) - (samples[0] ?? 0);
+
     return spanMs <= 0 ? 0 : ((samples.length - 1) * 1000) / spanMs;
   }
 }
@@ -479,25 +545,33 @@ export function seratoRemoteProviderFor(
 
 function intArg(args: readonly OscMessage["args"][number][], index: number): number | null {
   const value = args[index];
+
   if (!value) return null;
+
   if (value.type === "i") return value.value;
+
   if (value.type === "f") return Math.round(value.value);
+
   return null;
 }
 
 function floatArg(args: readonly OscMessage["args"][number][], index: number): number | null {
   const value = args[index];
+
   if (!value) return null;
+
   return value.type === "f" || value.type === "i" ? value.value : null;
 }
 
 function stringArg(args: readonly OscMessage["args"][number][], index: number): string | null {
   const value = args[index];
+
   return value !== undefined && value.type === "s" ? value.value : null;
 }
 
 /** The protocol sends booleans as floats (1.0 / 0.0). */
 function boolArg(args: readonly OscMessage["args"][number][], index: number): boolean | undefined {
   const value = floatArg(args, index);
+
   return value === null ? undefined : value >= 0.5;
 }

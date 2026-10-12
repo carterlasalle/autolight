@@ -48,10 +48,15 @@ import type {
 } from "@autolight/govee";
 
 const GLOBAL_BROADCAST = "255.255.255.255";
+
 const IPV4 = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
+
 const RUNG_GAP_MS = 60;
+
 const SAVE_THROTTLE_MS = 5000;
+
 const IP_HISTORY = 8;
+
 const RUNG_MARKS = 32;
 
 export type DiscoveryRung =
@@ -127,16 +132,22 @@ export const GOVEE_DEFAULTS = {
 export function optionsFromConfig(get: (key: string) => unknown): GoveeManagerOptions {
   const num = (key: string, fallback: number): number => {
     const v = get(key);
+
     return typeof v === "number" && Number.isFinite(v) ? v : fallback;
   };
+
   const bool = (key: string, fallback: boolean): boolean => {
     const v = get(key);
+
     return typeof v === "boolean" ? v : fallback;
   };
+
   const strings = (key: string): string[] => {
     const v = get(key);
+
     return Array.isArray(v) ? v.filter((e): e is string => typeof e === "string") : [];
   };
+
   return {
     scanPort: num("govee.lan.ports.scan", GOVEE_DEFAULTS.scanPort),
     replyPort: num("govee.lan.ports.reply", GOVEE_DEFAULTS.replyPort),
@@ -261,14 +272,18 @@ interface RungMark {
 function directedBroadcast(ip: string, netmask: string): string | null {
   const a = ip.split(".").map(Number);
   const m = netmask.split(".").map(Number);
+
   if (a.length !== 4 || m.length !== 4) return null;
   const out: number[] = [];
+
   for (let i = 0; i < 4; i++) {
     const o = a[i] ?? -1;
     const k = m[i] ?? -1;
+
     if (!Number.isInteger(o) || o < 0 || o > 255 || !Number.isInteger(k) || k < 0 || k > 255) return null;
     out.push(o | (~k & 255));
   }
+
   return out.join(".");
 }
 
@@ -276,38 +291,52 @@ function sameSubnet(ip: string, ifaceIp: string, netmask: string): boolean {
   const a = ip.split(".").map(Number);
   const b = ifaceIp.split(".").map(Number);
   const m = netmask.split(".").map(Number);
+
   if (a.length !== 4 || b.length !== 4 || m.length !== 4) return false;
+
   for (let i = 0; i < 4; i++) {
     if (((a[i] ?? -1) & (m[i] ?? 0)) !== ((b[i] ?? -2) & (m[i] ?? 0))) return false;
   }
+
   return true;
 }
+
 // T-GOV-16 network hygiene (spec 111): default bind set is private LAN
 // addresses only (RFC 1918). Anything else (public, CGNAT, unclassified) is
 // never bound: the manager refuses WAN interfaces even if selected.
 export function isPrivateIpv4(ip: string): boolean {
   const a = ip.split(".").map(Number);
+
   if (a.length !== 4) return false;
+
   for (const o of a) if (!Number.isInteger(o) || o < 0 || o > 255) return false;
   const b0 = a[0] ?? -1;
   const b1 = a[1] ?? -1;
+
   if (b0 === 10) return true;
+
   if (b0 === 172 && b1 >= 16 && b1 <= 31) return true;
+
   if (b0 === 192 && b1 === 168) return true;
+
   return false;
 }
 
 export function subnetAddress(ip: string, netmask: string): string | null {
   const a = ip.split(".").map(Number);
   const m = netmask.split(".").map(Number);
+
   if (a.length !== 4 || m.length !== 4) return null;
   const out: number[] = [];
+
   for (let i = 0; i < 4; i++) {
     const o = a[i] ?? -1;
     const k = m[i] ?? -1;
+
     if (!Number.isInteger(o) || o < 0 || o > 255 || !Number.isInteger(k) || k < 0 || k > 255) return null;
     out.push(o & k);
   }
+
   return out.join(".");
 }
 
@@ -318,12 +347,14 @@ export function firewallHints(platform: string = process.platform): string[] {
       "Accept the Local Network privacy prompt on first scan; without it discovery replies never arrive.",
     ];
   }
+
   if (platform === "win32") {
     return [
       "Allow UDP ports 4001-4003 inbound and outbound in Windows Defender Firewall.",
       "The network profile must be Private, not Public; check Settings > Network.",
     ];
   }
+
   return [
     "Allow UDP ports 4001-4003 both ways (for example: ufw allow 4001:4003/udp).",
   ];
@@ -332,6 +363,7 @@ export function firewallHints(platform: string = process.platform): string[] {
 const defaultWait = (ms: number): Promise<void> => {
   const { promise, resolve } = Promise.withResolvers<void>();
   setTimeout(resolve, Math.max(0, ms));
+
   return promise;
 };
 
@@ -344,6 +376,7 @@ let shared: GoveeLanManager | null = null;
 export function getGoveeManager(init?: GoveeManagerOptions): GoveeLanManager {
   if (!shared) shared = new GoveeLanManager(init);
   else if (init) shared.applyLiveTunables(init);
+
   return shared;
 }
 
@@ -420,12 +453,16 @@ export class GoveeLanManager implements StreamTransport {
 
   async start(): Promise<void> {
     if (this.started) return;
+
     if (this.starting) {
       await this.starting;
+
       return;
     }
+
     const gate = Promise.withResolvers<void>();
     this.starting = gate.promise;
+
     try {
       this.loadRegistry();
       const sock = createSocket("udp4");
@@ -446,10 +483,13 @@ export class GoveeLanManager implements StreamTransport {
         this.lastError = err.message;
       });
       this.replySock = sock;
+
       try {
         sock.unref?.();
       } catch { /* loop already draining; socket still works */ }
+
       const ifaces = this.eligibleInterfaces();
+
       for (const iface of ifaces) {
         try {
           sock.addMembership(MULTICAST, iface.address);
@@ -458,19 +498,23 @@ export class GoveeLanManager implements StreamTransport {
           this.multicastOk.set(iface.address, false);
         }
       }
+
       try {
         (electron as { powerMonitor?: { on: (event: string, fn: () => void) => void } }).powerMonitor?.on("resume", () => {
           this.notifyResume();
         });
       } catch { /* not under Electron (tests); resume is notified explicitly */ }
+
       this.started = true;
       this.lastError = null;
+      this.openSenders(ifaces);
       this.startDiscovery();
       gate.resolve();
     } catch (err) {
       const code = typeof err === "object" && err !== null && "code" in err
         ? (err as { code?: unknown }).code
         : null;
+
       if (code === "EADDRINUSE") {
         this.lastError =
           `govee reply port ${this.o.replyPort} is already bound: likely holders are ` +
@@ -479,35 +523,44 @@ export class GoveeLanManager implements StreamTransport {
       } else {
         this.lastError = err instanceof Error ? err.message : String(err);
       }
+
       this.replySock = null;
       gate.reject(new Error(this.lastError));
     } finally {
       this.starting = null;
     }
+
     await gate.promise;
   }
 
   stop(): void {
     this.stopDiscovery();
+
     for (const w of this.waiters.splice(0)) {
       clearTimeout(w.timer);
       w.resolve(null);
     }
+
     for (const entry of this.devices.values()) {
       this.clearStreamTimers(entry);
     }
+
     for (const s of this.senders.values()) {
       try {
         s.socket.close();
       } catch { /* already closed */ }
     }
+
     this.senders.clear();
+
     if (this.replySock) {
       try {
         this.replySock.close();
       } catch { /* already closed */ }
+
       this.replySock = null;
     }
+
     this.multicastOk.clear();
     this.started = false;
   }
@@ -553,6 +606,7 @@ export class GoveeLanManager implements StreamTransport {
     firewallHints: string[];
   } {
     const ifaces = this.eligibleInterfaces();
+
     const bound = ifaces.map((i) => ({
       name: i.name,
       address: i.address,
@@ -560,30 +614,39 @@ export class GoveeLanManager implements StreamTransport {
       subnet: subnetAddress(i.address, i.netmask),
       broadcast: i.broadcast,
     }));
+
     const onBoundSubnet = (ip: string): string | null => {
       for (const i of ifaces) {
         if (sameSubnet(ip, i.address, i.netmask)) {
           return subnetAddress(i.address, i.netmask);
         }
       }
+
       return null;
     };
+
     const isolationSuspects: { mac: string; ip: string; subnet: string | null }[] = [];
+
     for (const entry of this.devices.values()) {
       if (!entry.ip) continue;
       const subnet = onBoundSubnet(entry.ip);
+
       if (subnet === null) continue;
+
       if (entry.health === "offline" && this.scanRounds > 0) {
         isolationSuspects.push({ mac: entry.mac, ip: entry.ip, subnet });
       }
     }
+
     const multicastOk = bound.map((b) => ({
       address: b.address,
       ok: this.multicastOk.get(b.address) ?? false,
     }));
+
     const multicastFailed = multicastOk.some((m) => !m.ok);
     const sameSubnetOk = bound.length > 0;
     const firstHint = firewallHints()[0] ?? "Allow UDP ports 4001-4003 inbound and outbound.";
+
     return {
       interfaces: bound,
       refusedWan: [...this.refusedWan],
@@ -648,6 +711,7 @@ export class GoveeLanManager implements StreamTransport {
       this.retryDelayMs = this.o.retryInitialMs;
       void this.round();
     }, this.o.backgroundRescanMs);
+
     try {
       this.backgroundTimer.unref?.();
     } catch { /* process must stay alive for the show anyway */ }
@@ -655,6 +719,7 @@ export class GoveeLanManager implements StreamTransport {
 
   stopDiscovery(): void {
     this.loopLive = false;
+
     if (this.backgroundTimer !== null) {
       clearInterval(this.backgroundTimer);
       this.backgroundTimer = null;
@@ -676,6 +741,7 @@ export class GoveeLanManager implements StreamTransport {
     this.retryDelayMs = this.o.retryInitialMs;
     await this.round();
     await this.wait(Math.max(0, collectMs));
+
     return this.registrySnapshot();
   }
 
@@ -687,12 +753,17 @@ export class GoveeLanManager implements StreamTransport {
 
   sendJson(deviceId: string, text: string): void {
     const entry = this.devices.get(deviceId);
+
     if (!entry) {
       this.warn(`send to unknown device ${deviceId}: dropped (scan first)`);
+
       return;
     }
+
     const sender = this.senderFor(entry.ip);
+
     if (!sender) return;
+
     try {
       sender.socket.send(text, this.o.controlPort, entry.ip, (err: Error | null) => {
         if (err) this.noteFailure(entry, err.message);
@@ -704,20 +775,28 @@ export class GoveeLanManager implements StreamTransport {
   reply(deviceId: string, timeoutMs: number, want: "devStatus" | "any" = "any"): Promise<string | null> {
     const entry = this.devices.get(deviceId);
     const gate = Promise.withResolvers<string | null>();
+
     if (!entry) {
       gate.resolve(null);
+
       return gate.promise;
     }
+
     const resolve = gate.resolve;
+
     const timer = setTimeout(() => {
       const at = this.waiters.findIndex((w) => w.resolve === resolve);
+
       if (at >= 0) this.waiters.splice(at, 1);
       resolve(null);
     }, Math.max(1, timeoutMs));
+
     try {
       timer.unref?.();
     } catch { /* waiter still resolves on reply or stop */ }
+
     this.waiters.push({ ips: new Set([entry.ip, ...entry.ipHistory]), want, resolve, timer });
+
     return gate.promise;
   }
 
@@ -726,13 +805,16 @@ export class GoveeLanManager implements StreamTransport {
   async requestDevStatus(mac: string, opts?: { retryMs?: number; deadlineMs?: number }): Promise<DevStatusResult> {
     await this.start();
     const entry = this.require(mac);
+
     if (entry.armed) {
       return { mac, answered: false, attempts: 0, rttMs: null, status: null, skippedWhileArmed: true };
     }
+
     const retryMs = Math.max(1, opts?.retryMs ?? this.o.statusRetryMs);
     const deadlineMs = Math.max(1, opts?.deadlineMs ?? this.o.statusDeadlineMs);
     const started = this.clock();
     let attempts = 0;
+
     for (;;) {
       const sentAt = this.clock();
       attempts += 1;
@@ -740,6 +822,7 @@ export class GoveeLanManager implements StreamTransport {
         // Replies return to the sender's port, so the status request goes
         // out on the reply socket; one-way commands use the send socket.
         const sock = this.replySock;
+
         if (sock) {
           try {
             sock.send(devStatusCommand(), this.o.controlPort, entry.ip, () => undefined);
@@ -747,28 +830,36 @@ export class GoveeLanManager implements StreamTransport {
         }
       });
       const text = await this.reply(entry.mac, retryMs, "devStatus");
+
       if (text !== null) {
         let parsed: LanDeviceStatus | null = null;
+
         try {
           parsed = parseDevStatus(JSON.parse(text) as unknown);
         } catch {
           parsed = null;
         }
+
         if (parsed !== null) {
           entry.observed = parsed;
           entry.rttMs = this.clock() - sentAt;
           entry.lastSeenMs = this.clock();
           entry.consecutiveFailures = 0;
           entry.lastSuccessMs = this.clock();
+
           if (entry.health !== "online") entry.health = "online";
           this.saveRegistrySoon();
+
           return { mac, answered: true, attempts, rttMs: entry.rttMs, status: parsed, skippedWhileArmed: false };
         }
       }
+
       if (this.clock() - started + retryMs > deadlineMs) {
         this.noteFailure(entry, `devStatus unanswered after ${attempts} attempts`);
+
         return { mac, answered: false, attempts, rttMs: null, status: null, skippedWhileArmed: false };
       }
+
       await this.wait(retryMs);
     }
   }
@@ -781,6 +872,7 @@ export class GoveeLanManager implements StreamTransport {
     await this.enqueue(entry.mac, async () => {
       if (entry.armed) return;
       await this.spaced(entry);
+
       if (entry.observed?.onOff !== true) this.sendJson(entry.mac, turnCommand(true));
       await this.spaced(entry);
       this.sendJson(entry.mac, envelope(arm(true)));
@@ -794,18 +886,23 @@ export class GoveeLanManager implements StreamTransport {
     const entry = this.require(mac);
     const fps = Math.min(this.o.targetHz, Math.max(this.o.backoffMinFps, Math.round(opts.fps ?? this.o.fallbackHz)));
     const existing = entry.stream;
+
     if (existing && !entry.streamClosed && existing.rateHz === fps && existing.zones === opts.zones) {
       return this.wrapStream(entry, existing);
     }
+
     if (existing && !entry.streamClosed) {
       entry.streamClosed = true;
+
       try {
         existing.close();
       } catch { /* pacing loop already torn down */ }
     }
+
     entry.zones = opts.zones;
     entry.fps = fps;
     entry.streamDesired = true;
+
     const streamOpts: StreamOptions = {
       resolution: opts.zones,
       rateHz: fps,
@@ -813,9 +910,11 @@ export class GoveeLanManager implements StreamTransport {
       armSettleMs: 0,
       arm: false,
     };
+
     const stream = new PacingStream(entry.mac, streamOpts, this, WALL_SCHEDULER);
     entry.stream = stream;
     entry.streamClosed = false;
+
     if (entry.pendingBlackout) {
       entry.pendingBlackout = false;
       const zeros = blackoutPayload(opts.zones);
@@ -824,37 +923,49 @@ export class GoveeLanManager implements StreamTransport {
     } else if (entry.lastFrame && entry.lastFrame.length === opts.zones * 3) {
       stream.setAll(entry.lastFrame);
     }
+
     this.armKeepalive(entry);
+
     return this.wrapStream(entry, stream);
   }
 
   async pushFrame(mac: string, frame: Uint8Array): Promise<void> {
     const entry = this.require(mac);
     const zones = Math.floor(frame.length / 3);
+
     if (zones <= 0) throw new RangeError(`pushFrame needs 3 bytes per zone, got ${frame.length}`);
+
     if (entry.zones !== null && entry.zones !== zones) {
       await this.openStream(mac, { zones });
+
       return;
     }
+
     const stream = entry.stream;
+
     if (!stream || entry.streamClosed) {
       await this.openStream(mac, { zones, fps: entry.fps });
+
       return;
     }
+
     entry.lastFrame = frame.slice();
     stream.setAll(frame);
   }
 
   setZones(mac: string, zones: number): void {
     const entry = this.require(mac);
+
     if (!Number.isInteger(zones) || zones <= 0 || zones > 255) {
       throw new RangeError(`setZones needs 1..255, got ${zones} (fix: qualify the unit first)`);
     }
+
     entry.zones = zones;
   }
 
   closeStream(mac: string): void {
     const entry = this.devices.get(mac);
+
     if (!entry) return;
     this.teardownStream(entry);
     entry.streamDesired = false;
@@ -866,23 +977,31 @@ export class GoveeLanManager implements StreamTransport {
     await this.start();
     const entry = this.require(mac);
     const zones = entry.zones ?? (entry.lastFrame ? Math.floor(entry.lastFrame.length / 3) : 0);
+
     if (zones <= 0) {
       entry.pendingBlackout = true;
+
       return;
     }
+
     if (!entry.stream || entry.streamClosed) {
       await this.openStream(mac, { zones });
     }
+
     const live = this.require(mac);
+
     if (!live.stream || live.streamClosed) {
       live.pendingBlackout = true;
+
       return;
     }
+
     // Zeros go out on the wire now (blackout latency) and into the paced
     // stream (cancels any pending stale frame, keeps the channel armed).
     const zeros = blackoutPayload(live.zones ?? zones);
     this.sendRaw(mac, paint(zeros));
     live.lastFrame = zeros.slice();
+
     try {
       live.stream.setAll(zeros);
     } catch { /* zones raced; the direct zeros already went out */ }
@@ -890,6 +1009,7 @@ export class GoveeLanManager implements StreamTransport {
 
   async blackoutAll(): Promise<void> {
     await this.start();
+
     for (const mac of [...this.devices.keys()]) {
       await this.blackout(mac);
     }
@@ -899,13 +1019,17 @@ export class GoveeLanManager implements StreamTransport {
     await this.start();
     const entry = this.require(mac);
     const zones = entry.zones ?? (entry.lastFrame ? Math.floor(entry.lastFrame.length / 3) : 0);
+
     if (zones <= 0) {
       throw new Error(`whiteHit needs known zones for ${mac} (fix: openStream or setZones first)`);
     }
+
     if (!entry.stream || entry.streamClosed) {
       await this.openStream(mac, { zones });
     }
+
     const live = this.require(mac);
+
     if (!live.stream) throw new Error(`whiteHit lost the stream for ${mac} (fix: retry once)`);
     const frame = whiteHitPayload(live.zones ?? zones, intensity);
     live.lastFrame = frame.slice();
@@ -920,19 +1044,25 @@ export class GoveeLanManager implements StreamTransport {
     entry.generation += 1;
     const gapMs = 60000 / this.o.brightnessMaxPerMinute;
     const now = this.clock();
+
     if (now - entry.lastBrightnessSentMs >= gapMs && entry.brightnessTimer === null) {
       await this.sendBrightnessNow(entry, v);
+
       return;
     }
+
     entry.pendingBrightness = v;
+
     if (entry.brightnessTimer === null) {
       const delay = Math.max(0, gapMs - (now - entry.lastBrightnessSentMs));
       entry.brightnessTimer = setTimeout(() => {
         entry.brightnessTimer = null;
         const next = entry.pendingBrightness;
         entry.pendingBrightness = null;
+
         if (next !== null) void this.sendBrightnessNow(entry, next);
       }, delay);
+
       try {
         entry.brightnessTimer.unref?.();
       } catch { /* show lifetime owns the loop */ }
@@ -941,6 +1071,7 @@ export class GoveeLanManager implements StreamTransport {
 
   async dimAll(): Promise<void> {
     await this.start();
+
     for (const entry of this.devices.values()) {
       await this.sendBrightnessNow(entry, 1);
     }
@@ -948,6 +1079,7 @@ export class GoveeLanManager implements StreamTransport {
 
   disarm(mac: string): void {
     const entry = this.devices.get(mac);
+
     if (!entry) return;
     this.teardownStream(entry);
   }
@@ -963,18 +1095,24 @@ export class GoveeLanManager implements StreamTransport {
 
   backoff(mac: string): void {
     const entry = this.devices.get(mac);
+
     if (!entry) return;
     const next = Math.max(this.o.backoffMinFps, Math.floor(entry.fps / 2));
+
     if (next >= entry.fps) return;
     entry.fps = next;
+
     if (entry.health === "online") entry.health = "degraded";
     const stream = entry.stream;
+
     if (stream && !entry.streamClosed && stream.rateHz !== next && entry.zones !== null) {
       const zones = entry.zones;
       entry.streamClosed = true;
+
       try {
         stream.close();
       } catch { /* pacing loop already torn down */ }
+
       entry.stream = null;
       entry.armed = false;
       void this.openStream(mac, { zones, fps: next });
@@ -994,11 +1132,13 @@ export class GoveeLanManager implements StreamTransport {
     effectiveHz: number;
   }) | null {
     const entry = this.devices.get(mac);
+
     if (!entry) return null;
     const stream = entry.stream;
     const snap = this.snapshot(entry);
     const { requested: _requestedState, ...rest } = snap;
     void _requestedState;
+
     return {
       ...rest,
       requestedState: snap.requested,
@@ -1018,18 +1158,22 @@ export class GoveeLanManager implements StreamTransport {
     const flashMs = Math.max(0, opts?.flashMs ?? this.o.identifyFlashMs);
     const capture = await this.requestDevStatus(mac, { retryMs: 250, deadlineMs: 250 });
     const stream = entry.stream;
+
     if (entry.armed && stream && !entry.streamClosed && entry.zones !== null) {
       const zones = entry.zones;
       await this.enqueue(entry.mac, async () => {
         this.sendRaw(entry.mac, paint(whiteHitPayload(zones, 1)));
       });
       await this.wait(flashMs);
+
       const restore = entry.lastFrame && entry.lastFrame.length === zones * 3
         ? entry.lastFrame
         : blackoutPayload(zones);
+
       await this.enqueue(entry.mac, async () => {
         this.sendRaw(entry.mac, paint(restore));
       });
+
       return {
         mac,
         path: "stream",
@@ -1037,6 +1181,7 @@ export class GoveeLanManager implements StreamTransport {
         observedAnswered: capture.answered,
       };
     }
+
     const observed = capture.status;
     await this.enqueue(entry.mac, async () => {
       await this.spaced(entry);
@@ -1045,11 +1190,14 @@ export class GoveeLanManager implements StreamTransport {
       this.sendJson(entry.mac, colorCommand(255, 255, 255));
     });
     await this.wait(flashMs);
+
     if (observed === null) {
       return { mac, path: "colorwc", restored: "no-read-back", observedAnswered: false };
     }
+
     await this.enqueue(entry.mac, async () => {
       await this.spaced(entry);
+
       if (!observed.onOff) {
         this.sendJson(entry.mac, turnCommand(false));
       } else {
@@ -1058,6 +1206,7 @@ export class GoveeLanManager implements StreamTransport {
         this.sendJson(entry.mac, colorCommand(observed.color.r, observed.color.g, observed.color.b));
       }
     });
+
     return { mac, path: "colorwc", restored: "observed-state", observedAnswered: true };
   }
 
@@ -1066,15 +1215,21 @@ export class GoveeLanManager implements StreamTransport {
     const entry = this.require(mac);
     const stepMs = Math.max(0, opts?.stepMs ?? this.o.testChaseStepMs);
     const zones = entry.zones ?? (entry.lastFrame ? Math.floor(entry.lastFrame.length / 3) : 0);
+
     if (zones > 0) {
       if (!entry.stream || entry.streamClosed) {
         await this.openStream(mac, { zones });
       }
+
       const stream = this.require(mac).stream;
+
       if (!stream) throw new Error(`testChase lost the stream for ${mac} (fix: retry once)`);
       const order: number[] = [];
+
       for (let i = 0; i < zones; i++) order.push(i);
+
       for (let i = zones - 1; i >= 0; i--) order.push(i);
+
       for (const zone of order) {
         const frame = new Uint8Array(zones * 3);
         frame[zone * 3] = 255;
@@ -1084,9 +1239,12 @@ export class GoveeLanManager implements StreamTransport {
         stream.setAll(frame);
         await this.wait(stepMs);
       }
+
       return { mac, path: "stream", steps: order.length };
     }
+
     const capture = await this.requestDevStatus(mac, { retryMs: 250, deadlineMs: 250 });
+
     for (const level of [30, 65, 100]) {
       await this.enqueue(entry.mac, async () => {
         await this.spaced(entry);
@@ -1094,6 +1252,7 @@ export class GoveeLanManager implements StreamTransport {
       });
       await this.wait(stepMs);
     }
+
     if (capture.status) {
       const back = capture.status.brightness;
       await this.enqueue(entry.mac, async () => {
@@ -1101,40 +1260,56 @@ export class GoveeLanManager implements StreamTransport {
         this.sendJson(entry.mac, brightnessCommand(back));
       });
     }
+
     return { mac, path: "brightness-ramp", steps: 3 };
   }
 
   applyLiveTunables(p: Partial<GoveeManagerOptions>): void {
     const num = (v: number | undefined, min: number): number | null =>
       typeof v === "number" && Number.isFinite(v) ? Math.max(min, v) : null;
+
     const retryInitial = num(p.retryInitialMs, 100);
+
     if (retryInitial !== null) {
       this.o.retryInitialMs = retryInitial;
       this.retryDelayMs = Math.min(this.retryDelayMs, retryInitial);
     }
+
     const retryMax = num(p.retryMaxMs, 1000);
+
     if (retryMax !== null) this.o.retryMaxMs = retryMax;
     const bg = num(p.backgroundRescanMs, 1000);
+
     if (bg !== null && bg !== this.o.backgroundRescanMs) {
       this.o.backgroundRescanMs = bg;
+
       if (this.loopLive) {
         this.stopDiscovery();
         this.startDiscovery();
       }
     }
+
     const statusRetry = num(p.statusRetryMs, 1);
+
     if (statusRetry !== null) this.o.statusRetryMs = statusRetry;
     const deadline = num(p.statusDeadlineMs, 1);
+
     if (deadline !== null) this.o.statusDeadlineMs = deadline;
     const minFps = num(p.backoffMinFps, 1);
+
     if (minFps !== null) this.o.backoffMinFps = Math.round(minFps);
     const perMin = num(p.brightnessMaxPerMinute, 1);
+
     if (perMin !== null) this.o.brightnessMaxPerMinute = perMin;
     const flash = num(p.identifyFlashMs, 0);
+
     if (flash !== null) this.o.identifyFlashMs = flash;
     const step = num(p.testChaseStepMs, 0);
+
     if (step !== null) this.o.testChaseStepMs = step;
+
     if (Array.isArray(p.scanList)) this.o.scanList = [...p.scanList];
+
     if (Array.isArray(p.interfaces)) {
       this.o.interfaces = [...p.interfaces];
       this.lastIfaceSig = "";
@@ -1144,9 +1319,12 @@ export class GoveeLanManager implements StreamTransport {
 
   saveRegistryNow(): void {
     const path = this.o.registryPath;
+
     if (!path) return;
+
     try {
       mkdirSync(dirname(path), { recursive: true });
+
       const devices = [...this.devices.values()].map((e) => ({
         mac: e.mac,
         sku: e.sku,
@@ -1159,6 +1337,7 @@ export class GoveeLanManager implements StreamTransport {
         rung: e.rung,
         lastSeenMs: e.lastSeenMs,
       }));
+
       writeFileSync(path, JSON.stringify({ version: 1, devices }, null, 2), "utf8");
     } catch (err) {
       this.warn(`registry save failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -1169,10 +1348,13 @@ export class GoveeLanManager implements StreamTransport {
 
   private require(mac: string): DeviceEntry {
     const byMac = this.devices.get(mac);
+
     if (byMac) return byMac;
+
     for (const entry of this.devices.values()) {
       if (entry.ip === mac) return entry;
     }
+
     throw new Error(`unknown device ${mac} (fix: scan the LAN first)`);
   }
 
@@ -1202,6 +1384,7 @@ export class GoveeLanManager implements StreamTransport {
 
   private warn(message: string): void {
     this.warnings.push({ at: this.clock(), message });
+
     if (this.warnings.length > 100) this.warnings.splice(0, this.warnings.length - 100);
   }
 
@@ -1209,6 +1392,7 @@ export class GoveeLanManager implements StreamTransport {
     entry.consecutiveFailures += 1;
     entry.lastFailureMs = this.clock();
     entry.lastSendError = message;
+
     if (entry.consecutiveFailures >= 3 && entry.health === "online") entry.health = "degraded";
   }
 
@@ -1216,16 +1400,21 @@ export class GoveeLanManager implements StreamTransport {
     const prev = this.chains.get(mac) ?? Promise.resolve();
     const run = prev.then(work, work);
     this.chains.set(mac, run.then(() => undefined, () => undefined));
+
     return run;
   }
 
   private async spaced(entry: DeviceEntry): Promise<void> {
     const gap = this.o.minSpacingMs;
+
     if (gap <= 0) {
       entry.lastCommandAt = this.clock();
+
       return;
     }
+
     const remaining = entry.lastCommandAt + gap - this.clock();
+
     if (remaining > 0) await this.wait(remaining);
     entry.lastCommandAt = this.clock();
   }
@@ -1234,6 +1423,7 @@ export class GoveeLanManager implements StreamTransport {
     let closed = false;
     const mac = entry.mac;
     const zones = stream.zones;
+
     return {
       mac,
       zones,
@@ -1248,14 +1438,17 @@ export class GoveeLanManager implements StreamTransport {
       close: () => {
         if (closed) return;
         closed = true;
+
         if (entry.stream === stream) {
           entry.stream = null;
           entry.streamClosed = true;
           entry.streamDesired = false;
           entry.armed = false;
+
           try {
             stream.close();
           } catch { /* pacing loop already torn down */ }
+
           this.sendJson(mac, envelope(arm(false)));
         }
       },
@@ -1275,10 +1468,12 @@ export class GoveeLanManager implements StreamTransport {
     entry.streamClosed = true;
     entry.armed = false;
     this.clearStreamTimers(entry);
+
     if (stream) {
       try {
         stream.close();
       } catch { /* pacing loop already torn down */ }
+
       this.sendJson(entry.mac, envelope(arm(false)));
     }
   }
@@ -1288,6 +1483,7 @@ export class GoveeLanManager implements StreamTransport {
       clearInterval(entry.keepaliveTimer);
       entry.keepaliveTimer = null;
     }
+
     if (entry.brightnessTimer !== null) {
       clearTimeout(entry.brightnessTimer);
       entry.brightnessTimer = null;
@@ -1300,14 +1496,17 @@ export class GoveeLanManager implements StreamTransport {
       clearInterval(entry.keepaliveTimer);
       entry.keepaliveTimer = null;
     }
+
     if (this.o.keepaliveMs <= 0) return;
     entry.keepaliveTimer = setInterval(() => {
       const stream = entry.stream;
       const frame = entry.lastFrame;
+
       if (stream && !entry.streamClosed && frame) {
         this.sendRaw(entry.mac, paint(frame));
       }
     }, this.o.keepaliveMs);
+
     try {
       entry.keepaliveTimer.unref?.();
     } catch { /* show lifetime owns the loop */ }
@@ -1327,33 +1526,45 @@ export class GoveeLanManager implements StreamTransport {
         return s;
       }
     }
+
     const first = this.senders.values().next();
+
     if (!first.done) return first.value ?? null;
+
     return null;
   }
 
   private eligibleInterfaces(): { name: string; address: string; netmask: string; broadcast: string | null }[] {
     const out: { name: string; address: string; netmask: string; broadcast: string | null }[] = [];
     const all = networkInterfaces();
+
     for (const name of Object.keys(all)) {
       if (this.o.interfaces.length > 0 && !this.o.interfaces.includes(name)) continue;
       const addrs = all[name];
+
       if (!addrs) continue;
+
       for (const a of addrs) {
         if (a.family !== "IPv4") continue;
         const loopback = a.internal || a.address.startsWith("127.");
         const linkLocal = a.address.startsWith("169.254.");
+
         if (!this.o.loopbackScan && (loopback || linkLocal)) continue;
+
         if (this.o.loopbackScan && linkLocal) continue;
+
         if (!isPrivateIpv4(a.address) && !loopback) {
           if (!this.refusedWan.some((r) => r.name === name && r.address === a.address)) {
             this.refusedWan.push({ name, address: a.address });
           }
+
           continue;
         }
+
         out.push({ name, address: a.address, netmask: a.netmask, broadcast: directedBroadcast(a.address, a.netmask) });
       }
     }
+
     return out;
   }
 
@@ -1363,19 +1574,24 @@ export class GoveeLanManager implements StreamTransport {
     // One send socket per interface, reused for every command and frame
     // (T-GOV-04): the count is fixed at start, never per send.
     const wanted = ifaces.length > 0 ? ifaces : [{ name: "*", address: "", netmask: "", broadcast: null }];
+
     for (const iface of wanted) {
       const key = iface.address || "*";
+
       if (this.senders.has(key)) continue;
       const socket = createSocket("udp4");
       socket.on("error", (err: Error) => {
         this.lastError = err.message;
       });
+
       try {
         socket.setBroadcast(true);
       } catch { /* directed broadcast unavailable; multicast and unicast remain */ }
+
       try {
         socket.unref?.();
       } catch { /* loop already draining */ }
+
       this.senders.set(key, {
         socket,
         address: iface.address || null,
@@ -1386,14 +1602,17 @@ export class GoveeLanManager implements StreamTransport {
 
   private markRung(rung: DiscoveryRung): void {
     this.marks.push({ rung, at: this.clock() });
+
     if (this.marks.length > RUNG_MARKS) this.marks.splice(0, this.marks.length - RUNG_MARKS);
   }
 
   private rungForReply(atMs: number): DiscoveryRung {
     let rung: DiscoveryRung = "background";
+
     for (const mark of this.marks) {
       if (mark.at <= atMs) rung = mark.rung;
     }
+
     return rung;
   }
 
@@ -1406,53 +1625,72 @@ export class GoveeLanManager implements StreamTransport {
   }
   private async round(): Promise<void> {
     const sock = this.replySock;
+
     if (!sock) return;
+
     if (this.roundInFlight) return;
     this.roundInFlight = true;
+
     try {
       this.scanRounds += 1;
       const payload = JSON.stringify(SCAN_REQUEST);
+
       const send = (host: string, port: number): void => {
         try {
           sock.send(payload, port, host, () => undefined);
         } catch { /* unreachable host; next rung covers it */ }
       };
+
       if (this.o.multicast) {
         this.markRung("multicast");
         const ifaces = this.eligibleInterfaces();
+
         for (const iface of ifaces) {
           try {
             sock.setMulticastInterface(iface.address);
           } catch { /* default route still sends */ }
+
           send(MULTICAST, this.o.scanPort);
         }
+
         if (ifaces.length === 0) send(MULTICAST, this.o.scanPort);
         await this.wait(RUNG_GAP_MS);
       }
+
       if (this.o.perInterfaceBroadcast) {
         this.markRung("broadcast");
+
         for (const iface of this.eligibleInterfaces()) {
           if (iface.broadcast) send(iface.broadcast, this.o.scanPort);
         }
+
         await this.wait(RUNG_GAP_MS);
       }
+
       if (this.o.globalBroadcast) {
         this.markRung("global");
         send(GLOBAL_BROADCAST, this.o.scanPort);
         await this.wait(RUNG_GAP_MS);
       }
+
       if (this.o.scanList.length > 0) {
         this.markRung("scan-list");
+
         for (const target of await this.resolveScanList()) {
           send(target, this.o.scanPort);
         }
+
         await this.wait(RUNG_GAP_MS);
       }
+
       const cached = [...this.devices.values()].map((e) => e.ip).filter((ip) => ip !== "");
+
       if (cached.length > 0) {
         this.markRung("cached-unicast");
+
         for (const ip of cached) send(ip, this.o.scanPort);
       }
+
       this.checkInterfaces();
       this.markOffline();
     } finally {
@@ -1462,13 +1700,17 @@ export class GoveeLanManager implements StreamTransport {
 
   private async resolveScanList(): Promise<string[]> {
     const out: string[] = [];
+
     for (const entry of this.o.scanList) {
       const host = entry.trim();
+
       if (!host) continue;
+
       if (IPV4.test(host)) {
         out.push(host);
         continue;
       }
+
       try {
         const found = await dns.lookup(host);
         out.push(found.address);
@@ -1476,19 +1718,23 @@ export class GoveeLanManager implements StreamTransport {
         this.warn(`scan list host ${host} did not resolve (fix: check the name or use an IP)`);
       }
     }
+
     return out;
   }
 
   private checkInterfaces(): void {
     const sig = this.eligibleInterfaces().map((i) => `${i.name}=${i.address}`).join(",");
+
     if (this.lastIfaceSig !== "" && sig !== this.lastIfaceSig) {
       this.retryDelayMs = this.o.retryInitialMs;
     }
+
     this.lastIfaceSig = sig;
   }
 
   private markOffline(): void {
     const now = this.clock();
+
     for (const entry of this.devices.values()) {
       if (entry.health !== "offline" && now - entry.lastSeenMs > this.o.offlineAfterMs) {
         entry.health = "offline";
@@ -1498,15 +1744,20 @@ export class GoveeLanManager implements StreamTransport {
 
   private deliverToWaiters(senderIp: string, text: string): void {
     let cmd: unknown = null;
+
     try {
       cmd = (JSON.parse(text) as { msg?: { cmd?: unknown } }).msg?.cmd ?? null;
     } catch {
       cmd = null;
     }
+
     for (let i = this.waiters.length - 1; i >= 0; i--) {
       const waiter = this.waiters[i];
+
       if (!waiter) continue;
+
       if (waiter.want === "devStatus" && cmd !== "devStatus") continue;
+
       if (waiter.ips.has(senderIp)) {
         clearTimeout(waiter.timer);
         this.waiters.splice(i, 1);
@@ -1521,12 +1772,14 @@ export class GoveeLanManager implements StreamTransport {
         entry.lastSeenMs = atMs;
         entry.consecutiveFailures = 0;
         entry.lastSuccessMs = atMs;
+
         if (entry.health === "offline") {
           entry.health = "online";
           this.onReappear(entry);
         } else if (entry.health !== "degraded") {
           entry.health = "online";
         }
+
         return;
       }
     }
@@ -1537,17 +1790,21 @@ export class GoveeLanManager implements StreamTransport {
     const atMs = this.clock();
     this.deliverToWaiters(rinfo.address, text);
     let raw: unknown = null;
+
     try {
       raw = JSON.parse(text) as unknown;
     } catch {
       return;
     }
+
     if (typeof raw !== "object" || raw === null) return;
     const envelopeMsg = raw as { msg?: { cmd?: unknown; data?: unknown } };
     const cmd = envelopeMsg.msg?.cmd;
     const data = envelopeMsg.msg?.data as Record<string, unknown> | undefined;
+
     if (cmd === "devStatus" && data) {
       const parsed = parseDevStatus(raw);
+
       if (parsed) {
         for (const entry of this.devices.values()) {
           if (entry.ip === rinfo.address || entry.ipHistory.includes(rinfo.address)) {
@@ -1556,23 +1813,29 @@ export class GoveeLanManager implements StreamTransport {
             entry.lastSeenMs = atMs;
             entry.consecutiveFailures = 0;
             entry.lastSuccessMs = atMs;
+
             if (entry.health === "offline") {
               entry.health = "online";
               this.onReappear(entry);
             } else {
               entry.health = "online";
             }
+
             this.saveRegistrySoon();
             break;
           }
         }
       }
+
       return;
     }
+
     if (cmd === "status" && data) {
       this.touchSender(rinfo.address, atMs);
+
       return;
     }
+
     if (data && typeof data["device"] === "string" && typeof data["sku"] === "string") {
       this.noteScanData(data, rinfo.address, atMs);
     }
@@ -1583,35 +1846,44 @@ export class GoveeLanManager implements StreamTransport {
     const claimedIp = typeof data["ip"] === "string" ? (data["ip"] as string) : null;
     const ip = claimedIp ?? senderIp;
     const inferred = claimedIp === null;
+
     if (claimedIp !== null && claimedIp !== senderIp) {
       this.warn(
         `device ${mac} claims ip ${claimedIp} but the reply came from ${senderIp} ` +
         `(govee2mqtt issue 437: trusting the sender; fix: check for IP conflicts)`,
       );
     }
+
     const rung = this.rungForReply(atMs);
     const existing = this.devices.get(mac);
+
     if (existing) {
       if (claimedIp !== null && claimedIp !== senderIp) existing.disagreeCount += 1;
+
       if (existing.ip !== ip) {
         existing.ip = ip;
         existing.ipHistory = [ip, ...existing.ipHistory.filter((h) => h !== ip)].slice(0, IP_HISTORY);
       }
+
       existing.lastSeenMs = atMs;
       existing.rung = rung;
       existing.ipInferred = inferred;
       existing.consecutiveFailures = 0;
       existing.lastSuccessMs = atMs;
       const wasOffline = existing.health === "offline";
+
       if (wasOffline) {
         existing.health = "online";
         this.onReappear(existing);
       } else if (existing.health !== "degraded") {
         existing.health = "online";
       }
+
       this.saveRegistrySoon();
+
       return;
     }
+
     const entry: DeviceEntry = {
       mac,
       sku: data["sku"] as string,
@@ -1655,6 +1927,7 @@ export class GoveeLanManager implements StreamTransport {
       lastSuccessMs: atMs,
       lastFailureMs: 0,
     };
+
     entry.firmware = entry.wifiSoft || entry.bleSoft;
     this.devices.set(mac, entry);
     this.saveRegistrySoon();
@@ -1664,36 +1937,48 @@ export class GoveeLanManager implements StreamTransport {
     if (!entry.streamDesired) return;
     const now = this.clock();
     entry.rearmAt = entry.rearmAt.filter((t) => now - t < this.o.rearmWindowMs);
+
     if (entry.rearmAt.length >= this.o.maxRearmAttempts) {
       this.warn(`device ${entry.mac} reappeared but the re-arm budget is spent (fix: retry later)`);
+
       return;
     }
+
     entry.rearmAt.push(now);
     entry.reconnects += 1;
     const zones = entry.zones ?? (entry.lastFrame ? Math.floor(entry.lastFrame.length / 3) : 0);
+
     if (zones <= 0) return;
     const started = this.clock();
     void (async () => {
       const stream = entry.stream;
+
       if (stream && !entry.streamClosed) {
         entry.streamClosed = true;
+
         try {
           stream.close();
         } catch { /* pacing loop already torn down */ }
+
         entry.stream = null;
       }
+
       entry.armed = false;
       await this.ensureArmed(entry.mac);
+
       if (this.clock() - started > this.o.reconnectMaxMs) {
         this.warn(`device ${entry.mac} re-armed slower than govee.lan.reconnect.maxMs`);
       }
+
       await this.openStream(entry.mac, { zones, fps: entry.fps });
     })();
   }
 
   private loadRegistry(): void {
     const path = this.o.registryPath;
+
     if (!path || !existsSync(path)) return;
+
     try {
       const raw = JSON.parse(readFileSync(path, "utf8")) as {
         devices?: {
@@ -1702,11 +1987,14 @@ export class GoveeLanManager implements StreamTransport {
           lastSeenMs?: unknown;
         }[];
       };
+
       for (const row of raw.devices ?? []) {
         if (typeof row.mac !== "string" || typeof row.sku !== "string") continue;
+
         const history = Array.isArray(row.ipHistory)
           ? row.ipHistory.filter((h): h is string => typeof h === "string").slice(0, IP_HISTORY)
           : [];
+
         const entry: DeviceEntry = {
           mac: row.mac,
           sku: row.sku,
@@ -1750,6 +2038,7 @@ export class GoveeLanManager implements StreamTransport {
           lastSuccessMs: 0,
           lastFailureMs: 0,
         };
+
         entry.firmware = entry.wifiSoft || entry.bleSoft;
         this.devices.set(entry.mac, entry);
       }
@@ -1764,6 +2053,7 @@ export class GoveeLanManager implements StreamTransport {
       this.saveTimer = null;
       this.saveRegistryNow();
     }, SAVE_THROTTLE_MS);
+
     try {
       this.saveTimer.unref?.();
     } catch { /* save still lands on process exit paths */ }

@@ -39,10 +39,12 @@ import {
 import type { StatFile } from "./anlz.js";
 
 export type ReaderMode = "rekordbox-connect" | "pyrekordbox" | "auto";
+
 export type ActiveReader = "rekordbox-connect" | "pyrekordbox";
 
 /** Rows the service reads for snapshots and diagnostics. */
 export const SNAPSHOT_LIMIT = 5000;
+
 const DEFAULT_ENGINE: WatchEngine = "auto";
 
 export interface LibraryServiceConfig {
@@ -116,9 +118,11 @@ export class LibraryService {
 
   static async open(config: LibraryServiceConfig): Promise<LibraryService> {
     const resolved: ResolvedConfig = { ...config, mode: config.mode ?? "auto", crossCheck: config.crossCheck ?? true };
+
     if (resolved.mode === "pyrekordbox") {
       return new LibraryService(resolved, await openSidecar(resolved), "pyrekordbox");
     }
+
     try {
       const reader = await RekordboxReader.open({
         dbPath: resolved.dbPath,
@@ -126,11 +130,14 @@ export class LibraryService {
         ...(resolved.key === undefined ? {} : { key: resolved.key }),
         ...(resolved.statFile === undefined ? {} : { statFile: resolved.statFile }),
       });
+
       return new LibraryService(resolved, reader, "rekordbox-connect");
     } catch (error) {
       const recoverable =
         error instanceof LibraryDbError && (error.code === "cipher-module-missing" || error.code === "not-a-database");
+
       if (resolved.mode !== "auto" || !recoverable) throw error;
+
       return new LibraryService(resolved, await openSidecar(resolved), "pyrekordbox");
     }
   }
@@ -152,6 +159,7 @@ export class LibraryService {
 
   track(rekordboxId: string): LibraryTrack | undefined {
     const row = this.source.trackRow(rekordboxId);
+
     return row === undefined ? undefined : this.normalize(row);
   }
 
@@ -165,6 +173,7 @@ export class LibraryService {
 
   history(): LibraryHistorySession[] {
     const rows = this.source.historyRows();
+
     return rows.map((row) => mapHistoryRow(row, this.source.songHistoryRows(String(row["ID"] ?? "")).length));
   }
 
@@ -174,6 +183,7 @@ export class LibraryService {
 
   onChanged(listener: (change: LibraryChangeEvent) => void): () => void {
     this.listeners.push(listener);
+
     return () => {
       this.listeners = this.listeners.filter((entry) => entry !== listener);
     };
@@ -185,13 +195,17 @@ export class LibraryService {
       { path: this.settings.dbPath, kind: "db" },
       { path: `${this.settings.dbPath}-wal`, kind: "wal" },
     ];
+
     for (const track of tracks) {
       for (const file of [track.anlz.dat, track.anlz.ext, track.anlz.ex2]) {
         if (file !== null) files.push({ path: file.path, kind: "anlz", trackId: track.rekordboxId });
       }
+
       if (track.filePath !== null) files.push({ path: track.filePath, kind: "audio", trackId: track.rekordboxId });
     }
+
     this.watcherFiles = files;
+
     return files;
   }
 
@@ -211,11 +225,14 @@ export class LibraryService {
       const next = this.snapshotRows();
       const diff = diffLibraryRows(this.rowSnapshot, next);
       this.rowSnapshot = next;
+
       const invalidated = [
         ...new Set<InvalidationScope>([...change.invalidated, ...invalidationForDiff(diff)]),
       ].sort() as InvalidationScope[];
+
       const empty = diff.added.length + diff.removed.length + diff.changed.length === 0;
       const event: LibraryChangeEvent = { ...change, invalidated, diff: empty ? null : diff };
+
       for (const listener of this.listeners) listener(event);
     });
     await this.watcher.start();
@@ -234,10 +251,13 @@ export class LibraryService {
   /** Cross-check the TypeScript reader against the pyrekordbox sidecar (DS-15). */
   async runCrossCheck(): Promise<CrossCheck> {
     if (!this.settings.crossCheck) return { status: "disabled", mismatches: [] };
+
     if (this.activeReader === "pyrekordbox") {
       this.crossCheckResult = { status: "disabled", mismatches: [], note: "pyrekordbox is the active reader" };
+
       return this.crossCheckResult;
     }
+
     const result = await readLibraryViaSidecar(
       {
         dbPath: this.settings.dbPath,
@@ -247,6 +267,7 @@ export class LibraryService {
       },
       this.settings.sidecar ?? {},
     );
+
     if (!result.ok) {
       this.crossCheckResult = {
         status: "unavailable",
@@ -254,8 +275,10 @@ export class LibraryService {
         durationMs: result.durationMs,
         ...(result.error === undefined ? {} : { note: result.error }),
       };
+
       return this.crossCheckResult;
     }
+
     const mismatches = this.compareWithSidecar(result);
     this.crossCheckResult = {
       status: mismatches.length === 0 ? "agree" : "disagree",
@@ -264,6 +287,7 @@ export class LibraryService {
       mismatches,
       durationMs: result.durationMs,
     };
+
     return this.crossCheckResult;
   }
 
@@ -300,17 +324,22 @@ export class LibraryService {
 
   private tracksForEntries(entries: readonly PlaylistEntry[]): LibraryTrack[] {
     const rows: LibraryTrack[] = [];
+
     for (const entry of entries) {
       const track = this.track(entry.rekordboxId);
+
       if (track !== undefined) rows.push(track);
     }
+
     return rows;
   }
 
   private snapshotRows(): LibraryRowSnapshot[] {
     return this.source.trackRows({ limit: SNAPSHOT_LIMIT }).map((row) => {
       const columns: Record<string, unknown> = {};
+
       for (const [key, value] of Object.entries(row)) columns[key] = value;
+
       return { rekordboxId: String(row["ID"] ?? ""), columns };
     });
   }
@@ -319,46 +348,61 @@ export class LibraryService {
   private compareWithSidecar(result: SidecarResult): string[] {
     const mismatches: string[] = [];
     const ts = this.source.counts();
+
     if (result.counts !== undefined) {
       for (const key of ["tracks", "playlists", "historySessions", "historyEntries"] as const) {
         if (ts[key] !== result.counts[key]) mismatches.push(`${key}: ts=${ts[key]} py=${result.counts[key]}`);
       }
     }
+
     const tsPlaylists = new Map(this.playlists().map((playlist) => [playlist.id, playlist]));
+
     for (const row of result.playlists ?? []) {
       const id = String(row["ID"] ?? "");
       const mine = tsPlaylists.get(id);
+
       if (mine === undefined) {
         mismatches.push(`playlist ${id} missing from the TypeScript reader`);
         continue;
       }
+
       if (mine.name !== String(row["Name"] ?? "")) mismatches.push(`playlist ${id} name differs`);
       const pyCount = (result.songPlaylists ?? []).filter((entry) => String(entry.PlaylistID ?? "") === id).length;
+
       if (this.source.songPlaylistRows(id).length !== pyCount) mismatches.push(`playlist ${id} membership differs`);
     }
+
     for (const row of result.tracks ?? []) {
       const id = String(row["ID"] ?? "");
       const mine = this.source.trackRow(id);
+
       if (mine === undefined) {
         mismatches.push(`track ${id} missing from the TypeScript reader`);
         continue;
       }
+
       if (String(mine["AnalysisDataPath"] ?? "") !== String(row["AnalysisDataPath"] ?? "")) {
         mismatches.push(`track ${id} analysis path differs`);
       }
     }
+
     return mismatches;
   }
 }
 
 function summariseAnlz(tracks: readonly LibraryTrack[]): LibraryDiagnostics["anlz"] {
   const summary = { ok: 0, partial: 0, missing: 0, audioMissing: 0 };
+
   for (const track of tracks) {
     if (track.anlz.statuses.includes("anlz-ok")) summary.ok++;
+
     if (track.anlz.statuses.includes("anlz-partial")) summary.partial++;
+
     if (track.anlz.statuses.includes("anlz-missing")) summary.missing++;
+
     if (track.anlz.statuses.includes("audio-missing")) summary.audioMissing++;
   }
+
   return summary;
 }
 

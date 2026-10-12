@@ -21,9 +21,11 @@ export function decideUpdateCheck(options: UpdateCheckOptions): UpdateDecision {
       note: "update deferred: Live is active or a show is loaded (spec 145); status notice, no modal",
     };
   }
+
   if (!options.checkOnLaunch) {
     return { action: "skip-disabled", note: "update check off (update.checkOnLaunch)" };
   }
+
   return { action: "check", note: "checking for updates at launch" };
 }
 
@@ -33,7 +35,7 @@ export interface UpdateState {
   notice: string | null;
 }
 
-export function noteUpdateAvailable(state: UpdateState, version: string, liveActive: boolean): UpdateState {
+export function noteUpdateAvailable(version: string, liveActive: boolean): UpdateState {
   if (liveActive) {
     return {
       available: version,
@@ -41,6 +43,7 @@ export function noteUpdateAvailable(state: UpdateState, version: string, liveAct
       notice: `update ${version} available; install after Live ends (status notice only, spec 144)`,
     };
   }
+
   return { available: version, deferred: false, notice: `update ${version} available` };
 }
 

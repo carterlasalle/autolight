@@ -1,22 +1,41 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "entry": [
-    "apps/desktop/electron/main.ts",
-    "apps/desktop/electron/preload.ts",
-    "apps/desktop/src/app/main.tsx",
-    "apps/desktop/src/app/shell.tsx",
-    "packages/*/src/index.ts"
-  ],
-  "project": ["packages/*/src/**/*.ts", "apps/desktop/electron/**/*.ts", "apps/desktop/src/**/*.ts", "apps/desktop/src/**/*.tsx"],
+  "includeEntryExports": true,
+  "workspaces": {
+    ".": {
+      "entry": ["tools/**/*.mjs", "scripts/**/*.mjs"],
+      "project": ["tools/**/*.mjs", "scripts/**/*.mjs"]
+    },
+    "apps/desktop": {
+      "entry": [
+        "electron/main.ts!",
+        "electron/preload.ts!",
+        "src/app/main.tsx!",
+        "src/app/shell.tsx!",
+        "scripts/*.mjs",
+        "journeys/*.journey.ts"
+      ],
+      "project": [
+        "electron/**/*.ts!",
+        "src/**/*.{ts,tsx}!",
+        "scripts/*.mjs",
+        "journeys/**/*.ts"
+      ]
+    },
+    "packages/*": {
+      "entry": ["src/index.ts!"],
+      "project": ["src/**/*.ts!"]
+    }
+  },
   "ignore": ["packages/*/dist/**", "apps/desktop/dist/**"],
   "rules": {
-    "files": "warn",
-    "dependencies": "warn",
-    "unlisted": "error",
-    "binaries": "warn",
+    "files": "error",
+    "exports": "error",
+    "types": "error",
     "unresolved": "error",
-    "exports": "warn",
-    "types": "warn",
-    "enumMembers": "off"
+    "unlisted": "error",
+    "dependencies": "error",
+    "duplicates": "error",
+    "cycles": "warn"
   }
 }

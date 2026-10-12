@@ -3,7 +3,7 @@ import { Badge } from "../../components/ui/badge.js";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs.js";
 import { invoke, useShell } from "../../app/store.js";
 import { deckBpm } from "../../components/kit.js";
-import { DIAGNOSTIC_TABS, djEventRow, isFresh, type DjEventRow } from "../../routes/diagnostics/diagnostics-model.js";
+import { DIAGNOSTIC_TABS, isFresh } from "../../routes/diagnostics/diagnostics-model.js";
 
 function renderBpm(bpm: number | null): string {
   return bpm === null ? deckBpm(bpm) : `${deckBpm(bpm)} BPM`;
@@ -29,11 +29,14 @@ function TabMetrics({ tab, rows, fallback, sessionEvents }: {
   if (tab === "Logs") {
     return <p className="font-timing text-sm tabular-nums">Session events: {sessionEvents}</p>;
   }
+
   const wanted = TAB_ROWS[tab] ?? [];
   const found = rows.filter((r) => wanted.includes(r.label));
+
   if (found.length === 0) {
     return <p className="text-sm text-muted-foreground">{fallback ?? `${tab}: loading…`}</p>;
   }
+
   return (
     <dl className="grid grid-cols-[140px_1fr] gap-x-3 gap-y-1.5 text-sm">
       {found.map((r) => (
@@ -53,12 +56,12 @@ export function DiagnosticsView(): JSX.Element {
   const devices = useShell((s) => s.devices);
   const diagnostics = useShell((s) => s.diagnostics);
   const set = useShell((s) => s.set);
-  const [events, setEvents] = useState<DjEventRow[]>([]);
   const [seenAt, setSeenAt] = useState<number | null>(null);
   const [sessionEvents, setSessionEvents] = useState(0);
   useEffect(() => {
     let cancelled = false;
     void invoke("diagnostics/all", { version: 1 }).then((raw: unknown) => {
+      if (cancelled) return;
       const envelope = raw as { ok?: boolean; diagnostics?: { ax?: unknown; prolink?: unknown; events?: number } } | null;
       const d = envelope && envelope.ok !== false ? envelope.diagnostics : undefined;
       set({
@@ -76,11 +79,14 @@ export function DiagnosticsView(): JSX.Element {
         },
       });
       setSeenAt(Date.now());
+
       if (typeof d?.events === "number") setSessionEvents(d.events);
     });
+
     return () => { cancelled = true; };
   }, [live, bpm, devices, set]);
   const stale = seenAt !== null && !isFresh(seenAt, Date.now());
+
   const rows: { label: string; value: string }[] = [
     { label: "DJ link", value: live ? `${live.source} · deck 1 ${live.deckA.title}` : "No DJ link" },
     { label: "Beat clock", value: live?.beat !== undefined ? `beat ${deckBpm(live.beat)} @ ${renderBpm(bpm)}` : "No clock — load a track" },
@@ -91,6 +97,7 @@ export function DiagnosticsView(): JSX.Element {
     { label: "Lights", value: devices.length > 0 ? devices.map((x) => x.address).join(", ") : "No lights — scan the LAN" },
     { label: "Latency", value: "devStatus read-back verified per command" },
   ];
+
   return (
     <section className="min-w-0 rounded-xl border border-border bg-card px-4 py-3">
       <div className="mb-2 flex min-w-0 items-center gap-2">
@@ -104,32 +111,11 @@ export function DiagnosticsView(): JSX.Element {
         {DIAGNOSTIC_TABS.map((t) => (
           <TabsContent key={t} value={t}>
             {t === "DJ Events" ? (
-              events.length > 0 ? (
-                <div className="min-w-0 overflow-x-auto">
-                  <table aria-label="DJ events" className="w-full border-collapse text-sm">
-                    <thead>
-                      <tr className="text-left text-xs text-muted-foreground">
-                        <th scope="col" className="border-b py-1.5 pr-3 font-medium">Time</th>
-                        <th scope="col" className="border-b py-1.5 pr-3 font-medium">Source</th>
-                        <th scope="col" className="border-b py-1.5 pr-3 font-medium">Deck</th>
-                        <th scope="col" className="border-b py-1.5 font-medium">Event</th>
-                      </tr>
-                    </thead>
-                    <tbody className="font-timing tabular-nums">
-                      {events.map((e, i) => (
-                        <tr key={i}>
-                          <td className="border-b py-1.5 pr-3">{new Date(e.timestampMs).toLocaleTimeString()}</td>
-                          <td className="border-b py-1.5 pr-3">{e.source}</td>
-                          <td className="border-b py-1.5 pr-3">{e.deck}</td>
-                          <td className="border-b py-1.5">{e.event}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">No DJ events yet. Load a track and press play — events record to .ndjson.</p>
-              )
+              <div className="flex min-w-0 flex-col gap-1.5">
+                <p className="text-sm">{diagnostics["DJ Events"] ?? "No DJ link"}</p>
+                <p className="font-timing text-sm tabular-nums">Session events: {sessionEvents}</p>
+                <p className="text-xs text-muted-foreground">Per-event rows land here when the recorder exposes them; the count above is live.</p>
+              </div>
             ) : (
               <TabMetrics tab={t} rows={rows} fallback={diagnostics[t]} sessionEvents={sessionEvents} />
             )}

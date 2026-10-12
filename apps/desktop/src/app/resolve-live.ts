@@ -9,6 +9,7 @@ import type { DeckState, Fixture } from "@autolight/contracts";
 // blank-screens `yarn dev` (node:dgram externalized).
 import { axBeatToPlayhead, combineTransport } from "@autolight/rekordbox-live/follow";
 import { useShell, invoke, type LiveState } from "./store.js";
+
 // Live deck resolution (T-TRU-02): production path reads DeckState and
 // installed TrackModel plus ShowPlan from the show host over typed IPC.
 // No fixture fetch, no hardcoded track. Empty decks produce empty states.
@@ -33,7 +34,9 @@ function styleFor(name: string): (typeof BUILT_IN_STYLES)[keyof typeof BUILT_IN_
 
 function deckSnapshot(track: TrackModel | null, deck: { effectiveBpm: number | null } | null, section: string | undefined): { title: string; artist: string; readiness: "READY" | "NEEDS ANALYSIS"; bpm: number | null; section: string | undefined; countdown: undefined } {
   const bpm = deck?.effectiveBpm ?? track?.beatGrid.beats[0]?.bpm ?? null;
+
   if (!track) return { title: "—", artist: "", readiness: "NEEDS ANALYSIS", bpm, section, countdown: undefined };
+
   return {
     title: track.identity.title ?? track.identity.id,
     artist: track.identity.artist ?? "",
@@ -44,24 +47,31 @@ function deckSnapshot(track: TrackModel | null, deck: { effectiveBpm: number | n
   };
 }
 
-function buildLive(decks: LoadedDeck[], fixtures: Fixture[], style: string, blinder: boolean): LiveState | null {
+function buildLive(decks: LoadedDeck[], fixtures: Fixture[], blinder: boolean): LiveState | null {
   const [a, b] = [decks[0], decks[1]];
+
   if (!a) return null;
+
   const withBlinder = (plan: ShowPlan, beat: number): ShowPlan["cues"] => {
     if (!blinder) return plan.cues;
     const next = Math.ceil(beat / 32) * 32;
+
     if (plan.cues.some((c) => c.type === "white-hit" && c.startBeat === next)) return plan.cues;
+
     return [...plan.cues, { type: "white-hit", startBeat: next, durationBeats: 0.25, intensity: 1, target: "ALL", priority: 100 }];
   };
+
   const beatA = a.state.playheadSeconds;
   const beatB = b?.state.playheadSeconds ?? 1;
   const deckA = a.state;
+
   const deckB = b?.state ?? {
     source: "rekordbox" as const, deckId: 2, track: null, playing: false,
     playheadSeconds: 0, playRate: 1, effectiveBpm: null,
     loop: { active: false, startSeconds: null, endSeconds: null, beatLength: null },
     channelFader: 0, crossfader: 0, master: null, receivedAtNs: 0n,
   };
+
   const vm = liveViewModel({
     deckA, deckB,
     mixA: { state: deckA, beat: beatA, cues: withBlinder(a.plan, beatA), impactStrength: 0.5 },
@@ -69,9 +79,11 @@ function buildLive(decks: LoadedDeck[], fixtures: Fixture[], style: string, blin
     beatA, beatB, fixtures, track: a.track,
     reactiveEnergy: 0, reactiveAmount: 0,
   });
+
   const sectionA = a.track.sections.find((s) => beatA >= s.startBeat && beatA < s.endBeat);
   const sectionB = b?.track.sections.find((s) => beatB >= s.startBeat && beatB < s.endBeat);
   const bpm = deckA.effectiveBpm ?? a.track.beatGrid.beats[0]?.bpm ?? null;
+
   return {
     source: deckA.source === "serato" ? "SERATO" : "REKORDBOX",
     bpm,
@@ -85,21 +97,28 @@ function buildLive(decks: LoadedDeck[], fixtures: Fixture[], style: string, blin
 
 async function fetchShowLive(): Promise<ShowLiveResponse | null> {
   const raw = (await invoke("show/live", { version: 1 })) as unknown as ({ ok?: boolean } & ShowLiveResponse) | null;
+
   if (!raw || raw.ok === false || !Array.isArray(raw.decks)) return null;
+
   return raw;
 }
 
 export async function resolveLiveDecks(): Promise<{ live: LiveState; bpm: number | null } | null> {
   const snap = await fetchShowLive();
+
   if (!snap) return null;
   const loaded: LoadedDeck[] = [];
+
   for (const d of snap.decks) {
     if (d.track && d.plan) loaded.push({ track: d.track, plan: d.plan, deckId: d.state.deckId, state: d.state });
   }
+
   if (loaded.length === 0) return null;
   const st = useShell.getState();
-  const live = buildLive(loaded, snap.fixtures, st.style, st.blinder);
+  const live = buildLive(loaded, snap.fixtures, st.blinder);
+
   if (!live) return null;
+
   return { live, bpm: live.bpm };
 }
 
@@ -120,11 +139,14 @@ export function useLiveCursor(): void {
     let cancelled = false;
     void (async () => {
       const snap = await fetchShowLive();
+
       if (cancelled || !snap) return;
       const loaded: LoadedDeck[] = [];
+
       for (const d of snap.decks) {
         if (d.track && d.plan) loaded.push({ track: d.track, plan: d.plan, deckId: d.state.deckId, state: d.state });
       }
+
       if (loaded.length === 0) return;
       decksRef.current = loaded;
       fixturesRef.current = snap.fixtures;
@@ -133,45 +155,57 @@ export function useLiveCursor(): void {
         b: loaded[1]?.state.playheadSeconds ?? 1,
       };
     })();
+
     return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
     const timer = setInterval(() => {
       const decks = decksRef.current;
+
       if (!decks || decks.length === 0) return;
       const st = useShell.getState();
       const styleObj = styleFor(st.style);
+
       for (const d of decks) {
         const want = planShow(d.track, styleObj);
+
         if (want.seed !== d.plan.seed || want.styleId !== d.plan.styleId) d.plan = want;
       }
+
       void (invoke("follow/ax", { version: 1 }) as Promise<unknown>).then((raw: unknown) => {
         const envelope = raw as { ok?: boolean; readings?: { deckId: number; elapsedSeconds: number | null; playing: boolean | null; readable: boolean }[] } | null;
         const readings = envelope && envelope.ok !== false && Array.isArray(envelope.readings) ? envelope.readings : [];
         const grid = decks[0]?.track.beatGrid.beats ?? [];
+
         const axBeat = readings[0]?.readable
           ? axBeatToPlayhead({ deckId: 1, elapsedSeconds: readings[0]?.elapsedSeconds ?? null, playing: readings[0]?.playing ?? null, readable: true, sampledAtNs: 0n }, grid)
           : null;
+
         const combined = combineTransport({
           prolink: { beat: null, playing: null, bpm: null, peerPresent: false },
           ax: { beat: axBeat, playing: readings[0]?.playing ?? null },
           estimatedBeat: beatRef.current.a + 0.25 * ((decks[0]?.track.beatGrid.beats[0]?.bpm ?? 120) / 60),
           estimatedBpm: decks[0]?.track.beatGrid.beats[0]?.bpm ?? null,
         });
+
         const useAx = st.followMode === "ax-beat" || st.followMode === "prolink";
         const nextA = useAx && combined.beat !== null ? combined.beat : beatRef.current.a + 0.25 * ((decks[0]?.track.beatGrid.beats[0]?.bpm ?? 120) / 60) * 0.1;
         beatRef.current = { a: Math.min(nextA, grid.length || nextA), b: beatRef.current.b + 0.02 };
-        const live = buildLive(decks, fixturesRef.current, st.style, st.blinder);
+        const live = buildLive(decks, fixturesRef.current, st.blinder);
+
         if (live) {
           set({ live, bpm: live.bpm, reactiveLevel: Math.min(1, reactive * 0.2), liveBeat: live.beat ?? 0 });
+
           if (st.pendingStyle !== null && st.pendingStyle !== st.style) {
             const boundary = Math.ceil((live.beat ?? 0) / 32) * 32;
+
             if ((live.beat ?? 0) >= boundary) set({ style: st.pendingStyle, pendingStyle: null });
           }
         }
       });
     }, 250);
+
     return () => { clearInterval(timer); };
   }, [set, style, blinder, followMode, reactive]);
 }
