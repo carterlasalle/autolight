@@ -11,7 +11,7 @@ import { PARTY_PALETTES, ALT_PATTERNS } from "../../app/store.js";
 import type { AltPattern } from "../../app/store.js";
 import { trackPalette } from "../../routes/live/manual-intents.js";
 import { nextPhraseBeat } from "../../routes/live/live-fields.js";
-import { CueList, DeckPanel, FixturePreview, MasterControls, deckBpm } from "../../components/kit.js";
+import { CueList, DeckPanel, FixturePreview, MasterControls } from "../../components/kit.js";
 // Live screen (§89): status → decks + master clock → venue + upcoming →
 // emergency bar. Empty until a real show resolves — never fixture tracks.
 // Compact 32–36px controls, 12–14px text, mono for timing.
