@@ -6,6 +6,11 @@ import { Badge } from "./ui/badge.js";
 import { MetricBadge, StatusDot, deckBpm } from "./kit.js";
 import { tokens } from "../app/tokens.js";
 
+// Baked at bundle time by vite.config.ts `define` (short HEAD + dirty flag +
+// timestamp). Lets the running UI prove which commit it is.
+declare const __AUTOLIGHT_BUILD__: { sha: string; dirty: boolean; builtAt: string } | undefined;
+const BUILD_INFO: { sha: string; dirty: boolean; builtAt: string } =
+  typeof __AUTOLIGHT_BUILD__ !== "undefined" ? __AUTOLIGHT_BUILD__ : { sha: "dev", dirty: true, builtAt: "unknown" };
 // Titlebar: hiddenInset traffic lights on macOS, overlay on Win/Linux
 // (electron/main.ts). Drag region + no-drag controls per Electron docs.
 export function Titlebar(): JSX.Element {
@@ -57,11 +62,14 @@ export function Statusbar(): JSX.Element {
   const live = useShell((s) => s.live);
   const devices = useShell((s) => s.devices);
   return (
-    <footer className="flex h-8 items-center gap-3 border-t px-4 text-xs text-muted-foreground">
+    <footer className="flex h-8 min-w-0 items-center gap-3 overflow-x-clip border-t px-4 text-xs text-muted-foreground">
       <StatusDot tone={live ? "ok" : "neutral"} label={live ? live.source : "No DJ link"} />
-      <span>{live ? "Show loaded" : "No show — load a track"}</span>
-      <span>{devices.length > 0 ? `${devices.length} lights` : "No lights"}</span>
+      <span className="truncate">{live ? "Show loaded" : "No show — load a track"}</span>
+      <span className="shrink-0">{devices.length > 0 ? `${devices.length} lights` : "No lights"}</span>
       <span className="flex-1" />
+      <span className="shrink-0 font-mono" title={`built ${BUILD_INFO.builtAt}${BUILD_INFO.dirty ? " (dirty tree)" : ""}`}>
+        {BUILD_INFO.sha}{BUILD_INFO.dirty ? "*" : ""}
+      </span>
       <MetricBadge metric={{ label: "BPM", value: deckBpm(bpm), unit: "" }} />
     </footer>
   );

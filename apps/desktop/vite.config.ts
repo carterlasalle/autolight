@@ -4,8 +4,22 @@ import tailwindcss from "@tailwindcss/vite";
 import { readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-
+import { execSync } from "node:child_process";
 const root = dirname(fileURLToPath(import.meta.url));
+
+// Build SHA: short HEAD + dirty flag + timestamp, baked at bundle time so the
+// UI can prove which commit it runs. Dev and prod both get it (dev re-evaluates
+// per Vite restart; prod bakes per build).
+function buildInfo(): { sha: string; dirty: boolean; builtAt: string } {
+  let sha = "unknown";
+  let dirty = false;
+  try {
+    sha = execSync("git rev-parse --short HEAD", { cwd: root }).toString().trim();
+    dirty = execSync("git status --porcelain", { cwd: root }).toString().trim().length > 0;
+  } catch { /* not a git checkout: stay unknown */ }
+  return { sha, dirty, builtAt: new Date().toISOString() };
+}
+const info = buildInfo();
 const workspaceSrc = join(root, "..", "..", "packages");
 const workspaceAlias = Object.fromEntries(
   readdirSync(workspaceSrc).map((p) => [`@autolight/${p}`, join(workspaceSrc, p, "src", "index.ts")]),
@@ -31,6 +45,9 @@ const subpathAlias = [
 export default defineConfig({
   root: join(root, "src"),
   plugins: [react(), tailwindcss()],
+  define: {
+    __AUTOLIGHT_BUILD__: JSON.stringify(info),
+  },
   resolve: {
     alias: [
       ...subpathAlias,
