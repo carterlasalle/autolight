@@ -5,12 +5,14 @@ import { Button } from "../../components/ui/button.js";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select.js";
 import { DeviceTile } from "../../components/kit.js";
 import { deviceScreenRow, withTransportMode, type TransportMode } from "../../routes/venue/device-screens.js";
+import { RoomVenueRoute } from "../../routes/venue/index.js";
 
 // Venue (spec 98 ops live in the WP05 room editor under routes/venue/) +
 // Device screen (spec 99): tiles with measured-or-unmeasured fields plus the
 // transport mode dropdown. Empty until Scan finds real lights.
 export function VenueView(): JSX.Element {
   const s = useShell();
+  const [tab, setTab] = useState<"lights" | "room">("lights");
   const [modes, setModes] = useState<Record<string, TransportMode>>({});
   const [scanning, setScanning] = useState(false);
   const scan = (): void => {
@@ -25,11 +27,11 @@ export function VenueView(): JSX.Element {
           sku: d.name.split(" — ")[0] ?? "Govee",
           ip: d.address,
           firmware: "unknown",
-          segments: 14,
-          fps: 30,
+          segments: 0,
+          fps: 0,
           sentFrames: 0,
           supersededFrames: 0,
-          latencyMs: 25,
+          latencyMs: 0,
           health: "online",
         })),
       });
@@ -38,6 +40,14 @@ export function VenueView(): JSX.Element {
   };
   return (
     <div className="flex max-w-5xl flex-col gap-3">
+      <div role="tablist" aria-label="Venue sections" className="flex gap-2">
+        {(["lights", "room"] as const).map((t) => (
+          <Button key={t} size="sm" variant={tab === t ? "default" : "outline"} role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>
+            {t === "lights" ? "Lights" : "Room mapping"}
+          </Button>
+        ))}
+      </div>
+      {tab === "room" ? <RoomVenueRoute /> : (<>
       <Card>
         <CardHeader className="pb-2"><CardTitle className="text-[13px]">Lights{s.devices.length > 0 ? ` · ${s.devices.length} found` : ""}</CardTitle></CardHeader>
         <CardContent className="flex flex-col gap-2">
@@ -97,6 +107,7 @@ export function VenueView(): JSX.Element {
           </CardContent>
         </Card>
       )}
+      </>)}
     </div>
   );
 }

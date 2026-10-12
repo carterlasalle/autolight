@@ -5,7 +5,7 @@ import { Input } from "../../components/ui/input.js";
 import { Button } from "../../components/ui/button.js";
 import { MetricBadge, StatusDot, deckBpm } from "../../components/kit.js";
 import { libraryRowKey } from "../../routes/library/track-key.js";
-import { advanceQueue, dropFromQueue, libraryTrackRow, prioritiseQueue, queueEntry, type QueueEntry } from "../../routes/library/library-rows.js";
+import { advanceQueue, dropFromQueue, prioritiseQueue, queueEntry, type QueueEntry } from "../../routes/library/library-rows.js";
 
 // Library (spec 95) + readiness (spec 137) + preanalysis queue (spec 139).
 // Rows come from the resolved show: keyed by TrackId via track-key.ts, never
@@ -47,15 +47,15 @@ export function LibraryView(): JSX.Element {
               </thead>
               <tbody>
                 {tracks.map((t) => {
-                  const row = libraryTrackRow({ track: null, gridWarned: false, sourceMissing: false, analyzing: false, failed: null, deepAnalysis: "pending", show: "none", lastModified: null });
                   const key = t.id === "deck-a" || t.id === "deck-b" ? t.id : libraryRowKey({ trackId: t.id, title: t.title });
-                  void row;
+                  const artist = t.title.includes(" - ") ? t.title.split(" - ").slice(1).join(" - ") : "unknown artist";
+                  const ready = t.bpm !== null;
                   return (
                     <tr key={key} className={selected === t.id ? "bg-muted/50" : "cursor-pointer"} onClick={() => { set({ selectedTrackId: t.id }); }}>
                       <td className="border-b py-1.5 pr-3">{t.title || "—"}</td>
-                      <td className="border-b py-1.5 pr-3">—</td>
-                      <td className="border-b py-1.5 pr-3"><MetricBadge metric={{ label: "bpm", value: deckBpm(t.bpm), unit: "" }} /></td>
-                      <td className="border-b py-1.5 pr-3"><StatusDot tone="warn" label="NEEDS ANALYSIS" /></td>
+                      <td className="border-b py-1.5 pr-3">{artist}</td>
+                      <td className="border-b py-1.5 pr-3"><MetricBadge metric={{ label: "bpm", value: t.bpm === null ? null : deckBpm(t.bpm), unit: "" }} /></td>
+                      <td className="border-b py-1.5 pr-3"><StatusDot tone={ready ? "ok" : "warn"} label={ready ? "READY" : "NEEDS ANALYSIS"} /></td>
                       <td className="border-b py-1.5"><Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); enqueue(t.id); }}>Queue</Button></td>
                     </tr>
                   );
@@ -63,7 +63,10 @@ export function LibraryView(): JSX.Element {
               </tbody>
             </table>
           ) : (
-            <p className="text-[13px] text-muted-foreground">No tracks resolved. Load a track on a deck — rows appear after ANLZ + analysis.</p>
+            <div className="flex flex-col items-start gap-2">
+              <p className="text-[13px] text-muted-foreground">No tracks resolved. Load a track on a deck — rows appear after ANLZ + analysis.</p>
+              <Button size="sm" variant="outline" onClick={() => { set({ route: "setup" }); }}>Open Setup</Button>
+            </div>
           )}
         </CardContent>
       </Card>

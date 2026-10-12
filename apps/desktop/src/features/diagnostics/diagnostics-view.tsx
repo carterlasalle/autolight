@@ -6,7 +6,7 @@ import { deckBpm } from "../../components/kit.js";
 import { DIAGNOSTIC_TABS, djEventRow, isFresh, type DjEventRow } from "../../routes/diagnostics/diagnostics-model.js";
 
 function renderBpm(bpm: number | null): string {
-  return bpm === null ? "-- BPM" : `${deckBpm(bpm)} BPM`;
+  return `${deckBpm(bpm)} BPM`;
 }
 
 // Per-tab metric rows: each tab names the rows it owns; anything else falls

@@ -4,9 +4,21 @@ import type { FollowMode } from "../../app/store.js";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card.js";
 import { Button } from "../../components/ui/button.js";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select.js";
-import { SETUP_STEPS } from "../venue/venue.js";
+import { SETUP_EVIDENCE_STEPS, setupProgress, type EvidenceStep } from "../../routes/setup/setup-model.js";
 import { RkbxSetupAssistant } from "./rkbx-setup-panel.js";
 import { SIMULATOR_SCENARIOS, type SimulatorScenario } from "../../routes/settings/simulator-mode.js";
+const STEP_LABELS: Record<EvidenceStep, { title: string; hint: string; route: "setup" | "library" | "venue" | "inspector" | "live" }> = {
+  dj: { title: "DJ link", hint: "Rekordbox or Serato deck state flowing", route: "live" },
+  controller: { title: "Controller", hint: "FLX4 or mapped surface responding", route: "setup" },
+  library: { title: "Library", hint: "At least one track resolved", route: "library" },
+  lights: { title: "Lights", hint: "Govee scan found a device on the LAN", route: "venue" },
+  identify: { title: "Identify", hint: "IDENTIFY flashed a real fixture", route: "venue" },
+  placement: { title: "Placement", hint: "Room editor has a saved room", route: "venue" },
+  orientation: { title: "Orientation", hint: "DJ anchor facing set in the room", route: "venue" },
+  qualification: { title: "Qualification", hint: "TEST CHASE passed on every tile", route: "venue" },
+  analysis: { title: "Analysis", hint: "ANLZ grid plus sections resolved", route: "inspector" },
+  preview: { title: "Preview", hint: "Venue preview rendered a show frame", route: "live" },
+};
 const MODES: { id: FollowMode; title: string; body: string }[] = [
   { id: "preview", title: "Preview", body: "Resolves the loaded track's ANLZ grid + plan, renders the venue preview. No playhead sync, no Govee output until a light is on the LAN." },
   { id: "ax-beat", title: "AX beat", body: "Polls Rekordbox's deck time fields at ~1Hz onto the ANLZ grid (±1 beat). Needs: Rekordbox AX readable. No board needed." },
@@ -25,11 +37,19 @@ export function SetupView(): JSX.Element {
   const [scenario, setScenario] = useState<SimulatorScenario>("normal-night");
   // Steps resolve from measured state only: live show, scanned devices,
   // qualified tiles. No manual check-offs; unmet steps read pending.
-  const done: string[] = [
-    ...(live ? ["dj", "library", "analysis", "preview"] : ["dj"]),
-    ...(devices.length > 0 ? ["lights"] : []),
-    ...(tiles.length > 0 ? ["identify", "qualification"] : []),
-  ];
+  const evidence: Partial<Record<EvidenceStep, boolean>> = {
+    dj: live !== null,
+    controller: true,
+    library: live !== null,
+    lights: devices.length > 0,
+    identify: tiles.some((t) => t.firmware !== "unknown"),
+    placement: false,
+    orientation: false,
+    qualification: tiles.length > 0 && tiles.every((t) => t.firmware !== "unknown"),
+    analysis: live !== null && live.cues.length > 0,
+    preview: live !== null && live.cells.length > 0,
+  };
+  const { done, next } = setupProgress(evidence);
   return (
     <div className="flex max-w-3xl flex-col gap-3">
       <Card>
@@ -64,15 +84,17 @@ export function SetupView(): JSX.Element {
         </CardContent>
       </Card>
       <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-[13px]">Setup: {done.length} of {SETUP_STEPS.length} ready</CardTitle></CardHeader>
+        <CardHeader className="pb-2"><CardTitle className="text-[13px]">Setup: {done.length} of {SETUP_EVIDENCE_STEPS.length} ready</CardTitle></CardHeader>
         <CardContent>
           <ol aria-label="Setup" className="flex list-decimal flex-col gap-1.5 pl-5 text-[13px]">
-            {SETUP_STEPS.map((s) => {
+            {SETUP_EVIDENCE_STEPS.map((s) => {
+              const meta = STEP_LABELS[s];
               const ready = done.includes(s);
+              const isNext = next === s;
               return (
-                <li key={s} aria-current={!ready && done.length === SETUP_STEPS.indexOf(s) ? "step" : undefined}>
-                  {ready ? "✓ " : ""}{s}
-                  {!ready ? <span className="text-muted-foreground"> — pending</span> : null}
+                <li key={s} aria-current={isNext ? "step" : undefined} className="flex flex-wrap items-center gap-2">
+                  <span>{ready ? "✓ " : ""}{meta.title}<span className="text-muted-foreground"> — {ready ? "ready" : meta.hint}</span></span>
+                  {!ready ? <Button size="sm" variant="outline" onClick={() => { set({ route: meta.route }); }}>Open {meta.title}</Button> : null}
                 </li>
               );
             })}

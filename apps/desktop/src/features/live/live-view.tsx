@@ -23,11 +23,11 @@ function masterIntent(intent: "blackout" | "full" | "freeze" | "resume"): void {
 }
 
 function masterClock(bpm: number | null): string {
-  const oneDecimal = deckBpm(bpm);
-  return bpm === null ? "--.--" : `${oneDecimal}0`;
+  return bpm === null ? "unmeasured" : `${deckBpm(bpm)}0`;
 }
 
 export function LiveView({ live }: { live: LiveState | null }): JSX.Element {
+  const set = useShell((s) => s.set);
   const manual = useShell((s) => s.manual);
   const intensity = useShell((s) => s.overridesIntensity);
   if (!live) {
@@ -35,11 +35,12 @@ export function LiveView({ live }: { live: LiveState | null }): JSX.Element {
       <div className="flex flex-col gap-3">
         <Card>
           <CardHeader className="pb-1"><CardTitle>No show loaded</CardTitle></CardHeader>
-          <CardContent>
+          <CardContent className="flex flex-col items-start gap-2">
             <p className="text-[13px] text-muted-foreground">
               Load a track on a Rekordbox deck. The show appears here once the
               library resolves the ANLZ grid and the planner compiles cues.
             </p>
+            <Button size="sm" variant="outline" onClick={() => { set({ route: "setup" }); }}>Open Setup</Button>
           </CardContent>
         </Card>
         <Card>
@@ -52,7 +53,7 @@ export function LiveView({ live }: { live: LiveState | null }): JSX.Element {
   }
   return (
     <div className="flex flex-col gap-3">
-      <div className="grid grid-cols-[1fr_240px_1fr] gap-3">
+      <div className="grid grid-cols-[1fr_minmax(160px,240px)_1fr] gap-3">
         <DeckPanel
           deck={{
             title: live.deckA.title,
@@ -87,7 +88,10 @@ export function LiveView({ live }: { live: LiveState | null }): JSX.Element {
             {live.cells.length > 0 ? (
               <FixturePreview rows={[{ cells: live.cells }]} />
             ) : (
-              <p className="text-[13px] text-muted-foreground">No fixture output — qualify a light on the Venue tab.</p>
+              <div className="flex flex-col items-start gap-2">
+                <p className="text-[13px] text-muted-foreground">No fixture output — qualify a light on the Venue tab.</p>
+                <Button size="sm" variant="outline" onClick={() => { set({ route: "venue" }); }}>Open Venue</Button>
+              </div>
             )}
           </CardContent>
         </Card>

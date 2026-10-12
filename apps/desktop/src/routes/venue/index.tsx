@@ -1,9 +1,21 @@
 import { useState } from "react";
 import type { Room } from "@autolight/venue";
 import { rectangleRoom } from "@autolight/venue";
+import { Button } from "../../components/ui/button.js";
+import { Input } from "../../components/ui/input.js";
 import { RoomCanvas } from "./room-canvas.js";
 import { MappingWizard } from "./mapping-wizard.js";
 import { RoomPreview } from "./room-preview.js";
+
+function roomWidth(room: Room): number {
+  const xs = room.outline.map((p) => p.x);
+  return Math.max(1, Math.max(...xs) - Math.min(...xs));
+}
+
+function roomDepth(room: Room): number {
+  const ys = room.outline.map((p) => p.y);
+  return Math.max(1, Math.max(...ys) - Math.min(...ys));
+}
 
 export function RoomVenueRoute(): JSX.Element {
   const [room, setRoom] = useState<Room>(() => rectangleRoom(5, 5));
@@ -14,25 +26,26 @@ export function RoomVenueRoute(): JSX.Element {
         <h2 className="text-[13px] font-semibold">Room editor</h2>
         <RoomCanvas room={room} onPatch={setRoom} />
         <div className="flex flex-wrap items-center gap-2">
-          <label className="text-[13px]">
+          <label className="flex items-center gap-2 text-[13px]">
             Width (m)
-            <input
+            <Input
               type="number"
-              value={room.outline.length > 0 ? 5 : 5}
+              value={roomWidth(room)}
               min={1}
               max={30}
               step={0.1}
               aria-label="Room width meters"
               onChange={(e) => {
                 const w = Math.min(30, Math.max(1, Number(e.target.value) || 5));
-                setRoom(rectangleRoom(w, 5));
+                const depth = roomDepth(room);
+                setRoom(rectangleRoom(w, depth));
               }}
-              className="ml-2 w-20 rounded border px-1"
+              className="h-8 w-20"
             />
           </label>
-          <label className="text-[13px]">
+          <label className="flex items-center gap-2 text-[13px]">
             Ceiling (m)
-            <input
+            <Input
               type="number"
               value={room.ceilingHeight}
               min={2}
@@ -40,12 +53,12 @@ export function RoomVenueRoute(): JSX.Element {
               step={0.1}
               aria-label="Ceiling height meters"
               onChange={(e) => setRoom({ ...room, ceilingHeight: Number(e.target.value) || room.ceilingHeight })}
-              className="ml-2 w-20 rounded border px-1"
+              className="h-8 w-20"
             />
           </label>
-          <label className="text-[13px]">
+          <label className="flex items-center gap-2 text-[13px]">
             DJ facing (deg)
-            <input
+            <Input
               type="number"
               value={Math.round((room.anchors.dj.facingRad * 180) / Math.PI)}
               step={5}
@@ -54,18 +67,19 @@ export function RoomVenueRoute(): JSX.Element {
                 ...room,
                 anchors: { ...room.anchors, dj: { ...room.anchors.dj, facingRad: ((Number(e.target.value) || 0) * Math.PI) / 180 } },
               })}
-              className="ml-2 w-20 rounded border px-1"
+              className="h-8 w-20"
             />
           </label>
-          <button
+          <Button
             type="button"
+            size="sm"
+            variant="outline"
             onClick={() => {
               setSaved(true);
             }}
-            className="rounded border px-2 py-1 text-[13px]"
           >
             Save room
-          </button>
+          </Button>
           {saved ? <span className="text-[13px]">Saved in memory; venue persistence exports the file.</span> : null}
         </div>
       </section>
