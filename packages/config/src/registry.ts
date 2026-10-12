@@ -167,7 +167,7 @@ export const KEYS: readonly KeyDef[] = [
   { key: "govee.device.<fixtureId>.transportMode", type: "string", defaultRaw: "hybrid", unit: "enum DS-31", range: "", receipt: "owner (per device)", liveSafe: true, scope: "device" },
   { key: "govee.device.<fixtureId>.transportOrder", type: "json", defaultRaw: "[\"lan-razer\",\"ble-segmented\",\"lan-json\",\"ble-single\",\"matter\"]", unit: "ordered list", range: "", receipt: "spec 148", liveSafe: true, scope: "device" },
   { key: "live.provider", type: "string", defaultRaw: "fusion", unit: "enum DS-01", range: "", receipt: "owner", liveSafe: false, scope: "app" },
-  { key: "live.provider.staleMs", type: "number", defaultRaw: "500", unit: "ms", range: "", receipt: "spec 105", liveSafe: true, scope: "app" },
+  { key: "live.follow.mode", type: "string", defaultRaw: "preview", unit: "enum preview, ax-beat, prolink, soundswitch", range: "", receipt: "owner (Setup follow-mode)", liveSafe: true, scope: "app" },
   { key: "live.rkbx.oscBind", type: "string", defaultRaw: "127.0.0.1:4460", unit: "host:port", range: "", receipt: "rkbx_link README default destination", liveSafe: false, scope: "app" },
   { key: "live.rkbx.configPath", type: "string", defaultRaw: "\"\"", unit: "path to user's rkbx_link folder", range: "", receipt: "user", liveSafe: false, scope: "app" },
   { key: "live.prolink.mode", type: "string", defaultRaw: "passive", unit: "enum DS-29", range: "", receipt: "owner", liveSafe: false, scope: "app" },

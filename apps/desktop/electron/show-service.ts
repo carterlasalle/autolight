@@ -4,9 +4,10 @@ import { SessionRecorder, emptyMetrics, type Metrics } from "@autolight/diagnost
 import { KEYS as CONFIG_KEYS, PersistentConfigStore, defineKey, type Scope } from "@autolight/config";
 import { getGoveeManager, optionsFromConfig, registryFilePath } from "./govee-lan.js";
 import { pollAxDecks, startProlinkWatch } from "./services/provider-manager.js";
+import { getLiveShowBridge } from "./services/live-show-bridge.js";
+import { getAnalysisSupervisor } from "./services/analysis-supervisor.js";
 import { scaleChannel } from "@autolight/govee";
-// Show service: owns session/metrics/live-transport state in main (§86, §132).
-// The application database lives in the storage service
+import type { DeckState, Fixture, ShowPlan, TrackModel } from "@autolight/contracts";
 // (electron/services/storage-service.ts), which opens userData/autolight.db
 // with the DS-06 driver policy (§80); the show loop never blocks on it (§108).
 export interface ShowServiceState {
@@ -14,11 +15,12 @@ export interface ShowServiceState {
   metrics: Metrics;
   stage: string[];
   // Live transport cache: last AX/prolink observations + device IPs.
-  ax: { beat: number | null; playing: boolean | null; readable: boolean }[];
+  // AX rows keep elapsed seconds: the show bridge maps elapsed onto the
+  // ANLZ grid for playheads, so dropping it here would starve the bridge.
+  ax: { beat: number | null; playing: boolean | null; readable: boolean; elapsedSeconds: number | null }[];
   prolink: { beat: number | null; bpm: number | null; peerPresent: boolean };
   deviceIps: Map<string, string>;
   rememberedIps: string[];
-  // T-ARC-02 authoritative show state: every channel below mutates or reads
   // this, never echoes its payload.
   overrides: { blackout: boolean; full: boolean; frozen: boolean; intensity: number };
   followMode: string;
@@ -39,17 +41,23 @@ export function createShowService(): ShowServiceState {
   } catch {
     configPath = undefined;
   }
+  const store = new PersistentConfigStore(configPath);
+  let savedMode = "preview";
+  try {
+    const v = store.get("live.follow.mode");
+    if (v === "preview" || v === "ax-beat" || v === "prolink" || v === "soundswitch") savedMode = v;
+  } catch { /* fresh install: default holds */ }
   service = {
     recorder: new SessionRecorder(), metrics: emptyMetrics(), stage: ["db"],
     ax: [], prolink: { beat: null, bpm: null, peerPresent: false },
     deviceIps: new Map(), rememberedIps: [],
     overrides: { blackout: false, full: false, frozen: false, intensity: 1 },
-    followMode: "preview",
+    followMode: savedMode,
     showStyle: { style: "House", palette: "ND" },
     energyTier: "MED",
     venueColor: [255, 255, 255],
     simulatorMode: false,
-    config: new PersistentConfigStore(configPath),
+    config: store,
   };
   return service;
 }
@@ -88,7 +96,7 @@ export function startAxLoop(): void {
     try {
       const readings = await pollAxDecks();
       const svc = getShowService();
-      svc.ax = readings.map((r) => ({ beat: null, playing: r.playing, readable: r.readable }));
+      svc.ax = readings.map((r) => ({ beat: null, playing: r.playing, readable: r.readable, elapsedSeconds: r.elapsedSeconds }));
       svc.metrics.djUpdateRateHz = 1;
       svc.metrics.djStateAgeMs = 0;
     } catch { /* AX denied — readable:false already reported */ }
@@ -474,6 +482,9 @@ export function resumeMaster(at: "beat" | "bar" | "phrase" | "immediate"): { ok:
 export function setFollowMode(mode: string): { ok: true; mode: string } {
   const svc = getShowService();
   svc.followMode = mode;
+  try {
+    svc.config.set("app", "live.follow.mode", mode);
+  } catch { /* config store unavailable in tests; memory still holds it */ }
   svc.recorder.record("follow/mode", { mode });
   return { ok: true, mode };
 }
@@ -535,10 +546,28 @@ export function setSimulatorMode(enabled: boolean): { ok: true; enabled: boolean
   return { ok: true, enabled };
 }
 
-export function readLiveShow(): { ok: true; decks: never[]; fixtures: never[] } {
-  // Decks resolve via the provider manager (T-LIVE-02, T-RBL-07) and plans
-  // via the cache (T-RUN-08). Until then: honest empty, never fixtures.
-  return { ok: true, decks: [], fixtures: [] };
+export async function readLiveShow(): Promise<{ ok: true; decks: { state: DeckState; track: TrackModel | null; plan: ShowPlan | null }[]; fixtures: Fixture[] }> {
+  const svc = getShowService();
+  const bridge = getLiveShowBridge({
+    analyze: async (audioPath, nativeDir, trackId) => {
+      const res = await getAnalysisSupervisor().submit({
+        trackId, audioPath, ...(nativeDir ? { nativeMetadataPath: nativeDir } : {}),
+      });
+      return res.ok ? res.artifactPath : null;
+    },
+  });
+  // Fire resolution per readable deck; the bridge caches, so steady state is
+  // a map lookup and only first sight analyzes.
+  await Promise.all(svc.ax.map((reading, i) =>
+    reading.readable ? bridge.resolveDeck(i + 1, reading.elapsedSeconds, true, null) : Promise.resolve(null),
+  ));
+  const decks = bridge.decksSnapshot();
+  if (decks.length === 0) {
+    // Decks resolve via the provider manager (T-LIVE-02, T-RBL-07) and plans
+    // via the cache (T-RUN-08). Until then: honest empty, never fixtures.
+    return { ok: true, decks: [], fixtures: [] };
+  }
+  return { ok: true, decks, fixtures: bridge.fixturesSnapshot() };
 }
 
 // T-CFG-02 config channels: layered get/set/reset plus export/import/schema.
