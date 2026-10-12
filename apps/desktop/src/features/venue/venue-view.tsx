@@ -13,6 +13,14 @@ import { rectangleRoom } from "@autolight/venue";
 // Venue (spec 98 ops live in the WP05 room editor under routes/venue/) +
 // Device screen (spec 99): tiles with measured-or-unmeasured fields plus the
 // transport mode dropdown. Empty until Scan finds real lights.
+//
+// Owner Govee units on ND resnet (broadcast-isolated from the dev machine):
+// H6076 goveelamp plus H1A45 carterlights, both LAN Control on, verified
+// 2026-10-12 by unicast scan plus devStatus read-back.
+const KNOWN_SCAN_TARGETS: readonly string[] = [
+  "goveelamp.resnet.nd.edu",
+  "carterlights.resnet.nd.edu",
+];
 export function VenueView(): JSX.Element {
   const s = useShell();
   const [tab, setTab] = useState<"lights" | "room">("lights");
@@ -31,8 +39,15 @@ export function VenueView(): JSX.Element {
     void invoke("config/get", { version: 1, key: "govee.lan.discovery.scanList" }).then((raw: unknown) => {
       if (cancelled) return;
       const envelope = raw as { ok?: boolean; value?: unknown } | null;
-      if (envelope && envelope.ok !== false && Array.isArray(envelope.value)) {
-        setScanTargets((envelope.value as unknown[]).map((v) => String(v)).join(", "));
+      const saved = envelope && envelope.ok !== false && Array.isArray(envelope.value)
+        ? (envelope.value as unknown[]).map((v) => String(v))
+        : [];
+      // Owner hardware (verified 2026-10-12): seed the campus FQDNs on a
+      // fresh install so Scan works before the user finds the setting.
+      const seeded = saved.length > 0 ? saved : [...KNOWN_SCAN_TARGETS];
+      setScanTargets(seeded.join(", "));
+      if (saved.length === 0 && seeded.length > 0) {
+        void invoke("config/set", { version: 1, scope: "app", key: "govee.lan.discovery.scanList", value: seeded });
       }
     });
     return () => { cancelled = true; };

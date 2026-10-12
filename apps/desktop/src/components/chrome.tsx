@@ -14,9 +14,9 @@ export function Titlebar(): JSX.Element {
   const simulatorMode = useShell((s) => s.simulatorMode);
   const set = useShell((s) => s.set);
   return (
-    <header className="app-drag-region sticky top-0 z-10 flex h-11 items-center gap-2 border-b bg-background/90 px-4 backdrop-blur-xl">
-      <span className="w-16 shrink-0" aria-hidden />
-      <span className="text-sm font-semibold tracking-tight">AutoLight</span>
+    <header className="app-drag-region sticky top-0 z-10 flex h-11 min-w-0 items-center gap-2 overflow-x-clip border-b bg-background/90 px-4 backdrop-blur-xl">
+      <span className="hidden w-16 shrink-0 min-[900px]:block" aria-hidden />
+      <span className="truncate text-sm font-semibold tracking-tight">AutoLight</span>
       <Badge variant="secondary" className="app-no-drag">
         {live ? `${live.source.toLowerCase()} ●` : "no decks"}
       </Badge>
