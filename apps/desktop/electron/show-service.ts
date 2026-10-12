@@ -1,9 +1,9 @@
 import { app } from "electron";
 import { join } from "node:path";
 import { SessionRecorder, emptyMetrics, type Metrics } from "@autolight/diagnostics";
-import { KEYS as CONFIG_KEYS, PersistentConfigStore, defineKey, type Scope } from "@autolight/config";
+import { PersistentConfigStore } from "@autolight/config";
 import { getGoveeManager, optionsFromConfig, registryFilePath } from "./govee-lan.js";
-import { pollAxDecks, startProlinkWatch } from "./services/provider-manager.js";
+import { getProviderManager, startProlinkWatch } from "./services/provider-manager.js";
 import { getLiveShowBridge } from "./services/live-show-bridge.js";
 import { getAnalysisSupervisor } from "./services/analysis-supervisor.js";
 import { scaleChannel } from "@autolight/govee";
@@ -95,22 +95,6 @@ export function startAnalysis(): void {
   getAnalysisSupervisor().start();
 }
 
-// 1Hz AX poll loop: started once from boot; writes into service.ax.
-let axTimer: NodeJS.Timeout | null = null;
-export function startAxLoop(): void {
-  if (axTimer) return;
-  const tick = async (): Promise<void> => {
-    try {
-      const readings = await pollAxDecks();
-      const svc = getShowService();
-      svc.ax = readings.map((r) => ({ beat: null, playing: r.playing, readable: r.readable, elapsedSeconds: r.elapsedSeconds }));
-      svc.metrics.djUpdateRateHz = 1;
-      svc.metrics.djStateAgeMs = 0;
-    } catch { /* AX denied — readable:false already reported */ }
-  };
-  void tick();
-  axTimer = setInterval(() => { void tick(); }, 1000);
-}
 
 // PRO DJ LINK observer: reusePort on :50001, observe-only.
 let stopProlinkWatch: (() => void) | null = null;
@@ -148,13 +132,6 @@ export function stopCompositeFlx4(): void {
     () => undefined,
   );
 }
-export function stopAxLoop(): void {
-  if (axTimer !== null) {
-    clearInterval(axTimer);
-    axTimer = null;
-  }
-}
-
 export function stopProlink(): void {
   stopProlinkWatch?.();
   stopProlinkWatch = null;
@@ -176,7 +153,6 @@ export function isShowAcceptingUi(): boolean {
 
 export function quitApp(): void {
   try {
-    stopAxLoop();
     stopProlink();
     stopCompositeFlx4();
   } finally {
@@ -287,10 +263,8 @@ export function applyCrashPolicy(opts: CrashPolicyOptions): void {
 }
 
 export function restartShowHost(): void {
-  stopAxLoop();
   stopProlink();
   stopCompositeFlx4();
-  startAxLoop();
   startProlink();
   startCompositeFlx4();
   getShowService().recorder.record("crash/host-restarted", {});
@@ -319,10 +293,10 @@ export function runShutdown(opts: ShutdownOptions): Promise<void> {
     { name: "freeze-ui", run: () => setShowAcceptingUi(false) },
     { name: "ending-look", run: () => applyEndingLook("blackout") },
     { name: "disarm", run: () => disarmStreams() },
-    { name: "dj-adapters", run: () => { stopAxLoop(); stopProlink(); stopCompositeFlx4(); } },
+    { name: "dj-adapters", run: () => { stopProlink(); stopCompositeFlx4(); } },
     { name: "analysis", run: () => svc.recorder.record("shutdown/analysis-stopped", {}) },
     { name: "flush-db", run: () => flushConfig() },
-    { name: "workers", run: () => { stopAxLoop(); stopProlink(); } },
+    { name: "workers", run: () => { stopProlink(); } },
     { name: "exit", run: () => undefined },
   ];
   return (async () => {
@@ -363,7 +337,16 @@ function flushConfig(): void {
 }
 
 export async function pollAxCommand(): Promise<{ ok: true; readings: unknown[] }> {
-  return { ok: true, readings: await pollAxDecks() };
+  // Single AX authority: the manager owns the poll (helper first, osascript
+  // fallback, injected readers in tests). Every poll writes svc.ax, so the
+  // bridge and the renderer cursor always read the same state. Previously
+  // follow/ax bypassed this and the two caches drifted.
+  const readings = await getProviderManager().pollOnce();
+  const svc = getShowService();
+  svc.ax = readings.map((r) => ({ beat: null, playing: r.playing, readable: r.readable, elapsedSeconds: r.elapsedSeconds }));
+  svc.metrics.djUpdateRateHz = 1;
+  svc.metrics.djStateAgeMs = 0;
+  return { ok: true, readings };
 }
 
 export function listAudioDevices(): { ok: true; devices: { index: number; name: string }[] } {
@@ -554,7 +537,6 @@ export function setSimulatorMode(enabled: boolean): { ok: true; enabled: boolean
 }
 
 export async function readLiveShow(): Promise<{ ok: true; decks: { state: DeckState; track: TrackModel | null; plan: ShowPlan | null }[]; fixtures: Fixture[] }> {
-  const svc = getShowService();
   const bridge = getLiveShowBridge({
     analyze: async (audioPath, nativeDir, trackId) => {
       const res = await getAnalysisSupervisor().submit({
@@ -563,8 +545,11 @@ export async function readLiveShow(): Promise<{ ok: true; decks: { state: DeckSt
       return res.ok ? res.artifactPath : null;
     },
   });
-  // Fire resolution per readable deck; the bridge caches, so steady state is
+  // Poll fresh through the single AX authority (writes svc.ax), then fire
+  // resolution per readable deck; the bridge caches, so steady state is
   // a map lookup and only first sight analyzes.
+  await pollAxCommand();
+  const svc = getShowService();
   await Promise.all(svc.ax.map((reading, i) =>
     reading.readable ? bridge.resolveDeck(i + 1, reading.elapsedSeconds, true, null) : Promise.resolve(null),
   ));
@@ -577,69 +562,3 @@ export async function readLiveShow(): Promise<{ ok: true; decks: { state: DeckSt
   return { ok: true, decks, fixtures: bridge.fixturesSnapshot() };
 }
 
-// T-CFG-02 config channels: layered get/set/reset plus export/import/schema.
-// Invalid keys and values return typed errors naming the key, the value, the
-// allowed range, and the fix. Change events emit config:changed with the diff.
-export function configGet(key: string): { ok: true; key: string; value: unknown; layer: string; liveSafe: boolean } | { ok: false; error: { code: string; message: string } } {
-  const svc = getShowService();
-  let def;
-  try {
-    def = defineKey(key);
-  } catch {
-    return { ok: false, error: { code: "E_UNKNOWN_KEY", message: `${key}: unknown key (fix: remove it or pick a registry key)` } };
-  }
-  let value: unknown;
-  try {
-    value = svc.config.get(key);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return { ok: false, error: { code: "E_CONFIG_GET", message: `${key}: ${message}` } };
-  }
-  return { ok: true, key, value, layer: svc.config.layerOf(key), liveSafe: def.liveSafe };
-}
-
-export function configSet(scope: Scope, key: string, value: unknown): { ok: true; key: string; scope: string; value: unknown; layer: string } | { ok: false; error: { code: string; message: string } } {
-  const svc = getShowService();
-  try {
-    defineKey(key);
-  } catch {
-    return { ok: false, error: { code: "E_UNKNOWN_KEY", message: `${key}: unknown key (fix: remove it or pick a registry key)` } };
-  }
-  svc.config.set(scope, key, value);
-  svc.recorder.record("config/set", { scope, key });
-  return { ok: true, key, scope, value, layer: svc.config.layerOf(key) };
-}
-
-export function configReset(scope: Scope, key: string): { ok: true; key: string; scope: string } {
-  const svc = getShowService();
-  svc.config.reset(scope, key);
-  svc.recorder.record("config/reset", { scope, key });
-  return { ok: true, key, scope };
-}
-
-export function configExport(): { ok: true; json: string } {
-  return { ok: true, json: getShowService().config.exportJson() };
-}
-
-export function configImport(json: string): { ok: true; applied: number } | { ok: false; error: { code: string; message: string } } {
-  const svc = getShowService();
-  const res = svc.config.importJson(json);
-  if (!res.ok) {
-    return { ok: false, error: { code: "E_CONFIG_IMPORT", message: res.badKeys.join("; ") } };
-  }
-  let applied = 0;
-  try {
-    applied = Object.keys(JSON.parse(json).values ?? {}).length;
-  } catch {
-    applied = 0;
-  }
-  svc.recorder.record("config/import", { applied });
-  return { ok: true, applied };
-}
-
-export function configSchema(key?: string): { ok: true; keys: { key: string; type: string; scope: string; unit: string; range: string; liveSafe: boolean }[] } {
-  const rows = (key ? CONFIG_KEYS.filter((k) => k.key === key) : CONFIG_KEYS).map((k) => ({
-    key: k.key, type: k.type, scope: k.scope, unit: k.unit, range: k.range, liveSafe: k.liveSafe,
-  }));
-  return { ok: true, keys: rows };
-}

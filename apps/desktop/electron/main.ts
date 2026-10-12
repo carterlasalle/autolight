@@ -6,7 +6,6 @@ import {
   createShowService,
   getShowService,
   startAnalysis,
-  startAxLoop,
   startProlink,
   startCompositeFlx4,
   quitApp,
@@ -17,6 +16,7 @@ import {
   crashRecordPath,
 } from "./show-service.js";
 import { closeStorageService, openStorageService } from "./services/storage-service.js";
+import { getConfigService } from "./services/config-service.js";
 // Startup sequence (§132): DB → show worker → Govee → DJ adapter →
 // library watcher → analysis worker → venue → tracks → plans → arm → READY.
 export type StartupStage =
@@ -295,8 +295,11 @@ export async function boot(): Promise<void> {
     await win.loadFile(join(__dirname, "..", "renderer", "index.html"));
   }
   createShowService();
+  // One config file, one store: the ConfigService adopts show-service's
+  // file-backed store instead of opening a second instance that would
+  // silently overwrite its saves (AL-STATE-002).
+  await getConfigService({ store: getShowService().config });
   startAnalysis();
-  startAxLoop();
   startProlink();
   startCompositeFlx4();
   // Graceful shutdown (§133): before-quit and window close both run the

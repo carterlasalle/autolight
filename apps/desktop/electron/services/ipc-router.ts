@@ -6,12 +6,10 @@ import {
   readDiagnostics, readLiveShow, setSimulatorMode, setFollowMode,
   setShowStyle, setEnergyTier, triggerBuild, triggerDrop,
   setMasterBlackout, setMasterFull, setMasterFreeze, setMasterIntensity, resumeMaster,
-  readShowState, readVenueList, setVenueColor, deviceAction,
+  readShowState, readVenueList, setVenueColor, deviceAction, pollAxCommand,
 } from "./../show-service.js";
 import { ServiceTracker, type Service, type ServiceStatus } from "./base.js";
 import { getConfigService } from "./config-service.js";
-import { getProviderManager } from "./provider-manager.js";
-
 // ipc-router (T-ARC-02, spec 87; moved here from electron/ipc.ts by T-ARC-05):
 // typed channels only, sender checked, request and response validated. Main
 // registers it before the window is created. Errors return typed
@@ -50,8 +48,9 @@ const handlers: { [C in Channel]: ChannelHandler<C> } = {
   "venue/scan": () => scanLanCommand(),
   "venue/identify": (req) => identifyCommand(req.id),
   "venue/test-chase": (req) => testChaseCommand(req.id),
-  // AX polling moved to provider-manager with follow.ts (T-ARC-05).
-  "follow/ax": async () => ({ ok: true as const, readings: await getProviderManager().pollOnce() }),
+  // AX polls through show-service authority: one poll feeds svc.ax (bridge)
+  // and the response (renderer cursor). No second provider-manager cache.
+  "follow/ax": async () => pollAxCommand(),
   "follow/mode": (req) => setFollowMode(req.mode),
   "audio/devices": () => listAudioDevices(),
   "audio/level": () => readAudioLevel(),

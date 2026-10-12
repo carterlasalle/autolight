@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -20,6 +20,7 @@ import {
 import { MatterBridge, type MatterProcessPort } from "../../electron/services/matter-bridge.js";
 import { MidiService } from "../../electron/services/midi-service.js";
 import { ProviderManager, getProviderManager, resetProviderManagerForTest } from "../../electron/services/provider-manager.js";
+import { getLiveShowBridge, resetLiveShowBridgeForTest } from "../../electron/services/live-show-bridge.js";
 import { GoveeLanManager, resetGoveeManager } from "../../electron/govee-lan.js";
 import { getShowService } from "../../electron/show-service.js";
 import * as showService from "../../electron/show-service.js";
@@ -61,6 +62,22 @@ describe("config-service", () => {
 
     const unknown = svc.get("no.such.key");
     expect(unknown).toMatchObject({ ok: false, error: { code: "E_UNKNOWN_KEY" } });
+    expect(svc.stop().state).toBe("stopped");
+  });
+  it("adopts an injected store: writes through either side read through the other (AL-STATE-002)", async () => {
+    const { PersistentConfigStore } = await import("@autolight/config");
+    const dir = tempDir("autolight-config-shared-");
+    const shared = new PersistentConfigStore(join(dir, "config.json"));
+    const svc = new ConfigService({ store: shared });
+    expect((await svc.start()).state).toBe("running");
+    // Write via the service, read via the raw store: one mirror, no copy.
+    const first = svc.schema().keys[0];
+    if (!first) throw new Error("config registry is empty");
+    expect(svc.set("app", first.key, 0.5)).toMatchObject({ ok: true });
+    expect(shared.get(first.key)).toBe(0.5);
+    // Write via the raw store (show-service hot path), read via the service.
+    shared.set("app", first.key, 0.7);
+    expect(svc.get(first.key)).toMatchObject({ ok: true, value: 0.7 });
     expect(svc.stop().state).toBe("stopped");
   });
 });
@@ -556,9 +573,29 @@ describe("ipc handlers have real effects (T-TRU-03)", () => {
       await call("show/trigger-drop", { version: 1 });
       const state = await call("show/state", { version: 1, deck: 2 });
       expect(state).toMatchObject({ ok: true, deck: 2 });
-      // Honest empty until providers and plans land (T-LIVE-02, T-RUN-08).
+      // AL-FLOW-001: show/live serves the stubbed readable deck end to end
+      // (poll -> bridge resolve -> populated deck), never constant empty.
+      // Fixture share + artifact mirror live-show-bridge.test.ts.
+      resetLiveShowBridgeForTest();
+      const fixtureShare = mkdtempSync(join(tmpdir(), "tru03-share-"));
+      const bucket = join(fixtureShare, "135");
+      const trackDir = join(bucket, "fb47d-24bc-49c5-b5e7-ce275ed46465");
+      mkdirSync(trackDir, { recursive: true });
+      cpSync(
+        "/Users/rocket/Library/Pioneer/rekordbox/share/PIONEER/USBANLZ/135/fb47d-24bc-49c5-b5e7-ce275ed46465/ANLZ0000.DAT",
+        join(trackDir, "ANLZ0000.DAT"),
+      );
+      const artifactDir = mkdtempSync(join(tmpdir(), "tru03-artifact-"));
+      const artifactPath = join(artifactDir, "live-deck1.trackmodel.json");
+      cpSync("/Users/rocket/.autolight/analysis-cache/39ec10359514c496a6164306.trackmodel.json", artifactPath);
+      getLiveShowBridge({ shareDir: fixtureShare, analyze: async () => artifactPath });
       const live = await call("show/live", { version: 1 });
-      expect(live).toEqual({ ok: true, decks: [], fixtures: [] });
+      const decks = live["decks"] as { state: { playheadSeconds: number }; track: { beatGrid: { beats: unknown[] } } | null; plan: unknown }[];
+      expect(decks.length).toBe(1);
+      expect(decks[0]?.track?.beatGrid.beats.length).toBeGreaterThan(100);
+      expect(decks[0]?.plan).not.toBeNull();
+      expect(decks[0]?.state.playheadSeconds).toBe(12.5);
+      resetLiveShowBridgeForTest();
       // Follow, venue color, simulator mode mutate service state.
       await call("follow/mode", { version: 1, mode: "ax" });
       expect(svc.followMode).toBe("ax");
@@ -616,12 +653,12 @@ describe("ipc handlers have real effects (T-TRU-03)", () => {
         // seedable (live tunable); the sim's ports are construction-time, so
         // they ride in through the app config the entry already reads.
         const cfg = await getConfigService();
-        await cfg.set("app", "govee.lan.ports.scan", simPort);
-        await cfg.set("app", "govee.lan.ports.reply", 0);
-        await cfg.set("app", "govee.lan.ports.control", simPort);
-        await cfg.set("app", "govee.lan.discovery.multicast", false);
-        await cfg.set("app", "govee.lan.discovery.perInterfaceBroadcast", false);
-        await cfg.set("app", "govee.lan.discovery.globalBroadcast", false);
+        cfg.set("app", "govee.lan.ports.scan", simPort);
+        cfg.set("app", "govee.lan.ports.reply", 0);
+        cfg.set("app", "govee.lan.ports.control", simPort);
+        cfg.set("app", "govee.lan.discovery.multicast", false);
+        cfg.set("app", "govee.lan.discovery.perInterfaceBroadcast", false);
+        cfg.set("app", "govee.lan.discovery.globalBroadcast", false);
         // show-service owns a SEPARATE PersistentConfigStore (T-CFG-02), not
         // the ConfigService: mirror the sim ports there so govee() builds the
         // same manager the probe above verified. scanList rides in through

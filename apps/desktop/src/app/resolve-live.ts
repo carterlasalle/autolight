@@ -47,7 +47,7 @@ function deckSnapshot(track: TrackModel | null, deck: { effectiveBpm: number | n
   };
 }
 
-function buildLive(decks: LoadedDeck[], fixtures: Fixture[], blinder: boolean): LiveState | null {
+export function buildLive(decks: LoadedDeck[], fixtures: Fixture[], blinder: boolean, beat?: { a: number; b: number }): LiveState | null {
   const [a, b] = [decks[0], decks[1]];
 
   if (!a) return null;
@@ -61,8 +61,11 @@ function buildLive(decks: LoadedDeck[], fixtures: Fixture[], blinder: boolean): 
     return [...plan.cues, { type: "white-hit", startBeat: next, durationBeats: 0.25, intensity: 1, target: "ALL", priority: 100 }];
   };
 
-  const beatA = a.state.playheadSeconds;
-  const beatB = b?.state.playheadSeconds ?? 1;
+  // AL-FLOW-003: the live cursor's computed beat (AX-corrected, estimated
+  // between polls) is the render beat. The fetch-time snapshot only seeds
+  // the one-shot path; previously the computed beat died in beatRef.
+  const beatA = beat?.a ?? a.state.playheadSeconds;
+  const beatB = beat?.b ?? b?.state.playheadSeconds ?? 1;
   const deckA = a.state;
 
   const deckB = b?.state ?? {
@@ -160,11 +163,43 @@ export function useLiveCursor(): void {
   }, []);
 
   useEffect(() => {
+    // AL-LIFE-004: the mount fetch can land before decks exist. The cursor
+    // refetches while empty (guarded against overlap) so tracks loaded
+    // after mount still appear — no blind return, no subscription bus.
+    let refetching = false;
+
     const timer = setInterval(() => {
       const decks = decksRef.current;
 
-      if (!decks || decks.length === 0) return;
+      if (!decks || decks.length === 0) {
+        if (refetching) return;
+        refetching = true;
+        void fetchShowLive().then((snap) => {
+          refetching = false;
+
+          if (!snap) return;
+          const loaded: LoadedDeck[] = [];
+
+          for (const d of snap.decks) {
+            if (d.track && d.plan) loaded.push({ track: d.track, plan: d.plan, deckId: d.state.deckId, state: d.state });
+          }
+
+          if (loaded.length === 0) return;
+
+          decksRef.current = loaded;
+          fixturesRef.current = snap.fixtures;
+          beatRef.current = {
+            a: loaded[0]?.state.playheadSeconds ?? 1,
+            b: loaded[1]?.state.playheadSeconds ?? 1,
+          };
+        });
+
+        return;
+
+      }
+
       const st = useShell.getState();
+
       const styleObj = styleFor(st.style);
 
       for (const d of decks) {
@@ -192,7 +227,7 @@ export function useLiveCursor(): void {
         const useAx = st.followMode === "ax-beat" || st.followMode === "prolink";
         const nextA = useAx && combined.beat !== null ? combined.beat : beatRef.current.a + 0.25 * ((decks[0]?.track.beatGrid.beats[0]?.bpm ?? 120) / 60) * 0.1;
         beatRef.current = { a: Math.min(nextA, grid.length || nextA), b: beatRef.current.b + 0.02 };
-        const live = buildLive(decks, fixturesRef.current, st.blinder);
+        const live = buildLive(decks, fixturesRef.current, st.blinder, beatRef.current);
 
         if (live) {
           set({ live, bpm: live.bpm, reactiveLevel: Math.min(1, reactive * 0.2), liveBeat: live.beat ?? 0 });

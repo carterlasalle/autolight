@@ -16,6 +16,11 @@ export interface ConfigServiceOptions {
   // Explicit override, used by tests; production resolves userData.
   filePath?: string;
   userDataDir?: string;
+  // Shared store, injected at boot: show-service creates the file-backed
+  // store eagerly (sync hot paths need it); the service adopts it instead
+  // of opening a second instance on the same file. One file, one store —
+  // previously two writers silently overwrote each other's saves.
+  store?: PersistentConfigStore;
 }
 
 export interface ConfigValueReply {
@@ -73,9 +78,25 @@ export class ConfigService implements Service {
     }
   }
 
+  private subscribeStore(): void {
+    this.store?.subscribe((change) => {
+      this.history.push(change);
+      this.tracker.count("changes");
+      for (const listener of this.listeners) listener(change);
+    });
+  }
+
   async start(): Promise<ServiceStatus> {
     if (this.store) return this.status();
     this.tracker.set("starting");
+    if (this.opts.store) {
+      this.store = this.opts.store;
+      this.subscribeStore();
+      this.tracker.setCounter("keys", CONFIG_KEYS.length);
+      this.tracker.set("running", "shared store (owned by show-service)");
+      this.tracker.setCounter("changes", this.history.length);
+      return this.status();
+    }
     let filePath = this.opts.filePath;
     if (filePath === undefined) {
       const dir = await this.userDataDir();
@@ -83,11 +104,7 @@ export class ConfigService implements Service {
     }
     try {
       this.store = new PersistentConfigStore(filePath);
-      this.store.subscribe((change) => {
-        this.history.push(change);
-        this.tracker.count("changes");
-        for (const listener of this.listeners) listener(change);
-      });
+      this.subscribeStore();
     } catch (err) {
       this.tracker.set("failed", `config store unavailable: ${messageOf(err)}`);
       return this.status();

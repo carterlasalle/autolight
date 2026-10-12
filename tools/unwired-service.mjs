@@ -91,13 +91,17 @@ for (const { getter, file } of getters) {
   }
 }
 
-// Special case: ProviderManager.start() vs pollOnce-only consumption.
+// Special case: the AX path must stay live. Topology (AL-FLOW-001 fix):
+// pollAxCommand (show-service) polls through the manager's pollOnce() and
+// writes svc.ax, serving both the bridge and the renderer cursor. The
+// manager's start() 1Hz loop is intentionally NOT run at boot: latest()
+// has no consumers, prolink runs via startProlink(), and composite boot is
+// test-only. Demanding start() would wire a readerless loop.
 {
-  const pm = texts.get("apps/desktop/electron/services/provider-manager.ts") ?? "";
-  const bootStarts = (texts.get("apps/desktop/electron/main.ts") ?? "").match(/getProviderManager\(\)\.start\(\)/g);
-
-  if (pm.includes("start(): ServiceStatus") && !bootStarts) {
-    console.error("apps/desktop/electron/services/provider-manager.ts: getProviderManager().start() never called at boot (AX loop + prolink watch never run; follow/ax pollOnce-only leaves svc.ax stale)");
+  const show = texts.get("apps/desktop/electron/show-service.ts") ?? "";
+  const live = show.includes("getProviderManager().pollOnce()") && show.includes("svc.ax = readings.map");
+  if (!live) {
+    console.error("apps/desktop/electron/show-service.ts: pollAxCommand must poll through getProviderManager().pollOnce() and write svc.ax (single AX authority; see AL-FLOW-001)");
     failures++;
   }
 }
