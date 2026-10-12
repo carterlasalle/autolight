@@ -14,7 +14,7 @@ const SCREENS: Record<Route, (live: LiveState | null) => JSX.Element> = {
   live: (live) => (
     <div className="flex max-w-5xl flex-col gap-3">
       <LiveView live={live} />
-      {live ? <ControlGrid /> : null}
+      <ControlGrid />
     </div>
   ),
   library: () => <LibraryView />,
