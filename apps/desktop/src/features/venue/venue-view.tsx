@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useShell, invoke } from "../../app/store.js";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card.js";
 import { Button } from "../../components/ui/button.js";
+import { Input } from "../../components/ui/input.js";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select.js";
 import { DeviceTile } from "../../components/kit.js";
 import { deviceScreenRow, withTransportMode, type TransportMode } from "../../routes/venue/device-screens.js";
@@ -23,6 +24,23 @@ export function VenueView(): JSX.Element {
   };
   const [modes, setModes] = useState<Record<string, TransportMode>>({});
   const [scanning, setScanning] = useState(false);
+  const [scanTargets, setScanTargets] = useState("");
+  const [scanSaved, setScanSaved] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    void invoke("config/get", { version: 1, key: "govee.lan.discovery.scanList" }).then((raw: unknown) => {
+      if (cancelled) return;
+      const envelope = raw as { ok?: boolean; value?: unknown } | null;
+      if (envelope && envelope.ok !== false && Array.isArray(envelope.value)) {
+        setScanTargets((envelope.value as unknown[]).map((v) => String(v)).join(", "));
+      }
+    });
+    return () => { cancelled = true; };
+  }, []);
+  const saveScanTargets = (): void => {
+    const list = scanTargets.split(",").map((s) => s.trim()).filter((s) => s.length > 0);
+    void invoke("config/set", { version: 1, scope: "app", key: "govee.lan.discovery.scanList", value: list }).then(() => setScanSaved(true));
+  };
   const scan = (): void => {
     setScanning(true);
     void invoke("venue/scan", { version: 1 }).then((result: unknown) => {
@@ -66,6 +84,14 @@ export function VenueView(): JSX.Element {
             {s.devices.length === 0 && !scanning ? (
               <span className="text-sm text-muted-foreground">No lights found yet — power them in LAN mode on this network, then scan.</span>
             ) : null}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="flex flex-1 items-center gap-2 text-sm">
+              <span className="shrink-0 text-muted-foreground">Scan targets:</span>
+              <Input aria-label="Scan targets (IPs or hostnames)" value={scanTargets} onChange={(e) => { setScanTargets(e.target.value); setScanSaved(false); }} placeholder="10.24.253.138, carterlights.resnet.nd.edu" className="h-8" />
+            </label>
+            <Button size="sm" variant="outline" onClick={saveScanTargets}>Save targets</Button>
+            {scanSaved ? <span className="text-sm text-muted-foreground">Saved — next scan tries these directly.</span> : null}
           </div>
           <div className="flex items-center gap-2" role="radiogroup" aria-label="Control target">
             <span className="text-sm text-muted-foreground">Target:</span>
