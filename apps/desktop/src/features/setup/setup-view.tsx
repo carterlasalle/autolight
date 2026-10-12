@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useShell, invoke } from "../../app/store.js";
 import type { FollowMode } from "../../app/store.js";
 import { Button } from "../../components/ui/button.js";
@@ -34,18 +34,8 @@ export function SetupView(): JSX.Element {
   const tiles = useShell((s) => s.tiles);
   const simulatorMode = useShell((s) => s.simulatorMode);
   const [scenario, setScenario] = useState<SimulatorScenario>("normal-night");
-  useEffect(() => {
-    let cancelled = false;
-    void invoke("config/get", { version: 1, key: "live.follow.mode" }).then((raw: unknown) => {
-      if (cancelled) return;
-      const envelope = raw as { ok?: boolean; value?: unknown } | null;
-      const saved = envelope && envelope.ok !== false && typeof envelope.value === "string" ? envelope.value : null;
-      if (saved === "preview" || saved === "ax-beat" || saved === "prolink" || saved === "soundswitch") {
-        if (useShell.getState().followMode !== saved) set({ followMode: saved });
-      }
-    });
-    return () => { cancelled = true; };
-  }, [set]);
+  // Follow-mode restore lives in Shell on route-enter (covers HMR/reset);
+  // this view only writes via the mode buttons below.
   const evidence = setupEvidence({
     live, devices, tiles,
     identifiedIds: useShell((s) => s.identifiedIds),

@@ -16,6 +16,22 @@ export function Shell(): JSX.Element {
 
   useLiveCursor();
 
+  // Follow mode persists in config (live.follow.mode) but the store resets
+  // on reload/HMR. Re-assert the saved value every time Setup becomes
+  // visible: mount effects alone miss the return trip.
+  useEffect(() => {
+    if (route !== "setup") return;
+    let cancelled = false;
+    void invoke("config/get", { version: 1, key: "live.follow.mode" }).then((raw: unknown) => {
+      if (cancelled) return;
+      const envelope = raw as { ok?: boolean; value?: unknown } | null;
+      const saved = envelope && envelope.ok !== false && typeof envelope.value === "string" ? envelope.value : null;
+      if (saved === "preview" || saved === "ax-beat" || saved === "prolink" || saved === "soundswitch") {
+        if (useShell.getState().followMode !== saved) useShell.getState().set({ followMode: saved });
+      }
+    });
+    return () => { cancelled = true; };
+  }, [route]);
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       const el = event.target as HTMLElement | null;
