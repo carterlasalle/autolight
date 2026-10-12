@@ -16,7 +16,7 @@ export function CommandPalette(): JSX.Element {
     window.addEventListener("autolight:palette", onPalette);
     return () => { window.removeEventListener("autolight:palette", onPalette); };
   }, []);
-  const go = (route: "live" | "library" | "inspector" | "venue" | "setup" | "diagnostics"): void => {
+  const go = (route: "live" | "library" | "inspector" | "venue" | "setup" | "diagnostics" | "settings"): void => {
     set({ route });
     setOpen(false);
   };
@@ -32,8 +32,8 @@ export function CommandPalette(): JSX.Element {
       <CommandList>
         <CommandEmpty>No results.</CommandEmpty>
         <CommandGroup heading="Go">
-          {(["live", "library", "inspector", "venue", "setup", "diagnostics"] as const).map((r) => (
-            <CommandItem key={r} onSelect={() => { go(r); }}>Go to {r}</CommandItem>
+          {(["live", "library", "inspector", "venue", "setup", "diagnostics", "settings"] as const).map((r) => (
+            <CommandItem key={r} value={`go to ${r}`} onSelect={() => { go(r); }}>Go to {r}</CommandItem>
           ))}
         </CommandGroup>
         <CommandGroup heading="Emergency">

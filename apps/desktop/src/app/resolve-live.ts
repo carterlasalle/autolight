@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { TrackModel, ShowPlan } from "@autolight/contracts";
+import { coverageOf } from "@autolight/track-model";
 import { planShow, BUILT_IN_STYLES } from "@autolight/show-planner";
 import { liveViewModel } from "../features/live/live.js";
 import type { DeckState, Fixture } from "@autolight/contracts";
@@ -28,6 +29,19 @@ interface ShowLiveResponse {
 
 function styleFor(name: string): (typeof BUILT_IN_STYLES)[keyof typeof BUILT_IN_STYLES] {
   return BUILT_IN_STYLES[STYLE_ID[name] ?? "club"] ?? BUILT_IN_STYLES["club"]!;
+}
+
+function deckSnapshot(track: TrackModel | null, deck: { effectiveBpm: number | null } | null, section: string | undefined): { title: string; artist: string; readiness: "READY" | "NEEDS ANALYSIS"; bpm: number | null; section: string | undefined; countdown: undefined } {
+  const bpm = deck?.effectiveBpm ?? track?.beatGrid.beats[0]?.bpm ?? null;
+  if (!track) return { title: "—", artist: "", readiness: "NEEDS ANALYSIS", bpm, section, countdown: undefined };
+  return {
+    title: track.identity.title ?? track.identity.id,
+    artist: track.identity.artist ?? "",
+    readiness: coverageOf(track) === "adaptive" ? "NEEDS ANALYSIS" : "READY",
+    bpm,
+    section,
+    countdown: undefined,
+  };
 }
 
 function buildLive(decks: LoadedDeck[], fixtures: Fixture[], style: string, blinder: boolean): LiveState | null {
@@ -62,8 +76,8 @@ function buildLive(decks: LoadedDeck[], fixtures: Fixture[], style: string, blin
     source: deckA.source === "serato" ? "SERATO" : "REKORDBOX",
     bpm,
     beat: beatA,
-    deckA: { title: a.track.identity.title ?? a.track.identity.id, section: sectionA?.kind, countdown: undefined },
-    deckB: { title: b ? (b.track.identity.title ?? b.track.identity.id) : "—", section: sectionB?.kind, countdown: undefined },
+    deckA: deckSnapshot(a.track, deckA, sectionA?.kind),
+    deckB: b ? deckSnapshot(b.track, deckB, sectionB?.kind) : { title: "—", artist: "", readiness: "NEEDS ANALYSIS" as const, bpm: null, section: undefined, countdown: undefined },
     cues: vm.upcoming.map((c) => ({ ...c, durationBeats: 4, intensity: 0.8, priority: 10 })),
     cells: vm.cells,
   };

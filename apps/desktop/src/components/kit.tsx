@@ -170,7 +170,7 @@ export function SectionLane({ bands, startBeat, endBeat }: {
         const width = Math.max(0.5, ((s.end - s.start) / span) * 100);
         return (
           <span key={s.start} aria-hidden className="absolute top-0 h-6 bg-muted" style={{ left: `${left}%`, width: `${width}%` }}>
-            <span className="overflow-hidden px-1 text-[10px]">{s.label}</span>
+            <span className={"overflow-hidden px-1 " + tokens.type.caption}>{s.label}</span>
           </span>
         );
       })}
@@ -345,15 +345,15 @@ export function MasterControls({ state, onIntent }: {
 }): JSX.Element {
   return (
     <div role="toolbar" aria-label="Master" className="flex flex-wrap items-center gap-2">
-      <Button size="sm" variant={state.blackout ? "default" : "destructive"} onClick={() => onIntent("blackout")} aria-pressed={state.blackout}>
-        {state.blackout ? "Blackout on" : "Blackout"}
+      <Button size="sm" variant={state.blackout ? "default" : "destructive"} onClick={() => onIntent("blackout")} aria-pressed={state.blackout} title="Shortcut: B">
+        {state.blackout ? "Blackout on (B)" : "Blackout (B)"}
       </Button>
-      <Button size="sm" variant="outline" onClick={() => onIntent("full")}>Full white</Button>
-      <Button size="sm" variant="outline" onClick={() => onIntent("freeze")} aria-pressed={state.frozen}>
-        {state.frozen ? "Frozen" : "Freeze"}
+      <Button size="sm" variant="outline" onClick={() => onIntent("full")} title="Shortcut: W">Full white (W)</Button>
+      <Button size="sm" variant="outline" onClick={() => onIntent("freeze")} aria-pressed={state.frozen} title="Shortcut: F">
+        {state.frozen ? "Frozen (F)" : "Freeze (F)"}
       </Button>
-      <Button size="sm" variant="secondary" onClick={() => onIntent("resume")}>
-        {state.auto ? "Auto" : "Resume"}
+      <Button size="sm" variant="secondary" onClick={() => onIntent("resume")} title="Shortcut: A">
+        {state.auto ? "Auto (A)" : "Resume (A)"}
       </Button>
       <span className={tokens.type.timing + " " + tokens.type.small}>Intensity {masterIntensity(state.intensity)}</span>
     </div>

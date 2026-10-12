@@ -2,11 +2,11 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card.js";
 import { Button } from "../../components/ui/button.js";
 import { Switch } from "../../components/ui/switch.js";
+import { Slider } from "../../components/ui/slider.js";
 import { InspectorPanel } from "../../components/kit.js";
 import type { TrackModel } from "@autolight/contracts";
 import { useShell, invoke } from "../../app/store.js";
-import { auditionAtBeat, blendView, type CorrectionOp } from "../../routes/inspector/inspector-helpers.js";
-// Inspector (spec 96): synchronized lanes bound once per track and cached in
+import { addDropBeat, auditionAtBeat, type CorrectionOp } from "../../routes/inspector/inspector-helpers.js";
 // state, never refetched per tick. Beat audition renders that beat in the
 // preview; nothing reaches the lights unless send-to-lights is on. Blend A/B
 // viewer and corrections ops sit below the lanes.
@@ -47,49 +47,83 @@ export function InspectorView(): JSX.Element {
     void invoke("show/correction", { version: 1, op, sendToLights: false });
     setAudition(`correction queued: ${op.op}`);
   };
-  void blendView;
   return (
     <div className="flex max-w-5xl flex-col gap-3">
       <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-[13px]">Track inspector{selected ? ` — ${selected}` : ""}</CardTitle></CardHeader>
+        <CardHeader className="pb-2"><CardTitle className="text-sm">Track inspector{selected ? ` — ${selected}` : ""}</CardTitle></CardHeader>
         <CardContent className="flex flex-col gap-2">
           {!loaded ? (
-            <p className="text-[13px] text-muted-foreground">Loading lanes…</p>
+            <p className="text-sm text-muted-foreground">Loading lanes…</p>
           ) : track === null ? (
-            <p className="text-[13px] text-muted-foreground">No track analyzed yet. Lanes for waveform, grid, sections, events, and cues appear after the analysis worker finishes a loaded deck.</p>
+            <InspectorEmpty onSetup={() => { useShell.getState().set({ route: "setup" }); }} />
           ) : (
-            <>
-              <InspectorPanel
-                track={track}
-                startBeat={0}
-                endBeat={Math.max(1, ...track.sections.map((s) => s.endBeat), ...track.musicalEvents.map((e) => e.beat))}
-              />
-              <div className="flex flex-wrap items-center gap-2">
-                <Button size="sm" variant="outline" onClick={() => lanes(257)}>Audition beat 257</Button>
-                <label className="flex items-center gap-2 text-[13px]">
-                  <Switch checked={sendToLights} onCheckedChange={setSendToLights} /> Send to lights
-                </label>
-                <label className="flex items-center gap-2 text-[13px]">Blend A/B:
-                  <input type="range" min={0} max={1} step={0.1} value={blend} onChange={(e) => setBlend(Number(e.target.value))} aria-label="Blend A/B" />
-                  {blend.toFixed(1)}
-                </label>
-              </div>
-              {audition ? <p className="text-[13px] text-muted-foreground">{audition}</p> : null}
-              <div className="flex flex-col gap-2" role="group" aria-label="Corrections">
-                <div className="flex flex-wrap gap-2" role="group" aria-label="Drop corrections">
-                  <Button size="sm" variant="outline" onClick={() => correct({ op: "add-drop", beat: 256 })}>Add missing drop at 256</Button>
-                  <Button size="sm" variant="outline" onClick={() => correct({ op: "delete-drop", beat: 256 })}>Delete false drop at 256</Button>
-                  <Button size="sm" variant="outline" onClick={() => correct({ op: "mark-fake-drop", beat: 256, actualBeat: 288 })}>Mark fake drop 256 to 288</Button>
-                </div>
-                <div className="flex flex-wrap gap-2" role="group" aria-label="Section corrections">
-                  <Button size="sm" variant="outline" onClick={() => correct({ op: "regenerate-section", startBeat: 224, endBeat: 256 })}>Regenerate section 224 to 256</Button>
-                  <Button size="sm" variant="outline" onClick={() => correct({ op: "lock-section", startBeat: 224, endBeat: 256 })}>Lock section 224 to 256</Button>
-                </div>
-              </div>
-            </>
+            <InspectorBody track={track} lanes={lanes} correct={correct} sendToLights={sendToLights} setSendToLights={setSendToLights} blend={blend} setBlend={setBlend} audition={audition} />
           )}
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+export function InspectorEmpty({ onSetup }: { onSetup: () => void }): JSX.Element {
+  return (
+    <div className="flex flex-col items-start gap-2">
+      <p className="text-sm text-muted-foreground">No track analyzed yet. Lanes for waveform, grid, sections, events, and cues appear after the analysis worker finishes a loaded deck.</p>
+      <Button size="sm" variant="outline" onClick={onSetup}>Open Setup</Button>
+    </div>
+  );
+}
+
+function InspectorBody({ track, lanes, correct, sendToLights, setSendToLights, blend, setBlend, audition }: {
+  track: TrackModel;
+  lanes: (beat: number) => void;
+  correct: (op: CorrectionOp) => void;
+  sendToLights: boolean;
+  setSendToLights: (v: boolean) => void;
+  blend: number;
+  setBlend: (v: number) => void;
+  audition: string | null;
+}): JSX.Element {
+  const eventBeats = track.musicalEvents.map((e) => e.beat);
+  const finiteMax = (values: number[], floor: number): number =>
+    values.reduce((m, v) => (Number.isFinite(v) ? Math.max(m, v) : m), floor);
+  const lastBeat = finiteMax([...track.sections.map((s) => s.endBeat), ...eventBeats], 1);
+  const firstDrop = track.musicalEvents.find((e) => e.type === "drop")?.beat;
+  const dropBeat = firstDrop ?? Math.min(lastBeat, finiteMax(eventBeats, 0));
+  const auditionBeat = Math.min(lastBeat, dropBeat + 1);
+  const addBeat = addDropBeat(track.musicalEvents, lastBeat);
+  const section = track.sections.find((s) => dropBeat >= s.startBeat && dropBeat < s.endBeat);
+  const sectionStart = section?.startBeat ?? Math.max(0, dropBeat - 32);
+  const sectionEnd = section?.endBeat ?? lastBeat;
+  return (
+    <>
+      <InspectorPanel track={track} startBeat={0} endBeat={lastBeat} />
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" variant="outline" onClick={() => lanes(auditionBeat)}>Audition beat {auditionBeat}</Button>
+        <label className="flex items-center gap-2 text-sm">
+          <Switch checked={sendToLights} onCheckedChange={setSendToLights} /> Send to lights
+        </label>
+        <label className="flex items-center gap-2 text-sm">Blend A/B:
+          <Slider min={0} max={1} step={0.1} value={[blend]} onValueChange={(v) => setBlend(v[0] ?? blend)} aria-label="Blend A/B" className="w-32" />
+          {blend.toFixed(1)}
+        </label>
+      </div>
+      {audition ? <p className="text-sm text-muted-foreground">{audition}</p> : null}
+      <div className="flex flex-col gap-2" role="group" aria-label="Corrections">
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Drop corrections">
+          {addBeat === null ? (
+            <span className="text-sm text-muted-foreground">No drop-free beat available</span>
+          ) : (
+            <Button size="sm" variant="outline" onClick={() => correct({ op: "add-drop", beat: addBeat })}>Add missing drop at {addBeat}</Button>
+          )}
+          <Button size="sm" variant="outline" onClick={() => correct({ op: "delete-drop", beat: dropBeat })}>Delete false drop at {dropBeat}</Button>
+          <Button size="sm" variant="outline" onClick={() => correct({ op: "mark-fake-drop", beat: dropBeat, actualBeat: Math.min(lastBeat, dropBeat + 32) })}>Mark fake drop {dropBeat} to {Math.min(lastBeat, dropBeat + 32)}</Button>
+        </div>
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Section corrections">
+          <Button size="sm" variant="outline" onClick={() => correct({ op: "regenerate-section", startBeat: sectionStart, endBeat: sectionEnd })}>Regenerate section {sectionStart} to {sectionEnd}</Button>
+          <Button size="sm" variant="outline" onClick={() => correct({ op: "lock-section", startBeat: sectionStart, endBeat: sectionEnd })}>Lock section {sectionStart} to {sectionEnd}</Button>
+        </div>
+      </div>
+    </>
   );
 }

@@ -26,6 +26,24 @@ export function auditionAtBeat(
   return { beat: clamped, cueType: best?.type ?? "section-look", sendToLights };
 }
 
+// Add-missing-drop target (T-UI-07): never an occupied drop beat. Prefers
+// the beat after the first drop, else the first drop-free beat at or after
+// the audition point; null disables the button when no beat is free.
+export function addDropBeat(events: { type: string; beat: number }[], lastBeat: number): number | null {
+  const dropBeats = new Set(events.filter((e) => e.type === "drop").map((e) => e.beat));
+  const firstDrop = events.find((e) => e.type === "drop")?.beat;
+  if (firstDrop === undefined) {
+    const fallback = events.reduce((m, e) => (Number.isFinite(e.beat) ? Math.max(m, e.beat) : m), 0);
+    return Math.min(lastBeat, fallback);
+  }
+  const auditionBeat = Math.min(lastBeat, firstDrop + 1);
+  if (!dropBeats.has(auditionBeat)) return auditionBeat;
+  for (let b = auditionBeat + 1; b <= lastBeat; b++) {
+    if (!dropBeats.has(b)) return b;
+  }
+  return null;
+}
+
 export interface BlendView {
   styleA: string;
   styleB: string;

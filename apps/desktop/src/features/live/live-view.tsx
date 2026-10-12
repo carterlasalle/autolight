@@ -11,7 +11,7 @@ import { PARTY_PALETTES, ALT_PATTERNS } from "../../app/store.js";
 import type { AltPattern } from "../../app/store.js";
 import { trackPalette } from "../../routes/live/manual-intents.js";
 import { nextPhraseBeat } from "../../routes/live/live-fields.js";
-import { CueList, DeckPanel, FixturePreview, MasterControls, deckBpm } from "../../components/kit.js";
+import { CueList, DeckPanel, FixturePreview, MasterControls } from "../../components/kit.js";
 // Live screen (§89): status → decks + master clock → venue + upcoming →
 // emergency bar. Empty until a real show resolves — never fixture tracks.
 // Compact 32–36px controls, 12–14px text, mono for timing.
@@ -23,11 +23,11 @@ function masterIntent(intent: "blackout" | "full" | "freeze" | "resume"): void {
 }
 
 function masterClock(bpm: number | null): string {
-  const oneDecimal = deckBpm(bpm);
-  return bpm === null ? "--.--" : `${oneDecimal}0`;
+  return bpm === null ? "unmeasured" : bpm.toFixed(2);
 }
 
 export function LiveView({ live }: { live: LiveState | null }): JSX.Element {
+  const set = useShell((s) => s.set);
   const manual = useShell((s) => s.manual);
   const intensity = useShell((s) => s.overridesIntensity);
   if (!live) {
@@ -35,11 +35,12 @@ export function LiveView({ live }: { live: LiveState | null }): JSX.Element {
       <div className="flex flex-col gap-3">
         <Card>
           <CardHeader className="pb-1"><CardTitle>No show loaded</CardTitle></CardHeader>
-          <CardContent>
-            <p className="text-[13px] text-muted-foreground">
+          <CardContent className="flex flex-col items-start gap-2">
+            <p className="text-sm text-muted-foreground">
               Load a track on a Rekordbox deck. The show appears here once the
               library resolves the ANLZ grid and the planner compiles cues.
             </p>
+            <Button size="sm" variant="outline" onClick={() => { set({ route: "setup" }); }}>Open Setup</Button>
           </CardContent>
         </Card>
         <Card>
@@ -52,7 +53,7 @@ export function LiveView({ live }: { live: LiveState | null }): JSX.Element {
   }
   return (
     <div className="flex flex-col gap-3">
-      <div className="grid grid-cols-[1fr_240px_1fr] gap-3">
+      <div className="grid grid-cols-[1fr_minmax(160px,240px)_1fr] gap-3">
         <DeckPanel
           deck={{
             title: live.deckA.title,
@@ -82,17 +83,20 @@ export function LiveView({ live }: { live: LiveState | null }): JSX.Element {
       </div>
       <div className="grid grid-cols-[2fr_1fr] gap-3">
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-[13px]">Live venue preview</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">Live venue preview</CardTitle></CardHeader>
           <CardContent>
             {live.cells.length > 0 ? (
               <FixturePreview rows={[{ cells: live.cells }]} />
             ) : (
-              <p className="text-[13px] text-muted-foreground">No fixture output — qualify a light on the Venue tab.</p>
+              <div className="flex flex-col items-start gap-2">
+                <p className="text-sm text-muted-foreground">No fixture output — qualify a light on the Venue tab.</p>
+                <Button size="sm" variant="outline" onClick={() => { set({ route: "venue" }); }}>Open Venue</Button>
+              </div>
             )}
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-[13px]">Upcoming</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">Upcoming</CardTitle></CardHeader>
           <CardContent>
             {live.cues.length > 0 ? (
               <CueList
@@ -100,7 +104,7 @@ export function LiveView({ live }: { live: LiveState | null }): JSX.Element {
                 now={live.beat ?? 0}
               />
             ) : (
-              <p className="text-[13px] text-muted-foreground">No cues — plan compiles after analysis.</p>
+              <p className="text-sm text-muted-foreground">No cues — plan compiles after analysis.</p>
             )}
           </CardContent>
         </Card>
@@ -120,12 +124,12 @@ export function ControlGrid(): JSX.Element {
   const s = useShell();
   return (
     <section aria-label="Manual control">
-      <h2 className="mb-2 text-[13px] font-semibold">Manual</h2>
+      <h2 className="mb-2 text-sm font-semibold">Manual</h2>
       <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3">
       <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-[13px]">Style</CardTitle></CardHeader>
+        <CardHeader className="pb-2"><CardTitle className="text-sm">Style</CardTitle></CardHeader>
         <CardContent>
-          <label className="flex items-center gap-2 text-[13px]">Style:
+          <label className="flex items-center gap-2 text-sm">Style:
             <Select value={s.style} onValueChange={(v) => {
               s.set({ style: v, pendingStyle: v });
               void invoke("show/style", { version: 1, style: v, palette: s.palette, custom: false });
@@ -135,9 +139,9 @@ export function ControlGrid(): JSX.Element {
             </Select>
           </label>
           {s.pendingStyle !== null ? (
-            <p className="text-[13px] text-muted-foreground">Pending {s.pendingStyle}: applies at the next phrase boundary.</p>
+            <p className="text-sm text-muted-foreground">Pending {s.pendingStyle}: applies at the next phrase boundary.</p>
           ) : null}
-          <label className="flex items-center gap-2 text-[13px]">
+          <label className="flex items-center gap-2 text-sm">
             <Switch checked={s.blinder} onCheckedChange={(v) => { s.set({ blinder: v }); }} /> Blinder on next phrase (restraint-aware)
           </label>
           {!s.running
@@ -147,7 +151,7 @@ export function ControlGrid(): JSX.Element {
       </Card>
       <AudioSyncCard />
       <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-[13px]">Manual palette: from the track</CardTitle></CardHeader>
+        <CardHeader className="pb-2"><CardTitle className="text-sm">Manual palette: from the track</CardTitle></CardHeader>
         <CardContent>
           <div role="group" aria-label="Track palette" className="flex flex-wrap gap-2">
             {trackPalette(null).map((rgb, i) => (
@@ -162,7 +166,7 @@ export function ControlGrid(): JSX.Element {
               />
             ))}
           </div>
-          <label className="flex items-center gap-2 text-[13px]">
+          <label className="flex items-center gap-2 text-sm">
             <Switch checked={s.customColor} onCheckedChange={(v) => { s.set({ customColor: v }); }} /> Custom colour
           </label>
           {s.customColor ? (
@@ -193,12 +197,12 @@ export function ControlGrid(): JSX.Element {
         </CardContent>
       </Card>
       <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-[13px]">Flash on beat</CardTitle></CardHeader>
+        <CardHeader className="pb-2"><CardTitle className="text-sm">Flash on beat</CardTitle></CardHeader>
         <CardContent>
-          <label className="flex items-center gap-2 text-[13px]">
+          <label className="flex items-center gap-2 text-sm">
             <Switch checked={s.flashOn} onCheckedChange={(v) => { s.set({ flashOn: v }); }} /> Flash on beat
           </label>
-          <div className="flex gap-3 text-[13px]">
+          <div className="flex gap-3 text-sm">
             {(["static", "cycle"] as const).map((m) => (
               <label key={m} className="flex items-center gap-1.5">
                 <input type="radio" name="flash-mode" checked={s.flashMode === m} onChange={() => { s.set({ flashMode: m }); }} />
@@ -209,9 +213,9 @@ export function ControlGrid(): JSX.Element {
         </CardContent>
       </Card>
       <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-[13px]">Manual control</CardTitle></CardHeader>
+        <CardHeader className="pb-2"><CardTitle className="text-sm">Manual control</CardTitle></CardHeader>
         <CardContent>
-          <label className="flex items-center gap-2 text-[13px]">
+          <label className="flex items-center gap-2 text-sm">
             <Switch checked={s.manual} onCheckedChange={(v) => { s.set({ manual: v }); }} /> Manual override
           </label>
           <div className="flex gap-2" role="group" aria-label="Manual Energy Tier">
@@ -228,13 +232,13 @@ export function ControlGrid(): JSX.Element {
           </div>
           <div className="flex gap-3" role="radiogroup" aria-label="Spatial target">
             {(["A", "B", "Both"] as const).map((t) => (
-              <label key={t} className="flex items-center gap-1.5 text-[13px]">
+              <label key={t} className="flex items-center gap-1.5 text-sm">
                 <input type="radio" name="spatial-target" checked={s.target === t} onChange={() => { s.set({ target: t }); }} />
                 {t}
               </label>
             ))}
           </div>
-          <label className="flex flex-col gap-1 text-[13px]">Sensitivity: {s.sensitivity.toFixed(1)}x
+          <label className="flex flex-col gap-1 text-sm">Sensitivity: {s.sensitivity.toFixed(1)}x
             <Slider min={0.5} max={2} step={0.1} value={[s.sensitivity]} onValueChange={([v]) => {
               const next = v ?? 1;
               s.set({ sensitivity: next });
@@ -244,18 +248,18 @@ export function ControlGrid(): JSX.Element {
         </CardContent>
       </Card>
       <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-[13px]">Alternating A/B</CardTitle></CardHeader>
+        <CardHeader className="pb-2"><CardTitle className="text-sm">Alternating A/B</CardTitle></CardHeader>
         <CardContent>
-          <label className="flex items-center gap-2 text-[13px]">
+          <label className="flex items-center gap-2 text-sm">
             <Switch checked={s.altOn} onCheckedChange={(v) => { s.set({ altOn: v }); void invoke("show/energy", { version: 1, tier: "MED", alternate: v }); }} /> Alternating mode
           </label>
-          <label className="flex items-center gap-2 text-[13px]">Pattern:
+          <label className="flex items-center gap-2 text-sm">Pattern:
             <Select value={s.altPattern} onValueChange={(v) => { s.set({ altPattern: v as AltPattern }); void invoke("show/energy", { version: 1, tier: s.tier ?? "MED", alternate: s.altOn, pattern: v }); }}>
               <SelectTrigger className="h-8 w-44"><SelectValue /></SelectTrigger>
               <SelectContent>{ALT_PATTERNS.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
             </Select>
           </label>
-          <label className="flex flex-col gap-1 text-[13px]">Speed: {s.altSpeed}ms
+          <label className="flex flex-col gap-1 text-sm">Speed: {s.altSpeed}ms
             <Slider min={100} max={2000} step={50} value={[s.altSpeed]} onValueChange={([v]) => {
               const next = v ?? 500;
               s.set({ altSpeed: next });

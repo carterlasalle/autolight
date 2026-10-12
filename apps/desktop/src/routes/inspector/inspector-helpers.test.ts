@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { auditionAtBeat, blendView, redoPop, undoStack } from "./inspector-helpers.js";
+import { addDropBeat, auditionAtBeat, blendView, redoPop, undoStack } from "./inspector-helpers.js";
 import type { TrackModel } from "@autolight/contracts";
 
 const track = {
@@ -22,6 +22,13 @@ describe("inspector helpers (T-UI-06/07)", () => {
   it("clamps out-of-range beats and refuses no-track audition", () => {
     expect(auditionAtBeat(null, cues, 10, false)).toBeNull();
     expect(auditionAtBeat(track, cues, 9999, false)?.beat).toBe(512);
+  });
+  it("never targets an occupied drop, even capped at the last beat", () => {
+    expect(addDropBeat([{ type: "drop", beat: 32 }], 512)).toBe(33);
+    expect(addDropBeat([{ type: "drop", beat: 512 }], 512)).toBeNull();
+    expect(addDropBeat([{ type: "drop", beat: 510 }, { type: "drop", beat: 511 }, { type: "drop", beat: 512 }], 512)).toBeNull();
+    expect(addDropBeat([{ type: "build-start", beat: 16 }], 512)).toBe(16);
+    expect(addDropBeat([], 512)).toBe(0);
   });
   it("mixes blend-space A/B within bounds", () => {
     expect(blendView("club", "house", 1.4).mix).toBe(1);

@@ -8,8 +8,8 @@ export interface LiveState {
   source: "REKORDBOX" | "SERATO";
   bpm: number | null;
   beat: number | undefined;
-  deckA: { title: string; section: string | undefined; countdown: string | undefined };
-  deckB: { title: string; section: string | undefined; countdown: string | undefined };
+  deckA: { title: string; artist: string; readiness: "READY" | "NEEDS ANALYSIS"; bpm: number | null; section: string | undefined; countdown: string | undefined };
+  deckB: { title: string; artist: string; readiness: "READY" | "NEEDS ANALYSIS"; bpm: number | null; section: string | undefined; countdown: string | undefined };
   cues: ShowCue[];
   cells: { x: number; color: string }[];
 }
@@ -91,6 +91,9 @@ interface ShellState {
   devices: { address: string; name: string }[];
   target: LightTarget;
   tiles: DeviceTile[];
+  identifiedIds: string[];
+  chasePassedIds: string[];
+  roomSaved: boolean;
   live: LiveState | null;
   selectedTrackId: string | null;
   diagnostics: Record<string, string>;
@@ -129,6 +132,9 @@ export const useShell = create<ShellState>((set) => ({
   devices: [],
   target: "Both",
   tiles: [],
+  identifiedIds: [],
+  chasePassedIds: [],
+  roomSaved: false,
   live: null,
   selectedTrackId: null,
   diagnostics: {},

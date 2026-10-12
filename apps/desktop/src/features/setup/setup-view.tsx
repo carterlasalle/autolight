@@ -4,9 +4,21 @@ import type { FollowMode } from "../../app/store.js";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card.js";
 import { Button } from "../../components/ui/button.js";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select.js";
-import { SETUP_STEPS } from "../venue/venue.js";
+import { SETUP_EVIDENCE_STEPS, setupEvidence, setupProgress, type EvidenceStep } from "../../routes/setup/setup-model.js";
 import { RkbxSetupAssistant } from "./rkbx-setup-panel.js";
 import { SIMULATOR_SCENARIOS, type SimulatorScenario } from "../../routes/settings/simulator-mode.js";
+const STEP_LABELS: Record<EvidenceStep, { title: string; hint: string; route: "setup" | "library" | "venue" | "inspector" | "live" }> = {
+  dj: { title: "DJ link", hint: "Rekordbox or Serato deck state flowing", route: "live" },
+  controller: { title: "Controller", hint: "No controller evidence over IPC yet — stays pending", route: "setup" },
+  library: { title: "Library", hint: "At least one track resolved", route: "library" },
+  lights: { title: "Lights", hint: "Govee scan found a device on the LAN", route: "venue" },
+  identify: { title: "Identify", hint: "IDENTIFY flashed a real fixture", route: "venue" },
+  placement: { title: "Placement", hint: "Room editor has no saved-room record yet — stays pending", route: "venue" },
+  orientation: { title: "Orientation", hint: "DJ anchor facing has no saved-room record yet — stays pending", route: "venue" },
+  qualification: { title: "Qualification", hint: "TEST CHASE passed on every tile", route: "venue" },
+  analysis: { title: "Analysis", hint: "ANLZ grid plus sections resolved", route: "inspector" },
+  preview: { title: "Preview", hint: "Venue preview rendered a show frame", route: "live" },
+};
 const MODES: { id: FollowMode; title: string; body: string }[] = [
   { id: "preview", title: "Preview", body: "Resolves the loaded track's ANLZ grid + plan, renders the venue preview. No playhead sync, no Govee output until a light is on the LAN." },
   { id: "ax-beat", title: "AX beat", body: "Polls Rekordbox's deck time fields at ~1Hz onto the ANLZ grid (±1 beat). Needs: Rekordbox AX readable. No board needed." },
@@ -23,36 +35,40 @@ export function SetupView(): JSX.Element {
   const tiles = useShell((s) => s.tiles);
   const simulatorMode = useShell((s) => s.simulatorMode);
   const [scenario, setScenario] = useState<SimulatorScenario>("normal-night");
-  // Steps resolve from measured state only: live show, scanned devices,
-  // qualified tiles. No manual check-offs; unmet steps read pending.
-  const done: string[] = [
-    ...(live ? ["dj", "library", "analysis", "preview"] : ["dj"]),
-    ...(devices.length > 0 ? ["lights"] : []),
-    ...(tiles.length > 0 ? ["identify", "qualification"] : []),
-  ];
+  // Steps resolve from measured state only: the pure setupEvidence collector
+  // owns the mapping so it is unit pinned. Identify/chase outcomes and room
+  // saves are recorded in the store from their IPC responses; steps with no
+  // renderer-side evidence source (controller) stay pending and say so.
+  const evidence = setupEvidence({
+    live, devices, tiles,
+    identifiedIds: useShell((s) => s.identifiedIds),
+    chasePassedIds: useShell((s) => s.chasePassedIds),
+    roomSaved: useShell((s) => s.roomSaved),
+  });
+  const { done, next } = setupProgress(evidence);
   return (
-    <div className="flex max-w-3xl flex-col gap-3">
+    <div className="flex max-w-5xl flex-col gap-3">
       <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-[13px]">Follow mode</CardTitle></CardHeader>
+        <CardHeader className="pb-2"><CardTitle className="text-sm">Follow mode</CardTitle></CardHeader>
         <CardContent className="flex flex-col gap-2">
           <div role="radiogroup" aria-label="Follow mode" className="grid grid-cols-2 gap-2">
             {MODES.map((m) => (
               <button
                 key={m.id} type="button" role="radio" aria-checked={mode === m.id}
                 onClick={() => { set({ followMode: m.id }); void invoke("follow/mode", { version: 1, mode: m.id }); }}
-                className={`rounded-lg border p-2.5 text-left text-[13px] ${mode === m.id ? "border-primary bg-primary/10" : "border-border hover:bg-muted"}`}
+                className={`rounded-lg border p-2.5 text-left text-sm ${mode === m.id ? "border-primary bg-primary/10" : "border-border hover:bg-muted"}`}
               >
                 <span className="font-medium">{m.title}</span>
               </button>
             ))}
           </div>
-          <p className="text-[13px] text-muted-foreground">{MODES.find((m) => m.id === mode)?.body}</p>
+          <p className="text-sm text-muted-foreground">{MODES.find((m) => m.id === mode)?.body}</p>
         </CardContent>
       </Card>
       <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-[13px]">Simulator: {simulatorMode ? "on" : "off"}</CardTitle></CardHeader>
+        <CardHeader className="pb-2"><CardTitle className="text-sm">Simulator: {simulatorMode ? "on" : "off"}</CardTitle></CardHeader>
         <CardContent className="flex flex-wrap items-center gap-2">
-          <label className="flex items-center gap-2 text-[13px]">Scenario:
+          <label className="flex items-center gap-2 text-sm">Scenario:
             <Select value={scenario} onValueChange={(v) => setScenario(v as SimulatorScenario)}>
               <SelectTrigger className="h-8 w-44"><SelectValue /></SelectTrigger>
               <SelectContent>{SIMULATOR_SCENARIOS.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
@@ -64,15 +80,18 @@ export function SetupView(): JSX.Element {
         </CardContent>
       </Card>
       <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-[13px]">Setup: {done.length} of {SETUP_STEPS.length} ready</CardTitle></CardHeader>
+        <CardHeader className="pb-2"><CardTitle className="text-sm">Setup: {done.length} of {SETUP_EVIDENCE_STEPS.length} ready</CardTitle></CardHeader>
         <CardContent>
-          <ol aria-label="Setup" className="flex list-decimal flex-col gap-1.5 pl-5 text-[13px]">
-            {SETUP_STEPS.map((s) => {
+          <ol aria-label="Setup" className="flex list-decimal flex-col gap-1.5 pl-5 text-sm">
+            {SETUP_EVIDENCE_STEPS.map((s) => {
+              // Total by construction: STEP_LABELS covers every EvidenceStep.
+              const meta: (typeof STEP_LABELS)[EvidenceStep] = STEP_LABELS[s];
               const ready = done.includes(s);
+              const isNext = next === s;
               return (
-                <li key={s} aria-current={!ready && done.length === SETUP_STEPS.indexOf(s) ? "step" : undefined}>
-                  {ready ? "✓ " : ""}{s}
-                  {!ready ? <span className="text-muted-foreground"> — pending</span> : null}
+                <li key={s} aria-current={isNext ? "step" : undefined} className="flex flex-wrap items-center gap-2">
+                  <span>{ready ? "✓ " : ""}{meta.title}<span className="text-muted-foreground"> — {ready ? "ready" : meta.hint}</span></span>
+                  {!ready ? <Button size="sm" variant="outline" onClick={() => { set({ route: meta.route }); }}>Open {meta.title}</Button> : null}
                 </li>
               );
             })}

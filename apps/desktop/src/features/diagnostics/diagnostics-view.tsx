@@ -6,7 +6,7 @@ import { deckBpm } from "../../components/kit.js";
 import { DIAGNOSTIC_TABS, djEventRow, isFresh, type DjEventRow } from "../../routes/diagnostics/diagnostics-model.js";
 
 function renderBpm(bpm: number | null): string {
-  return bpm === null ? "-- BPM" : `${deckBpm(bpm)} BPM`;
+  return bpm === null ? deckBpm(bpm) : `${deckBpm(bpm)} BPM`;
 }
 
 // Per-tab metric rows: each tab names the rows it owns; anything else falls
@@ -27,15 +27,15 @@ function TabMetrics({ tab, rows, fallback, sessionEvents }: {
   tab: string; rows: { label: string; value: string }[]; fallback: string | undefined; sessionEvents: number;
 }): JSX.Element {
   if (tab === "Logs") {
-    return <p className="font-timing text-[13px] tabular-nums">Session events: {sessionEvents}</p>;
+    return <p className="font-timing text-sm tabular-nums">Session events: {sessionEvents}</p>;
   }
   const wanted = TAB_ROWS[tab] ?? [];
   const found = rows.filter((r) => wanted.includes(r.label));
   if (found.length === 0) {
-    return <p className="text-[13px] text-muted-foreground">{fallback ?? `${tab}: loading…`}</p>;
+    return <p className="text-sm text-muted-foreground">{fallback ?? `${tab}: loading…`}</p>;
   }
   return (
-    <dl className="grid grid-cols-[140px_1fr] gap-x-3 gap-y-1.5 text-[13px]">
+    <dl className="grid grid-cols-[140px_1fr] gap-x-3 gap-y-1.5 text-sm">
       {found.map((r) => (
         <div key={r.label} className="contents">
           <dt className="text-muted-foreground">{r.label}</dt>
@@ -95,7 +95,7 @@ export function DiagnosticsView(): JSX.Element {
     <div className="flex max-w-5xl flex-col gap-3">
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-[13px]">
+          <CardTitle className="text-sm">
             Diagnostics{stale ? " · stale" : ""}
           </CardTitle>
         </CardHeader>
@@ -108,7 +108,7 @@ export function DiagnosticsView(): JSX.Element {
               <TabsContent key={t} value={t}>
                 {t === "DJ Events" ? (
                   events.length > 0 ? (
-                    <table aria-label="DJ events" className="w-full border-collapse text-[13px]">
+                    <table aria-label="DJ events" className="w-full border-collapse text-sm">
                       <thead>
                         <tr className="text-left text-xs text-muted-foreground">
                           <th scope="col" className="border-b py-1.5 pr-3 font-medium">Time</th>
@@ -129,7 +129,7 @@ export function DiagnosticsView(): JSX.Element {
                       </tbody>
                     </table>
                   ) : (
-                    <p className="text-[13px] text-muted-foreground">No DJ events yet. Load a track and press play — events record to .ndjson.</p>
+                    <p className="text-sm text-muted-foreground">No DJ events yet. Load a track and press play — events record to .ndjson.</p>
                   )
                 ) : (
                   <TabMetrics tab={t} rows={rows} fallback={diagnostics[t]} sessionEvents={sessionEvents} />

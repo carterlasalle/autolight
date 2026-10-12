@@ -10,7 +10,7 @@
 export namespace tokens {
   // Surface: dense order, deep neutral background, minimal chrome.
   export const surface = "bg-background text-foreground";
-  export const panel = "rounded-md border border-border";
+  export const panel = "rounded-xl border border-border bg-card text-card-foreground text-sm";
   export const subtle = "text-muted-foreground";
   export const card = "bg-card text-card-foreground";
 
@@ -25,15 +25,16 @@ export namespace tokens {
   export const statusBad = "var(--bad)";
   export const statusIdle = "var(--muted-foreground)";
 
-  // Type scale: large timing typography, dense body.
+  // Type scale: body text-sm, small text-xs, captions text-[11px] only for
+  // lane labels. Timing stays mono tabular.
   export const type = {
-    body: "text-[13px]",
+    body: "text-sm",
     small: "text-xs",
     caption: "text-[11px]",
     timing: "font-timing tabular-nums",
     timingLarge: "font-timing text-5xl font-semibold tabular-nums",
   } as const;
-  export const fontBody = "text-[13px]";
+  export const fontBody = "text-sm";
   export const fontTiming = "font-timing tabular-nums";
 
   // Spacing: dense.

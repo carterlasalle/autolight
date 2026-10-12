@@ -73,10 +73,10 @@ export function AudioSyncCard(): JSX.Element {
 
   return (
     <Card>
-      <CardHeader className="pb-2"><CardTitle className="text-[13px]">Audio sync</CardTitle></CardHeader>
+      <CardHeader className="pb-2"><CardTitle className="text-sm">Audio sync</CardTitle></CardHeader>
       <CardContent>
         <MetricBadge metric={{ label: "BPM", value: deckBpm(s.bpm), unit: "" }} />
-        <label className="flex items-center gap-2 text-[13px]">Input:
+        <label className="flex items-center gap-2 text-sm">Input:
           <Select
             value={s.audioDevice !== null ? String(s.audioDevice) : ""}
             onValueChange={(v) => { s.set({ audioDevice: Number(v) }); }}
@@ -94,13 +94,13 @@ export function AudioSyncCard(): JSX.Element {
           <span className="font-timing text-xs tabular-nums">{Math.round(level * 100)}%</span>
         </div>
         {s.audioPermission === "denied" && (
-          <p className="text-[13px] text-muted-foreground">Mic blocked — enable microphone access, then Start.</p>
+          <p className="text-sm text-muted-foreground">Mic blocked — enable microphone access, then Start.</p>
         )}
         <div className="flex gap-2">
           <Button size="sm" variant="outline" onClick={() => { void start(); }}>Start</Button>
           <Button size="sm" variant="outline" onClick={stop}>Stop</Button>
         </div>
-        <p className="text-[13px] text-muted-foreground">Overlay nudges brightness/sparkle from the DJ grid (§69) — never mic guessing.</p>
+        <p className="text-sm text-muted-foreground">Overlay nudges brightness/sparkle from the DJ grid (§69) — never mic guessing.</p>
       </CardContent>
     </Card>
   );

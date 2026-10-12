@@ -12,9 +12,9 @@ import { SettingsView } from "../features/settings/settings-view.js";
 // owns the performance surface and wraps its own layout.
 const SCREENS: Record<Route, (live: LiveState | null) => JSX.Element> = {
   live: (live) => (
-    <div className="flex max-w-6xl flex-col gap-3">
+    <div className="flex max-w-5xl flex-col gap-3">
       <LiveView live={live} />
-      <ControlGrid />
+      {live ? <ControlGrid /> : null}
     </div>
   ),
   library: () => <LibraryView />,
