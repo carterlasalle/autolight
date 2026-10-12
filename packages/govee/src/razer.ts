@@ -13,6 +13,13 @@
 // so existing imports from "@autolight/govee" keep resolving. It imports
 // nothing from the engine modules, so the engines can import it without a
 // cycle.
+//
+// Snap versus fade (hardware receipt 2026-10-12, owner H6076 + H1A45): the
+// firmware eases `colorwc` frames into each other, so rapid colorwc strobes
+// read as a slow gradient, not a snap. B0/B4 paint with gradient=0 snaps
+// with no fade at 10 Hz on both units. Rule: anything that must cut —
+// strobes, white hits, blackouts — travels the razer stream, never colorwc.
+// colorwc is for slow fades and static looks, where the easing is welcome.
 
 export const OPCODE = { ARM: 0xb1, RGB_STREAM: 0xb0, ZONED: 0xb4, ARM_STATUS: 0xb2 } as const;
 export const PORTS = { DISCOVER_MCAST: 4001, DISCOVER_RESP: 4002, CONTROL: 4003 } as const;

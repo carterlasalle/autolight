@@ -90,7 +90,38 @@ describe("govee device actions", () => {
     expect(result.observedAnswered).toBe(false);
     expect(lamp.armed).toBe(true);
   });
+  it("armed snap effects never touch colorwc: the firmware would fade them", async () => {
 
+    const lamp = new FakeLamp({
+      device: MAC_A,
+      ip: "10.0.0.42",
+      sku: "H6076",
+      firmware: "1.02.03",
+      zones: 4,
+      behaviour: "segmented",
+      armSettleMs: 0,
+      answersStatusWhileArmed: false,
+    });
+    const showFrame = new Uint8Array([10, 0, 0, 20, 0, 0, 30, 0, 0, 40, 0, 0]);
+    armLamp(lamp);
+    const identified = await identify(
+      lamp,
+      { hardwareId: MAC_A, zones: 4, capability: "segmented", orientation: "forward", armed: true, currentFrame: showFrame },
+      { flashMs: 5, minSpacingMs: 0, captureTimeoutMs: 5 },
+    );
+    const chased = await testChase(
+      lamp,
+      { hardwareId: MAC_A, zones: 4, capability: "segmented", orientation: "forward", armed: true },
+      { stepMs: 1, minSpacingMs: 0 },
+    );
+    // Hardware receipt 2026-10-12: colorwc eases between colors, so any
+    // colorwc here would render a fade, not the snap the caller asked for.
+    for (const sent of [...identified.commandsSent, ...chased.commandsSent]) {
+      expect(sent).not.toContain('"colorwc"');
+    }
+    expect(identified.framesSentHex.length).toBeGreaterThan(0);
+    expect(chased.framesSentHex.length).toBeGreaterThan(0);
+  });
   it("IDENTIFY flashes through colorwc when unarmed and restores the observed state", async () => {
     const lamp = new FakeLamp({
       device: MAC_A,
