@@ -88,6 +88,13 @@ export function govee() {
 }
 
 
+// Analysis supervisor: started once from boot so the show bridge's analyze
+// callback can submit jobs. Without this, submit() returns
+// E_SUPERVISOR_NOT_STARTED and no deck ever resolves (silent empty show).
+export function startAnalysis(): void {
+  getAnalysisSupervisor().start();
+}
+
 // 1Hz AX poll loop: started once from boot; writes into service.ax.
 let axTimer: NodeJS.Timeout | null = null;
 export function startAxLoop(): void {

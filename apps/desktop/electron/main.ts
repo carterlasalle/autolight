@@ -5,9 +5,10 @@ import { createIpc } from "./services/ipc-router.js";
 import {
   createShowService,
   getShowService,
+  startAnalysis,
   startAxLoop,
-  startCompositeFlx4,
   startProlink,
+  startCompositeFlx4,
   quitApp,
   setShowAcceptingUi,
   applyCrashPolicy,
@@ -294,6 +295,7 @@ export async function boot(): Promise<void> {
     await win.loadFile(join(__dirname, "..", "renderer", "index.html"));
   }
   createShowService();
+  startAnalysis();
   startAxLoop();
   startProlink();
   startCompositeFlx4();

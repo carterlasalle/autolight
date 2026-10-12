@@ -68,4 +68,13 @@ describe("live show bridge", () => {
     expect(await bridge.resolveDeck(1, 10, true, null)).toBeNull();
     expect(bridge.decksSnapshot()).toEqual([]);
   });
+
+  it("an unstarted supervisor surfaces E_SUPERVISOR_NOT_STARTED, never a silent empty", async () => {
+    const { AnalysisSupervisor } = await import("./analysis-supervisor.js");
+    const supervisor = new AnalysisSupervisor();
+    const res = await supervisor.submit({ trackId: "t", audioPath: "", priority: "deck" });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error.code).toBe("E_SUPERVISOR_NOT_STARTED");
+    supervisor.start();
+  });
 });
