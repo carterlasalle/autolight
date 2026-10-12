@@ -18,6 +18,7 @@
     "dev": "yarn workspace @autolight/desktop dev",
     "truth": "node docs/finish/tools/check-coverage.mjs && node tools/capabilities-check.mjs && node tools/claim-check.mjs && node tools/forbidden-words.mjs && node tools/trackmodel-drift.mjs && yarn sg scan --config tools/ast-grep/sgconfig.yml",
     "audit:truth": "yarn truth",
+    "analyze": "node_modules/.bin/oxlint && yarn knip && yarn depcruise --config .dependency-cruiser.cjs packages apps/desktop/src apps/desktop/electron && node tools/unwired-service.mjs && yarn tsc --noEmit -p apps/desktop/tsconfig.typecheck.json --noUnusedLocals --noUnusedParameters --noImplicitReturns --noFallthroughCasesInSwitch && yarn madge --circular packages/*/src apps/desktop/src apps/desktop/electron && uv run --project analysis ruff check analysis/src analysis/tests && uv run --project analysis pyright analysis/src/autolight_analysis && uv run --project analysis --with vulture vulture analysis/src --min-confidence 80",
     "verify:all": "yarn build && yarn typecheck && yarn vitest run && uv run --project analysis pytest -q && yarn workspace @autolight/desktop test:e2e"
   },
   "devDependencies": {
@@ -32,6 +33,7 @@
     "electron-builder": "^26",
     "esbuild": "^0.28.2",
     "eslint": "^10.11.0",
+    "gitnexus": "^1.6.12",
     "knip": "^6.38.0",
     "license-checker-rseidelsohn": "^5.0.1",
     "madge": "^8.0.0",
