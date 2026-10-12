@@ -170,7 +170,7 @@ export function SectionLane({ bands, startBeat, endBeat }: {
         const width = Math.max(0.5, ((s.end - s.start) / span) * 100);
         return (
           <span key={s.start} aria-hidden className="absolute top-0 h-6 bg-muted" style={{ left: `${left}%`, width: `${width}%` }}>
-            <span className="overflow-hidden px-1 text-[10px]">{s.label}</span>
+            <span className={"overflow-hidden px-1 " + tokens.type.caption}>{s.label}</span>
           </span>
         );
       })}

@@ -50,10 +50,10 @@ export function InspectorView(): JSX.Element {
   return (
     <div className="flex max-w-5xl flex-col gap-3">
       <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-[13px]">Track inspector{selected ? ` — ${selected}` : ""}</CardTitle></CardHeader>
+        <CardHeader className="pb-2"><CardTitle className="text-sm">Track inspector{selected ? ` — ${selected}` : ""}</CardTitle></CardHeader>
         <CardContent className="flex flex-col gap-2">
           {!loaded ? (
-            <p className="text-[13px] text-muted-foreground">Loading lanes…</p>
+            <p className="text-sm text-muted-foreground">Loading lanes…</p>
           ) : track === null ? (
             <InspectorEmpty onSetup={() => { useShell.getState().set({ route: "setup" }); }} />
           ) : (
@@ -68,7 +68,7 @@ export function InspectorView(): JSX.Element {
 export function InspectorEmpty({ onSetup }: { onSetup: () => void }): JSX.Element {
   return (
     <div className="flex flex-col items-start gap-2">
-      <p className="text-[13px] text-muted-foreground">No track analyzed yet. Lanes for waveform, grid, sections, events, and cues appear after the analysis worker finishes a loaded deck.</p>
+      <p className="text-sm text-muted-foreground">No track analyzed yet. Lanes for waveform, grid, sections, events, and cues appear after the analysis worker finishes a loaded deck.</p>
       <Button size="sm" variant="outline" onClick={onSetup}>Open Setup</Button>
     </div>
   );
@@ -100,19 +100,19 @@ function InspectorBody({ track, lanes, correct, sendToLights, setSendToLights, b
       <InspectorPanel track={track} startBeat={0} endBeat={lastBeat} />
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" variant="outline" onClick={() => lanes(auditionBeat)}>Audition beat {auditionBeat}</Button>
-        <label className="flex items-center gap-2 text-[13px]">
+        <label className="flex items-center gap-2 text-sm">
           <Switch checked={sendToLights} onCheckedChange={setSendToLights} /> Send to lights
         </label>
-        <label className="flex items-center gap-2 text-[13px]">Blend A/B:
+        <label className="flex items-center gap-2 text-sm">Blend A/B:
           <Slider min={0} max={1} step={0.1} value={[blend]} onValueChange={(v) => setBlend(v[0] ?? blend)} aria-label="Blend A/B" className="w-32" />
           {blend.toFixed(1)}
         </label>
       </div>
-      {audition ? <p className="text-[13px] text-muted-foreground">{audition}</p> : null}
+      {audition ? <p className="text-sm text-muted-foreground">{audition}</p> : null}
       <div className="flex flex-col gap-2" role="group" aria-label="Corrections">
         <div className="flex flex-wrap gap-2" role="group" aria-label="Drop corrections">
           {addBeat === null ? (
-            <span className="text-[13px] text-muted-foreground">No drop-free beat available</span>
+            <span className="text-sm text-muted-foreground">No drop-free beat available</span>
           ) : (
             <Button size="sm" variant="outline" onClick={() => correct({ op: "add-drop", beat: addBeat })}>Add missing drop at {addBeat}</Button>
           )}

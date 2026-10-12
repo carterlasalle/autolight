@@ -37,7 +37,7 @@ export function EnvironmentPanel({
   return (
     <section aria-label="Environment" className="flex flex-col gap-3">
       <div>
-        <h3 className="text-[13px] font-medium">Runtime (detected)</h3>
+        <h3 className="text-sm font-medium">Runtime (detected)</h3>
         <dl className="divide-y divide-border">
           <Row label="Electron" value={facts.electron} />
           <Row label="Node" value={facts.node} />
@@ -48,7 +48,7 @@ export function EnvironmentPanel({
       </div>
       {owner !== undefined ? (
         <div>
-          <h3 className="text-[13px] font-medium">Owner rig (recorded)</h3>
+          <h3 className="text-sm font-medium">Owner rig (recorded)</h3>
           <dl className="divide-y divide-border">
             <Row label="Mac" value={owner.macModel ?? ""} />
             <Row label="Chip" value={owner.macChip ?? ""} />

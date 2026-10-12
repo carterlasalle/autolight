@@ -56,10 +56,10 @@ export function RoomVenueRoute({ room: roomProp, onRoom, saved: savedProp, onSav
   return (
     <div className="flex max-w-5xl flex-col gap-3">
       <section aria-label="Room editor" className="flex flex-col gap-2">
-        <h2 className="text-[13px] font-semibold">Room editor</h2>
+        <h2 className="text-sm font-semibold">Room editor</h2>
         <RoomCanvas room={room} onPatch={setRoom} />
         <div className="flex flex-wrap items-center gap-2">
-          <label className="flex items-center gap-2 text-[13px]">
+          <label className="flex items-center gap-2 text-sm">
             Width (m)
             <Input
               type="number"
@@ -75,7 +75,7 @@ export function RoomVenueRoute({ room: roomProp, onRoom, saved: savedProp, onSav
               className="h-8 w-20"
             />
           </label>
-          <label className="flex items-center gap-2 text-[13px]">
+          <label className="flex items-center gap-2 text-sm">
             Ceiling (m)
             <Input
               type="number"
@@ -88,7 +88,7 @@ export function RoomVenueRoute({ room: roomProp, onRoom, saved: savedProp, onSav
               className="h-8 w-20"
             />
           </label>
-          <label className="flex items-center gap-2 text-[13px]">
+          <label className="flex items-center gap-2 text-sm">
             DJ facing (deg)
             <Input
               type="number"
@@ -112,7 +112,7 @@ export function RoomVenueRoute({ room: roomProp, onRoom, saved: savedProp, onSav
           >
             Save room
           </Button>
-          {saved ? <span className="text-[13px]">Saved in memory; venue persistence exports the file.</span> : null}
+          {saved ? <span className="text-sm">Saved in memory; venue persistence exports the file.</span> : null}
         </div>
       </section>
       <MappingWizard onDone={() => setSaved(true)} />

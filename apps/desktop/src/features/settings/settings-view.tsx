@@ -79,7 +79,7 @@ export function SettingsView(): JSX.Element {
           </nav>
           {pending.length > 0 ? (
             <div className="flex flex-wrap items-center gap-2">
-              <p className="text-[13px] text-muted-foreground">Pending until Live ends: {pending.length}</p>
+              <p className="text-sm text-muted-foreground">Pending until Live ends: {pending.length}</p>
               {live === null ? <Button size="sm" variant="outline" onClick={applyPending}>Apply pending</Button> : null}
             </div>
           ) : null}
@@ -88,7 +88,7 @@ export function SettingsView(): JSX.Element {
       {groups.map(([group, keys]) => (
         <section key={group} id={`settings-${group}`} aria-label={`${group} settings`} className="scroll-mt-24">
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-[13px]">{group} · {keys.length}{keys.length > 200 ? " (showing first 200)" : ""}</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">{group} · {keys.length}{keys.length > 200 ? " (showing first 200)" : ""}</CardTitle></CardHeader>
           <CardContent className="flex flex-col gap-2">
             {keys.slice(0, 200).map((k) => (
               <div key={k.key} className="flex flex-wrap items-center gap-2">

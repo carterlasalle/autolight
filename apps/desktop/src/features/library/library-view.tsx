@@ -26,11 +26,11 @@ export function LibraryView(): JSX.Element {
   return (
     <div className="flex max-w-5xl flex-col gap-3">
       <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-[13px]">Library</CardTitle></CardHeader>
+        <CardHeader className="pb-2"><CardTitle className="text-sm">Library</CardTitle></CardHeader>
         <CardContent className="flex flex-col gap-2">
           <Input aria-label="Search library" placeholder="Search track or artist" value={query} onChange={(e) => setQuery(e.target.value)} />
           {tracks.length > 0 ? (
-            <table aria-label="Library" className="w-full border-collapse text-[13px]">
+            <table aria-label="Library" className="w-full border-collapse text-sm">
               <thead>
                 <tr className="text-left text-xs text-muted-foreground">
                   <th scope="col" className="border-b py-1.5 pr-3 font-medium">Track</th>
@@ -58,20 +58,20 @@ export function LibraryView(): JSX.Element {
             </table>
           ) : (
             <div className="flex flex-col items-start gap-2">
-              <p className="text-[13px] text-muted-foreground">No tracks resolved. Load a track on a deck — rows appear after ANLZ + analysis.</p>
+              <p className="text-sm text-muted-foreground">No tracks resolved. Load a track on a deck — rows appear after ANLZ + analysis.</p>
               <Button size="sm" variant="outline" onClick={() => { set({ route: "setup" }); }}>Open Setup</Button>
             </div>
           )}
         </CardContent>
       </Card>
       <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-[13px]">Preanalysis queue: {queue.length} queued</CardTitle></CardHeader>
+        <CardHeader className="pb-2"><CardTitle className="text-sm">Preanalysis queue: {queue.length} queued</CardTitle></CardHeader>
         <CardContent className="flex flex-col gap-1.5">
           {queue.length === 0 ? (
-            <p className="text-[13px] text-muted-foreground">Select playlists or crates and queue them; entries persist across restarts.</p>
+            <p className="text-sm text-muted-foreground">Select playlists or crates and queue them; entries persist across restarts.</p>
           ) : (
             queue.map((e) => (
-              <div key={e.trackId} className="flex items-center gap-2 text-[13px]">
+              <div key={e.trackId} className="flex items-center gap-2 text-sm">
                 <span>{e.trackId}</span>
                 <span className="text-muted-foreground">{e.state}{e.priority ? " · priority" : ""}</span>
                 <Button size="sm" variant="outline" onClick={() => setQueue((prev) => prioritiseQueue(prev, e.trackId))}>Priority</Button>
