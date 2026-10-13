@@ -68,17 +68,41 @@ function readTrackTitle(nativeDir: string): string | null {
   }
 }
 
+function normalizeTitle(text: string): string {
+  return text.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
 export class LiveShowBridge {
   private readonly decks = new Map<number, BridgeDeck>();
+  // deckId → the ANLZ dir this deck resolved to: retries keep their
+  // assignment, and a second deck can never bind the same unknown-title dir.
+  private readonly nativeDirs = new Map<number, string>();
+  // deckId → in-flight first-sight resolution so concurrent polls coalesce.
+  private readonly inFlight = new Map<number, Promise<BridgeDeck | null>>();
   private anlzDirs: string[] | null = null;
-  private readonly analyze: BridgeOptions["analyze"];
-  private readonly styleId: string;
-  private readonly shareDir: string;
+  private analyze: BridgeOptions["analyze"];
+  private styleId: string;
+  private shareDir: string;
 
   constructor(opts: BridgeOptions = {}) {
     this.analyze = opts.analyze ?? undefined;
     this.styleId = opts.styleId ?? "house";
     this.shareDir = opts.shareDir ?? USBANLZ_DIR;
+  }
+
+  /**
+   * Merge late-bound options. The singleton is often constructed before the
+   * caller that owns the analyzer arrives; previously those options were
+   * discarded and every deck stayed on the no-analyzer miss path forever.
+   */
+  applyOptions(opts: BridgeOptions): void {
+    this.analyze = opts.analyze ?? this.analyze;
+    this.styleId = opts.styleId ?? this.styleId;
+
+    if (opts.shareDir !== undefined && opts.shareDir !== this.shareDir) {
+      this.shareDir = opts.shareDir;
+      this.anlzDirs = null;
+    }
   }
 
   private dirs(): string[] {
@@ -107,27 +131,39 @@ export class LiveShowBridge {
       return deck;
     }
 
-    // First sight: find the ANLZ set. Prefer title match, else first unclaimed.
+    // Concurrent first sight for the same deck coalesces onto one run: two
+    // racing AX polls must not both analyze and overwrite the cache.
+    const pending = this.inFlight.get(deckId);
+
+    if (pending) return pending;
+
+    const run = this.resolveFirstSight(deckId, playheadSeconds, title).finally(() => {
+      this.inFlight.delete(deckId);
+    });
+
+    this.inFlight.set(deckId, run);
+
+    return run;
+  }
+
+  /** First sight: bind an ANLZ dir (stable per deck), analyze, plan. */
+  private async resolveFirstSight(deckId: number, playheadSeconds: number, title: string | null): Promise<BridgeDeck | null> {
     const dirs = this.dirs();
-    let nativeDir: string | null = null;
+    // A deck keeps the dir it already resolved to across retries; otherwise
+    // prefer a title match (same-track decks may legitimately share one dir),
+    // else the first dir no other deck has claimed.
+    let nativeDir: string | null = this.nativeDirs.get(deckId) ?? null;
 
-    if (title) {
-      const lower = title.toLowerCase();
-
-      for (const dir of dirs) {
-        const t = readTrackTitle(dir);
-
-        if (t !== null && (t.toLowerCase().includes(lower) || lower.includes(t.toLowerCase()))) {
-          nativeDir = dir;
-          break;
-        }
-      }
+    if (nativeDir === null && title !== null) {
+      nativeDir = this.matchByTitle(dirs, title);
     }
 
-    if (!nativeDir) {
-      const claimed = new Set([...this.decks.values()].map((d) => (d.track?.identity.id ?? "")));
-      nativeDir = dirs.find((dir) => !claimed.has(dir)) ?? dirs[0] ?? null;
+    if (nativeDir === null) {
+      const taken = new Set(this.nativeDirs.values());
+      nativeDir = dirs.find((dir) => !taken.has(dir)) ?? dirs[0] ?? null;
     }
+
+    if (nativeDir !== null) this.nativeDirs.set(deckId, nativeDir);
 
     // Egress trail, first-sight only: cached coasts stay silent. Each line
     // says where deck data went: no ANLZ match, no analyzer, analysis
@@ -145,17 +181,28 @@ export class LiveShowBridge {
     }
 
     const trackId = `live-deck${deckId}`;
-    const artifactPath = await this.analyze("", nativeDir, trackId);
+    let artifactPath: string | null = null;
+    let analyzeError: string | null = null;
+
+    // The analyzer is injectable and may reject (worker spawn failure,
+    // supervisor down); a rejected promise previously escaped resolveDeck
+    // entirely. Record it and treat as an honest miss instead.
+    try {
+      artifactPath = await this.analyze("", nativeDir, trackId);
+    } catch (err) {
+      analyzeError = err instanceof Error ? err.message : String(err);
+    }
 
     if (!artifactPath) {
-      audit("bridge.miss", { deck: deckId, reason: "analysis-failed" });
+      audit("bridge.miss", { deck: deckId, reason: "analysis-failed", error: analyzeError?.slice(0, 200) ?? null });
 
       return null;
     }
 
     try {
-      const raw = JSON.parse(readFileSync(artifactPath, "utf8")) as unknown;
-      const track = trackModelSchema.parse({ ...(raw as Record<string, unknown>), identity: { id: trackId, sourceIds: {} } });
+      // zod validates the payload below: parsing the artifact IS the boundary.
+      const raw = JSON.parse(readFileSync(artifactPath, "utf8"));
+      const track = trackModelSchema.parse({ ...raw, identity: { id: trackId, sourceIds: {} } });
       const style = showStyleSchema.parse(BUILT_IN_STYLES[this.styleId] ?? BUILT_IN_STYLES["house"]);
       const plan = planShow(track, style);
 
@@ -171,9 +218,39 @@ export class LiveShowBridge {
       audit("bridge.resolved", { deck: deckId, beats: track.beatGrid.beats.length, cues: plan.cues.length });
 
       return deck;
-    } catch {
+    } catch (err) {
+      // Malformed artifact or schema drift: same observability as the other
+      // miss paths — a silent null here hides the failure from diagnostics.
+      audit("bridge.miss", { deck: deckId, reason: "artifact-invalid", error: String(err instanceof Error ? err.message : err).slice(0, 200) });
+
       return null;
     }
+  }
+
+  /**
+   * Heuristic title match against extracted ANLZ runs. readTrackTitle is a
+   * printable-run scan, not a tag parse, so accept only normalized equality,
+   * or containment where the contained side is at least 6 characters —
+   * short noisy runs otherwise false-positive against unrelated dirs.
+   */
+  private matchByTitle(dirs: string[], title: string): string | null {
+    const lower = normalizeTitle(title);
+
+    for (const dir of dirs) {
+      const t = readTrackTitle(dir);
+
+      if (t === null) continue;
+
+      const extracted = normalizeTitle(t);
+
+      if (extracted.length === 0) continue;
+
+      if (extracted === lower || (extracted.length >= 6 && lower.includes(extracted)) || (lower.length >= 6 && extracted.includes(lower))) {
+        return dir;
+      }
+    }
+
+    return null;
   }
 
   decksSnapshot(): { state: DeckState; track: TrackModel | null; plan: ShowPlan | null }[] {
@@ -186,6 +263,7 @@ export class LiveShowBridge {
 
   clear(): void {
     this.decks.clear();
+    this.nativeDirs.clear();
     this.anlzDirs = null;
   }
 }
@@ -193,7 +271,15 @@ export class LiveShowBridge {
 let bridge: LiveShowBridge | null = null;
 
 export function getLiveShowBridge(opts?: BridgeOptions): LiveShowBridge {
-  if (!bridge) bridge = new LiveShowBridge(opts);
+  if (!bridge) {
+    bridge = new LiveShowBridge(opts);
+
+    return bridge;
+  }
+
+  // Late callers can still supply the analyzer/style/shareDir: the first
+  // construction may have happened without them (previously discarded).
+  if (opts) bridge.applyOptions(opts);
 
   return bridge;
 }

@@ -115,8 +115,8 @@ function pipLicenses() {
 
 function handList() {
   return [
-    { name: "FFmpeg", kind: "bundled binary", license: "LGPL-2.1-or-later (unmodified binary; T-OPS-05 bundles it)", version: "system (brew/choco today)" },
-    { name: "uv", kind: "bundled binary", license: "MIT OR Apache-2.0", version: "pinned by astral-sh/setup-uv" },
+    { name: "FFmpeg", kind: "bundled binary", license: "LGPL-2.1-or-later (unmodified static build; T-OPS-05 vendors it)", version: "pinned in apps/desktop/scripts/fetch-vendor.mjs (BtbN win64-lgpl, myndr macOS-arm64)" },
+    { name: "uv", kind: "bundled binary", license: "MIT OR Apache-2.0", version: "0.9.4 (pinned in apps/desktop/scripts/fetch-vendor.mjs; astral-sh/setup-uv in CI)" },
     { name: "Python 3.12", kind: "runtime", license: "PSF-2.0", version: "3.12 (setup-python)" },
     { name: "Node.js 22 (Electron bundles its own)", kind: "runtime", license: "MIT", version: "engines >=22.12" },
     { name: "all-in-one-infer weights", kind: "model weights", license: "UNLICENSED until owner decides (OD-09); not bundled today", version: "not bundled" },

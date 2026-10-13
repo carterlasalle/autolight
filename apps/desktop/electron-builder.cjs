@@ -30,7 +30,7 @@ const config = {
     {
       from: "vendor",
       to: "vendor",
-      filter: ["**/*", "!**/.gitkeep"],
+      filter: ["**/*", "!**/.gitkeep", "!**/.work", "!**/.work/**"],
     },
     {
       from: "../../analysis",
