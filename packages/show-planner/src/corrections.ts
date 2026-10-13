@@ -63,7 +63,10 @@ export function regenerateWithLocks(input: RegenInput): RegenResult {
     return true;
   });
 
-  const pinned = input.edits.pinnedCues.filter((c) => !deleted.has(c.id) && !keptIds.has(c.id));
+  const freshIds = new Set(fresh.map((c) => c.id));
+  const pinned = input.edits.pinnedCues.filter(
+    (c) => !deleted.has(c.id) && !keptIds.has(c.id) && !freshIds.has(c.id),
+  );
 
   const cues = [...kept, ...fresh, ...pinned].sort(
     (a, b) => a.startBeat - b.startBeat || b.priority - a.priority,
@@ -84,6 +87,7 @@ export function applyEdits(
   edits: PlanEdits,
 ): EditReport {
   const ids = new Set(cues.map((c) => c.id));
+  const deletedIds = new Set(edits.deletedCueIds);
   const noLongerApply: string[] = [];
   let applied = 0;
 
@@ -94,11 +98,16 @@ export function applyEdits(
 
   for (const p of edits.pinnedCues) {
     if (ids.has(p.id)) applied++;
-    else applied++;
+    else noLongerApply.push(`pinned ${p.id} no longer in plan`);
   }
 
   for (const r of edits.lockedRegions) {
-    const covered = cues.some((c) => c.startBeat >= r.startBeat && c.startBeat < r.endBeat);
+    const covered = cues.some(
+      (c) =>
+        !deletedIds.has(c.id) &&
+        c.startBeat >= r.startBeat &&
+        c.startBeat + c.durationBeats <= r.endBeat,
+    );
 
     if (covered) applied++;
     else noLongerApply.push(`locked ${r.startBeat}-${r.endBeat} covers no cues`);

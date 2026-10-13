@@ -39,7 +39,23 @@
     },
     {
       "type": "pulse",
+      "startBeat": 33,
+      "durationBeats": 0.5,
+      "intensity": 0.5202000000000001,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "pulse",
       "startBeat": 34,
+      "durationBeats": 0.5,
+      "intensity": 0.5202000000000001,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "pulse",
+      "startBeat": 35,
       "durationBeats": 0.5,
       "intensity": 0.5202000000000001,
       "target": "PRIMARY",
@@ -60,6 +76,14 @@
       "intensity": 0.6,
       "target": "AMBIENT",
       "priority": 35
+    },
+    {
+      "type": "pulse",
+      "startBeat": 37,
+      "durationBeats": 0.5,
+      "intensity": 0.5202000000000001,
+      "target": "PRIMARY",
+      "priority": 60
     },
     {
       "type": "pulse",
@@ -87,6 +111,14 @@
     },
     {
       "type": "pulse",
+      "startBeat": 39,
+      "durationBeats": 0.5,
+      "intensity": 0.5202000000000001,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "pulse",
       "startBeat": 40,
       "durationBeats": 0.5,
       "intensity": 0.5202000000000001,
@@ -103,7 +135,23 @@
     },
     {
       "type": "pulse",
+      "startBeat": 41,
+      "durationBeats": 0.5,
+      "intensity": 0.5202000000000001,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "pulse",
       "startBeat": 42,
+      "durationBeats": 0.5,
+      "intensity": 0.5202000000000001,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "pulse",
+      "startBeat": 43,
       "durationBeats": 0.5,
       "intensity": 0.5202000000000001,
       "target": "PRIMARY",
@@ -126,6 +174,14 @@
       "priority": 50
     },
     {
+      "type": "pulse",
+      "startBeat": 45,
+      "durationBeats": 0.5,
+      "intensity": 0.5202000000000001,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
       "type": "chase",
       "startBeat": 45.33333333333333,
       "durationBeats": 6.666666666666667,
@@ -136,6 +192,14 @@
     {
       "type": "pulse",
       "startBeat": 46,
+      "durationBeats": 0.5,
+      "intensity": 0.5202000000000001,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "pulse",
+      "startBeat": 47,
       "durationBeats": 0.5,
       "intensity": 0.5202000000000001,
       "target": "PRIMARY",
@@ -159,7 +223,23 @@
     },
     {
       "type": "pulse",
+      "startBeat": 49,
+      "durationBeats": 0.5,
+      "intensity": 0.5202000000000001,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "pulse",
       "startBeat": 50,
+      "durationBeats": 0.5,
+      "intensity": 0.5202000000000001,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "pulse",
+      "startBeat": 51,
       "durationBeats": 0.5,
       "intensity": 0.5202000000000001,
       "target": "PRIMARY",
@@ -191,7 +271,23 @@
     },
     {
       "type": "pulse",
+      "startBeat": 53,
+      "durationBeats": 0.5,
+      "intensity": 0.5202000000000001,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "pulse",
       "startBeat": 54,
+      "durationBeats": 0.5,
+      "intensity": 0.5202000000000001,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "pulse",
+      "startBeat": 55,
       "durationBeats": 0.5,
       "intensity": 0.5202000000000001,
       "target": "PRIMARY",
@@ -212,6 +308,14 @@
       "intensity": 0.7,
       "target": "PRIMARY",
       "priority": 52
+    },
+    {
+      "type": "pulse",
+      "startBeat": 57,
+      "durationBeats": 0.5,
+      "intensity": 0.5202000000000001,
+      "target": "PRIMARY",
+      "priority": 60
     },
     {
       "type": "build-ramp",
@@ -239,7 +343,23 @@
     },
     {
       "type": "pulse",
+      "startBeat": 59,
+      "durationBeats": 0.5,
+      "intensity": 0.5202000000000001,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "pulse",
       "startBeat": 60,
+      "durationBeats": 0.5,
+      "intensity": 0.5202000000000001,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "pulse",
+      "startBeat": 61,
       "durationBeats": 0.5,
       "intensity": 0.5202000000000001,
       "target": "PRIMARY",
@@ -260,6 +380,14 @@
       "intensity": 0,
       "target": "ALL",
       "priority": 96
+    },
+    {
+      "type": "pulse",
+      "startBeat": 63,
+      "durationBeats": 0.5,
+      "intensity": 0.5202000000000001,
+      "target": "PRIMARY",
+      "priority": 60
     },
     {
       "type": "white-hit",
@@ -311,6 +439,14 @@
     },
     {
       "type": "pulse",
+      "startBeat": 65,
+      "durationBeats": 0.5,
+      "intensity": 0.585225,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "pulse",
       "startBeat": 66,
       "durationBeats": 0.5,
       "intensity": 0.585225,
@@ -324,6 +460,14 @@
       "intensity": 0.85,
       "target": "PRIMARY",
       "priority": 61
+    },
+    {
+      "type": "pulse",
+      "startBeat": 67,
+      "durationBeats": 0.5,
+      "intensity": 0.585225,
+      "target": "PRIMARY",
+      "priority": 60
     },
     {
       "type": "pulse",
@@ -343,6 +487,14 @@
     },
     {
       "type": "pulse",
+      "startBeat": 69,
+      "durationBeats": 0.5,
+      "intensity": 0.585225,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "pulse",
       "startBeat": 70,
       "durationBeats": 0.5,
       "intensity": 0.585225,
@@ -356,6 +508,14 @@
       "intensity": 0.9,
       "target": "LEFT",
       "priority": 11
+    },
+    {
+      "type": "pulse",
+      "startBeat": 71,
+      "durationBeats": 0.5,
+      "intensity": 0.585225,
+      "target": "PRIMARY",
+      "priority": 60
     },
     {
       "type": "pulse",
@@ -375,6 +535,14 @@
     },
     {
       "type": "pulse",
+      "startBeat": 73,
+      "durationBeats": 0.5,
+      "intensity": 0.585225,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "pulse",
       "startBeat": 74,
       "durationBeats": 0.5,
       "intensity": 0.585225,
@@ -383,7 +551,23 @@
     },
     {
       "type": "pulse",
+      "startBeat": 75,
+      "durationBeats": 0.5,
+      "intensity": 0.585225,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "pulse",
       "startBeat": 76,
+      "durationBeats": 0.5,
+      "intensity": 0.585225,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "pulse",
+      "startBeat": 77,
       "durationBeats": 0.5,
       "intensity": 0.585225,
       "target": "PRIMARY",
@@ -407,6 +591,14 @@
     },
     {
       "type": "pulse",
+      "startBeat": 79,
+      "durationBeats": 0.5,
+      "intensity": 0.585225,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "pulse",
       "startBeat": 80,
       "durationBeats": 0.5,
       "intensity": 0.585225,
@@ -423,7 +615,23 @@
     },
     {
       "type": "pulse",
+      "startBeat": 81,
+      "durationBeats": 0.5,
+      "intensity": 0.585225,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "pulse",
       "startBeat": 82,
+      "durationBeats": 0.5,
+      "intensity": 0.585225,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "pulse",
+      "startBeat": 83,
       "durationBeats": 0.5,
       "intensity": 0.585225,
       "target": "PRIMARY",
@@ -447,7 +655,23 @@
     },
     {
       "type": "pulse",
+      "startBeat": 85,
+      "durationBeats": 0.5,
+      "intensity": 0.585225,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "pulse",
       "startBeat": 86,
+      "durationBeats": 0.5,
+      "intensity": 0.585225,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "pulse",
+      "startBeat": 87,
       "durationBeats": 0.5,
       "intensity": 0.585225,
       "target": "PRIMARY",
@@ -471,6 +695,14 @@
     },
     {
       "type": "pulse",
+      "startBeat": 89,
+      "durationBeats": 0.5,
+      "intensity": 0.585225,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "pulse",
       "startBeat": 90,
       "durationBeats": 0.5,
       "intensity": 0.585225,
@@ -487,6 +719,14 @@
     },
     {
       "type": "pulse",
+      "startBeat": 91,
+      "durationBeats": 0.5,
+      "intensity": 0.585225,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "pulse",
       "startBeat": 92,
       "durationBeats": 0.5,
       "intensity": 0.585225,
@@ -495,7 +735,23 @@
     },
     {
       "type": "pulse",
+      "startBeat": 93,
+      "durationBeats": 0.5,
+      "intensity": 0.585225,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "pulse",
       "startBeat": 94,
+      "durationBeats": 0.5,
+      "intensity": 0.585225,
+      "target": "PRIMARY",
+      "priority": 60
+    },
+    {
+      "type": "pulse",
+      "startBeat": 95,
       "durationBeats": 0.5,
       "intensity": 0.585225,
       "target": "PRIMARY",

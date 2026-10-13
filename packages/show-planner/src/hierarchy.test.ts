@@ -5,6 +5,9 @@ import { DEFAULT_CONFIG } from "./config.js";
 import { BUILT_IN_STYLES } from "./styles.js";
 import { DEFAULT_VENUE_CLASS } from "./types.js";
 import { validateCompiledPlan } from "./validate.js";
+import { assertCueLevelAttributes } from "./hierarchy.js";
+
+assertCueLevelAttributes();
 
 function futureTrack(): TrackModel {
   return {

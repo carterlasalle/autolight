@@ -63,6 +63,9 @@ describe("planner", () => {
   });
   it("reuses motif with direction variation on repeat chorus", () => {
     const cues = planShow(track, style).cues.filter((c) => c.priority === 10 && (c.startBeat === 64 || c.startBeat === 128));
+    expect(cues).toHaveLength(2);
+    expect(cues[0]!.target).toBe("PRIMARY");
+    expect(cues[1]!.target).toBe("SECONDARY");
     expect(cues[0]!.target).not.toBe(cues[1]!.target);
   });
   it("restrains repeat white hits", () => {
@@ -74,8 +77,9 @@ describe("planner", () => {
   });
   it("blends in linear light, not naive sRGB", () => {
     const [r, g, b] = blendRgb([255, 0, 0], [0, 0, 255], 0.5);
-    expect(r).toBeGreaterThan(100);
-    expect(b).toBeGreaterThan(100);
+    // Linear-light mix ≈188 per channel; naive sRGB averaging would be ≈128.
+    expect(r).toBeGreaterThan(150);
+    expect(b).toBeGreaterThan(150);
     expect([r, g, b].every((v) => v >= 0 && v <= 255)).toBe(true);
   });
   it("maps section energy and motif variants", () => {

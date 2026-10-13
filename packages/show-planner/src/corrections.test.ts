@@ -8,7 +8,7 @@ import { BUILT_IN_STYLES } from "./styles.js";
 import { DEFAULT_VENUE_CLASS, EMPTY_EDITS } from "./types.js";
 
 function model(): TrackModel {
-  return {
+  const m: TrackModel = {
     schemaVersion: 2, analyzerVersion: "t", identity: { id: "corr", sourceIds: {} },
     durationSeconds: 400,
     beatGrid: { version: 1, beats: [{ index: 0, beatInBar: 1, sourceTimeMs: 0, bpm: 128 }] },
@@ -47,13 +47,18 @@ function model(): TrackModel {
     gridWarnings: [],
     beatFeatures: [],
     phrases: [],
-  } as TrackModel;
+  };
+
+  return m;
 }
 
 describe("T-PLAN-11 corrections (P-97)", () => {
   it("derives stable ids from seed, section, level and ordinal", () => {
     expect(cueId("seed", 1, "beat", 3)).toBe(cueId("seed", 1, "beat", 3));
     expect(cueId("seed", 1, "beat", 3)).not.toBe(cueId("seed", 2, "beat", 3));
+    expect(cueId("seed", 1, "beat", 3)).not.toBe(cueId("other", 1, "beat", 3));
+    expect(cueId("seed", 1, "beat", 3)).not.toBe(cueId("seed", 1, "bar", 3));
+    expect(cueId("seed", 1, "beat", 3)).not.toBe(cueId("seed", 1, "beat", 4));
   });
   it("regenerating a middle section keeps every cue id outside it", () => {
     const { plan } = compileShow({ track: model(), venue: DEFAULT_VENUE_CLASS, style: BUILT_IN_STYLES["club"]!, config: DEFAULT_CONFIG });
@@ -66,15 +71,40 @@ describe("T-PLAN-11 corrections (P-97)", () => {
       expect(kept, id).toBeDefined();
       expect(kept!.startBeat).toBe(beat);
     }
+
+    // The middle section must actually regenerate: fresh cues land with the
+    // new intensity, and the loop must have had outside cues to preserve.
+    expect(before.size).toBeGreaterThan(0);
+
+    for (const c of fresh) {
+      const landed = cues.find((k) => k.id === c.id);
+      expect(landed, c.id).toBeDefined();
+      expect(landed!.intensity).toBe(0.1);
+    }
   });
   it("locks survive, deletions stick, and stale edits are reported on upgrade", () => {
     const { plan } = compileShow({ track: model(), venue: DEFAULT_VENUE_CLASS, style: BUILT_IN_STYLES["club"]!, config: DEFAULT_CONFIG });
     const victim = plan.cues.find((c) => c.startBeat >= 32 && c.startBeat < 64)!;
-    const edits = { ...EMPTY_EDITS, lockedRegions: [{ startBeat: 0, endBeat: 32 }], deletedCueIds: [victim.id] };
-    const r = regenerateWithLocks({ plan, sectionStart: 32, sectionEnd: 64, fresh: [], edits });
+    // Lock region 0-96 spans whole cues, so the full-span coverage predicate
+    // (startBeat + durationBeats <= endBeat, matching inLockedRegion) counts
+    // it as applied; the 500-600 region covers nothing and is reported.
+    const edits = { ...EMPTY_EDITS, lockedRegions: [{ startBeat: 0, endBeat: 96 }], deletedCueIds: [victim.id] };
+    // Re-add the victim via fresh: only the deletion logic can remove it, so a
+    // regression that ignores deletedCueIds fails here.
+    const r = regenerateWithLocks({ plan, sectionStart: 32, sectionEnd: 64, fresh: [{ ...victim }], edits });
     expect(r.cues.some((c) => c.id === victim.id)).toBe(false);
+    expect(r.droppedFresh).toContain(victim.id);
     expect(r.cues.some((c) => c.startBeat < 32)).toBe(true);
-    const rep = applyEdits(r.cues, { ...edits, lockedRegions: [{ startBeat: 500, endBeat: 600 }] });
-    expect(rep.noLongerApply.some((x) => x.includes("covers no cues"))).toBe(true);
+    const rep = applyEdits(r.cues, { ...edits, lockedRegions: [{ startBeat: 0, endBeat: 96 }, { startBeat: 500, endBeat: 600 }] });
+    expect(rep.applied).toBeGreaterThan(0);
+    expect(rep.noLongerApply.some((x) => x.includes("500-600"))).toBe(true);
+  });
+  it("reconciles pinned cues: present pins apply, absent pins are reported", () => {
+    const { plan } = compileShow({ track: model(), venue: DEFAULT_VENUE_CLASS, style: BUILT_IN_STYLES["club"]!, config: DEFAULT_CONFIG });
+    const present = plan.cues[0]!;
+    const absent = { ...present, id: "cue-missing" };
+    const rep = applyEdits(plan.cues, { ...EMPTY_EDITS, pinnedCues: [present, absent] });
+    expect(rep.applied).toBe(1);
+    expect(rep.noLongerApply.some((x) => x.includes("cue-missing"))).toBe(true);
   });
 });

@@ -61,6 +61,20 @@ export const CUE_LEVEL_ATTRIBUTES: Record<string, { level: HierarchyLevel; attrs
   "roll-pattern": { level: "sub-beat", attrs: ["roll"] },
 };
 
+// Test-time invariant: every cue's attrs must be a subset of its level's
+// attributes, else the validator silently accepts/rejects the wrong changes.
+export function assertCueLevelAttributes(): void {
+  for (const [type, entry] of Object.entries(CUE_LEVEL_ATTRIBUTES)) {
+    const allowed = LEVEL_ATTRIBUTES[entry.level];
+
+    for (const attr of entry.attrs) {
+      if (!allowed.includes(attr)) {
+        throw new Error(`CUE_LEVEL_ATTRIBUTES[${type}] attr ${attr} not in LEVEL_ATTRIBUTES[${entry.level}]`);
+      }
+    }
+  }
+}
+
 export interface HierarchyCue {
   type: string;
   startBeat: number;
@@ -96,6 +110,10 @@ export function findDropPlans(track: TrackModel, minConfidence: number): DropPla
   for (const ev of track.musicalEvents) {
     if (ev.type !== "drop" || ev.confidence < minConfidence) continue;
 
+    // First qualifying build event wins (array order = arrangement order):
+    // the earliest stage owns the whole build so staged ramps span the full
+    // build→impact range (P-35/P-36). The predrop fallback covers a predrop
+    // that the build predicate cannot see.
     const build = track.musicalEvents.find(
       (b) =>
         (b.type === "build-start" || b.type === "predrop" || b.type === "build-intensification") &&
@@ -124,7 +142,7 @@ export function stagedBuild(
   const cues: HierarchyCue[] = [];
   const span = Math.max(4, impactBeat - buildStart);
   const stages = Math.max(2, Math.min(8, Math.floor(span / 4)));
-  const stageLen = span / stages;
+  const stageLen = Math.max(1, Math.round(span / stages));
 
   for (let i = 0; i < stages; i++) {
     const start = buildStart + i * stageLen;
@@ -150,6 +168,7 @@ export function phraseStartsIn(
   sectionEnd: number,
   phraseBeats = 8,
 ): number[] {
+  if (phraseBeats <= 0) return [];
   const out: number[] = [];
 
   for (let b = sectionStart + phraseBeats; b < sectionEnd; b += phraseBeats) out.push(b);
@@ -188,6 +207,7 @@ export function barCues(
   periodBeats: number,
   energy: number,
 ): HierarchyCue[] {
+  if (periodBeats <= 0) return [];
   const cues: HierarchyCue[] = [];
 
   for (let b = sectionStart + periodBeats; b < sectionEnd; b += periodBeats) {
@@ -217,7 +237,7 @@ export function beatCues(
   if (energy < 0.75 || movementDensity < 0.4) return [];
   const cues: HierarchyCue[] = [];
 
-  for (let b = sectionStart; b < sectionEnd; b += 2) {
+  for (let b = sectionStart; b < sectionEnd; b += 1) {
     cues.push({
       type: "pulse",
       startBeat: b,
@@ -240,7 +260,9 @@ export function subBeatCues(
   strobeFrequency: number,
   rand: () => number,
 ): HierarchyCue[] {
-  if (strobeFrequency <= 0 || rand() >= strobeFrequency * 0.5) return [];
+  const duty = Math.min(1, strobeFrequency * 0.5);
+
+  if (strobeFrequency <= 0 || rand() >= duty) return [];
 
   return [
     {
