@@ -1,6 +1,7 @@
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import type { ConfigChange } from "@autolight/config";
 import { CC, NOTE } from "@autolight/controller-flx4/consts";
@@ -33,6 +34,10 @@ import { closeStorageService, getStorageService, openStorageService } from "../.
 // substituted, which is the seam production wiring uses too).
 
 const tempDir = (prefix: string): string => mkdtempSync(join(tmpdir(), prefix));
+
+// Committed TrackModel fixture (the T-ANA-12 parity file): T-TRU-03's live
+// proof is self-contained, so CI and any dev machine run the same test.
+const FIXTURE_TRACK_MODEL = fileURLToPath(new URL("../../../../test-fixtures/analysis/live-deck1.trackmodel.json", import.meta.url));
 
 describe("config-service", () => {
   it("persists a layered set, emits the change and rejects unknown keys", async () => {
@@ -623,19 +628,18 @@ describe("ipc handlers have real effects (T-TRU-03)", () => {
       expect(state).toMatchObject({ ok: true, deck: 2 });
       // AL-FLOW-001: show/live serves the stubbed readable deck end to end
       // (poll -> bridge resolve -> populated deck), never constant empty.
-      // Fixture share + artifact mirror live-show-bridge.test.ts.
+      // Self-contained fixture share + committed TrackModel: no machine
+      // paths, so CI and any dev machine run the same proof (mirrors
+      // live-show-bridge.test.ts).
       resetLiveShowBridgeForTest();
       const fixtureShare = mkdtempSync(join(tmpdir(), "tru03-share-"));
       const bucket = join(fixtureShare, "135");
       const trackDir = join(bucket, "fb47d-24bc-49c5-b5e7-ce275ed46465");
       mkdirSync(trackDir, { recursive: true });
-      cpSync(
-        "/Users/rocket/Library/Pioneer/rekordbox/share/PIONEER/USBANLZ/135/fb47d-24bc-49c5-b5e7-ce275ed46465/ANLZ0000.DAT",
-        join(trackDir, "ANLZ0000.DAT"),
-      );
+      writeFileSync(join(trackDir, "ANLZ0000.DAT"), "", "utf16le");
       const artifactDir = mkdtempSync(join(tmpdir(), "tru03-artifact-"));
       const artifactPath = join(artifactDir, "live-deck1.trackmodel.json");
-      cpSync("/Users/rocket/.autolight/analysis-cache/39ec10359514c496a6164306.trackmodel.json", artifactPath);
+      copyFileSync(FIXTURE_TRACK_MODEL, artifactPath);
       getLiveShowBridge({ shareDir: fixtureShare, analyze: async () => artifactPath });
       const live = await call("show/live", { version: 1 });
       const decks = live["decks"] as { state: { playheadSeconds: number }; track: { beatGrid: { beats: unknown[] } } | null; plan: unknown }[];
