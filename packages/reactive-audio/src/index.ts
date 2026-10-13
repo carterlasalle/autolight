@@ -1,10 +1,12 @@
+import { DEFAULT_OVERLAY_CAP, applyOverlayScalar } from "./overlay.js";
+
 // Live audio may only nudge brightness/sparkle (§69); never strobe/palette/drop.
-export const MAX_OVERLAY_GAIN = 0.2; // Fixed cap; now audio.overlay.cap times style.reactiveAmount (T-AUD-03).
+// Legacy scalar entry: delegates to overlay.ts so the configured
+// audio.overlay.cap is honored and black stays black (F-AUD-02/04, T-AUD-03).
+export const MAX_OVERLAY_GAIN = DEFAULT_OVERLAY_CAP;
 
-export function applyOverlay(planned: number, energy: number, reactiveAmount: number): number {
-  const clamped = Math.min(1, Math.max(0, energy)) * Math.min(1, Math.max(0, reactiveAmount));
-
-  return Math.min(1, planned + clamped * MAX_OVERLAY_GAIN);
+export function applyOverlay(planned: number, energy: number, reactiveAmount: number, cap: number = DEFAULT_OVERLAY_CAP): number {
+  return applyOverlayScalar(planned, energy, reactiveAmount, cap);
 }
 
 // Adaptive director (§71): phrase-length looks with cooldowns, not beat reactions.
@@ -20,8 +22,25 @@ export interface DirectorState {
 export function nextLook(state: DirectorState, energyHigh: boolean, seed: number): { look: AdaptiveLook; state: DirectorState } {
   const cooled = Object.fromEntries(Object.entries(state.cooldowns).map(([k, v]) => [k, Math.max(0, v - 1)]));
   const options: AdaptiveLook[] = energyHigh ? ["swell", "shift", "hold"] : ["hold", "dip", "shift"];
-  const avail = options.filter((o) => !(cooled[o]! > 0));
-  const look = avail[seed % avail.length] ?? "hold";
+  const avail = options.filter((o) => !((cooled[o] ?? 0) > 0));
+
+  // Every option on cooldown: cooldowns already decayed above, so holding
+  // one phrase lets them expire instead of violating the restraint.
+  if (avail.length === 0) {
+    return {
+      look: "hold",
+      state: {
+        phraseCount: state.phraseCount + 1,
+        recentLooks: [...state.recentLooks.slice(-3), "hold" as AdaptiveLook],
+        cooldowns: { ...cooled, hold: 2 },
+        palette: state.palette,
+      },
+    };
+  }
+
+  const n = avail.length;
+  const idx = ((Math.trunc(Number.isFinite(seed) ? seed : 0) % n) + n) % n;
+  const look = avail[idx] ?? "hold";
 
   return {
     look,

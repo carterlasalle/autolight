@@ -33,13 +33,13 @@ describe("Ableton Link participation (T-LIVE-12, DS-36)", () => {
 
   it("tracks tempo and phase from a scripted sidecar over a real socket", async () => {
     const sidecar = await startFakeSidecar();
+    const accepted = once(sidecar.server, "connection");
+    const transport = new SidecarLinkTransport({ host: "127.0.0.1", port: sidecar.port });
 
     try {
       // Wait for the server side to accept before sending. The client
       // connect event can fire before the fake sidecar registers the
       // socket, and an immediate send is then lost on the floor.
-      const accepted = once(sidecar.server, "connection");
-      const transport = new SidecarLinkTransport({ host: "127.0.0.1", port: sidecar.port });
       expect(transport.getStatus().state).toBe("unavailable");
       await transport.start();
       await accepted;
@@ -52,19 +52,22 @@ describe("Ableton Link participation (T-LIVE-12, DS-36)", () => {
       expect(transport.latest()).toMatchObject({ bpm: 124, beat: 32, phase: 0.25, quantum: 4, playing: true });
       expect(transport.getStatus().state).toBe("live");
       transport.publish({ tempo: 126 });
-      const published = Promise.withResolvers<void>();
 
-      const check = (): void => {
-        if (sidecar.received.join("\n").includes("setTempo")) published.resolve();
-        else setImmediate(check);
-      };
+      let publishedLine: string | undefined;
 
-      check();
-      await published.promise;
+      for (let attempt = 0; attempt < 200; attempt += 1) {
+        publishedLine = sidecar.received.find((entry) => entry.includes("setTempo"));
+
+        if (publishedLine !== undefined) break;
+        await new Promise<void>((resolve) => setImmediate(resolve));
+      }
+
+      if (publishedLine === undefined) throw new Error("sidecar never received a setTempo frame");
+      expect(JSON.parse(publishedLine)).toMatchObject({ setTempo: 126 });
       transport.ingest("garbage-line\n");
       expect(transport.rejectedCount()).toBe(1);
-      await transport.stop();
     } finally {
+      await transport.stop();
       await stopFakeSidecar(sidecar);
     }
   });

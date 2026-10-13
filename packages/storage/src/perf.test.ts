@@ -120,7 +120,7 @@ describe("performance harness (T-QA-05, spec 117)", () => {
       // in the jitter report, so this entry fails by construction.
       summarise("showHost.tickJitterWith20msStall", "ms", stalledJitter, {
         threshold: thresholds.tickJitterP99Ms,
-        statistic: "p99",
+        statistic: "max",
       }),
       summarise("render.perTick2000Cells", "ms", renderMs, { threshold: thresholds.renderP95Ms }),
       summarise("ipc.roundTrip", "ms", ipcMs, { threshold: thresholds.ipcP95Ms }),
@@ -135,15 +135,20 @@ describe("performance harness (T-QA-05, spec 117)", () => {
       ),
     ];
 
+    const desktopPkg = JSON.parse(readFileSync(join(repoRoot, "apps", "desktop", "package.json"), "utf8")) as {
+      name: string;
+      version: string;
+    };
+
     const file = createMeasurementFile({
-      appName: JSON.parse(readFileSync(join(repoRoot, "apps", "desktop", "package.json"), "utf8")).name as string,
-      appVersion: JSON.parse(readFileSync(join(repoRoot, "apps", "desktop", "package.json"), "utf8")).version as string,
+      appName: desktopPkg.name,
+      appVersion: desktopPkg.version,
       configHash: configSnapshotHash({
         "runtime.clock.tickHz": 60,
         "runtime.fastPath.budgetMs": 100,
         "storage.sqlite.synchronous": "NORMAL",
         "storage.sqlite.busyTimeoutMs": 5000,
-        "qa.perf.ciSlack": 3,
+        "qa.perf.ciSlack": ciSlack,
       }),
       command: `vitest run src/perf.test.ts (${process.argv.slice(0, 2).join(" ")})`,
       ciSlack,
@@ -156,10 +161,11 @@ describe("performance harness (T-QA-05, spec 117)", () => {
     const written = JSON.parse(readFileSync(measurementPath, "utf8")) as typeof file;
     expect(written.machine.cpuCount).toBeGreaterThan(0);
     expect(written.machine.cpuModel.length).toBeGreaterThan(0);
-    expect(written.app.version).toBe("0.1.0");
+    expect(written.app.name).toBe(desktopPkg.name);
+    expect(written.app.version).toBe(desktopPkg.version);
     expect(written.configHash).toHaveLength(16);
     expect(written.command).toContain("perf.test.ts");
-    expect(written.measurements.length).toBe(8);
+    expect(written.measurements.length).toBe(measurements.length);
     expect(written.measurements.every((m) => m.samples > 0 || !m.measured)).toBe(true);
     expect(unmeasured(written).map((m) => m.name)).toEqual(["ui.frameTimeLive"]);
     expect(unmeasured(written).every((m) => (m.reason ?? "").length > 0)).toBe(true);
@@ -177,12 +183,14 @@ describe("performance harness (T-QA-05, spec 117)", () => {
     );
     expect(jitter?.max).toBeGreaterThan(10);
     expect(renderMs.length).toBe(200);
-    // Everything measured passes except the injected stall, which is the
-    // saved red run for the jitter report; fail-closed also reports the
-    // unmeasured live frame metric as failed (never silently absent).
+    // The stall is one deliberately injected outlier: max (not p99) sees it
+    // deterministically, and every other measured entry passes, so a real
+    // regression on a fast host cannot hide behind the slack.
     const failed = failedMeasurements(file).map((m) => m.name);
-    expect(failed).toEqual(expect.arrayContaining(["showHost.tickJitterWith20msStall"]));
-    expect(failed).toContain("ui.frameTimeLive");
+    expect(failed).toContain("showHost.tickJitterWith20msStall");
+    expect(unmeasured(file).map((m) => m.name)).toEqual(["ui.frameTimeLive"]);
+    const measuredFailed = failed.filter((name) => name !== "ui.frameTimeLive");
+    expect(measuredFailed).toEqual(["showHost.tickJitterWith20msStall"]);
   });
 
   it("records relaxed thresholds for CI runs without comparing to the reference machine", () => {
@@ -230,7 +238,8 @@ describe("performance harness (T-QA-05, spec 117)", () => {
   });
 
   it("keeps the evidence measurement.json parseable", () => {
-    const file = JSON.parse(readFileSync(measurementPath, "utf8")) as { measurements: Measurement[]; generatedAt: string };
+    const committed = join(evidenceDir, "measurement.json");
+    const file = JSON.parse(readFileSync(committed, "utf8")) as { measurements: Measurement[]; generatedAt: string };
     expect(file.generatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     expect(file.measurements.map((m) => m.name)).toContain("emergency.requestToSend");
   });

@@ -22,7 +22,18 @@ export function measureLatency(opts: {
   spreadMs?: number;
   method?: LatencyMeasurement["method"];
 }): LatencyMeasurement {
-  const latencyMs = Math.max(0, opts.detectedAtMs - opts.emittedAtMs);
+  // Emitted before detected: inverted ordering or clock-domain skew is a
+  // wiring fault, never a zero-latency measurement. Surface it so callers
+  // cannot mistake it for a good calibration.
+  if (!Number.isFinite(opts.detectedAtMs) || !Number.isFinite(opts.emittedAtMs)) {
+    throw new RangeError(`measureLatency: non-finite clock readings (emitted=${opts.emittedAtMs}, detected=${opts.detectedAtMs})`);
+  }
+
+  if (opts.detectedAtMs < opts.emittedAtMs) {
+    throw new RangeError(`measureLatency: detectedAtMs (${opts.detectedAtMs}) precedes emittedAtMs (${opts.emittedAtMs})`);
+  }
+
+  const latencyMs = opts.detectedAtMs - opts.emittedAtMs;
   const spreadMs = opts.spreadMs ?? 0;
   const confidence = spreadMs <= 0 ? 1 : Math.max(0, 1 - spreadMs / Math.max(1, latencyMs));
 
@@ -35,7 +46,13 @@ export function measureLatency(opts: {
  * added.
  */
 export function alignedShowTimeNs(captureTimeNs: bigint, latencyMs: number): bigint {
-  return captureTimeNs - BigInt(Math.round(latencyMs * 1e6));
+  if (!Number.isFinite(latencyMs) || latencyMs < 0) {
+    throw new RangeError(`alignedShowTimeNs: invalid latencyMs ${latencyMs}`);
+  }
+
+  const offsetNs = BigInt(Math.round(latencyMs * 1e6));
+
+  return captureTimeNs > offsetNs ? captureTimeNs - offsetNs : 0n;
 }
 
 export function alignFeature<F extends { captureTimeNs: bigint }>(
@@ -62,6 +79,14 @@ export class LatencyCalibration {
   }
 
   record(measurement: LatencyMeasurement): void {
+    if (!Number.isFinite(measurement.latencyMs) || measurement.latencyMs < 0) {
+      throw new RangeError(`LatencyCalibration.record: invalid latencyMs ${measurement.latencyMs}`);
+    }
+
+    if (!Number.isFinite(measurement.confidence) || measurement.confidence < 0 || measurement.confidence > 1) {
+      throw new RangeError(`LatencyCalibration.record: invalid confidence ${measurement.confidence}`);
+    }
+
     this.measurement = measurement;
   }
 

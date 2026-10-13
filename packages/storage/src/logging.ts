@@ -35,11 +35,10 @@ interface RepeatState {
   key: string;
   count: number;
   windowStart: number;
-  suppressed: number;
 }
 
 export class Logger {
-  private readonly repeat: RepeatState = { key: "", count: 0, windowStart: 0, suppressed: 0 };
+  private readonly repeat: RepeatState = { key: "", count: 0, windowStart: 0 };
 
   constructor(private readonly options: LoggerOptions) {}
 
@@ -48,14 +47,30 @@ export class Logger {
     const monoMs = now();
     const maxRepeated = this.options.maxRepeated ?? 10;
     const windowMs = this.options.windowMs ?? 1000;
-    const key = `${severity}:${message}`;
+
+    // Core fields are logger-owned: strip them from caller-supplied extra so
+    // a forwarded worker payload cannot masquerade as this logger or break
+    // the spec-130 schema. Contextual fields stay caller-supplied.
+    const { timestamp: _timestamp, monoMs: _monoMs, module: _module, severity: _severity, message: _message, ...rest } =
+      extra;
+
+    // Dedup covers the full event identity, not just text: the same error
+    // string for different decks/tracks is distinct data, never a repeat.
+    const contextKey = [
+      rest.session ?? this.options.session ?? "",
+      rest.deck ?? "",
+      rest.track ?? "",
+      rest.fixture ?? "",
+      rest.event ?? "",
+    ].join(":");
+
+    const key = `${severity}:${message}:${contextKey}`;
     const state = this.repeat;
 
     if (state.key === key && monoMs - state.windowStart < windowMs) {
       state.count += 1;
 
       if (state.count > maxRepeated) {
-        state.suppressed += 1;
         this.options.onSuppressed?.(1);
 
         return;
@@ -67,13 +82,13 @@ export class Logger {
     }
 
     const fields: LogFields = {
-      timestamp: new Date(monoMs).toISOString(),
+      ...rest,
+      ...this.sessionFields(),
+      timestamp: new Date(Date.now()).toISOString(),
       monoMs,
       module: this.options.module,
       severity,
       message,
-      ...this.sessionFields(),
-      ...extra,
     };
 
     if (fields.rawProtocol !== undefined && !(this.options.diagnosticMode ?? false)) {
@@ -104,13 +119,6 @@ export class Logger {
   }
 }
 
-const LOG_SCHEMA_KEYS = [
-  "timestamp",
-  "monoMs",
-  "module",
-  "severity",
-  "message",
-] as const;
 
 // P-130: every line of a session log validates against the schema. Unknown
 // extra fields are allowed (decks, tracks, fixtures add them); every
@@ -154,10 +162,8 @@ export function validateLogLine(line: string, diagnosticMode = false): string[] 
 
   if (!diagnosticMode && "rawProtocol" in row) {
     problems.push("rawProtocol: only allowed in diagnostic mode");
-  }
-
-  for (const key of LOG_SCHEMA_KEYS) {
-    if (!(key in row)) problems.push(`${key}: missing`);
+  } else if ("rawProtocol" in row && typeof row.rawProtocol !== "string") {
+    problems.push("rawProtocol: must be a string");
   }
 
   return problems;

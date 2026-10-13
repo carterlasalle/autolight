@@ -20,7 +20,7 @@
 // cues, master switch) have no script and no fixture: the protocol carries no
 // message for them, which the evidence records rather than inventing frames.
 import { connect, type Socket } from "node:net";
-import { FrameReader, arg, frameOsc, osc, type OscArg, type OscMessage } from "serato-connect";
+import { DEFAULT_SUBSCRIPTION_TOPICS, FrameReader, arg, frameOsc, osc, type OscArg, type OscMessage } from "serato-connect";
 
 export const SERATO_ACTIONS = [
   "load-deck-1",
@@ -78,6 +78,15 @@ function playheadMessage(deckId: number, positionSeconds: number, playRate: numb
   return osc("/Status/Deck/Playhead", deckIndex(deckId), arg.f(positionSeconds), arg.f(playRate), arg.f(bpm));
 }
 
+/** The track-identity frame: `trackMessages` index 2 carries the file path. */
+export function filepathMessage(deckId: number, filePath: string, title: string, artist: string): OscMessage {
+  const message = trackMessages(deckId, filePath, title, artist)[2];
+
+  if (!message) throw new Error(`trackMessages has no filepath frame for deck ${deckId}`);
+
+  return message;
+}
+
 function autoLoopMessage(deckId: number, on: boolean): OscMessage {
   return osc("/Status/Deck/Loop/AutoLoopOn", deckIndex(deckId), arg.f(on ? 1 : 0));
 }
@@ -106,53 +115,53 @@ export function seratoActionScript(action: SeratoAction): SeratoScriptStep[] {
       add(20, playheadMessage(2, 0, 0, 126));
       break;
     case "play":
-      add(0, trackMessages(1, "/music/fixture-a.mp3", "Fixture A", "Emulator")[2] as OscMessage);
+      add(0, filepathMessage(1, "/music/fixture-a.mp3", "Fixture A", "Emulator"));
       add(20, playheadMessage(1, 0, 1, 124));
       add(120, playheadMessage(1, 2, 1, 124));
       break;
     case "pause":
-      add(0, trackMessages(1, "/music/fixture-a.mp3", "Fixture A", "Emulator")[2] as OscMessage);
+      add(0, filepathMessage(1, "/music/fixture-a.mp3", "Fixture A", "Emulator"));
       add(20, playheadMessage(1, 0, 1, 124));
       add(120, playheadMessage(1, 2, 1, 124));
       add(200, playheadMessage(1, 2, 0, 124));
       break;
     case "seek":
-      add(0, trackMessages(1, "/music/fixture-a.mp3", "Fixture A", "Emulator")[2] as OscMessage);
+      add(0, filepathMessage(1, "/music/fixture-a.mp3", "Fixture A", "Emulator"));
       add(20, playheadMessage(1, 0, 1, 124));
       add(120, playheadMessage(1, 30, 1, 124));
       break;
     case "loop-4-beat":
-      add(0, trackMessages(1, "/music/fixture-a.mp3", "Fixture A", "Emulator")[2] as OscMessage);
+      add(0, filepathMessage(1, "/music/fixture-a.mp3", "Fixture A", "Emulator"));
       add(20, playheadMessage(1, 0, 1, 124));
       add(60, osc("/Status/Deck/Loop/BeatLength", deckIndex(1), arg.f(4)));
       add(64, autoLoopMessage(1, true));
       break;
     case "loop-1-beat":
-      add(0, trackMessages(1, "/music/fixture-a.mp3", "Fixture A", "Emulator")[2] as OscMessage);
+      add(0, filepathMessage(1, "/music/fixture-a.mp3", "Fixture A", "Emulator"));
       add(20, playheadMessage(1, 0, 1, 124));
       add(60, osc("/Status/Deck/Loop/BeatLength", deckIndex(1), arg.f(1)));
       add(64, autoLoopMessage(1, true));
       break;
     case "loop-roll":
-      add(0, trackMessages(1, "/music/fixture-a.mp3", "Fixture A", "Emulator")[2] as OscMessage);
+      add(0, filepathMessage(1, "/music/fixture-a.mp3", "Fixture A", "Emulator"));
       add(20, playheadMessage(1, 0, 1, 124));
       add(60, osc("/Status/Deck/Loop/BeatLength", deckIndex(1), arg.f(0.5)));
       add(64, osc("/Status/Deck/Loop/LoopRollOn", deckIndex(1), arg.f(1)));
       add(160, osc("/Status/Deck/Loop/LoopRollOn", deckIndex(1), arg.f(0)));
       break;
     case "pitch-plus-8":
-      add(0, trackMessages(1, "/music/fixture-a.mp3", "Fixture A", "Emulator")[2] as OscMessage);
+      add(0, filepathMessage(1, "/music/fixture-a.mp3", "Fixture A", "Emulator"));
       add(20, playheadMessage(1, 0, 1.08, 133.92));
       add(120, playheadMessage(1, 2.16, 1.08, 133.92));
       break;
     case "crossfader":
-      add(0, trackMessages(1, "/music/fixture-a.mp3", "Fixture A", "Emulator")[2] as OscMessage);
+      add(0, filepathMessage(1, "/music/fixture-a.mp3", "Fixture A", "Emulator"));
       add(20, osc("/Status/Video/Mixer/Crossfader", arg.f(0)));
       add(60, playheadMessage(1, 0, 1, 124));
       add(120, osc("/Status/Video/Mixer/Crossfader", arg.f(1)));
       break;
     case "upfader":
-      add(0, trackMessages(1, "/music/fixture-a.mp3", "Fixture A", "Emulator")[2] as OscMessage);
+      add(0, filepathMessage(1, "/music/fixture-a.mp3", "Fixture A", "Emulator"));
       add(20, osc("/Status/Video/Deck/Mixer/Upfader", deckIndex(1), arg.f(0)));
       add(60, playheadMessage(1, 0, 1, 124));
       add(120, osc("/Status/Video/Deck/Mixer/Upfader", deckIndex(1), arg.f(0.8)));
@@ -166,7 +175,7 @@ export function seratoActionScript(action: SeratoAction): SeratoScriptStep[] {
       add(200, osc("/Status/Video/Mixer/Crossfader", arg.f(0.25)));
       break;
     case "replace-track":
-      add(0, trackMessages(1, "/music/fixture-a.mp3", "Fixture A", "Emulator")[2] as OscMessage);
+      add(0, filepathMessage(1, "/music/fixture-a.mp3", "Fixture A", "Emulator"));
       add(20, autoLoopMessage(1, true));
       add(24, osc("/Status/Deck/Loop/BeatLength", deckIndex(1), arg.f(4)));
       add(60, playheadMessage(1, 30, 1, 124));
@@ -178,7 +187,7 @@ export function seratoActionScript(action: SeratoAction): SeratoScriptStep[] {
       add(160, playheadMessage(1, 0, 0, 128));
       break;
     case "eject-deck-1":
-      add(0, trackMessages(1, "/music/fixture-a.mp3", "Fixture A", "Emulator")[2] as OscMessage);
+      add(0, filepathMessage(1, "/music/fixture-a.mp3", "Fixture A", "Emulator"));
       add(20, playheadMessage(1, 0, 0, 124));
       add(80, osc("/Status/Deck/Song/Valid", deckIndex(1), arg.f(0)));
       break;
@@ -203,6 +212,10 @@ export interface SeratoEmulatorOptions {
   peerUuid?: string;
   /** Malformed-frame source: a 16-byte nonce per challenge. */
   challenge?: Buffer;
+  /** How long to wait for one server reply before failing (default 4000 ms). */
+  replyTimeoutMs?: number;
+  /** Subscription topics the server burst should end with (defaults to serato-connect's set). */
+  expectedTopics?: readonly string[];
 }
 
 /** One captured frame, as the peer sent or received it. */
@@ -226,9 +239,8 @@ export class SeratoRemoteEmulator {
   private readonly recorded: RecordedFrame[] = [];
   private readonly waiters: {
     match: (message: OscMessage) => boolean;
-    resolve: (message: OscMessage) => void;
-    reject: (error: Error) => void;
-    onTimeout: string;
+    settle: (message: OscMessage) => void;
+    fail: (error: Error) => void;
   }[] = [];
 
   constructor(options: SeratoEmulatorOptions) {
@@ -238,16 +250,20 @@ export class SeratoRemoteEmulator {
   async connect(): Promise<void> {
     const { promise, resolve, reject } = Promise.withResolvers<void>();
     const socket = connect({ host: this.options.host ?? "127.0.0.1", port: this.options.port }, () => resolve());
-    socket.on("error", reject);
+    socket.on("error", (err: Error) => {
+      this.failWaiters(err);
+      reject(err);
+    });
+    socket.on("close", () => {
+      this.failWaiters(new Error("serato server connection closed"));
+    });
     socket.on("data", (chunk: Buffer) => {
       for (const message of this.reader.push(chunk)) {
         this.receivedMessages.push(message);
         this.recorded.push({ atMs: Date.now(), bytes: frameOsc(message), direction: "received" });
 
         for (const waiter of [...this.waiters]) {
-          if (!waiter.match(message)) continue;
-          this.waiters.splice(this.waiters.indexOf(waiter), 1);
-          waiter.resolve(message);
+          if (waiter.match(message)) waiter.settle(message);
         }
       }
     });
@@ -270,29 +286,47 @@ export class SeratoRemoteEmulator {
     const active = pair.args.find((a) => a.type === "i");
 
     if (active?.value !== 1) throw new Error("server did not reply to Pair with isActive=1");
-    const register = await this.awaitMessagePrefix("/Register/Status/");
-    // The subscription burst ends with the mixer topic; waiting for it proves
-    // every /Register/Status/... frame has arrived before we read them back.
-    await this.awaitMessage("/Register/Status/Video/Mixer/Crossfader");
-    const topics = [register, ...this.receivedMessages.filter((m) => m.address.startsWith("/Register/Status/")).map((m) => m.address)];
+    // The server's subscription burst is one /Register/Status/<topic> frame
+    // per subscribed topic (serato-connect DEFAULT_SUBSCRIPTION_TOPICS, sent
+    // in order). Wait for the last advertised topic so the read-back below
+    // sees the whole burst instead of a prefix of it.
+    const expected = this.options.expectedTopics ?? DEFAULT_SUBSCRIPTION_TOPICS;
+    const last = expected[expected.length - 1];
+
+    if (last === undefined) throw new Error("handshake: no subscription topics to wait for");
+    await this.awaitMessage(last);
+    const topics = this.receivedMessages.filter((m) => m.address.startsWith("/Register/Status/")).map((m) => m.address);
 
     return { topics: [...new Set(topics)], digestBytes: digest.value.length };
   }
 
   /** Send one framed message, recording it as peer traffic. */
   send(message: OscMessage): void {
+    const socket = this.socket;
+
+    if (!socket || socket.destroyed || socket.closed !== false) {
+      throw new Error("send() with no live socket: connect() first and do not send after close()");
+    }
+
     const bytes = frameOsc(message);
     this.recorded.push({ atMs: Date.now(), bytes, direction: "sent" });
-    this.socket?.write(bytes);
+    socket.write(bytes);
   }
 
   /** Send a frame the protocol cannot decode, to exercise the reject path. */
   sendMalformedFrame(): void {
+    const socket = this.socket;
+
+    if (!socket || socket.destroyed || socket.closed !== false) {
+      throw new Error("sendMalformedFrame() with no live socket: connect() first and do not send after close()");
+    }
+
     const header = Buffer.from("/Status/Deck/Playhead\0\0\0,jjj", "utf8");
     const frame = Buffer.concat([header, Buffer.alloc(4), frameOsc(osc("/Ping")).subarray(-16)]);
     this.recorded.push({ atMs: Date.now(), bytes: frame, direction: "sent" });
-    this.socket?.write(frame);
+    socket.write(frame);
   }
+
 
   /** Play an action script with `speed` scaling the real delays. */
   async playAction(action: SeratoAction, speed = 4): Promise<void> {
@@ -310,13 +344,19 @@ export class SeratoRemoteEmulator {
 
   /** Send one framed message stamped with the script's own atMs. */
   sendAt(message: OscMessage, atMs: number): void {
+    const socket = this.socket;
+
+    if (!socket || socket.destroyed || socket.closed !== false) {
+      throw new Error("sendAt() with no live socket: connect() first and do not send after close()");
+    }
+
     const bytes = frameOsc(message);
     // Script time, not wall time: replay bursts group by these stamps, so a
     // loaded CI machine stalling 50 ms between two sends cannot split one
     // track load into two generations in replay only. `send` keeps wall time
     // for tests that assert arrival timing.
     this.recorded.push({ atMs, bytes, direction: "sent" });
-    this.socket?.write(bytes);
+    socket.write(bytes);
   }
 
   /** Frames the peer sent, in wire form, with arrival timestamps. */
@@ -332,6 +372,9 @@ export class SeratoRemoteEmulator {
     if (!this.socket) return;
     const socket = this.socket;
     this.socket = null;
+    this.failWaiters(new Error("serato emulator closed"));
+
+    if (socket.destroyed || socket.closed !== false) return;
     const { promise, resolve } = Promise.withResolvers<void>();
     socket.once("close", () => resolve());
     socket.end();
@@ -342,27 +385,38 @@ export class SeratoRemoteEmulator {
     return this.awaitPredicate((message) => message.address === address, `no ${address} from server`);
   }
 
-  private async awaitMessagePrefix(prefix: string): Promise<string> {
-    const message = await this.awaitPredicate((m) => m.address.startsWith(prefix), `no ${prefix}* from server`);
-
-    return message.address;
-  }
 
   private awaitPredicate(match: (message: OscMessage) => boolean, onTimeout: string): Promise<OscMessage> {
     const existing = this.receivedMessages.find(match);
 
     if (existing) return Promise.resolve(existing);
     const { promise, resolve, reject } = Promise.withResolvers<OscMessage>();
-    const waiter = { match, resolve, reject, onTimeout };
-    this.waiters.push(waiter);
-    setTimeout(() => {
-      const index = this.waiters.indexOf(waiter);
+    const timeoutMs = this.options.replyTimeoutMs ?? 4000;
 
-      if (index === -1) return;
-      this.waiters.splice(index, 1);
-      reject(new Error(onTimeout));
-    }, 4000);
+    const waiter = {
+      match,
+      settle: (message: OscMessage) => {
+        clearTimeout(timer);
+        this.waiters.splice(this.waiters.indexOf(waiter), 1);
+        resolve(message);
+      },
+      fail: (error: Error) => {
+        clearTimeout(timer);
+        this.waiters.splice(this.waiters.indexOf(waiter), 1);
+        reject(error);
+      },
+    };
+
+    const timer = setTimeout(() => {
+      waiter.fail(new Error(onTimeout));
+    }, timeoutMs);
+
+    this.waiters.push(waiter);
 
     return promise;
+  }
+
+  private failWaiters(error: Error): void {
+    for (const waiter of [...this.waiters]) waiter.fail(error);
   }
 }

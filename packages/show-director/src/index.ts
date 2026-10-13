@@ -114,6 +114,8 @@ export function initialDirectorState(): DirectorState {
 export function phraseOf(beat: number, phraseBeats: number = DEFAULT_PHRASE_BEATS): number {
   if (!Number.isFinite(beat) || beat < 0) return 0;
 
+  if (!Number.isFinite(phraseBeats) || phraseBeats <= 0) phraseBeats = DEFAULT_PHRASE_BEATS;
+
   return Math.floor(beat / Math.max(1, phraseBeats));
 }
 
@@ -184,11 +186,25 @@ function advisedEnergy(base: EnergyLevel, input: DirectorInput, engine: Director
     else if (target < idx) idx = Math.max(0, idx - 1);
   }
 
+  // Live onset accents the build: a detected onset steps energy up one level
+  // (still advisory, still at most one step per tick).
+  if (input.onset === true && idx < order.length - 1) idx += 1;
+
   for (const hint of input.hints ?? []) {
     if (hint.kind === "fader-rise" && hint.value > 0.7 && idx < order.length - 1) {
       idx += 1;
       break;
     }
+
+    // A wide-open filter sweep is the same build accent as a fader rise.
+    if (hint.kind === "filter-sweep" && hint.value > 0.7 && idx < order.length - 1) {
+      idx += 1;
+      break;
+    }
+
+    // Transport hints (play/cue/load edges) carry no energy information, so
+    // the director deliberately ignores them; they are handled structurally
+    // by the mixer (accent-phrase-change), never as an energy nudge here.
   }
 
   return order[idx]!;
@@ -214,7 +230,19 @@ export function pickPhraseLook(library: PhraseLook[], state: DirectorState, ener
     return true;
   });
 
-  const usable = candidates.length > 0 ? candidates : pool.filter((l) => l.id !== last);
+  // Fall back without violating a restraint the caller set: first allow the
+  // current look again while still honoring cooldowns and the strobe rule,
+  // then the whole pool with cooldowns still honored, and only the raw pool
+  // as the last resort (every candidate cooled down).
+  const allowCurrent = pool.filter((l) => {
+    if ((state.cooldowns[l.id] ?? 0) > 0) return false;
+
+    if (l.strobe && lastStrobe) return false;
+
+    return true;
+  });
+
+  const usable = candidates.length > 0 ? candidates : allowCurrent.length > 0 ? allowCurrent : pool;
   const fallback = usable.length > 0 ? usable : pool;
 
   const ranked = [...fallback].sort((a, b) => {
@@ -230,10 +258,16 @@ export function pickPhraseLook(library: PhraseLook[], state: DirectorState, ener
     return a.id < b.id ? -1 : 1;
   });
 
-  // Note: deterministic tie-break by phrase counter rotates through equal
-  // candidates instead of always taking the first; per-look history if this
-  // ever looks samey.
-  return ranked[(state.phrase * 7) % Math.max(1, ranked.length)] ?? ranked[0]!;
+  // Deterministic tie-break by phrase counter rotates through the
+  // highest-preference group only, so the unused-motif/palette preference
+  // the sort just established cannot be overridden by the rotation.
+  const topScore = (l: PhraseLook): number =>
+    (state.motifs.includes(l.motif) ? 1 : 0) * 2 + (l.palette === state.palette ? 1 : 0);
+
+  const best = ranked[0] === undefined ? 0 : topScore(ranked[0]);
+  const top = ranked.filter((l) => topScore(l) === best);
+
+  return top[(state.phrase * 7) % Math.max(1, top.length)] ?? ranked[0]!;
 }
 
 // One director tick. Looks change only when the phrase counter advances;
@@ -252,8 +286,24 @@ export function directorTick(
   const current = state.effects[state.effects.length - 1];
   const currentLook = library.find((l) => l.id === current);
 
-  if (phrase <= state.phrase && currentLook !== undefined) {
-    return { look: currentLook, changed: false, state };
+  if (current !== undefined && phrase <= state.phrase) {
+    // Same phrase: hold the current look. When the library no longer
+    // contains it (swap/failover), keep holding the stored id rather than
+    // firing a spurious mid-phrase change; the next phrase boundary picks a
+    // look from the new library.
+    if (currentLook !== undefined) return { look: currentLook, changed: false, state };
+
+    const held: PhraseLook = {
+      id: current ?? "look-0",
+      energy: state.energy,
+      palette: state.palette,
+      motif: state.motifs[state.motifs.length - 1] ?? "motif-1",
+      spatial: state.spatial,
+      strobe: false,
+      darkness: state.darkness,
+    };
+
+    return { look: held, changed: false, state };
   }
 
   const energy = advisedEnergy(state.energy, input, engine);
