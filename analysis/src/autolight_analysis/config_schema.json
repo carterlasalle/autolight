@@ -222,7 +222,13 @@
         "number",
         "boolean"
       ],
-      "default": "{ weight: 1, master: 0.3, confidence: 0.5, strength: 1, significance: 0.5 }",
+      "default": {
+        "weight": 1,
+        "master": 0.3,
+        "confidence": 0.5,
+        "strength": 1,
+        "significance": 0.5
+      },
       "description": "map  [unmeasured (spec 65 factors)]"
     },
     "mixer.blendSpace": {
@@ -559,6 +565,16 @@
       ],
       "description": "beats  [spec 23]"
     },
+    "analysis.build.minStrength": {
+      "type": "number",
+      "default": 0.05,
+      "description": "ratio  [was hardcoded (`structure.py:58`)]"
+    },
+    "analysis.build.minConfidence": {
+      "type": "number",
+      "default": 0.5,
+      "description": "ratio  [was hardcoded (`structure.py:59`)]"
+    },
     "analysis.drop.minJump": {
       "type": "number",
       "default": 0.25,
@@ -824,6 +840,16 @@
       "type": "number",
       "default": 10000,
       "description": "requests  [Govee docs via toolkit `cloud.md:101`]"
+    },
+    "govee.cloud.apiKey": {
+      "type": "string",
+      "default": "secrets-module, no default, never stored as plain text",
+      "description": "secret id  [T-SEC-01]"
+    },
+    "agent.apiToken": {
+      "type": "string",
+      "default": "secrets-module, no default, never stored as plain text",
+      "description": "secret id  [T-SEC-01]"
     },
     "govee.failover.policy": {
       "type": "string",

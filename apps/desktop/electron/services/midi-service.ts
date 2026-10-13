@@ -45,8 +45,10 @@ export class MidiService implements Service {
   start(): ServiceStatus {
     if (this.backend !== null) return this.status();
 
+    let backend: MidiBackend | undefined;
+
     try {
-      const backend = this.opts.openBackend?.();
+      backend = this.opts.openBackend?.();
 
       if (backend === undefined) {
         this.tracker.set("degraded", "no MIDI backend wired (DS-13 backend lands with the FLX4 task)");
@@ -74,6 +76,8 @@ export class MidiService implements Service {
       this.backend = backend;
       this.tracker.set("running", `backend ${backend.name}`);
     } catch (err) {
+      try { backend?.close(); } catch { /* open failed; still release the partial handle */ }
+
       this.tracker.set("degraded", `MIDI backend failed: ${messageOf(err)}`);
     }
 
@@ -112,6 +116,7 @@ export class MidiService implements Service {
 
   // Direct CC injection, used by the capture tooling and by tests.
   handleCc(cc: number, value: number): Flx4Hint | null {
+    this.tracker.count("messages");
     const hint = classifyCC(cc, value);
 
     if (hint !== null) this.publish(hint);
@@ -120,6 +125,7 @@ export class MidiService implements Service {
   }
 
   handleNote(note: number, velocity: number): TransportHint | null {
+    this.tracker.count("messages");
     const control = controlForNote(note);
 
     if (control === undefined) return null;
@@ -135,7 +141,9 @@ export class MidiService implements Service {
     if (this.hints.length > 64) this.hints.shift();
     this.tracker.count("hints");
 
-    for (const listener of this.listeners) listener(hint);
+    for (const listener of Array.from(this.listeners)) {
+      try { listener(hint); } catch { /* one listener must not block fan-out */ }
+    }
   }
 }
 
@@ -145,7 +153,15 @@ export const FLX4_NOTE = NOTE;
 
 let instance: MidiService | null = null;
 
+export function resetMidiService(): void {
+  instance = null;
+}
+
 export function getMidiService(opts: MidiServiceOptions = {}): MidiService {
+  if (instance !== null && opts.openBackend !== undefined) {
+    throw new Error("midi-service already configured: call resetMidiService() first to reconfigure");
+  }
+
   instance ??= new MidiService(opts);
 
   return instance;

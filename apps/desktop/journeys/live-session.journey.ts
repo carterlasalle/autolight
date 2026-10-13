@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { trackModelSchema, showStyleSchema } from "@autolight/contracts";
+import type { DeckState } from "@autolight/contracts";
 import { planShow, BUILT_IN_STYLES } from "@autolight/show-planner";
 import { liveViewModel } from "../src/features/live/live.js";
 import { makeDeck, makeFixture } from "@autolight/simulator";
@@ -35,19 +36,37 @@ test("live decks: both loaded tracks plan and light the rig", () => {
   );
 
   expect(both.expectedEvents).toHaveLength(2);
+  const beat = 120;
 
-  const cuesB = planB.cues.filter((c) => 120 >= c.startBeat && 120 < c.startBeat + c.durationBeats);
+  const deckStates = both.expectedEvents.map((e, i) => ({
+    ...e,
+    receivedAtNs: 1_000_000_000n + BigInt(i * 100_000_000),
+  }));
+
+  const cuesB = planB.cues.filter((c) => beat >= c.startBeat && beat < c.startBeat + c.durationBeats);
+  expect(cuesB.length).toBeGreaterThan(0);
+
+  const deckStateFor = (deckId: number): DeckState => {
+    const replayed = deckStates.find((d) => d.deckId === deckId);
+
+    if (!replayed) throw new Error(`both-decks-loaded fixture missing deck ${deckId}`);
+
+    return makeDeck({ ...replayed, channelFader: deckId === 1 ? 0.2 : 1, crossfader: 1, receivedAtNs: replayed.receivedAtNs });
+  };
+
+  const deckA = deckStateFor(1);
+  const deckB = deckStateFor(2);
 
   const vm = liveViewModel({
-    deckA: makeDeck({ deckId: 1, channelFader: 0.2, crossfader: 1, track: { id: "rb:163221817", sourceIds: { rekordboxId: "163221817" } } }),
-    deckB: makeDeck({ deckId: 2, channelFader: 1, crossfader: 1, track: { id: "rb:231828222", sourceIds: { rekordboxId: "231828222" } } }),
-    mixA: { state: makeDeck({ deckId: 1, channelFader: 0.2, crossfader: 1, track: { id: "rb:163221817", sourceIds: {} } }), beat: 120, cues: [], impactStrength: 0.3 },
-    mixB: { state: makeDeck({ deckId: 2, channelFader: 1, crossfader: 1, track: { id: "rb:231828222", sourceIds: {} } }), beat: 120, cues: cuesB, impactStrength: 0.9 },
-    beatA: 120, beatB: 120, fixtures: fx, track: homecoming,
+    deckA,
+    deckB,
+    mixA: { state: makeDeck({ ...deckA, track: { id: deckA.track?.id ?? "rb:163221817", sourceIds: {} } }), beat, cues: [], impactStrength: 0.3 },
+    mixB: { state: makeDeck({ ...deckB, track: { id: deckB.track?.id ?? "rb:231828222", sourceIds: {} } }), beat, cues: cuesB, impactStrength: 0.9 },
+    beatA: beat, beatB: beat, fixtures: fx, track: homecoming,
     reactiveEnergy: 0, reactiveAmount: 0,
   });
 
   expect(vm.owner).toBe("b");
-  expect(vm.cells.some((c) => c.color !== "rgb(0,0,0)")).toBe(true);
+  expect(vm.cells.filter((c) => c.color !== "rgb(0,0,0)").length).toBeGreaterThanOrEqual(Math.min(4, vm.cells.length));
   expect(vm.libraryStatus).toBe("READY");
 });

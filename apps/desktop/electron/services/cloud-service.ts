@@ -38,12 +38,13 @@ export class CloudService implements Service {
   readonly name = "cloud-service";
   private readonly tracker = new ServiceTracker("cloud-service");
   private lastDevices: GoveeCloudDevice[] = [];
+  private generation = 0;
+  private stopped = false;
   private readonly opts: CloudServiceOptions;
 
   constructor(opts: CloudServiceOptions = {}) {
     this.opts = opts;
   }
-
   start(): ServiceStatus {
     if (this.opts.enabled !== true) {
       this.tracker.set("degraded", "optional cloud metadata disabled (config or flag); frames never use the cloud");
@@ -69,6 +70,9 @@ export class CloudService implements Service {
   }
 
   stop(): ServiceStatus {
+    this.generation += 1;
+    this.stopped = true;
+    this.lastDevices = [];
     this.tracker.set("stopped");
 
     return this.status();
@@ -82,6 +86,10 @@ export class CloudService implements Service {
   }
 
   async devices(): Promise<CloudDevicesReply | CloudFailure> {
+    if (this.stopped) {
+      return { ok: false, error: { code: "E_CLOUD_DISABLED", message: "cloud metadata is disabled; enable it in settings to fetch device metadata" } };
+    }
+
     if (this.opts.enabled !== true || this.opts.transport === undefined) {
       return { ok: false, error: { code: "E_CLOUD_DISABLED", message: "cloud metadata is disabled; enable it in settings to fetch device metadata" } };
     }
@@ -90,14 +98,21 @@ export class CloudService implements Service {
       return { ok: false, error: { code: "E_CLOUD_NO_KEY", message: "no Govee cloud API key configured" } };
     }
 
+    const generation = this.generation;
+
     try {
-      const devices = await this.opts.transport.devices(this.opts.apiKey);
-      this.lastDevices = devices;
+      const fetched = await this.opts.transport.devices(this.opts.apiKey);
+
+      if (generation !== this.generation || this.stopped) return { ok: true, devices: [] };
+      this.lastDevices = fetched.map((d) => ({ ...d }));
       this.tracker.count("fetches");
 
-      return { ok: true, devices };
+      return { ok: true, devices: this.lastDevices.map((d) => ({ ...d })) };
     } catch (err) {
-      this.tracker.count("failures");
+      if (generation === this.generation && !this.stopped) {
+        this.lastDevices = [];
+        this.tracker.count("failures");
+      }
 
       return { ok: false, error: { code: "E_CLOUD_FETCH", message: messageOf(err) } };
     }
@@ -112,7 +127,15 @@ export class CloudService implements Service {
 
 let instance: CloudService | null = null;
 
+export function resetCloudService(): void {
+  instance = null;
+}
+
 export function getCloudService(opts: CloudServiceOptions = {}): CloudService {
+  if (instance !== null && (opts.enabled !== undefined || opts.apiKey !== undefined || opts.transport !== undefined)) {
+    throw new Error("cloud-service already configured: call resetCloudService() first to reconfigure");
+  }
+
   instance ??= new CloudService(opts);
 
   return instance;

@@ -40,20 +40,22 @@ export function deckFields(
     .filter((c) => c.startBeat > beat)
     .sort((a, b) => a.startBeat - b.startBeat);
 
+  const anchor = [...grid].reverse().find((a) => beat >= a.index);
+
   return {
     title: track?.identity.title ?? state.track?.id ?? "No track",
     artist: track?.identity.artist ?? null,
     source: state.source === "serato" ? "SERATO" : "REKORDBOX",
     playing: state.playing,
     playheadSeconds: state.playheadSeconds,
-    nativeBpm: grid[0]?.bpm ?? null,
+    nativeBpm: (anchor ?? grid[0])?.bpm ?? null,
     effectiveBpm: state.effectiveBpm,
-    pitchPercent: state.playRate === 1 ? 0 : (state.playRate - 1) * 100,
+    pitchPercent: Number.isFinite(state.playRate) && state.playRate > 0 ? (state.playRate - 1) * 100 : null,
     beat: whole,
     bar: Math.floor(whole / 4) + 1,
     phrase: Math.floor(whole / 32) + 1,
     section: section?.kind ?? null,
-    nextEvent: upcoming[0] ? `${upcoming[0].type} in ${Math.round(upcoming[0].startBeat - beat)} beats` : null,
+    nextEvent: upcoming[0] ? `${upcoming[0].type} in ${Math.max(1, Math.round(upcoming[0].startBeat - beat))} beats` : null,
     channelFader: state.channelFader,
     weight: audibleWeight(state),
     analysisQuality: track ? coverageOf(track).toUpperCase() : "NEEDS ANALYSIS",
@@ -66,7 +68,7 @@ export function deckFields(
 export function predictiveLabel(cues: ShowCue[], beat: number, horizonBeats = 64): string | null {
   const after = cues.filter((c) => c.startBeat > beat).sort((a, b) => a.startBeat - b.startBeat);
   const at = (t: string): ShowCue | undefined => after.find((c) => c.type === t);
-  const drop = at("white-hit") ?? at("impact") ?? after.find((c) => c.type === "drop");
+  const drop = after.find((c) => c.type === "white-hit" || c.type === "impact" || c.type === "drop");
 
   if (drop && drop.startBeat - beat <= horizonBeats) {
     return `DROP IN ${Math.max(1, Math.round(drop.startBeat - beat))}`;
@@ -88,5 +90,5 @@ export function predictiveLabel(cues: ShowCue[], beat: number, horizonBeats = 64
 // Next phrase boundary at or after beat (32-beat phrases). Style handover and
 // blinder scheduling land here.
 export function nextPhraseBeat(beat: number, phraseBeats = 32): number {
-  return Math.ceil(beat / phraseBeats) * phraseBeats;
+  return Math.floor(beat / phraseBeats) * phraseBeats + phraseBeats;
 }

@@ -46,7 +46,13 @@
   "mixer.blackout.policy": "auto",
   "mixer.blackout.otherDeckThreshold": 0.3,
   "mixer.owner.hysteresis": 0.1,
-  "mixer.owner.factorWeights": "{ weight: 1, master: 0.3, confidence: 0.5, strength: 1, significance: 0.5 }",
+  "mixer.owner.factorWeights": {
+    "weight": 1,
+    "master": 0.3,
+    "confidence": 0.5,
+    "strength": 1,
+    "significance": 0.5
+  },
   "mixer.blendSpace": "oklab-hue-linear-intensity",
   "render.gammaDefault": 2.2,
   "render.antialias.subCell": true,
@@ -121,6 +127,8 @@
     16,
     32
   ],
+  "analysis.build.minStrength": 0.05,
+  "analysis.build.minConfidence": 0.5,
   "analysis.drop.minJump": 0.25,
   "analysis.drop.minVotes": 3,
   "analysis.drop.minConfidence": 0.6,
@@ -173,6 +181,8 @@
   "govee.cloud.enabled": false,
   "govee.cloud.perDevicePerMinute": 10,
   "govee.cloud.perAccountPerDay": 10000,
+  "govee.cloud.apiKey": "secrets-module, no default, never stored as plain text",
+  "agent.apiToken": "secrets-module, no default, never stored as plain text",
   "govee.failover.policy": "hybrid",
   "govee.failover.lanLossMs": 3000,
   "govee.failover.probeIntervalMs": 10000,

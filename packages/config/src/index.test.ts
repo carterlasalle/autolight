@@ -44,7 +44,14 @@ describe("config registry", () => {
       expect(bad.badKeys.join("\n")).toContain("runtime.clock.tickHz");
     }
 
-    expect(s.importJson("{oops")).toEqual({ ok: false, badKeys: ["<unparseable JSON>"] });
+    // Atomicity: a rejected import must not partially apply valid values.
+    const mixed = s.importJson(JSON.stringify({ version: 1, values: {
+      "runtime.snapshot.uiRateHz": 45,
+      "nope.key": 1,
+    } }));
+    expect(mixed.ok).toBe(false);
+    expect(s.get("runtime.snapshot.uiRateHz")).toBe(30);
+
   });
   it("round-trips export and import", () => {
     const a = new ConfigStore();
@@ -52,6 +59,26 @@ describe("config registry", () => {
     const b = new ConfigStore();
     expect(b.importJson(a.exportJson())).toEqual({ ok: true });
     expect(b.get("runtime.clock.tickHz")).toBe(90);
+  });
+  it("rejects malformed documents and out-of-range numbers, and preserves layers on round trip", () => {
+    const s = new ConfigStore();
+    // `JSON.parse("null")` is legal JSON; the old code crashed on `.values`.
+    expect(s.importJson("null")).toEqual({ ok: false, badKeys: ["<unsupported config document>"] });
+    expect(s.importJson(JSON.stringify({ version: 2, values: {} }))).toEqual({ ok: false, badKeys: ["<unsupported config document>"] });
+    // Range/NaN enforcement matches validateImportValues in store.ts.
+    const ranged = s.importJson(JSON.stringify({ version: 1, values: { "runtime.clock.tickHz": 5 } }));
+    expect(ranged.ok).toBe(false);
+    if (!ranged.ok) expect(ranged.badKeys.join("\n")).toContain("30 to 120");
+    expect(s.importJson(JSON.stringify({ version: 1, values: { "runtime.clock.tickHz": Number.NaN } })).ok).toBe(false);
+    expect(() => s.set("app", "runtime.clock.tickHz", undefined)).toThrow(/reset/);
+    // Layers survive a round trip instead of collapsing into app overrides.
+    const layered = new ConfigStore();
+    layered.set("app", "runtime.clock.tickHz", 90);
+    layered.set("device", "runtime.clock.tickHz", 120);
+    const restored = new ConfigStore();
+    expect(restored.importJson(layered.exportJson())).toEqual({ ok: true });
+    expect(restored.get("runtime.clock.tickHz")).toBe(120);
+    expect(restored.layerOf("runtime.clock.tickHz")).toBe("device");
   });
 });
 
@@ -62,8 +89,13 @@ describe("secrets boundary (T-SEC-01)", () => {
     const bad = s.importJson(JSON.stringify({ version: 1, values: { "govee.cloud.apiKey": "PLAIN" } }));
     expect(bad.ok).toBe(false);
 
-    if (!bad.ok) expect(bad.badKeys.join("\n")).toContain("govee.cloud.apiKey");
-    expect(validateImportValues({ "agent.apiToken": "PLAIN" }).join("\n")).toContain("agent.apiToken");
+    if (!bad.ok) {
+      expect(bad.badKeys.join("\n")).toContain("govee.cloud.apiKey");
+      expect(bad.badKeys.join("\n")).toContain("secrets-service");
+    }
+    const agentMsg = validateImportValues({ "agent.apiToken": "PLAIN" }).join("\n");
+    expect(agentMsg).toContain("agent.apiToken");
+    expect(agentMsg).toContain("secrets-service");
   });
 });
 
@@ -99,14 +131,14 @@ describe("config persistence (T-CFG-02)", () => {
     expect(bad.length).toBe(3);
     expect(joined).toContain("nope.key");
     expect(joined).toContain("runtime.clock.tickHz");
-    expect(joined).toContain("30 to 120");
+    expect(joined).toContain("allowed range");
     expect(joined).toContain("runtime.snapshot.uiRateHz");
     expect(joined).toContain("fix:");
     const store = new PersistentConfigStore();
     const res = store.importJson(JSON.stringify({ version: 1, values: { "nope.key": 1, "runtime.clock.tickHz": 5 } }));
     expect(res.ok).toBe(false);
 
-    if (!res.ok) expect(res.badKeys.join("\n")).toContain("30 to 120");
+    if (!res.ok) expect(res.badKeys.join("\n")).toContain("allowed range");
     expect(store.get("runtime.clock.tickHz")).toBe(60);
   });
   it("exposes live-safe metadata per key", () => {

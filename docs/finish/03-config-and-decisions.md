@@ -197,7 +197,7 @@ literal not listed here, add it. `R:` is the receipt. `LS` is live-safe
 | `mixer.blackout.policy` | `auto` | enum DS-18 | | spec 66 | Y |
 | `mixer.blackout.otherDeckThreshold` | 0.3 | weight | 0 to 1 | was hardcoded (`show-mixer/src/index.ts:25`) | Y |
 | `mixer.owner.hysteresis` | 0.1 | ratio | 0 to 0.5 | unmeasured | Y |
-| `mixer.owner.factorWeights` | `{ weight: 1, master: 0.3, confidence: 0.5, strength: 1, significance: 0.5 }` | map | | unmeasured (spec 65 factors) | Y |
+| `mixer.owner.factorWeights` | `{"weight":1,"master":0.3,"confidence":0.5,"strength":1,"significance":0.5}` | map | | unmeasured (spec 65 factors) | Y |
 | `mixer.blendSpace` | `oklab-hue-linear-intensity` | enum DS-09 | | spec 64 (combined mode) | Y |
 | `render.gammaDefault` | 2.2 | exponent | 1 to 3 | spec 49 approximation; per device from calibration | Y |
 | `render.antialias.subCell` | true | bool | | owner room request | Y |
@@ -269,6 +269,8 @@ literal not listed here, add it. `R:` is the receipt. `LS` is live-safe
 | `analysis.frame.size` | 2048 | samples | was hardcoded | N |
 | `analysis.bands` | `{bass:[20,150], lowMid:[150,500], mid:[500,2000], high:[2000,20000]}` | Hz | was hardcoded (`stems.py:51-59`) | N |
 | `analysis.build.windows` | `[8,16,32]` | beats | spec 23 | N |
+| `analysis.build.minStrength` | 0.05 | ratio | was hardcoded (`structure.py:58`) | N |
+| `analysis.build.minConfidence` | 0.5 | ratio | was hardcoded (`structure.py:59`) | N |
 | `analysis.drop.minJump` | 0.25 | relative | was hardcoded (`structure.py:81`) | N |
 | `analysis.drop.minVotes` | 3 | count | was hardcoded | N |
 | `analysis.drop.minConfidence` | 0.6 | ratio | was hardcoded | N |

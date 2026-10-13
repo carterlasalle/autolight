@@ -3,7 +3,7 @@ import { z } from "zod";
 // @autolight/config registry (T-CFG-01). Generated from
 // docs/finish/03-config-and-decisions.md section 3 by
 // `yarn workspace @autolight/config run export`. Do not hand-edit: edit the
-// catalog, rerun export, commit both. 240 keys.
+// catalog, rerun export, commit both. 244 keys.
 
 export interface KeyDef {
   key: string;
@@ -55,7 +55,7 @@ export const KEYS: readonly KeyDef[] = [
   { key: "mixer.blackout.policy", type: "string", defaultRaw: "auto", unit: "enum DS-18", range: "", receipt: "spec 66", liveSafe: true, scope: "style" },
   { key: "mixer.blackout.otherDeckThreshold", type: "number", defaultRaw: "0.3", unit: "weight", range: "0 to 1", receipt: "was hardcoded (`show-mixer/src/index.ts:25`)", liveSafe: true, scope: "style" },
   { key: "mixer.owner.hysteresis", type: "number", defaultRaw: "0.1", unit: "ratio", range: "0 to 0.5", receipt: "unmeasured", liveSafe: true, scope: "style" },
-  { key: "mixer.owner.factorWeights", type: "json", defaultRaw: "{ weight: 1, master: 0.3, confidence: 0.5, strength: 1, significance: 0.5 }", unit: "map", range: "", receipt: "unmeasured (spec 65 factors)", liveSafe: true, scope: "style" },
+  { key: "mixer.owner.factorWeights", type: "json", defaultRaw: "{\"weight\":1,\"master\":0.3,\"confidence\":0.5,\"strength\":1,\"significance\":0.5}", unit: "map", range: "", receipt: "unmeasured (spec 65 factors)", liveSafe: true, scope: "style" },
   { key: "mixer.blendSpace", type: "string", defaultRaw: "oklab-hue-linear-intensity", unit: "enum DS-09", range: "", receipt: "spec 64 (combined mode)", liveSafe: true, scope: "style" },
   { key: "render.gammaDefault", type: "number", defaultRaw: "2.2", unit: "exponent", range: "1 to 3", receipt: "spec 49 approximation; per device from calibration", liveSafe: true, scope: "style" },
   { key: "render.antialias.subCell", type: "boolean", defaultRaw: "true", unit: "bool", range: "", receipt: "owner room request", liveSafe: true, scope: "style" },
@@ -112,6 +112,8 @@ export const KEYS: readonly KeyDef[] = [
   { key: "analysis.frame.size", type: "number", defaultRaw: "2048", unit: "samples", range: "", receipt: "was hardcoded", liveSafe: false, scope: "app" },
   { key: "analysis.bands", type: "json", defaultRaw: "{bass:[20,150], lowMid:[150,500], mid:[500,2000], high:[2000,20000]}", unit: "Hz", range: "", receipt: "was hardcoded (`stems.py:51-59`)", liveSafe: false, scope: "app" },
   { key: "analysis.build.windows", type: "json", defaultRaw: "[8,16,32]", unit: "beats", range: "", receipt: "spec 23", liveSafe: false, scope: "app" },
+  { key: "analysis.build.minStrength", type: "number", defaultRaw: "0.05", unit: "ratio", range: "", receipt: "was hardcoded (`structure.py:58`)", liveSafe: false, scope: "app" },
+  { key: "analysis.build.minConfidence", type: "number", defaultRaw: "0.5", unit: "ratio", range: "", receipt: "was hardcoded (`structure.py:59`)", liveSafe: false, scope: "app" },
   { key: "analysis.drop.minJump", type: "number", defaultRaw: "0.25", unit: "relative", range: "", receipt: "was hardcoded (`structure.py:81`)", liveSafe: false, scope: "app" },
   { key: "analysis.drop.minVotes", type: "number", defaultRaw: "3", unit: "count", range: "", receipt: "was hardcoded", liveSafe: false, scope: "app" },
   { key: "analysis.drop.minConfidence", type: "number", defaultRaw: "0.6", unit: "ratio", range: "", receipt: "was hardcoded", liveSafe: false, scope: "app" },
@@ -161,13 +163,15 @@ export const KEYS: readonly KeyDef[] = [
   { key: "govee.cloud.enabled", type: "boolean", defaultRaw: "false", unit: "bool", range: "", receipt: "spec 148", liveSafe: false, scope: "app" },
   { key: "govee.cloud.perDevicePerMinute", type: "number", defaultRaw: "10", unit: "requests", range: "", receipt: "Govee docs via toolkit `cloud.md:102`", liveSafe: false, scope: "app" },
   { key: "govee.cloud.perAccountPerDay", type: "number", defaultRaw: "10000", unit: "requests", range: "", receipt: "Govee docs via toolkit `cloud.md:101`", liveSafe: false, scope: "app" },
+  { key: "govee.cloud.apiKey", type: "string", defaultRaw: "secrets-module, no default, never stored as plain text", unit: "secret id", range: "", receipt: "T-SEC-01", liveSafe: false, scope: "app" },
+  { key: "agent.apiToken", type: "string", defaultRaw: "secrets-module, no default, never stored as plain text", unit: "secret id", range: "", receipt: "T-SEC-01", liveSafe: false, scope: "app" },
   { key: "govee.failover.policy", type: "string", defaultRaw: "hybrid", unit: "enum DS-03", range: "", receipt: "owner", liveSafe: false, scope: "app" },
   { key: "govee.failover.lanLossMs", type: "number", defaultRaw: "3000", unit: "ms", range: "", receipt: "unmeasured", liveSafe: true, scope: "app" },
   { key: "govee.failover.probeIntervalMs", type: "number", defaultRaw: "10000", unit: "ms", range: "", receipt: "unmeasured", liveSafe: true, scope: "app" },
   { key: "govee.device.<fixtureId>.transportMode", type: "string", defaultRaw: "hybrid", unit: "enum DS-31", range: "", receipt: "owner (per device)", liveSafe: true, scope: "device" },
   { key: "govee.device.<fixtureId>.transportOrder", type: "json", defaultRaw: "[\"lan-razer\",\"ble-segmented\",\"lan-json\",\"ble-single\",\"matter\"]", unit: "ordered list", range: "", receipt: "spec 148", liveSafe: true, scope: "device" },
   { key: "live.provider", type: "string", defaultRaw: "fusion", unit: "enum DS-01", range: "", receipt: "owner", liveSafe: false, scope: "app" },
-  { key: "live.follow.mode", type: "string", defaultRaw: "preview", unit: "enum preview, ax-beat, prolink, soundswitch", range: "", receipt: "owner (Setup follow-mode)", liveSafe: true, scope: "app" },
+  { key: "live.provider.staleMs", type: "number", defaultRaw: "500", unit: "ms", range: "", receipt: "spec 105", liveSafe: true, scope: "app" },
   { key: "live.rkbx.oscBind", type: "string", defaultRaw: "127.0.0.1:4460", unit: "host:port", range: "", receipt: "rkbx_link README default destination", liveSafe: false, scope: "app" },
   { key: "live.rkbx.configPath", type: "string", defaultRaw: "\"\"", unit: "path to user's rkbx_link folder", range: "", receipt: "user", liveSafe: false, scope: "app" },
   { key: "live.prolink.mode", type: "string", defaultRaw: "passive", unit: "enum DS-29", range: "", receipt: "owner", liveSafe: false, scope: "app" },
@@ -265,29 +269,21 @@ const byKey = new Map(KEYS.map((k) => [k.key, k]));
 
 export function defineKey(key: string): KeyDef {
   const def = byKey.get(key);
-
   if (!def) throw new Error(`unknown-config-key: ${key}`);
-
   return def;
 }
 
 export function defaultFor(key: string): unknown {
   const def = defineKey(key);
-
   if (def.type === "boolean") return def.defaultRaw === "true";
-
   if (def.type === "number") return Number(def.defaultRaw);
-
   if (def.type === "json") { try { return JSON.parse(def.defaultRaw); } catch { return def.defaultRaw; } }
-
   return def.defaultRaw;
 }
 
 export function defaultsObject(): Record<string, unknown> {
   const out: Record<string, unknown> = {};
-
   for (const k of KEYS) out[k.key] = defaultFor(k.key);
-
   return out;
 }
 

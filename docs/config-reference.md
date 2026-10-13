@@ -2,7 +2,7 @@
 
 Generated from `docs/finish/03-config-and-decisions.md` section 3 by `yarn workspace @autolight/config run export`. Do not hand-edit.
 
-240 keys. Receipt kinds: spec (SPEC mandates), upstream (measured upstream), measured (measured by us), unmeasured (starting guess with owning task).
+244 keys. Receipt kinds: spec (SPEC mandates), upstream (measured upstream), measured (measured by us), unmeasured (starting guess with owning task).
 
 | Key | Default | Unit | Range | Receipt | Live-safe |
 | --- | --- | --- | --- | --- | --- |
@@ -44,7 +44,7 @@ Generated from `docs/finish/03-config-and-decisions.md` section 3 by `yarn works
 | `mixer.blackout.policy` | `auto` | enum DS-18 |  | spec 66 | Y |
 | `mixer.blackout.otherDeckThreshold` | `0.3` | weight | 0 to 1 | was hardcoded (`show-mixer/src/index.ts:25`) | Y |
 | `mixer.owner.hysteresis` | `0.1` | ratio | 0 to 0.5 | unmeasured | Y |
-| `mixer.owner.factorWeights` | `{ weight: 1, master: 0.3, confidence: 0.5, strength: 1, significance: 0.5 }` | map |  | unmeasured (spec 65 factors) | Y |
+| `mixer.owner.factorWeights` | `{"weight":1,"master":0.3,"confidence":0.5,"strength":1,"significance":0.5}` | map |  | unmeasured (spec 65 factors) | Y |
 | `mixer.blendSpace` | `oklab-hue-linear-intensity` | enum DS-09 |  | spec 64 (combined mode) | Y |
 | `render.gammaDefault` | `2.2` | exponent | 1 to 3 | spec 49 approximation; per device from calibration | Y |
 | `render.antialias.subCell` | `true` | bool |  | owner room request | Y |
@@ -101,6 +101,8 @@ Generated from `docs/finish/03-config-and-decisions.md` section 3 by `yarn works
 | `analysis.frame.size` | `2048` | samples |  | was hardcoded | N |
 | `analysis.bands` | `{bass:[20,150], lowMid:[150,500], mid:[500,2000], high:[2000,20000]}` | Hz |  | was hardcoded (`stems.py:51-59`) | N |
 | `analysis.build.windows` | `[8,16,32]` | beats |  | spec 23 | N |
+| `analysis.build.minStrength` | `0.05` | ratio |  | was hardcoded (`structure.py:58`) | N |
+| `analysis.build.minConfidence` | `0.5` | ratio |  | was hardcoded (`structure.py:59`) | N |
 | `analysis.drop.minJump` | `0.25` | relative |  | was hardcoded (`structure.py:81`) | N |
 | `analysis.drop.minVotes` | `3` | count |  | was hardcoded | N |
 | `analysis.drop.minConfidence` | `0.6` | ratio |  | was hardcoded | N |
@@ -150,6 +152,8 @@ Generated from `docs/finish/03-config-and-decisions.md` section 3 by `yarn works
 | `govee.cloud.enabled` | `false` | bool |  | spec 148 | N |
 | `govee.cloud.perDevicePerMinute` | `10` | requests |  | Govee docs via toolkit `cloud.md:102` | N |
 | `govee.cloud.perAccountPerDay` | `10000` | requests |  | Govee docs via toolkit `cloud.md:101` | N |
+| `govee.cloud.apiKey` | `secrets-module, no default, never stored as plain text` | secret id |  | T-SEC-01 | N |
+| `agent.apiToken` | `secrets-module, no default, never stored as plain text` | secret id |  | T-SEC-01 | N |
 | `govee.failover.policy` | `hybrid` | enum DS-03 |  | owner | N |
 | `govee.failover.lanLossMs` | `3000` | ms |  | unmeasured | Y |
 | `govee.failover.probeIntervalMs` | `10000` | ms |  | unmeasured | Y |
