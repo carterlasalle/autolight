@@ -3042,6 +3042,12 @@ TBD.
 
 ## Durable learnings
 
+- TypeScript version split: the root devDependency (`typescript: "<7"`)
+  resolves to TS 6.x while workspaces use 5.9.x. TS 6 does NOT auto-include
+  `node_modules/@types` nor resolve `node:` specifiers without an explicit
+  `types` — `tsconfig.base.json` must keep `"types": ["node"]` or every
+  package shows phantom TS2591 ("Cannot find name 'Buffer'") under the root
+  compiler/LSP while `yarn typecheck` (workspace TS 5.9) stays green.
 - `yarn truth` now includes `tools/bundle-scan.mjs`: it fails unless
   `apps/desktop/dist` is a RELEASE build (`yarn workspace @autolight/desktop
   build`). `test:e2e` self-builds the `--test` main bundle (test API
