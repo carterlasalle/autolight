@@ -31,7 +31,7 @@ export interface AgentResolution {
   ok: boolean;
   path: string | null;
   endpoint: string | null;
-  reason: "resolved" | "no-token" | "not-present" | "not-found" | "denied" | "malformed";
+  reason: "resolved" | "no-token" | "not-present" | "not-found" | "denied" | "malformed" | "server-error";
 }
 
 export interface AgentClientOptions {
@@ -48,6 +48,9 @@ export const AGENT_RESOLVE_ENDPOINTS: readonly string[] = [
   "/api/data/{id}/path",
   "/api/data/track/{id}",
 ];
+
+// Response bodies are capped: a misbehaving agent must not grow memory unbounded.
+const MAX_RESPONSE_BYTES = 256 * 1024;
 
 const PATH_KEYS = ["path", "filePath", "absolutePath", "contentPath"] as const;
 
@@ -119,12 +122,17 @@ export class RekordboxAgentClient {
   }
 
   async resolveContent(contentId: string): Promise<AgentResolution> {
-    if (this.token === null) return { ok: false, path: null, endpoint: null, reason: "no-token" };
+    // Capture once: a concurrent forgetToken/adoptToken across the awaits must
+    // not turn a later request into an unauthenticated one misreported as denied.
+    const token = this.token;
+    if (token === null) return { ok: false, path: null, endpoint: null, reason: "no-token" };
     let sawResponse = false;
+    let lastErrorStatus: number | null = null;
+    let malformedEndpoint: string | null = null;
 
     for (const candidate of AGENT_RESOLVE_ENDPOINTS) {
       const endpoint = candidate.replace("{id}", encodeURIComponent(contentId));
-      const response = await this.get(endpoint, this.token);
+      const response = await this.get(endpoint, token);
 
       if (response === null) continue;
       sawResponse = true;
@@ -133,12 +141,31 @@ export class RekordboxAgentClient {
 
       if (response.status === 404) continue;
 
-      if (response.status >= 400) continue;
+      // A 5xx (or other unexpected status) is a server failure, not proof the
+      // content is missing: keep trying later endpoints, then report it.
+      if (response.status >= 400) {
+        lastErrorStatus = response.status;
+        continue;
+      }
       const path = parsePathBody(response.body);
 
-      if (path === null) return { ok: false, path: null, endpoint, reason: "malformed" };
+      // A 200 without a path key on an intermediate candidate means this
+      // endpoint answers something else: fall through to the next candidate
+      // instead of aborting failover. Only the last such candidate reports malformed.
+      if (path === null) {
+        malformedEndpoint = endpoint;
+        continue;
+      }
 
       return { ok: true, path, endpoint, reason: "resolved" };
+    }
+
+    if (lastErrorStatus !== null) {
+      return { ok: false, path: null, endpoint: null, reason: "server-error" };
+    }
+
+    if (malformedEndpoint !== null) {
+      return { ok: false, path: null, endpoint: malformedEndpoint, reason: "malformed" };
     }
 
     return sawResponse
@@ -148,6 +175,19 @@ export class RekordboxAgentClient {
 
   private get(path: string, token?: string): Promise<{ status: number; body: string } | null> {
     const { promise, resolve } = Promise.withResolvers<{ status: number; body: string } | null>();
+    let settled = false;
+    const finish = (value: { status: number; body: string } | null): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(deadline);
+      resolve(value);
+    };
+    // The socket `timeout` only fires on inactivity: a slow drip-fed response
+    // would hold the request open forever. This wall-clock deadline bounds it.
+    const deadline = setTimeout(() => {
+      finish(null);
+    }, this.timeoutMs);
+    deadline.unref?.();
 
     const req = request(
       {
@@ -163,17 +203,22 @@ export class RekordboxAgentClient {
         res.setEncoding("utf8");
         res.on("data", (chunk: string) => {
           body += chunk;
+
+          if (body.length > MAX_RESPONSE_BYTES) {
+            req.destroy();
+            finish(null);
+          }
         });
-        res.on("end", () => resolve({ status: res.statusCode ?? 0, body }));
-        res.on("error", () => resolve(null));
+        res.on("end", () => finish({ status: res.statusCode ?? 0, body }));
+        res.on("error", () => finish(null));
       },
     );
 
     req.on("timeout", () => {
       req.destroy();
-      resolve(null);
+      finish(null);
     });
-    req.on("error", () => resolve(null));
+    req.on("error", () => finish(null));
     req.end();
 
     return promise;
@@ -217,7 +262,7 @@ export async function resolveWithAgent(
     return { path: null, source: "none", report: `agent API: no token (${report.join("; ")})` };
   }
 
-  if (!client.hasToken()) {
+  if (!client.hasToken() || client.tokenOrigin() !== source) {
     return { path: null, source: "none", report: `agent API: no token loaded from ${source} (${report.join("; ")})` };
   }
 

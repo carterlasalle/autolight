@@ -41,6 +41,8 @@ const BASE85_RADIX = 85n;
 
 const BYTE_SHIFTS = [24n, 16n, 8n, 0n] as const;
 
+// SAFETY: Platform is the closed "darwin" | "win32" | "linux" union and
+// process.platform on a supported host is one of those values.
 export function platformPaths(platform: Platform = process.platform as Platform, home = homedir()): PlatformPaths {
   if (platform === "darwin") {
     return {
@@ -105,11 +107,23 @@ export interface RekordboxOptions {
 export function readOptionsFile(path: string): RekordboxOptions {
   const parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
 
-  if (typeof parsed !== "object" || parsed === null || !Array.isArray((parsed as RekordboxOptions).options)) {
+  if (typeof parsed !== "object" || parsed === null || !("options" in parsed)) {
     throw new TypeError(`options.json has no options array: ${path}`);
   }
 
-  return parsed as RekordboxOptions;
+  const raw: unknown = parsed.options;
+
+  if (!Array.isArray(raw)) {
+    throw new TypeError(`options.json has no options array: ${path}`);
+  }
+  // Malformed tuples are dropped here so every downstream reader sees only
+  // well-shaped [key, value] pairs; optionValue below needs no re-validation.
+  const tuples = raw.filter(
+    (entry): entry is [string, string] =>
+      Array.isArray(entry) && entry.length === 2 && typeof entry[0] === "string" && typeof entry[1] === "string",
+  );
+
+  return { options: tuples };
 }
 
 export function optionValue(options: RekordboxOptions, key: string): string | undefined {
@@ -142,47 +156,75 @@ export async function resolveLibraryConfig(overrides: LibraryConfigOverrides = {
   const paths = platformPaths(overrides.platform, overrides.home);
   const optionsPath = overrides.optionsPath ?? paths.optionsPath;
   const sharePath = overrides.sharePath ?? paths.sharePath;
-  const dbDir = overrides.dbPath ? join(overrides.dbPath, "..") : paths.dbDir;
-  let detected = overrides.dbPath === undefined;
+  let dbDir = overrides.dbPath ? join(overrides.dbPath, "..") : paths.dbDir;
+  let detected = overrides.dbPath === undefined && overrides.optionsPath === undefined && overrides.sharePath === undefined;
   let dbPath = overrides.dbPath;
   let key = overrides.key;
   let keySource: LibraryConfig["keySource"] = overrides.key === undefined ? "pyrekordbox-blob" : "explicit";
 
   if (existsSync(optionsPath)) {
-    const options = readOptionsFile(optionsPath);
-    const optionDbPath = optionValue(options, "db-path");
+    // A broken options.json (partial write, bad permissions, invalid JSON)
+    // must not reject the whole resolution: fall through to the blob/sidecar path.
+    let options: RekordboxOptions | undefined;
 
-    if (dbPath === undefined && optionDbPath !== undefined && existsSync(optionDbPath)) {
-      dbPath = optionDbPath;
-      detected = true;
+    try {
+      options = readOptionsFile(optionsPath);
+    } catch {
+      options = undefined;
     }
 
-    // rekordbox-connect's route: options.json holds the Blowfish-encrypted
-    // password under "dp". Its decryptor is used when the dependency is
-    // installed; otherwise the published blob derivation below applies.
-    const dp = key === undefined ? optionValue(options, "dp") : undefined;
+    if (options !== undefined) {
+      const optionDbPath = optionValue(options, "db-path");
 
-    if (dp !== undefined) {
-      const decrypt = await rekordboxConnectPassword(overrides, optionsPath);
+      if (dbPath === undefined && optionDbPath !== undefined && existsSync(optionDbPath)) {
+        dbPath = optionDbPath;
+        // dbDir documents the directory holding master.db: follow the resolved path.
+        dbDir = join(optionDbPath, "..");
 
-      if (decrypt !== undefined) {
-        key = decrypt;
-        keySource = "options-dp";
+        // Every path still came from detection: optionsPath/sharePath overrides
+        // only disqualify when they point somewhere else.
+        if (overrides.dbPath === undefined) detected = true;
+      }
+
+      // rekordbox-connect's route: options.json holds the Blowfish-encrypted
+      // password under "dp". Its decryptor is used when the dependency is
+      // installed; otherwise the published blob derivation below applies.
+      const dp = key === undefined ? optionValue(options, "dp") : undefined;
+
+      if (dp !== undefined) {
+        const decrypt = await rekordboxConnectPassword(overrides, optionsPath);
+
+        if (decrypt !== undefined) {
+          key = decrypt;
+          keySource = "options-dp";
+        }
       }
     }
   }
 
-  key ??= deobfuscateKey();
+  if (key === undefined) {
+    try {
+      key = deobfuscateKey();
+    } catch {
+      // Corrupt/truncated blob (raw zlib error) must not reject resolution:
+      // the caller falls back to the pyrekordbox sidecar reader with no key.
+      key = undefined;
+      keySource = "pyrekordbox-blob";
+    }
+  }
 
-  return {
+  const config: LibraryConfig = {
     dbPath: dbPath ?? join(paths.dbDir, "master.db"),
     optionsPath,
     sharePath,
     dbDir,
     keySource,
-    key,
     detected,
   };
+
+  if (key !== undefined) config.key = key;
+
+  return config;
 }
 
 // rekordbox-connect is an optional runtime dependency (native SQLCipher
@@ -198,9 +240,19 @@ async function rekordboxConnectPassword(overrides: LibraryConfigOverrides, optio
     };
 
     if (typeof mod.getRekordboxConfig !== "function") return undefined;
-    process.env["REKORDBOX_OPTIONS_PATH"] ??= optionsPath;
+    // rekordbox-connect reads its options path from the environment, so set it
+    // for exactly this call and restore the previous value: ??= would leak a
+    // stale path into later resolutions and race concurrent callers.
+    const envKey = "REKORDBOX_OPTIONS_PATH";
+    const previous = process.env[envKey];
+    process.env[envKey] = optionsPath;
 
-    return mod.getRekordboxConfig(overrides.dbPath, overrides.key)?.password;
+    try {
+      return mod.getRekordboxConfig(overrides.dbPath, overrides.key)?.password;
+    } finally {
+      if (previous === undefined) delete process.env[envKey];
+      else process.env[envKey] = previous;
+    }
   } catch {
     return undefined;
   }

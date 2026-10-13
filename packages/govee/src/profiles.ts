@@ -115,6 +115,23 @@ function parseScalar(text: string): YamlScalar {
   return trimmed;
 }
 
+/** Cut a trailing `#` comment only when the hash is outside double quotes, so
+ *  quoted receipts survive the parse. Only double quotes are tracked: the
+ *  subset quotes scalars with `"..."` (see parseScalar), and treating
+ *  apostrophes as quotes would corrupt plain scalars like `unit's`. */
+function stripComment(raw: string): string {
+  let inQuotes = false;
+
+  for (let i = 0; i < raw.length; i++) {
+    const ch = raw[i];
+
+    if (ch === '"') inQuotes = !inQuotes;
+    else if (!inQuotes && ch === "#") return raw.slice(0, i);
+  }
+
+  return raw;
+}
+
 /** Parses the profile subset. Throws with the line number on anything the
  *  subset cannot express, so a malformed profile fails loudly. */
 export function parseProfileYaml(text: string): { [key: string]: YamlNode } {
@@ -127,9 +144,7 @@ export function parseProfileYaml(text: string): { [key: string]: YamlNode } {
   const lines = text.split(/\r?\n/);
 
   for (let index = 0; index < lines.length; index++) {
-    const raw = lines[index] ?? "";
-    const hash = raw.indexOf("#");
-    const line = hash >= 0 ? raw.slice(0, hash) : raw;
+    const line = stripComment(lines[index] ?? "");
 
     if (line.trim().length === 0) continue;
     const indent = line.length - line.trimStart().length;
@@ -181,9 +196,7 @@ export function parseProfileYaml(text: string): { [key: string]: YamlNode } {
 
 function nextIsList(lines: readonly string[], from: number): boolean {
   for (let index = from; index < lines.length; index++) {
-    const raw = lines[index] ?? "";
-    const hash = raw.indexOf("#");
-    const line = hash >= 0 ? raw.slice(0, hash) : raw;
+    const line = stripComment(lines[index] ?? "");
 
     if (line.trim().length === 0) continue;
 
@@ -229,29 +242,39 @@ function measured<T>(
 
   const raw = map["value"];
 
-  return { value: raw === undefined || raw === null ? null : read(raw), source, receipt };
+  if (raw === undefined || raw === null) return { value: null, source, receipt };
+  const value = read(raw);
+
+  if (value === null) throw new Error(`profile: ${where}.value has the wrong type`);
+
+  return { value, source, receipt };
 }
 
 function readNumber(value: YamlNode): number | null {
-  return typeof value === "number" ? value : null;
+  if (typeof value === "number") return value;
+  throw new Error("profile: expected a number value");
 }
 
 function readBoolean(value: YamlNode): boolean | null {
-  return typeof value === "boolean" ? value : null;
+  if (typeof value === "boolean") return value;
+  throw new Error("profile: expected a boolean value");
 }
 
 function readText(value: YamlNode): string | null {
-  return typeof value === "string" ? value : null;
+  if (typeof value === "string") return value;
+  throw new Error("profile: expected a text value");
 }
 
 function readZoneTable(value: YamlNode): Record<number, number> | null {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error("profile: expected a zone table map");
+  }
   const table: Record<number, number> = {};
 
   for (const [key, entry] of Object.entries(value)) {
     const zones = Number(key);
 
-    if (!Number.isFinite(zones) || typeof entry !== "number") return null;
+    if (!Number.isFinite(zones) || typeof entry !== "number") throw new Error("profile: zone table entries must be numbers");
     table[zones] = entry;
   }
 
@@ -355,7 +378,7 @@ export const DEFAULT_DEVICES_DIR = new URL("../../../devices/", import.meta.url)
 /** Loads `devices/*.yaml` the way the fork's toolkit catalog does: every file
  *  is a profile, every profile must lint clean. */
 export function loadDeviceCatalog(dir: string | URL = DEFAULT_DEVICES_DIR): DeviceCatalog {
-  const base = typeof dir === "string" ? pathToFileURL(join(dir, "/")) : dir;
+  const base = typeof dir === "string" ? pathToFileURL(join(dir, "/")) : new URL(dir.href.endsWith("/") ? dir.href : `${dir.href}/`);
   const entries = readdirSync(dir).filter((entry) => entry.endsWith(".yaml")).sort();
 
   if (entries.length === 0) throw new Error(`profile catalog: no .yaml profiles under ${String(dir)}`);
@@ -371,7 +394,11 @@ export function loadDeviceCatalog(dir: string | URL = DEFAULT_DEVICES_DIR): Devi
 
     if (profiles.has(profile.sku)) throw new Error(`profile catalog: ${profile.sku} is defined twice`);
     profiles.set(profile.sku, profile);
-    schema = profile.schema;
+
+    if (schema === "") schema = profile.schema;
+    else if (schema !== profile.schema) {
+      throw new Error(`profile ${entry}: schema ${profile.schema} does not match catalog schema ${schema}`);
+    }
   }
 
   return { schema, profiles };
@@ -395,6 +422,7 @@ export function profileDefaultsFor(catalog: DeviceCatalog, sku: string): DeviceP
  * with the unit's own ceiling.
  */
 export function defaultRateHz(profile: DeviceProfile, zones: number, targetHz: number): number {
+  if (!Number.isFinite(targetHz)) throw new Error(`defaultRateHz: targetHz must be a finite number, got ${targetHz}`);
   const table = profile.measurements.maxHzByZones.value;
   let ceiling = profile.measurements.fallbackHz.value ?? 10;
 

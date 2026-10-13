@@ -14,9 +14,9 @@ export interface ListenerDecl {
 }
 
 function isLoopback(host: string): boolean {
-  const h = host.toLowerCase();
+  const n = host.trim().toLowerCase().replace(/^\[|\]$/g, "");
 
-  return h === "127.0.0.1" || h === "::1" || h === "localhost";
+  return n === "::1" || n === "localhost" || /^127\./.test(n) || n === "0:0:0:0:0:0:0:1";
 }
 
 const ALLOWED_NON_LOOPBACK: ReadonlyArray<{ port: number; reason: string }> = [
@@ -27,6 +27,7 @@ const ALLOWED_NON_LOOPBACK: ReadonlyArray<{ port: number; reason: string }> = [
 
 const ALLOWED_DISCOVERY: ReadonlyArray<{ name: string; reason: string }> = [
   { name: "prolink", reason: "PRO DJ LINK discovery requires LAN multicast" },
+  { name: "prolink-discovery", reason: "PRO DJ LINK discovery requires LAN multicast" },
   { name: "serato-bonjour", reason: "Serato Remote Bonjour (_SeratoIOSRemote._tcp)" },
   { name: "os2l", reason: "OS2L discovery service type" },
 ];
@@ -51,17 +52,21 @@ export function auditListeners(listeners: readonly ListenerDecl[]): NetworkAudit
       continue;
     }
 
+    // Govee LAN requires multicast/broadcast reception from the subnet, so the
+    // UDP ports are allowed only on the wildcard interfaces every NIC shares.
+    // A public or single-NIC unicast bind is not a discovery listener.
     const portRule = ALLOWED_NON_LOOPBACK.find((r) => r.port === l.port);
+    const host = l.host.trim();
 
-    if (portRule !== undefined) {
-      allowed.push(l);
+    if (portRule !== undefined && (host === "0.0.0.0" || host === "::")) {
+      allowed.push({ ...l, reason: portRule.reason });
       continue;
     }
 
-    const discovery = ALLOWED_DISCOVERY.find((r) => l.name.toLowerCase().includes(r.name));
+    const discovery = ALLOWED_DISCOVERY.find((r) => l.name.toLowerCase() === r.name);
 
     if (discovery !== undefined) {
-      allowed.push(l);
+      allowed.push({ ...l, reason: discovery.reason });
       continue;
     }
 

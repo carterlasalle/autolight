@@ -19,7 +19,10 @@ interface FakeAgent {
 
 // Local fake agent: 404 on / (alive, like the captured Express agent), bearer
 // check on the resolve endpoints, one known content id, one unknown id.
-async function fakeAgent(): Promise<FakeAgent> {
+// With malformedFirst the first candidate answers 200 without a path key so
+// failover must reach the second; errorId answers 500 to prove server errors
+// are distinct from not-found.
+async function fakeAgent(opts: { malformedFirst?: boolean; errorId?: string } = {}): Promise<FakeAgent> {
   const requests: string[] = [];
 
   const server = createServer((req, res) => {
@@ -49,7 +52,29 @@ async function fakeAgent(): Promise<FakeAgent> {
       return;
     }
 
+    if (opts.errorId !== undefined && (url === `/api/data/${opts.errorId}` || url === `/api/data/${opts.errorId}/path` || url === `/api/data/track/${opts.errorId}`)) {
+      res.statusCode = 500;
+      res.end("boom");
+
+      return;
+    }
+
     if (url === "/api/data/1234") {
+      if (opts.malformedFirst) {
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/json");
+        res.end(JSON.stringify({ tracks: [] }));
+
+        return;
+      }
+      res.statusCode = 200;
+      res.setHeader("content-type", "application/json");
+      res.end(JSON.stringify({ path: "/music/track.mp3" }));
+
+      return;
+    }
+
+    if (opts.malformedFirst && (url === "/api/data/1234/path" || url === "/api/data/track/1234")) {
       res.statusCode = 200;
       res.setHeader("content-type", "application/json");
       res.end(JSON.stringify({ path: "/music/track.mp3" }));
@@ -108,6 +133,37 @@ describe("Rekordbox agent API client (T-LIVE-08)", () => {
       client.forgetToken();
       expect(client.hasToken()).toBe(false);
       expect(await client.resolveContent("1234")).toMatchObject({ ok: false, reason: "no-token" });
+    } finally {
+      await closeAgent(agent);
+    }
+  });
+
+  it("falls through a malformed first candidate and reports server errors distinctly", async () => {
+    const agent = await fakeAgent({ malformedFirst: true, errorId: "5000" });
+
+    try {
+      const client = new RekordboxAgentClient({ port: agent.port, timeoutMs: 500 });
+      client.adoptToken(TOKEN, "manual");
+      // First endpoint answers 200 without a path key: failover reaches the second.
+      const resolved = await client.resolveContent("1234");
+      expect(resolved.ok).toBe(true);
+      expect(resolved.endpoint).toBe(AGENT_RESOLVE_ENDPOINTS[1]?.replace("{id}", "1234"));
+      // A 500 is a server failure, never a definitive not-found.
+      expect(await client.resolveContent("5000")).toMatchObject({ ok: false, reason: "server-error" });
+    } finally {
+      await closeAgent(agent);
+    }
+  });
+
+  it("refuses a token adopted from a different source than the chosen one", async () => {
+    const agent = await fakeAgent();
+
+    try {
+      const client = new RekordboxAgentClient({ port: agent.port, timeoutMs: 500 });
+      client.adoptToken(TOKEN, "manual");
+      const step = await resolveWithAgent(client, "1234", [{ source: "file", available: true, detail: "found at userData/agent-token" }]);
+      expect(step).toMatchObject({ path: null, source: "none" });
+      expect(step.report).toContain("no token loaded from file");
     } finally {
       await closeAgent(agent);
     }

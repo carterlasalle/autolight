@@ -86,6 +86,41 @@ describe("session recorder and exact replay (T-DATA-06, F-DATA-06, spec 103)", (
     expect(rec.count).toBe(0);
     expect(rec.exportNdjson()).toBe("");
   });
+
+  it("hashes config snapshots by canonical form, not key insertion order", () => {
+    expect(frameHashFor(1, { a: 1 }, { x: 1, y: { p: 1, q: 2 } }))
+      .toBe(frameHashFor(1, { a: 1 }, { y: { q: 2, p: 1 }, x: 1 }));
+  });
+
+  it("drops a record larger than the budget without evicting stored entries", () => {
+    const rec = new SessionRecorder({ enabled: true, maxMb: 0.001 });
+    rec.record("tick-input", { tick: 1, inputs: { deck: 1 } }, 1);
+    const before = rec.count;
+    rec.record("error", { blob: "x".repeat(5000) }, 2);
+    expect(rec.count).toBe(before);
+    expect(rec.droppedCount).toBe(1);
+  });
+
+  it("parses a trailing newline and rejects an unknown kind", () => {
+    const rec = new SessionRecorder({ enabled: true, maxMb: 64 });
+    rec.record("tick-input", { tick: 1 }, 1);
+    expect(parseSessionNdjson(`${rec.exportNdjson()}\n`)).toHaveLength(1);
+    expect(() => parseSessionNdjson(JSON.stringify({ seq: 0, tMs: 0, kind: "bogus", payload: {} }))).toThrow("unknown kind");
+  });
+
+  it("reports a frame with no recorded tick input as a mismatch instead of rendering unknowns", () => {
+    const rec = new SessionRecorder({ enabled: true, maxMb: 64 });
+    rec.record("frame-hash", { tick: 5, hash: "deadbeef" }, 5);
+    let called = 0;
+    const result = replaySession(rec.entries(), { style: "club" }, () => {
+      called += 1;
+
+      return "deadbeef";
+    });
+    expect(called).toBe(0);
+    expect(result.mismatched).toBe(1);
+    expect(result.mismatchedTicks).toEqual([5]);
+  });
 });
 
 describe("structured logging (T-OPS-02, F-OPS-01, spec 130)", () => {
@@ -201,7 +236,33 @@ describe("network exposure audit (T-SEC-02, spec 110/111)", () => {
 
     expect(result.allowed).toHaveLength(3);
     expect(result.denied).toHaveLength(1);
-    expect(result.denied[0]?.reason).toContain("control-server");
+    expect(result.denied[0]?.listener.name).toBe("control-server");
+    // The audit derives the reason from the matched rule, not the caller.
+    expect(result.allowed[1]?.reason).toBe("Govee LAN scan listener (UDP 4001)");
+    expect(result.allowed[0]?.host).toBe("127.0.0.1");
+  });
+  it("treats every loopback form as local and refuses lookalike discovery names", () => {
+    expect(oscMustRefuseRemote("127.0.0.2")).toBe(false);
+    expect(oscMustRefuseRemote("127.1.1.1")).toBe(false);
+    expect(oscMustRefuseRemote(" [::1] ")).toBe(false);
+    expect(oscMustRefuseRemote("localhost")).toBe(false);
+
+    const local = auditListeners([
+      { name: "osc", host: "127.0.0.2", port: 4460, reason: "OSC on alternate loopback", loopbackOnly: true },
+    ]);
+
+    expect(local.allowed).toHaveLength(1);
+
+    // Port-only allowlist bypass: a public unicast bind is not a discovery listener.
+    const wide = auditListeners([
+      { name: "govee-scan", host: "203.0.113.7", port: 4001, reason: "Govee LAN scan", loopbackOnly: false },
+      { name: "xprolink", host: "0.0.0.0", port: 50000, reason: "PRO DJ LINK discovery", loopbackOnly: false },
+      { name: "os2l-proxy", host: "0.0.0.0", port: 50001, reason: "OS2L discovery service type", loopbackOnly: false },
+      { name: "control-server", host: "::", port: 8080, reason: "remote control", loopbackOnly: false },
+    ]);
+
+    expect(wide.allowed).toHaveLength(0);
+    expect(wide.denied).toHaveLength(4);
   });
 
   it("refuses non-loopback OSC bindings by default", () => {

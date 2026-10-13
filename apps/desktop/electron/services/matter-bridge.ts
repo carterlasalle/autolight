@@ -20,21 +20,33 @@ export interface MatterBridgeOptions {
   maxRestarts?: number;
 }
 
+// A controller that stays alive this long resets the crash budget, so
+// transient crashes months apart never pin the bridge to degraded.
+const HEALTHY_UPTIME_MS = 60_000;
+
 export class MatterBridge implements Service {
   readonly name = "matter-bridge";
   private readonly tracker = new ServiceTracker("matter-bridge");
   private port: MatterProcessPort | null = null;
   private restarts = 0;
+  private stopped = false;
+  private healthySinceMs: number | null = null;
   private readonly inbound: unknown[] = [];
   private readonly listeners = new Set<(msg: unknown) => void>();
-  private readonly opts: MatterBridgeOptions;
+  private opts: MatterBridgeOptions;
 
   constructor(opts: MatterBridgeOptions = {}) {
-    this.opts = opts;
+    this.opts = { ...opts };
+  }
+
+  /** Merge later options so a second getMatterBridge call is honored, not ignored. */
+  configure(opts: MatterBridgeOptions): void {
+    Object.assign(this.opts, opts);
   }
 
   start(): ServiceStatus {
     if (this.port !== null) return this.status();
+    this.stopped = false;
 
     try {
       const port = this.opts.spawn?.();
@@ -51,11 +63,25 @@ export class MatterBridge implements Service {
 
         if (this.inbound.length > 64) this.inbound.shift();
 
-        for (const listener of this.listeners) listener(msg);
+        for (const listener of this.listeners) {
+          try {
+            listener(msg);
+          } catch {
+            this.tracker.count("listener-errors");
+          }
+        }
       });
       port.onExit((code) => {
         this.tracker.count("exits");
+        // A stale exit (previous port, or a kill from stop()) must not clear a
+        // live port or respawn the controller.
+        if (this.stopped || this.port !== port) return;
         this.port = null;
+        // A controller that stayed alive for a full healthy window resets the
+        // crash budget, so transient crashes months apart never pin degraded.
+        const startedAt = this.healthySinceMs ?? Date.now();
+
+        if (Date.now() - startedAt >= HEALTHY_UPTIME_MS) this.restarts = 0;
         const limit = this.opts.maxRestarts ?? 3;
 
         if (this.restarts >= limit) {
@@ -69,6 +95,7 @@ export class MatterBridge implements Service {
         this.start();
       });
       this.port = port;
+      this.healthySinceMs = Date.now();
       this.tracker.set("running", `controller process ${port.name}`);
     } catch (err) {
       this.tracker.set("degraded", `Matter controller failed to start: ${messageOf(err)}`);
@@ -78,6 +105,8 @@ export class MatterBridge implements Service {
   }
 
   stop(): ServiceStatus {
+    this.stopped = true;
+
     try {
       this.port?.kill();
     } catch { /* teardown never throws */ }
@@ -97,7 +126,12 @@ export class MatterBridge implements Service {
 
   send(msg: unknown): boolean {
     if (this.port === null) return false;
-    this.port.postMessage(msg);
+
+    try {
+      this.port.postMessage(msg);
+    } catch {
+      return false;
+    }
     this.tracker.count("outbound");
 
     return true;
@@ -119,7 +153,10 @@ export class MatterBridge implements Service {
 let instance: MatterBridge | null = null;
 
 export function getMatterBridge(opts: MatterBridgeOptions = {}): MatterBridge {
-  instance ??= new MatterBridge(opts);
+  // Options merge on every call so a later caller passing spawn/maxRestarts is
+  // honored instead of silently ignored.
+  if (instance === null) instance = new MatterBridge(opts);
+  else instance.configure(opts);
 
   return instance;
 }
