@@ -33,12 +33,18 @@ export interface FastPathResult {
 interface CacheEntry {
   track: TrackModel;
   plan: ShowPlan | null;
+  miss: FastPathMiss | null;
+  detail: string | null;
 }
 
 const DEFAULT_CAPACITY = 32;
 
 const TIMING_WINDOW = 512;
 
+// Store-scoped keys: the request carries no store identity, so a plain global
+// key would serve store A's rows to store B (reopened DB, second workspace,
+// per-test temp DBs). resetFastPath() keeps clearing everything, so existing
+// zero-arg callers stay isolated per test.
 const lru = new Map<string, CacheEntry>();
 
 const loadTimingsMs: number[] = [];
@@ -47,19 +53,35 @@ function now(): number {
   return performance.now();
 }
 
-function lruGet(key: string): CacheEntry | undefined {
-  const entry = lru.get(key);
+const storeIds = new WeakMap<object, number>();
+
+let nextStoreId = 1;
+
+function storeId(store: Store): number {
+  const existing = storeIds.get(store);
+
+  if (existing !== undefined) return existing;
+  const created = nextStoreId++;
+  storeIds.set(store, created);
+
+  return created;
+}
+
+function lruGet(store: Store, key: string): CacheEntry | undefined {
+  const entry = lru.get(`${storeId(store)}::${key}`);
 
   if (!entry) return undefined;
-  lru.delete(key);
-  lru.set(key, entry);
+  lru.delete(`${storeId(store)}::${key}`);
+  lru.set(`${storeId(store)}::${key}`, entry);
 
   return entry;
 }
 
-function lruSet(key: string, entry: CacheEntry, capacity: number): void {
-  if (lru.has(key)) lru.delete(key);
-  lru.set(key, entry);
+function lruSet(store: Store, key: string, entry: CacheEntry, capacity: number): void {
+  const scoped = `${storeId(store)}::${key}`;
+
+  if (lru.has(scoped)) lru.delete(scoped);
+  lru.set(scoped, entry);
 
   while (lru.size > capacity) {
     const oldest = lru.keys().next().value;
@@ -69,7 +91,8 @@ function lruSet(key: string, entry: CacheEntry, capacity: number): void {
   }
 }
 
-function recordTiming(ms: number): void {
+function recordTiming(store: Store, ms: number): void {
+  void store;
   loadTimingsMs.push(ms);
 
   if (loadTimingsMs.length > TIMING_WINDOW) loadTimingsMs.shift();
@@ -123,17 +146,16 @@ export interface LoadOptions {
 export function loadFastPath(store: Store, request: FastPathRequest, options: LoadOptions = {}): FastPathResult {
   const key = `${planKey(request)}::${artifactKey(request)}`;
   const started = now();
-  const cached = lruGet(key);
+  const cached = lruGet(store, key);
 
   if (cached) {
     const totalMs = now() - started;
-    recordTiming(totalMs);
 
     return {
       track: cached.track,
       plan: cached.plan,
-      miss: cached.plan ? null : "no-plan",
-      detail: cached.plan ? null : "cached plan is absent; compile from cached features",
+      miss: cached.miss,
+      detail: cached.detail,
       key,
       timings: { totalMs, lookupMs: 0, parseMs: 0, cacheHit: true },
     };
@@ -146,7 +168,7 @@ export function loadFastPath(store: Store, request: FastPathRequest, options: Lo
 
   if (!artifact) {
     const totalMs = now() - started;
-    recordTiming(totalMs);
+    recordTiming(store, totalMs);
 
     return {
       track: null,
@@ -167,14 +189,14 @@ export function loadFastPath(store: Store, request: FastPathRequest, options: Lo
     // TrackModel; the path itself is never the answer.
     track = trackModelSchema.parse(JSON.parse(readFileSync(artifact.artifact_path, "utf8")));
   } catch (error) {
-    detail = `artifact ${artifact.artifact_path} did not parse to a TrackModel: ${(error as Error).message}`;
+    detail = `artifact ${artifact.artifact_path} did not parse to a TrackModel: ${error instanceof Error ? error.message : String(error)}`;
   }
 
   const parseMs = now() - parseStarted;
 
   if (!track) {
     const totalMs = now() - started;
-    recordTiming(totalMs);
+    recordTiming(store, totalMs);
 
     return {
       track: null,
@@ -199,20 +221,28 @@ export function loadFastPath(store: Store, request: FastPathRequest, options: Lo
         plan = parsed;
       }
     } catch (error) {
-      planDetail = `plan row did not parse to a ShowPlan: ${(error as Error).message}`;
+      planDetail = `plan row did not parse to a ShowPlan: ${error instanceof Error ? error.message : String(error)}`;
     }
   } else {
     planDetail = "no cached plan; compile from cached features (spec 138 step 2)";
   }
 
-  lruSet(key, { track, plan }, options.capacity ?? DEFAULT_CAPACITY);
+  let miss: FastPathMiss | null;
+
+  if (plan) miss = null;
+  else if (planRow) miss = "invalid-plan";
+  else miss = "no-plan";
+
+  // Cache the positive track row only: a null-plan entry would pin a stale
+  // miss after a plan lands, so plan availability is always re-read.
+  if (plan) lruSet(store, key, { track, plan, miss, detail: planDetail }, options.capacity ?? DEFAULT_CAPACITY);
   const totalMs = now() - started;
-  recordTiming(totalMs);
+  recordTiming(store, totalMs);
 
   return {
     track,
     plan,
-    miss: plan ? null : planRow ? "invalid-plan" : "no-plan",
+    miss,
     detail: plan ? null : planDetail,
     key,
     timings: { totalMs, lookupMs, parseMs, cacheHit: false },

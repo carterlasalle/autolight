@@ -65,6 +65,8 @@ export function blankBleQualification(address: string): BleQualificationRecord {
       "icCount",
       "maskedWrite",
       "writeBudgetHz",
+      "burstCeilingHz",
+      "recoveryMs",
       "writeDrainMs",
       "renderHoldMs",
       "latencyMs",
@@ -117,86 +119,104 @@ export async function runBleQualification(probe: BleWizardProbe): Promise<{ reco
 
   for (const name of record.unmeasured) pending[name] = true;
 
-  if (peripheral.connected) peripheral.handleDisconnect();
-  peripheral.handleConnect();
-  steps.push({ step: "connect", ok: peripheral.connected, detail: `connected to ${peripheral.advertisement.address}` });
+  try {
+    if (peripheral.connected) peripheral.handleDisconnect();
+    peripheral.handleConnect();
+    steps.push({ step: "connect", ok: peripheral.connected, detail: `connected to ${peripheral.advertisement.address}` });
 
-  record.hardVersion = peripheral.readState(0x20) as string | null;
-  record.softVersion = peripheral.readState(0x21) as string | null;
-  const versionsOk = record.hardVersion !== null && record.softVersion !== null;
+    const hard = peripheral.readState(0x20);
+    const soft = peripheral.readState(0x21);
+    // Version characteristics answer text; a byte-array answer is a protocol
+    // mismatch, not a version (same Array.isArray guard as the segment reads).
+    record.hardVersion = Array.isArray(hard) ? null : hard;
+    record.softVersion = Array.isArray(soft) ? null : soft;
+    const versionsOk = record.hardVersion !== null && record.softVersion !== null;
 
-  if (versionsOk) delete pending["versions"];
-  steps.push({ step: "versions", ok: versionsOk, detail: `hard ${record.hardVersion} soft ${record.softVersion}` });
+    if (versionsOk) delete pending["versions"];
+    steps.push({ step: "versions", ok: versionsOk, detail: `hard ${record.hardVersion} soft ${record.softVersion}` });
 
-  const segments = peripheral.readState(0x0f);
-  record.segmentCount = Array.isArray(segments) ? (segments[0] ?? null) : null;
-  const segmentsOk = record.segmentCount !== null;
+    const segments = peripheral.readState(0x0f);
+    record.segmentCount = Array.isArray(segments) ? (segments[0] ?? null) : null;
+    const segmentsOk = record.segmentCount !== null;
 
-  if (segmentsOk) delete pending["segmentCount"];
-  steps.push({ step: "segment-count", ok: segmentsOk, detail: `aa 0f reports ${record.segmentCount}` });
+    if (segmentsOk) delete pending["segmentCount"];
+    steps.push({ step: "segment-count", ok: segmentsOk, detail: `aa 0f reports ${record.segmentCount}` });
 
-  const ic = peripheral.readState(0x40);
-  record.icCount = Array.isArray(ic) ? (ic[0] ?? null) : null;
-  const icOk = record.icCount !== null;
+    const ic = peripheral.readState(0x40);
+    record.icCount = Array.isArray(ic) ? (ic[0] ?? null) : null;
+    const icOk = record.icCount !== null;
 
-  if (icOk) delete pending["icCount"];
-  steps.push({ step: "ic-count", ok: icOk, detail: `aa 40 reports ${record.icCount}` });
+    if (icOk) delete pending["icCount"];
+    steps.push({ step: "ic-count", ok: icOk, detail: `aa 40 reports ${record.icCount}` });
 
-  record.maskedWriteVerified = await user.confirmMaskedWrite("masked-stripe");
+    record.maskedWriteVerified = await user.confirmMaskedWrite("masked-stripe");
 
-  if (record.maskedWriteVerified) {
-    delete pending["maskedWrite"];
-    record.dialect = {
-      ...record.dialect,
-      colorModes: ["single-0d", "masked-15-01"],
-      supportsMaskedBrightness: true,
+    if (record.maskedWriteVerified) {
+      delete pending["maskedWrite"];
+      record.dialect = {
+        ...record.dialect,
+        colorModes: ["single-0d", "masked-15-01"],
+        supportsMaskedBrightness: true,
+      };
+    }
+
+    steps.push({ step: "masked-write", ok: record.maskedWriteVerified, detail: record.maskedWriteVerified ? "user confirmed the masked stripe" : "user did not confirm the masked stripe" });
+
+    const budget = benchmarkWriteBudget(peripheral.options, now());
+    record.writeBudgetHz = budget.sustainedHz;
+    record.burstCeilingHz = budget.ceilingHz;
+    record.recoveryMs = budget.recoveryMs;
+
+    if (budget.sustainedHz !== null) delete pending["writeBudgetHz"];
+
+    if (budget.ceilingHz !== null) delete pending["burstCeilingHz"];
+
+    if (budget.recoveryMs !== null) delete pending["recoveryMs"];
+    steps.push({ step: "write-budget", ok: budget.sustainedHz !== null, detail: `sustained ${budget.sustainedHz} Hz, burst ceiling ${budget.ceilingHz} Hz, recovery ${budget.recoveryMs} ms` });
+
+    if (!peripheral.connected) peripheral.handleConnect();
+    let tick = now();
+
+    const advance: () => number = () => {
+      tick += 1000;
+
+      return tick;
     };
+
+    record.writeDrainMs = measureWriteDrain(peripheral, advance);
+
+    if (record.writeDrainMs !== null) delete pending["writeDrainMs"];
+    steps.push({ step: "write-drain", ok: record.writeDrainMs !== null, detail: `drain ${record.writeDrainMs} ms` });
+
+    if (!peripheral.connected) peripheral.handleConnect();
+    record.renderHoldMs = measureRenderHold(peripheral, advance);
+
+    if (record.renderHoldMs !== null) delete pending["renderHoldMs"];
+    steps.push({ step: "render-hold", ok: record.renderHoldMs !== null, detail: `render hold ${record.renderHoldMs} ms` });
+
+    record.latencyMs = await user.readLatencyMs();
+
+    if (record.latencyMs !== null) delete pending["latencyMs"];
+    steps.push({ step: "latency", ok: record.latencyMs !== null, detail: record.latencyMs === null ? "camera procedure not run" : `camera latency ${record.latencyMs} ms` });
+
+    const need = encryptedLinkNeed(peripheral.advertisement.manufacturer, peripheral.readVersionByte(), mode);
+
+    if (need.protocolV2) record.encryptedHandshake = "v2";
+    else if (need.encoded) record.encryptedHandshake = "seed";
+    else record.encryptedHandshake = "plain";
+    record.sku = peripheral.options.sku ?? null;
+
+    if (record.sku !== null) delete pending["sku"];
+    record.unmeasured = Object.keys(pending).sort();
+
+    return { record, steps };
+  } finally {
+    try {
+      peripheral.handleDisconnect();
+    } catch {
+      // Best-effort cleanup: the record stays authoritative on failure.
+    }
   }
-
-  steps.push({ step: "masked-write", ok: record.maskedWriteVerified, detail: record.maskedWriteVerified ? "user confirmed the masked stripe" : "user did not confirm the masked stripe" });
-
-  const budget = benchmarkWriteBudget(peripheral.options, now());
-  record.writeBudgetHz = budget.sustainedHz;
-  record.burstCeilingHz = budget.ceilingHz;
-  record.recoveryMs = budget.recoveryMs;
-
-  if (budget.sustainedHz !== null) delete pending["writeBudgetHz"];
-  steps.push({ step: "write-budget", ok: budget.sustainedHz !== null, detail: `sustained ${budget.sustainedHz} Hz, burst ceiling ${budget.ceilingHz} Hz, recovery ${budget.recoveryMs} ms` });
-
-  if (!peripheral.connected) peripheral.handleConnect();
-  let tick = now();
-
-  const advance: () => number = () => {
-    tick += 1000;
-
-    return tick;
-  };
-
-  record.writeDrainMs = measureWriteDrain(peripheral, advance);
-
-  if (record.writeDrainMs !== null) delete pending["writeDrainMs"];
-  steps.push({ step: "write-drain", ok: record.writeDrainMs !== null, detail: `drain ${record.writeDrainMs} ms` });
-
-  if (!peripheral.connected) peripheral.handleConnect();
-  record.renderHoldMs = measureRenderHold(peripheral, advance);
-
-  if (record.renderHoldMs !== null) delete pending["renderHoldMs"];
-  steps.push({ step: "render-hold", ok: record.renderHoldMs !== null, detail: `render hold ${record.renderHoldMs} ms` });
-
-  record.latencyMs = await user.readLatencyMs();
-
-  if (record.latencyMs !== null) delete pending["latencyMs"];
-  steps.push({ step: "latency", ok: record.latencyMs !== null, detail: record.latencyMs === null ? "camera procedure not run" : `camera latency ${record.latencyMs} ms` });
-
-  const need = encryptedLinkNeed(peripheral.advertisement.manufacturer, peripheral.readVersionByte(), mode);
-  record.encryptedHandshake = need.protocolV2 ? "v2" : need.encoded ? "seed" : "plain";
-  record.sku = peripheral.options.sku ?? null;
-
-  if (record.sku !== null) delete pending["sku"];
-  record.unmeasured = Object.keys(pending).sort();
-  peripheral.handleDisconnect();
-
-  return { record, steps };
 }
 
 export interface BleBudgetBenchmark {
@@ -209,16 +229,15 @@ export interface BleBudgetBenchmark {
 const BUDGET_SWEEP_HZ = [10, 20, 30, 60, 100, 150, 200] as const;
 
 /** True when sending rate writes in one second stalls a probe with this budget. */
-function sweepRateStalls(budgetHz: number | null, rate: number, t0: number): boolean {
-  const probe = new SimPeripheral({ address: "AA:BB:CC:00:BE:01", zones: 8, budgetHz });
+function sweepRateStalls(peripheral: SimPeripheral, rate: number, t0: number): boolean {
   const spacing = 1000 / rate;
   let t = t0;
 
   for (let i = 0; i < rate; i++) {
     t += Math.max(1, Math.round(spacing));
-    probe.handleWrite(blePower(true), t);
+    peripheral.handleWrite(blePower(true), t);
 
-    if (probe.metrics.stalled > 0) return true;
+    if (peripheral.metrics.stalled > 0) return true;
   }
 
   return false;
@@ -232,7 +251,12 @@ function benchmarkWriteBudget(options: SimPeripheralOptions, t0: number): BleBud
   let ceiling: number | null = null;
 
   for (const rate of BUDGET_SWEEP_HZ) {
-    if (sweepRateStalls(budgetHz, rate, t0)) {
+    // Fresh probe per rate with the unit's own full options (address, zones,
+    // budget): a shared or synthetic fixed-address probe would carry stall
+    // state across rates or attribute another object's behaviour to this unit.
+    const probe = new SimPeripheral({ ...options, address: options.address });
+
+    if (sweepRateStalls(probe, rate, t0)) {
       ceiling = rate;
       break;
     }
@@ -240,28 +264,35 @@ function benchmarkWriteBudget(options: SimPeripheralOptions, t0: number): BleBud
     sustained = rate;
   }
 
-  if (sustained === null) return { sustainedHz: null, ceilingHz: ceiling, recoveryMs: ceiling === null ? null : 2000 };
-
-  return { sustainedHz: sustained, ceilingHz: ceiling ?? sustained * 2, recoveryMs: 2000 };
+  // Honest reporting: the sweep measures sustained rate and stall ceiling
+  // only. Recovery time is never measured here, so it stays null (named in
+  // `unmeasured`) instead of a fabricated constant; likewise an unobserved
+  // ceiling stays null instead of an invented `sustained * 2`.
+  return { sustainedHz: sustained, ceilingHz: ceiling, recoveryMs: null };
 }
 
 function measureWriteDrain(peripheral: SimPeripheral, now: () => number): number | null {
+  const t0 = now();
   const before = peripheral.readState(0x01);
   const targetOn = !(Array.isArray(before) && before[0] === 1);
   const expect = targetOn ? 1 : 0;
-  peripheral.handleWrite(blePower(targetOn), now());
+  peripheral.handleWrite(blePower(targetOn), t0);
   const immediate = peripheral.readState(0x01);
 
   if (!(Array.isArray(immediate) && immediate[0] === expect)) return null;
+  // Drain window: hold the written state across a reconnect, then read back.
+  // The returned value is the measured hold time, not a constant.
+  const t1 = now();
   peripheral.handleDisconnect();
   peripheral.handleConnect();
   const after = peripheral.readState(0x01);
   const kept = Array.isArray(after) && after[0] === expect;
-  peripheral.handleWrite(blePower(!targetOn), now());
+  const t2 = now();
+  peripheral.handleWrite(blePower(!targetOn), t2);
   peripheral.handleDisconnect();
   peripheral.handleConnect();
 
-  return kept ? 300 : null;
+  return kept ? Math.max(0, t2 - t1) : null;
 }
 
 function measureRenderHold(peripheral: SimPeripheral, now: () => number): number | null {

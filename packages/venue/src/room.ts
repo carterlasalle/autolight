@@ -80,6 +80,13 @@ export function isClockwiseFromAbove(outline: Point2[]): boolean {
   return signedArea(outline) < 0;
 }
 
+/**
+ * Clockwise-from-above vertex order. Reverses counter-clockwise input, which
+ * renumbers every wall/edge index: attach wallNames, openings.wall and
+ * perimeter offsets AFTER normalizing (rectangleRoom does), and re-normalize
+ * stored outlines before use (fields.ts, venue.ts do) so wall-indexed data
+ * always refers to the normalized order.
+ */
 export function normalizeOutline(outline: Point2[]): Point2[] {
   const copy = outline.map((p) => ({ ...p }));
 
@@ -186,7 +193,11 @@ export function validateRoom(room: Room): string[] {
     if (o.wall < 0 || o.wall >= n) problems.push(`opening wall ${o.wall} out of range`);
 
     if (!(o.from >= 0 && o.to <= 1 && o.from < o.to)) problems.push("opening from/to must satisfy 0 <= from < to <= 1");
+
+    if (o.kind !== "door" && o.kind !== "window" && o.kind !== "gap") problems.push(`opening kind ${JSON.stringify(o.kind)} must be door, window or gap`);
   }
+
+  if (room.units !== "m" && room.units !== "ft") problems.push(`room.units ${JSON.stringify(room.units)} must be m or ft`);
 
   return problems;
 }
@@ -207,7 +218,9 @@ export function perimeterLength(outline: Point2[]): number {
   return wallLengths(outline).reduce((a, b) => a + b, 0);
 }
 
-export function rectangleRoom(widthM: number, lengthM: number, name = "Square room"): Room {
+let roomSeq = 0;
+
+export function rectangleRoom(widthM: number, lengthM: number, name?: string): Room {
   const w = widthM / 2;
   const l = lengthM / 2;
 
@@ -218,13 +231,20 @@ export function rectangleRoom(widthM: number, lengthM: number, name = "Square ro
     { x: w, y: -l },
   ];
 
+  const normalized = normalizeOutline(outline);
+  // Outline is clockwise from above: edge 0 runs along x=-w, edge 1 along
+  // y=+l, edge 2 along x=+w, edge 3 along y=-l. The DJ stands at y=-l with
+  // facingRad 0 (+x), so the front wall is edge 2 (x=+w), the back wall edge
+  // 0, left edge 1 and right edge 3.
+  const label = name ?? (widthM === lengthM ? "Square room" : "Rectangle room");
+
   return {
-    id: "room-square",
-    name,
+    id: `room-rect-${widthM}x${lengthM}-${++roomSeq}`,
+    name: label,
     units: "m",
-    outline: normalizeOutline(outline),
+    outline: normalized,
     ceilingHeight: 2.6,
-    wallNames: ["Front", "Right", "Back", "Left"],
+    wallNames: ["Back", "Left", "Front", "Right"],
     openings: [],
     anchors: {
       dj: { position: { x: 0, y: -l + 0.5 }, facingRad: 0 },
@@ -239,11 +259,10 @@ export function rectangleRoom(widthM: number, lengthM: number, name = "Square ro
   };
 }
 
-export type SplineKind = "polyline" | "catmull-rom" | "cubic-bezier";
+export type SplineKind = "polyline" | "catmull-rom";
 
 export interface SplineGeom {
   kind: Exclude<SplineKind, "polyline">;
-  tension?: number;
 }
 
 function catmullPoint(p0: Point3, p1: Point3, p2: Point3, p3: Point3, t: number): Point3 {
@@ -257,24 +276,29 @@ function catmullPoint(p0: Point3, p1: Point3, p2: Point3, p3: Point3, t: number)
 }
 
 export function samplePath(points: Point3[], geom: SplineGeom | undefined, toleranceM: number, closed = false): Point3[] {
-  if (!geom || geom.kind === undefined || points.length < 3) return points.map((p) => ({ ...p }));
-  const ring = closed ? [...points, points[0]!] : points;
+  if (points.length < 3) return closed ? [...points.map((p) => ({ ...p })), { ...points[0]! }] : points.map((p) => ({ ...p }));
+
+  if (!geom) return points.map((p) => ({ ...p }));
+  const n = points.length;
   const out: Point3[] = [];
-  const segs = ring.length - 1;
+  const segs = closed ? n : n - 1;
   const steps = Math.max(4, Math.min(64, Math.ceil(0.05 / Math.max(1e-6, toleranceM))));
 
+  // Neighbours index the control points, not an appended ring: modulo n keeps
+  // the closing segment's tangents (no degenerate p0===p1 at the seam), and
+  // open paths clamp at the endpoints instead of wrapping around.
   for (let i = 0; i < segs; i++) {
-    const p0 = ring[(i - 1 + ring.length) % ring.length]!;
-    const p1 = ring[i]!;
-    const p2 = ring[i + 1]!;
-    const p3 = ring[(i + 2) % ring.length]!;
+    const p1 = points[i]!;
+    const p2 = points[(i + 1) % n]!;
+    const p0 = closed ? points[(i - 1 + n) % n]! : points[Math.max(0, i - 1)]!;
+    const p3 = closed ? points[(i + 2) % n]! : points[Math.min(n - 1, i + 2)]!;
 
     for (let k = 0; k < steps; k++) {
       out.push(catmullPoint(p0, p1, p2, p3, k / steps));
     }
   }
 
-  out.push({ ...(closed ? ring[0]! : points[points.length - 1]!) });
+  out.push({ ...(closed ? points[0]! : points[points.length - 1]!) });
 
   return out;
 }

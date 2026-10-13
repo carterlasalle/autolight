@@ -1,9 +1,9 @@
 // Durable identity (T-ID-01, P-12-rename-survives; closes F-ID-01, F-LIVE-07).
 import { describe, expect, it } from "vitest";
 import { MemoryAliasStore, aliasesFor, normalizePath, resolveTrackId } from "./alias.js";
-import { acousticProposesLink, acousticSimilarity, landmarkHashes, quantize16 } from "./fingerprint.js";
+import { acousticProposesLink, acousticSimilarity, landmarkHashes, pcmHashOf, quantize16 } from "./fingerprint.js";
 import { fileHashOf } from "./hash.js";
-import { derivePlannerSeed } from "./seed.js";
+import { derivePlannerSeed, seedStream } from "./seed.js";
 
 const BYTES = (s: string): Uint8Array => new TextEncoder().encode(s);
 
@@ -70,6 +70,28 @@ describe("pcm fingerprint", () => {
     expect(acousticProposesLink(hSame, hSame)).toBe(true);
     expect(acousticSimilarity(hSame, landmarkHashes(other))).toBeLessThan(0.9);
   });
+
+  it("hashes quantized PCM as little-endian bytes, independent of host endianness", async () => {
+    const quantized = quantize16(new Float32Array([1, -1]));
+    const littleEndian = new Uint8Array([0xff, 0x7f, 0x01, 0x80]);
+
+    expect(await pcmHashOf(quantized)).toBe(await pcmHashOf(littleEndian));
+  });
+
+  it("rejects a non-positive hop or window instead of looping forever", () => {
+    expect(() => landmarkHashes(new Float32Array(16), 4, 0)).toThrow(RangeError);
+    expect(() => landmarkHashes(new Float32Array(16), 0, 2)).toThrow(RangeError);
+  });
+
+  it("keeps window index distinct so distant windows never alias", () => {
+    // A constant drone has one band pair per window, so the only source of
+    // distinct hashes is the (untruncated) window index.
+    const drone = new Float32Array(1024 * 300).fill(0.5);
+    const hashes = landmarkHashes(drone);
+
+    expect(hashes.length).toBeGreaterThan(256);
+    expect(new Set(hashes).size).toBe(hashes.length);
+  });
 });
 
 describe("planner seed (T-ID-02)", () => {
@@ -85,5 +107,18 @@ describe("planner seed (T-ID-02)", () => {
     const weak = derivePlannerSeed({ nativeId: "101" }, "1.0", "s");
     expect(weak.seedSource).toBe("native-id-weak");
     expect(weak.weak).toBe(true);
+  });
+  it("refuses the shared id:unknown sentinel instead of colliding tracks", () => {
+    expect(() => derivePlannerSeed({}, "1.0", "s")).toThrow(/pcmFingerprint, fileHash, or nativeId/);
+    expect(() => derivePlannerSeed({ nativeId: "" }, "1.0", "s")).toThrow(/pcmFingerprint, fileHash, or nativeId/);
+  });
+  it("folds the full 64-bit seed into the stream and rejects bad hex", () => {
+    const a = seedStream("0123456789abcdef");
+    const b = seedStream("01234567ffffffff");
+    expect(a()).not.toBe(b());
+    expect(() => seedStream("")).toThrow(/hex/);
+    expect(() => seedStream("zzzzzzzz")).toThrow(/hex/);
+    const legacy = seedStream("01234567");
+    expect(legacy()).toBe(seedStream("01234567")());
   });
 });

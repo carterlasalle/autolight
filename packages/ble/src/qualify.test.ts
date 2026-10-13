@@ -65,12 +65,16 @@ describe("ble qualification (T-BLE-06)", () => {
     expect(record.dialect.colorModes).toContain("masked-15-01");
     expect(record.writeBudgetHz).toBe(20);
     expect(record.burstCeilingHz).toBe(30);
-    expect(record.recoveryMs).toBe(2000);
-    expect(record.writeDrainMs).toBe(300);
+    // Recovery is never measured by the sweep: null + named unmeasured.
+    expect(record.recoveryMs).toBeNull();
+    expect(record.unmeasured).toContain("recoveryMs");
+    // Drain is the measured hold across the reconnect window (>= 0), not a constant.
+    expect(record.writeDrainMs).not.toBeNull();
+    expect(record.writeDrainMs!).toBeGreaterThanOrEqual(0);
     expect(record.renderHoldMs).toBe(2000);
     expect(record.latencyMs).toBe(25);
     expect(record.encryptedHandshake).toBe("plain");
-    expect(record.unmeasured).toEqual([]);
+    expect(record.unmeasured).not.toContain("writeDrainMs");
   });
 
   it("reports v2 versus seed handshakes and keeps unmeasured honest", async () => {
