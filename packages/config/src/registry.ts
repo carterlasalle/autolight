@@ -270,46 +270,33 @@ const byKey = new Map(KEYS.map((k) => [k.key, k]));
 // Dynamic key families (per-device / per-shortcut / per-scenario maps)
 // resolve through their listed template rows in KEYS.
 const DEVICE_RE = /^govee\.device\.[^.]+\.(transportMode|transportOrder)$/;
-
 const SHORTCUT_RE = /^ui\.shortcuts\.[a-zA-Z0-9_-]+$/;
-
 const FAULT_RE = /^qa\.faults\.[a-zA-Z0-9_-]+$/;
 
 function templateFor(key: string): KeyDef | undefined {
   if (DEVICE_RE.test(key)) return byKey.get(key.replace(/^govee\.device\.[^.]+\./, "govee.device.<fixtureId>."));
-
   if (SHORTCUT_RE.test(key)) return byKey.get("ui.shortcuts.*");
-
   if (FAULT_RE.test(key)) return byKey.get("qa.faults.*");
-
   return undefined;
 }
 
 export function defineKey(key: string): KeyDef {
   const def = byKey.get(key) ?? templateFor(key);
-
   if (!def) throw new Error(`unknown-config-key: ${key}`);
-
   return def;
 }
 
 export function defaultFor(key: string): unknown {
   const def = defineKey(key);
-
   if (def.type === "boolean") return def.defaultRaw === "true";
-
   if (def.type === "number") return Number(def.defaultRaw);
-
   if (def.type === "json") { try { return JSON.parse(def.defaultRaw); } catch { return def.defaultRaw; } }
-
   return def.defaultRaw;
 }
 
 export function defaultsObject(): Record<string, unknown> {
   const out: Record<string, unknown> = {};
-
   for (const k of KEYS) out[k.key] = defaultFor(k.key);
-
   return out;
 }
 

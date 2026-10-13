@@ -85,12 +85,26 @@ function schemaType(def) {
   return t;
 }
 
-function schemaDefault(def) {
+// json-typed rows must carry valid JSON: a raw-string fallback would ship
+// a string default where Python/TS consumers expect a dict/list.
+function jsonDefault(def) {
   try {
     return JSON.parse(def);
   } catch {
-    return def;
+    throw new Error(`export: invalid JSON default (fix the catalog row to valid JSON): ${def.slice(0, 120)}`);
   }
+}
+
+function schemaDefault(def) {
+  if (!(def.startsWith("[") || def.startsWith("{"))) {
+    try {
+      return JSON.parse(def);
+    } catch {
+      return def;
+    }
+  }
+
+  return jsonDefault(def);
 }
 
 const properties = {};
