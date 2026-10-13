@@ -115,6 +115,8 @@ jobs:
           node-version: 22
       - run: corepack enable
       - run: yarn install --immutable
+      # bundle-scan (in `yarn truth`) needs a release-built apps/desktop/dist.
+      - run: yarn build
       # trackmodel-drift.mjs shells to `uv run` for the Python validator,
       # so the uv toolchain plus the synced venv must exist here too.
       - uses: astral-sh/setup-uv@v5
