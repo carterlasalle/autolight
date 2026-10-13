@@ -79,6 +79,8 @@ export class LibraryService implements Service {
     }));
     const watchRoot = this.opts.watchRoot ?? defaultWatchRoot;
 
+    let failed = 0;
+
     for (const root of this.roots) {
       if (!root.readable) continue;
 
@@ -86,9 +88,16 @@ export class LibraryService implements Service {
         const watcher = watchRoot(root.path, (file) => { this.enqueue(root, file); });
         watcher.on("error", (err) => {
           this.tracker.set("degraded", `watch failed on ${root.path}: ${messageOf(err)}`);
+          try {
+            watcher.close();
+          } catch {
+            // ignore close errors while degrading
+          }
+          this.watchers = this.watchers.filter((w) => w !== watcher);
         });
         this.watchers.push(watcher);
       } catch (err) {
+        failed += 1;
         this.tracker.set("degraded", `watch failed on ${root.path}: ${messageOf(err)}`);
       }
     }
@@ -99,6 +108,8 @@ export class LibraryService implements Service {
 
     if (readable.length === 0) {
       this.tracker.set("degraded", "no readable library root (rekordbox or serato not installed, or permission denied)");
+    } else if (failed > 0 || this.watchers.length < readable.length) {
+      this.tracker.set("degraded", `watching ${this.watchers.length} of ${readable.length} readable roots`);
     } else {
       this.tracker.set("running", readable.map((r) => `${r.provider}: ${r.path}`).join(", "));
     }
@@ -112,6 +123,7 @@ export class LibraryService implements Service {
 
     if (this.debounce !== null) clearTimeout(this.debounce);
     this.debounce = null;
+    this.pending = [];
     this.tracker.set("stopped");
 
     return this.status();
@@ -150,7 +162,13 @@ export class LibraryService implements Service {
       this.debounce = null;
       this.tracker.count("batches");
 
-      for (const listener of this.listeners) listener(batch);
+      for (const listener of this.listeners) {
+        try {
+          listener(batch);
+        } catch (err) {
+          this.tracker.set("degraded", `change listener failed: ${messageOf(err)}`);
+        }
+      }
     }, this.opts.debounceMs ?? 150);
   }
 }
@@ -167,8 +185,9 @@ function isReadableDir(path: string): boolean {
 // (fs.watch supplies eventType and filename), adapted to the port type so the
 // two overloads of FSWatcher.on do not leak into the service.
 function defaultWatchRoot(root: string, onEvent: (file: string) => void): LibraryWatcher {
-  const watcher = watch(root, { recursive: true }, (eventType, filename) => {
-    onEvent(filename === null ? eventType : filename);
+  const watcher = watch(root, { recursive: true }, (_eventType, filename: string | Buffer | null) => {
+    if (filename === null) return;
+    onEvent(typeof filename === "string" ? filename : filename.toString("utf8"));
   });
 
   return {
@@ -183,4 +202,8 @@ export function getLibraryService(opts: LibraryServiceOptions = {}): LibraryServ
   instance ??= new LibraryService(opts);
 
   return instance;
+}
+
+export function resetLibraryService(): void {
+  instance = null;
 }

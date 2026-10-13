@@ -35,7 +35,7 @@ export const MEMORY_PROVIDER_ID = "memory-cleanroom" as const satisfies Provider
 const pointerPathSchema = z.object({
   field: z.enum(["playheadSamples", "bpm", "masterDeck", "trackId"]),
   base: z.string().min(1),
-  offsets: z.array(z.number().int()),
+  offsets: z.array(z.number().int()).length(1),
   sampleRateHz: z.number().optional(),
 });
 
@@ -191,7 +191,7 @@ export interface MemoryObservation {
 }
 
 export function scanMemoryOffsets(
-  accessor: MemoryAccessor,
+  accessor: MemoryAccessor | MemoryAccessor[],
   slots: readonly string[],
   range: number,
   observations: readonly MemoryObservation[],
@@ -200,39 +200,38 @@ export function scanMemoryOffsets(
   const first = observations[0];
 
   if (!first) return [];
-  const expectedSamples = BigInt(Math.round(first.playheadSeconds * sampleRateHz));
+  const readers = Array.isArray(accessor) ? accessor : [accessor];
+  const expectedSamples = (obs: MemoryObservation): bigint => BigInt(Math.round(obs.playheadSeconds * sampleRateHz));
+  const matches = (reader: MemoryAccessor, obs: MemoryObservation, field: string, base: string, index: number): boolean => {
+    if (field === "playheadSamples") return reader.readU64(base, index) === expectedSamples(obs);
+    if (field === "bpm") return reader.readF64(base, index) === obs.bpm;
+    return reader.readU32(base, index) === obs.trackId;
+  };
   const found: MemoryPointerPath[] = [];
 
   for (const slot of slots) {
     for (let index = 0; index < range; index++) {
-      if (accessor.readU64(slot, index) === expectedSamples) {
+      if (readers[0]!.readU64(slot, index) === expectedSamples(first)) {
         found.push({ field: "playheadSamples", base: slot, offsets: [index], sampleRateHz });
       }
 
-      if (accessor.readF64(slot, index) === first.bpm) {
+      if (readers[0]!.readF64(slot, index) === first.bpm) {
         found.push({ field: "bpm", base: slot, offsets: [index] });
       }
 
-      if (accessor.readU32(slot, index) === first.trackId) {
+      if (readers[0]!.readU32(slot, index) === first.trackId) {
         found.push({ field: "trackId", base: slot, offsets: [index] });
       }
     }
   }
 
-  const rest = observations.slice(1);
-
   return found.filter((candidate) => {
-    const obs = rest[0];
-
-    if (!obs) return true;
     const index = candidate.offsets[0] ?? 0;
 
-    if (candidate.field === "playheadSamples") {
-      return accessor.readU64(candidate.base, index) === BigInt(Math.round(obs.playheadSeconds * sampleRateHz))
-        || accessor.readU64(candidate.base, index) === expectedSamples;
-    }
-
-    return true;
+    return observations.every((obs, i) => {
+      const reader = readers[Math.min(i, readers.length - 1)]!;
+      return matches(reader, obs, candidate.field, candidate.base, index);
+    });
   });
 }
 
@@ -330,21 +329,35 @@ export class MemoryCleanroomProvider extends ProviderBase {
   }
 
   private readonly samples = new Map<number, { sample: MemorySample; atNs: bigint }>();
+  private lastPollAtNs: bigint | null = null;
+  private pollCount = 0;
+  private pollFirstAtNs: bigint | null = null;
 
   poll(atNs?: bigint): void {
     const at = atNs ?? this.now();
 
     if (this.capability() !== "READY" || !this.offsets || !this.accessor) return;
-    const rate = this.sampleRateHz;
     const found = readMemorySample(this.accessor, this.offsets, (deck) => `deck${deck}`);
-    void rate;
+
+    for (const deck of [...this.samples.keys()]) {
+      if (!found.has(deck)) this.samples.delete(deck);
+    }
 
     for (const [deck, sample] of found) {
       this.samples.set(deck, { sample, atNs: at });
       this.emit(this.stateFor(deck, at));
     }
 
-    if (found.size > 0) this.setStatus({ state: "live", updateHz: 0, ageMs: 0 });
+    if (this.pollFirstAtNs === null) this.pollFirstAtNs = at;
+    this.pollCount += 1;
+    const previous = this.lastPollAtNs;
+    this.lastPollAtNs = at;
+    if (found.size > 0) {
+      const spanMs = this.pollFirstAtNs !== null ? Number(at - this.pollFirstAtNs) / 1e6 : 0;
+      const updateHz = this.pollCount >= 2 && spanMs > 0 ? ((this.pollCount - 1) * 1000) / spanMs : 0;
+      const ageMs = previous !== null ? Number(at - previous) / 1e6 : 0;
+      this.setStatus({ state: "live", updateHz, ageMs });
+    }
   }
 
   ingestMalformed(reason = "malformed helper frame"): void {
@@ -355,15 +368,17 @@ export class MemoryCleanroomProvider extends ProviderBase {
     const entry = this.samples.get(deck);
     const at = atNs ?? entry?.atNs ?? this.now();
     const sample = entry?.sample;
+    const rate = this.pathRate();
+    const hasPlayhead = sample?.playheadSamples !== null && sample?.playheadSamples !== undefined;
 
-    const playheadSeconds = sample?.playheadSamples !== null && sample?.playheadSamples !== undefined
-      ? Number(sample.playheadSamples) / this.sampleRateHz
+    const playheadSeconds = hasPlayhead
+      ? Number(sample.playheadSamples) / rate
       : 0;
 
     const state = this.mapper.update(this.id, {
       deckId: deck,
       atNs: at,
-      playing: true,
+      ...(hasPlayhead ? { playing: true } : {}),
       playheadSeconds,
       effectiveBpm: sample?.bpm ?? null,
       ...(sample?.trackId !== null && sample?.trackId !== undefined
@@ -372,18 +387,23 @@ export class MemoryCleanroomProvider extends ProviderBase {
       master: sample?.masterDeck === null || sample?.masterDeck === undefined
         ? null
         : sample.masterDeck === deck,
-      quality: this.qualityFor(),
+      quality: this.qualityFor(sample),
     });
 
     return { ...state, raw: { provider: MEMORY_PROVIDER_ID } };
   }
 
-  private qualityFor(): Partial<Record<keyof ProviderDeckState, QualityLabel>> {
+  private pathRate(): number {
+    const path = this.offsets?.paths.find((p) => p.field === "playheadSamples");
+    return path?.sampleRateHz ?? this.sampleRateHz;
+  }
+
+  private qualityFor(sample: MemorySample | undefined): Partial<Record<keyof ProviderDeckState, QualityLabel>> {
     return {
-      playheadSeconds: "exact",
+      playheadSeconds: sample?.playheadSamples !== null && sample?.playheadSamples !== undefined ? "exact" : "stale",
       playing: "derived",
-      effectiveBpm: "exact",
-      master: "exact",
+      effectiveBpm: sample?.bpm !== null && sample?.bpm !== undefined ? "exact" : "stale",
+      master: sample?.masterDeck !== null && sample?.masterDeck !== undefined ? "exact" : "stale",
     };
   }
 }

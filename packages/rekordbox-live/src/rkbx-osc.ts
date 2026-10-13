@@ -39,6 +39,7 @@ export interface RkbxOscOptions {
   playingEpsilonMs?: number;
   pauseHoldMs?: number;
   seekThresholdMs?: number;
+  masterMatchMs?: number;
   grids?: Readonly<Record<number, readonly { sourceTimeMs: number }[]>>;
 }
 
@@ -69,6 +70,7 @@ interface DeckBuffer {
   title: string | null;
   artist: string | null;
   album: string | null;
+  resolvedTitle: string | null;
   phrase: PhraseInfo;
   beatSubdiv: number | null;
   lastBeatAtNs: bigint | null;
@@ -88,6 +90,7 @@ function emptyBuffer(): DeckBuffer {
     title: null,
     artist: null,
     album: null,
+    resolvedTitle: null,
     phrase: { current: null, next: null, countInBeats: null },
     beatSubdiv: null,
     lastBeatAtNs: null,
@@ -118,6 +121,7 @@ export class RkbxOscProvider extends ProviderBase {
       playingEpsilonMs: opts.playingEpsilonMs ?? 5,
       pauseHoldMs: opts.pauseHoldMs ?? 150,
       seekThresholdMs: opts.seekThresholdMs ?? 150,
+      masterMatchMs: opts.masterMatchMs ?? 250,
       grids: opts.grids ?? {},
     };
   }
@@ -144,6 +148,8 @@ export class RkbxOscProvider extends ProviderBase {
     });
     await promise.catch((err: unknown) => {
       this.setStatus({ state: "failed", error: `osc bind ${this.options.bind ?? ""}: ${err instanceof Error ? err.message : String(err)}` });
+      try { this.socket?.close(); } catch { /* already closed */ }
+      this.socket = null;
       throw err;
     });
   }
@@ -259,7 +265,7 @@ export class RkbxOscProvider extends ProviderBase {
         const seconds = asNumber(value);
 
         if (seconds === null) return this.rejectValue(message.address);
-        this.applyTime(buffer, seconds, atNs);
+        this.applyTime(parsed.deck, buffer, seconds, atNs);
 
         if (parsed.deck === "master") this.resolveMaster();
 
@@ -276,17 +282,28 @@ export class RkbxOscProvider extends ProviderBase {
         return parsed.deck;
       case "track/title":
         buffer.title = asText(value);
+        buffer.resolvedTitle = null;
         this.requestResolution(parsed.deck, atNs);
 
         return parsed.deck;
-      case "track/artist":
-        buffer.artist = asText(value);
+      case "track/artist": {
+        const artist = asText(value);
+        if (artist !== buffer.artist) {
+          buffer.artist = artist;
+          if (buffer.title !== null && buffer.resolvedTitle !== buffer.title) this.requestResolution(parsed.deck, atNs);
+        }
 
         return parsed.deck;
-      case "track/album":
-        buffer.album = asText(value);
+      }
+      case "track/album": {
+        const album = asText(value);
+        if (album !== buffer.album) {
+          buffer.album = album;
+          if (buffer.title !== null && buffer.resolvedTitle !== buffer.title) this.requestResolution(parsed.deck, atNs);
+        }
 
         return parsed.deck;
+      }
       case "track/duration":
         buffer.durationSeconds = asNumber(value);
 
@@ -331,15 +348,23 @@ export class RkbxOscProvider extends ProviderBase {
   // A seek is a playhead jump that the elapsed wall time cannot explain;
   // comparing against the wall clock keeps normal 120 Hz playback from
   // looking like a seek.
-  private applyTime(buffer: DeckBuffer, seconds: number, atNs: bigint): void {
+  private applyTime(deck: number | "master", buffer: DeckBuffer, seconds: number, atNs: bigint): void {
     const previous = buffer.playheadSeconds;
     const previousAt = buffer.previousAtNs;
 
     if (previousAt !== null) {
       const deltaMs = Math.abs(seconds - previous) * 1000;
-      const forward = seconds > previous;
+      const forward = seconds >= previous;
+      const wallMs = Number(atNs - previousAt) / 1e6;
+      const expectedMs = Math.max(wallMs * this.playRate(buffer), wallMs * 0.25);
+      const epsilonMs = Math.min(this.options.playingEpsilonMs, Math.max(expectedMs * 0.5, 0.5));
 
-      if (forward && deltaMs >= this.options.playingEpsilonMs) {
+      if (deltaMs >= epsilonMs && forward) {
+        buffer.playing = true;
+        buffer.pauseSinceNs = null;
+      } else if (deltaMs >= this.options.seekThresholdMs && !forward) {
+        // Backward jump while playing is a seek, not a pause; keep playing
+        // and let the seek check below record the jump.
         buffer.playing = true;
         buffer.pauseSinceNs = null;
       } else if (!forward && deltaMs >= this.options.playingEpsilonMs) {
@@ -351,13 +376,15 @@ export class RkbxOscProvider extends ProviderBase {
         buffer.playing = false;
       }
 
-      const wallMs = Number(atNs - previousAt) / 1e6;
       const explainedMs = wallMs * this.playRate(buffer);
 
       // A pause (unchanged playhead) moves far less than the wall clock; only
       // an actual jump counts as a seek.
       if (deltaMs > this.options.seekThresholdMs && Math.abs(deltaMs - explainedMs) > this.options.seekThresholdMs) {
-        this.seekEvents.push({ deckId: this.deckIdOf(buffer), fromSeconds: previous, toSeconds: seconds, atNs });
+        const deckId = deck === "master" ? this.masterDeckId : deck;
+        if (deckId !== null) {
+          this.seekEvents.push({ deckId, fromSeconds: previous, toSeconds: seconds, atNs });
+        }
       }
     }
 
@@ -365,20 +392,16 @@ export class RkbxOscProvider extends ProviderBase {
     buffer.playheadSeconds = seconds;
   }
 
-  private deckIdOf(buffer: DeckBuffer): number {
-    for (const [deck, value] of this.buffers) {
-      if (value === buffer && typeof deck === "number") return deck;
-    }
-
-    return 0;
-  }
 
   private requestResolution(deck: number | "master", atNs: bigint): void {
     const buffer = this.bufferFor(deck);
 
     if (buffer.title === null) return;
+    const deckId = deck === "master" ? this.masterDeckId : deck;
+    if (deckId === null) return;
+    buffer.resolvedTitle = buffer.title;
     this.resolutionRequests.push({
-      deckId: deck === "master" ? (this.masterDeckId ?? 0) : deck,
+      deckId,
       title: buffer.title,
       artist: buffer.artist,
       album: buffer.album,
@@ -404,12 +427,14 @@ export class RkbxOscProvider extends ProviderBase {
       if (best === null || deltaMs < best.deltaMs) best = { deck, deltaMs };
     }
 
-    this.masterDeckId = best && best.deltaMs <= 250 ? best.deck : null;
+    this.masterDeckId = best && best.deltaMs <= this.options.masterMatchMs ? best.deck : null;
 
     for (const deck of this.buffers.keys()) {
       if (typeof deck !== "number") continue;
       const buffer = this.bufferFor(deck);
-      buffer.masterFlag = this.masterDeckId === null ? null : deck === this.masterDeckId;
+      const next = this.masterDeckId === null ? null : deck === this.masterDeckId;
+      if (buffer.masterFlag === next) continue;
+      buffer.masterFlag = next;
       this.emit(this.stateFor(deck));
     }
   }
@@ -541,7 +566,9 @@ export function buildRkbxDatagrams(timeline: RkbxTimeline): RkbxDatagram[] {
 
   for (let atMs = 0; atMs <= timeline.durationMs; atMs += period) {
     for (const step of timeline.steps) {
-      if (step.atMs > atMs || step.atMs < atMs - period) continue;
+      // Half-open window: a step fires on the first tick at or past its
+      // timestamp, never on two consecutive ticks.
+      if (step.atMs > atMs || step.atMs <= atMs - period) continue;
 
       if (step.action === "play") playing = true;
 

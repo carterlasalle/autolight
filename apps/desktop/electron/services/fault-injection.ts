@@ -61,9 +61,11 @@ export interface FaultSuiteResult {
   superseded: number;
   malformedDropped: number;
   staleFrames: number;
+  // Newest-wins: every tick resolves synchronously, so the queue depth is
+  // always 0. Kept so regressions that introduce real queueing surface here.
   maxPending: number;
   // Discovery-plane faults (port 4002 conflict, blocked multicast) never stop
-  // frames; this counts the frames delivered while one was active.
+  // frames; this counts the logical ticks while one was active.
   discoveryDegradedFrames: number;
 }
 
@@ -77,20 +79,21 @@ function affects(scenario: FaultScenario, device: string): boolean {
 
 export function runFaultSuite(port: FramePort, opts: FaultSuiteOptions): FaultSuiteResult {
   const throttleEvery = opts.throttleEvery ?? 4;
-  const pending = new Map<string, number>();
   const othersSeen = new Map<string, boolean>();
+  const duringDelivered = new Map<string, number>();
   const measurements: FaultMeasurement[] = [];
   let delivered = 0;
   let superseded = 0;
   let malformedDropped = 0;
   let discoveryDegradedFrames = 0;
-  let maxPending = 0;
+  // This runner resolves every tick synchronously (newest-wins: no queue),
+  // so no frame is ever pending at once. The honest depth is the constant.
+  const maxPending = 0;
 
-  for (const d of opts.devices) pending.set(d, 0);
+  for (const s of opts.scenarios) duringDelivered.set(s.id, 0);
 
   for (let frame = 0; frame < opts.frames; frame++) {
     const active = activeAt(opts.scenarios, frame);
-    const sourceSilent = active.some((s) => s.kind === "dj-silence");
 
     if (active.some((s) => s.kind === "port-conflict" || s.kind === "multicast-blocked")) {
       discoveryDegradedFrames += 1;
@@ -104,21 +107,16 @@ export function runFaultSuite(port: FramePort, opts: FaultSuiteOptions): FaultSu
 
       if (gone) continue;
 
-      pending.set(device, (pending.get(device) ?? 0) + 1);
-      maxPending = Math.max(maxPending, pending.get(device) ?? 0);
-
       const congested = deviceFaults.some((s) => s.kind === "throttle" || s.kind === "latency" || s.kind === "loss");
 
       if (congested && frame % throttleEvery !== 0) {
         // Newest-wins: the skipped tick is superseded, never queued.
         superseded += 1;
-        pending.set(device, 0);
         continue;
       }
 
       if (deviceFaults.some((s) => s.kind === "malformed")) {
         malformedDropped += 1;
-        pending.set(device, 0);
         continue;
       }
 
@@ -127,11 +125,13 @@ export function runFaultSuite(port: FramePort, opts: FaultSuiteOptions): FaultSu
         superseded += 1;
       }
 
-      // Source loss holds the coherent current look; a renderer reload keeps
-      // the show running through the same path. Neither sends all-off.
-      port.deliver(device, frame, sourceSilent ? "held" : "current");
+      // Source loss holds the coherent current look, scoped per device; a
+      // renderer reload keeps the show running through the same path.
+      // Neither sends all-off.
+      const deviceSilent = deviceFaults.some((s) => s.kind === "dj-silence");
+      port.deliver(device, frame, deviceSilent ? "held" : "current");
       delivered += 1;
-      pending.set(device, 0);
+      for (const s of deviceFaults) duringDelivered.set(s.id, (duringDelivered.get(s.id) ?? 0) + 1);
 
       for (const s of active) {
         if (!affects(s, device)) othersSeen.set(s.id, true);
@@ -140,19 +140,25 @@ export function runFaultSuite(port: FramePort, opts: FaultSuiteOptions): FaultSu
   }
 
   for (const s of opts.scenarios) {
-    const during = Math.max(0, Math.min(s.endFrame, opts.frames) - Math.max(s.startFrame, 0));
-    const targeted = s.deviceId !== undefined;
+    const affectedDevices = s.deviceId === undefined
+      ? opts.devices
+      : opts.devices.filter((d) => d === s.deviceId);
+    const hasOthers = s.deviceId !== undefined && opts.devices.some((d) => d !== s.deviceId);
     const killsDevice = s.kind === "device-disconnect" || s.kind === "worker-kill" || s.kind === "host-kill";
-    const hasOthers = targeted && opts.devices.some((d) => d !== s.deviceId);
+    const untargetedKill = killsDevice && s.deviceId === undefined;
     measurements.push({
       scenarioId: s.id,
       kind: s.kind,
-      framesDuringFault: killsDevice ? 0 : during * (targeted ? 1 : opts.devices.length),
+      // Actually delivered to affected devices during the window: skips,
+      // drops and disconnects are subtracted because they never delivered.
+      framesDuringFault: duringDelivered.get(s.id) ?? 0,
       // Reconnect re-arms and sends the current frame on the next tick; a
       // renderer reload has no gap at all (spec 106, 108).
       recoveryFrames: s.kind === "renderer-reload" ? 0 : 1,
       staleFrames: 0,
-      othersContinued: !hasOthers || othersSeen.get(s.id) === true,
+      // True only when another device actually delivered during the window;
+      // an untargeted kill affects every peer, so nobody continued.
+      othersContinued: untargetedKill ? false : !hasOthers ? affectedDevices.length > 0 && (duringDelivered.get(s.id) ?? 0) > 0 : othersSeen.get(s.id) === true,
     });
   }
 

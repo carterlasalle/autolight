@@ -86,6 +86,7 @@ export class SidecarLinkTransport implements LinkTransport {
   private readonly quantum: number;
   private readonly now: () => bigint;
   private socket: Socket | null = null;
+  private connecting: { socket: Socket; promise: Promise<void> } | null = null;
   private tail = "";
   private current: LinkState | null = null;
   private readonly listeners = new Set<(tempo: LinkTempo) => void>();
@@ -104,31 +105,62 @@ export class SidecarLinkTransport implements LinkTransport {
 
   async start(): Promise<void> {
     if (this.socket) return;
-    const { promise, resolve, reject } = Promise.withResolvers<void>();
+    if (this.connecting) return this.connecting.promise;
     const socket = createConnection({ host: this.host, port: this.port });
-    this.socket = socket;
     socket.setEncoding("utf8");
-    socket.once("connect", () => resolve());
-    socket.once("error", (err: Error) => {
-      this.socket = null;
-      reject(err);
+    const { promise, resolve, reject } = Promise.withResolvers<void>();
+    const attempt = { socket, promise };
+    this.connecting = attempt;
+    const settle = (): void => {
+      if (this.connecting === attempt) this.connecting = null;
+    };
+    socket.once("connect", () => {
+      if (this.connecting !== attempt) {
+        socket.destroy();
+        return;
+      }
+      settle();
+      this.socket = socket;
+      resolve();
     });
+    const onError = (err: Error): void => {
+      if (this.connecting !== attempt) return;
+      settle();
+      socket.destroy();
+      reject(err);
+    };
+    socket.once("error", onError);
     socket.on("data", (chunk: string) => this.ingest(chunk));
     socket.on("close", () => {
       if (this.socket === socket) this.socket = null;
+      if (this.connecting === attempt) {
+        settle();
+        reject(new Error("sidecar connection closed before connect"));
+      }
     });
-    await promise;
+    try {
+      await promise;
+      socket.on("error", () => {
+        if (this.socket === socket) this.socket = null;
+      });
+    } finally {
+      socket.off("error", onError);
+    }
   }
 
   async stop(): Promise<void> {
     const socket = this.socket;
+    const pending = this.connecting;
     this.socket = null;
-
-    if (!socket) return;
-    const { promise, resolve } = Promise.withResolvers<void>();
-    socket.once("close", () => resolve());
-    socket.destroy();
-    await promise;
+    this.connecting = null;
+    if (!socket && !pending) return;
+    const target = socket ?? pending?.socket ?? null;
+    if (target) {
+      const { promise, resolve } = Promise.withResolvers<void>();
+      target.once("close", () => resolve());
+      target.destroy();
+      await promise;
+    }
   }
 
   latest(): LinkState | null {
@@ -188,7 +220,13 @@ export class SidecarLinkTransport implements LinkTransport {
         playing: tempo.playing ?? null,
       };
 
-      for (const listener of this.listeners) listener(tempo);
+      for (const listener of this.listeners) {
+        try {
+          listener(tempo);
+        } catch {
+          this.rejected += 1;
+        }
+      }
     }
   }
 }
@@ -197,6 +235,7 @@ export interface FakeSidecar {
   server: Server;
   port: number;
   received: string[];
+  sockets: Set<Socket>;
   send(line: string): void;
 }
 
@@ -205,12 +244,15 @@ export interface FakeSidecar {
 export async function startFakeSidecar(onLine?: (line: string) => void): Promise<FakeSidecar> {
   const received: string[] = [];
   const sockets = new Set<Socket>();
+  const tails = new Map<Socket, string>();
 
   const server = createServer((socket) => {
     sockets.add(socket);
     socket.setEncoding("utf8");
     socket.on("data", (chunk: string) => {
-      for (const line of chunk.split("\n")) {
+      const lines = ((tails.get(socket) ?? "") + chunk).split("\n");
+      tails.set(socket, lines.pop() ?? "");
+      for (const line of lines) {
         const text = line.trim();
 
         if (!text) continue;
@@ -218,7 +260,10 @@ export async function startFakeSidecar(onLine?: (line: string) => void): Promise
         onLine?.(text);
       }
     });
-    socket.on("close", () => sockets.delete(socket));
+    socket.on("close", () => {
+      sockets.delete(socket);
+      tails.delete(socket);
+    });
   });
 
   const { promise, resolve } = Promise.withResolvers<void>();
@@ -231,6 +276,7 @@ export async function startFakeSidecar(onLine?: (line: string) => void): Promise
     server,
     port,
     received,
+    sockets,
     send(line: string) {
       for (const socket of sockets) socket.write(line + "\n");
     },
@@ -238,6 +284,8 @@ export async function startFakeSidecar(onLine?: (line: string) => void): Promise
 }
 
 export async function stopFakeSidecar(fake: FakeSidecar): Promise<void> {
+  for (const socket of fake.sockets) socket.destroy();
+  fake.sockets.clear();
   const { promise, resolve } = Promise.withResolvers<void>();
   fake.server.close(() => resolve());
   await promise;

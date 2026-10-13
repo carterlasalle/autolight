@@ -146,7 +146,9 @@ export function decodeLightingCapture(bytes: Uint8Array): LightingDecodeResult {
         if (!known[key]) raw[key] = value;
       }
 
-      raw["provider"] = LIGHTING_PROVIDER_ID;
+      if (!Object.prototype.hasOwnProperty.call(raw, "provider")) {
+        raw["provider"] = LIGHTING_PROVIDER_ID;
+      }
       frames.push({ event, raw });
     } catch (err) {
       malformed.push(`bad frame at ${offset - length}: ${err instanceof Error ? err.message : String(err)}`);
@@ -161,6 +163,12 @@ export function decodeLightingCaptureBase64(capture: string): LightingDecodeResu
 
   if (capture.startsWith("handwritten-synthetic:")) {
     return { frames: [], malformed: ["handwritten-synthetic capture marker, no bytes to decode"] };
+  }
+
+  // Buffer.from ignores non-base64 characters instead of throwing, so garbage
+  // would otherwise decode to empty bytes and misreport as truncated frames.
+  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(capture) || capture.length % 4 !== 0) {
+    return { frames: [], malformed: [`capture is not base64: invalid characters or length (${capture.length})`] };
   }
 
   try {
@@ -296,18 +304,17 @@ export function replayLightingCapture(
   fixture: LightingFixture,
   mapper: DeckGenerationMapper,
   opts: LightingReplayOptions = {},
-  now: ClockFn | null = null,
 ): { states: ProviderDeckState[]; malformed: string[] } {
   const rate = opts.rate ?? 1;
+  if (!Number.isFinite(rate) || rate <= 0) throw new RangeError(`lighting replay rate must be positive, got ${rate}`);
   const stepMs = opts.stepMs ?? 100;
   const { frames, malformed } = decodeLightingCaptureBase64(fixture.capture);
   const baseNs = 1_000_000_000n;
-  const clock = now ?? (() => baseNs);
 
   const states = frames.map((frame, index) => {
     const atNs = baseNs + BigInt(Math.round((index * stepMs * 1_000_000) / rate));
 
-    return frameToState(frame, mapper, atNs, clock);
+    return frameToState(frame, mapper, atNs);
   });
 
   return { states, malformed };
@@ -317,9 +324,7 @@ function frameToState(
   frame: LightingFrame,
   mapper: DeckGenerationMapper,
   atNs: bigint,
-  clock: ClockFn,
 ): ProviderDeckState {
-  void clock;
   const event = frame.event;
 
   const state = mapper.update(LIGHTING_PROVIDER_ID, {
@@ -416,7 +421,7 @@ export class LightingIpcProvider extends ProviderBase {
   }
 
   getDecks(): readonly ProviderDeckState[] {
-    return this.replayed;
+    return [...this.replayed];
   }
 
   private readonly replayed: ProviderDeckState[] = [];
@@ -426,7 +431,7 @@ export class LightingIpcProvider extends ProviderBase {
     const malformed: string[] = [];
 
     for (const fixture of this.fixtures) {
-      const result = replayLightingCapture(fixture, this.mapper, opts, this.now);
+      const result = replayLightingCapture(fixture, this.mapper, opts);
       malformed.push(...result.malformed.map((m) => `${fixture.action}: ${m}`));
       states.push(...result.states);
     }
@@ -438,8 +443,10 @@ export class LightingIpcProvider extends ProviderBase {
 
     if (states.length > 0 && malformed.length === 0) {
       this.setStatus({ state: "live", updateHz: 0, ageMs: 0 });
-    } else if (states.length === 0 && malformed.length > 0) {
-      this.markRejected(malformed[0] ?? "lighting capture did not decode");
+    } else if (states.length > 0) {
+      this.setStatus({ state: "degraded", reason: malformed[0] ?? "some captures did not decode", updateHz: 0, ageMs: 0 });
+    } else {
+      this.setStatus({ state: "degraded", reason: malformed[0] ?? "lighting capture did not decode", updateHz: 0, ageMs: 0 });
     }
 
     return { states, malformed };
@@ -458,10 +465,10 @@ export class LightingIpcProvider extends ProviderBase {
       return null;
     }
 
-    const state = frameToState(frame, this.mapper, at, this.now);
+    const state = frameToState(frame, this.mapper, at);
     this.replayed.push(state);
+    if (this.replayed.length > 512) this.replayed.splice(0, this.replayed.length - 512);
     this.emit(state);
-    this.setStatus({ state: "live", updateHz: 0, ageMs: 0 });
 
     return state;
   }
@@ -470,18 +477,23 @@ export class LightingIpcProvider extends ProviderBase {
     const at = atNs ?? this.now();
     const decoded = decodeLightingCapture(bytes);
 
-    if (decoded.malformed.length > 0 || decoded.frames.length === 0) {
+    if (decoded.frames.length === 0) {
       this.markRejected(decoded.malformed[0] ?? "lighting bytes did not decode");
 
       return;
     }
 
     for (const frame of decoded.frames) {
-      const state = frameToState(frame, this.mapper, at, this.now);
+      const state = frameToState(frame, this.mapper, at);
       this.replayed.push(state);
+      if (this.replayed.length > 512) this.replayed.splice(0, this.replayed.length - 512);
       this.emit(state);
     }
 
-    this.setStatus({ state: "live", updateHz: 0, ageMs: 0 });
+    if (decoded.malformed.length > 0) {
+      this.markRejected(decoded.malformed[0] ?? "some lighting bytes did not decode");
+    } else {
+      this.setStatus({ state: "live", updateHz: 0, ageMs: 0 });
+    }
   }
 }

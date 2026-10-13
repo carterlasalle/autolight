@@ -1,5 +1,5 @@
 {
-  "generated": "2026-10-01",
+  "generated": "2026-10-13",
   "yarn": [],
   "pip": [
     {
@@ -427,14 +427,14 @@
     {
       "name": "FFmpeg",
       "kind": "bundled binary",
-      "license": "LGPL-2.1-or-later (unmodified binary; T-OPS-05 bundles it)",
-      "version": "system (brew/choco today)"
+      "license": "LGPL-2.1-or-later (unmodified static build; T-OPS-05 vendors it)",
+      "version": "pinned in apps/desktop/scripts/fetch-vendor.mjs (BtbN win64-lgpl, myndr macOS-arm64)"
     },
     {
       "name": "uv",
       "kind": "bundled binary",
       "license": "MIT OR Apache-2.0",
-      "version": "pinned by astral-sh/setup-uv"
+      "version": "0.9.4 (pinned in apps/desktop/scripts/fetch-vendor.mjs; astral-sh/setup-uv in CI)"
     },
     {
       "name": "Python 3.12",
