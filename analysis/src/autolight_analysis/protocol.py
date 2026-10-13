@@ -11,7 +11,6 @@ pointed at stderr, so any third-party library print cannot corrupt frames.
 
 from __future__ import annotations
 
-import contextlib
 import json
 import os
 import sys
@@ -26,24 +25,28 @@ class ProtocolError(Exception):
     """A typed protocol failure that becomes an ``error`` frame, never a death."""
 
 
+_PROTOCOL_LOCK = threading.Lock()
+_PROTOCOL_FD: int | None = None
+
 def protect_stdout() -> int:
     """Duplicate fd 1 for protocol use, then redirect prints to stderr.
 
     Returns the preserved file descriptor the frame writer must use.
-    Idempotent within a process (second call returns the same fd).
     """
     global _PROTOCOL_FD
     if _PROTOCOL_FD is not None:
         return _PROTOCOL_FD
-    kept = os.dup(1)
-    sys.stdout = sys.stderr  # type: ignore[assignment]
-    with contextlib.suppress(OSError):
-        os.dup2(2, 1)
-    _PROTOCOL_FD = kept
-    return kept
-
-
-_PROTOCOL_FD: int | None = None
+    with _PROTOCOL_LOCK:
+        if _PROTOCOL_FD is not None:
+            return _PROTOCOL_FD
+        kept = os.dup(1)
+        sys.stdout = sys.stderr
+        try:
+            os.dup2(2, 1)
+        except OSError as e:
+            log_event("protect-stdout-dup2-failed", error=str(e))
+        _PROTOCOL_FD = kept
+        return kept
 
 
 def log_event(event: str, **fields: object) -> None:
@@ -73,7 +76,7 @@ def frame_id(msg: dict) -> str | None:
 
 
 def ok_frame(ident: str | None, **body: object) -> dict:
-    return {"v": PROTOCOL_VERSION, "id": ident, **body}
+    return {**body, "v": PROTOCOL_VERSION, "id": ident}
 
 
 def error_frame(ident: str | None, code: str, detail: str = "") -> dict:
@@ -96,11 +99,11 @@ class FrameWriter:
     def write(self, frame: dict) -> None:
         data = (json.dumps(frame) + "\n").encode()
         with self._lock:
-            os.write(self._fd, data)
+            view = memoryview(data)
+            while view:
+                written = os.write(self._fd, view)
+                view = view[written:]
 
-
-class Heartbeat:
-    """Emit heartbeat frames until stopped (T-ANA-01, T-ANA-02 supervision)."""
 
     def __init__(
         self, writer: FrameWriter, interval_ms: int = HEARTBEAT_DEFAULT_MS
@@ -108,18 +111,25 @@ class Heartbeat:
         self._writer = writer
         self._interval = max(100, interval_ms) / 1000.0
         self._stop = threading.Event()
+        self._start_lock = threading.Lock()
         self._thread: threading.Thread | None = None
 
     def start(self) -> None:
-        if self._thread is not None:
-            return
-        self._thread = threading.Thread(
-            target=self._run, daemon=True, name="analysis-heartbeat"
-        )
-        self._thread.start()
+        with self._start_lock:
+            if self._stop.is_set():
+                self._stop.clear()
+            if self._thread is not None and self._thread.is_alive():
+                return
+            self._thread = threading.Thread(
+                target=self._run, daemon=True, name="analysis-heartbeat"
+            )
+            self._thread.start()
 
-    def stop(self) -> None:
+    def stop(self, timeout: float = 2.0) -> None:
         self._stop.set()
+        thread, self._thread = self._thread, None
+        if thread is not None and thread is not threading.current_thread():
+            thread.join(timeout=timeout)
 
     def _run(self) -> None:
         while not self._stop.wait(self._interval):

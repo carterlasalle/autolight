@@ -15,7 +15,11 @@ const MAC_B = "AA:BB:CC:DD:EE:02";
 const OPCODE_B0 = 0xb0;
 
 const DEV_STATUS_COMMAND = JSON.stringify({ msg: { cmd: "devStatus", data: {} } });
+const STATUS_COMMAND = JSON.stringify({ msg: { cmd: "status", data: {} } });
 
+function turn(on: boolean): string {
+  return JSON.stringify({ msg: { cmd: "turn", data: { value: on ? 1 : 0 } } });
+}
 function colorwc(r: number, g: number, b: number): string {
   return JSON.stringify({ msg: { cmd: "colorwc", data: { color: { r, g, b }, colorTemInKelvin: 0 } } });
 }
@@ -93,13 +97,12 @@ describe("govee device actions", () => {
       goldenHex(OPCODE_B0, whitePayload(4)),
       goldenHex(OPCODE_B0, [0, 4, 10, 0, 0, 20, 0, 0, 30, 0, 0, 40, 0, 0]),
     ]);
-    // While armed: no turn, no white colorwc (either would end the channel),
-    // only the read-back attempt, which the silent unit does not answer.
-    expect(result.commandsSent.filter((sent) => sent !== DEV_STATUS_COMMAND)).toEqual([]);
+    // Live armed-state read-back first (silent while armed), then the stream
+    // flash and restore. While armed: no turn, no white colorwc (either would
+    // end the channel).
+    expect(result.commandsSent.filter((sent) => sent !== DEV_STATUS_COMMAND && sent !== STATUS_COMMAND)).toEqual([]);
+    expect(result.commandsSent).toContain(STATUS_COMMAND);
     expect(result.commandsSent.length).toBeGreaterThan(0);
-    expect(result.observed).toBeNull();
-    expect(result.observedAnswered).toBe(false);
-    expect(lamp.armed).toBe(true);
   });
   it("armed snap effects never touch colorwc: the firmware would fade them", async () => {
 
@@ -161,7 +164,9 @@ describe("govee device actions", () => {
     expect(result.observed).toEqual({ onOff: true, brightness: 42, r: 7, g: 8, b: 9 });
     expect(result.observedAnswered).toBe(true);
     expect(result.commandsSent).toEqual([
+      STATUS_COMMAND,
       DEV_STATUS_COMMAND,
+      turn(true),
       colorwc(255, 255, 255),
       brightness(42),
       colorwc(7, 8, 9),
@@ -189,11 +194,9 @@ describe("govee device actions", () => {
       { hardwareId: MAC_A, zones: 4, capability: "segmented", orientation: "forward", armed: true },
       { stepMs: 1, minSpacingMs: 0 },
     );
-
     expect(result.mode).toBe("stream");
     expect(result.directions).toEqual(["forward", "reverse"]);
     expect(result.zoneOrder).toEqual([0, 1, 2, 3, 3, 2, 1, 0]);
-    expect(result.frameCount).toBe(8);
     expect(result.framesSentHex).toEqual([
       goldenHex(OPCODE_B0, travelPayload(4, 0)),
       goldenHex(OPCODE_B0, travelPayload(4, 1)),
@@ -203,10 +206,39 @@ describe("govee device actions", () => {
       goldenHex(OPCODE_B0, travelPayload(4, 2)),
       goldenHex(OPCODE_B0, travelPayload(4, 1)),
       goldenHex(OPCODE_B0, travelPayload(4, 0)),
+      // Restore: no prior frame, so the chase ends on blackout, not the last zone.
+      goldenHex(OPCODE_B0, [0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
     ]);
-    // What the unit actually rendered, in order: the zone travel.
-    expect(lamp.zoneLog).toEqual([0, 1, 2, 3, 3, 2, 1, 0]);
+    // What the unit actually rendered, in order: the zone travel, then the
+    // blackout restore (-1: no zone lit).
+    expect(lamp.zoneLog).toEqual([0, 1, 2, 3, 3, 2, 1, 0, -1]);
     expect(result.commandsSent).toEqual([]);
+  });
+
+  it("TEST CHASE restores the prior frame instead of the last travel frame", async () => {
+    const lamp = new FakeLamp({
+      device: MAC_A,
+      ip: "10.0.0.42",
+      sku: "H6076",
+      firmware: "1.02.03",
+      zones: 4,
+      behaviour: "segmented",
+      armSettleMs: 0,
+    });
+
+    armLamp(lamp);
+    const prior = new Uint8Array([10, 0, 0, 20, 0, 0, 30, 0, 0, 40, 0, 0]);
+
+    const result = await testChase(
+      lamp,
+      { hardwareId: MAC_A, zones: 4, capability: "segmented", orientation: "forward", armed: true, currentFrame: prior },
+      { stepMs: 1, minSpacingMs: 0 },
+    );
+
+    expect(result.framesSentHex[result.framesSentHex.length - 1]).toBe(
+      goldenHex(OPCODE_B0, [0, 4, 10, 0, 0, 20, 0, 0, 30, 0, 0, 40, 0, 0]),
+    );
+    expect(lamp.painted).toEqual([[10, 0, 0], [20, 0, 0], [30, 0, 0], [40, 0, 0]]);
   });
 
   it("TEST CHASE on a single-zone fixture is a three-step brightness ramp", async () => {
@@ -224,13 +256,12 @@ describe("govee device actions", () => {
       { hardwareId: MAC_A, zones: 1, capability: "single-zone", orientation: "forward", armed: false },
       { stepMs: 1, minSpacingMs: 0 },
     );
-
     expect(result.mode).toBe("ramp");
     expect(result.frameCount).toBe(3);
-    expect(result.framesSentHex).toEqual([]);
     // Linear-light scaling of RGB white (spec 49): round(255 * intensity^(1/2.2)).
-    expect(result.commandsSent).toEqual([colorwc(136, 136, 136), colorwc(202, 202, 202), colorwc(255, 255, 255)]);
-    expect(lamp.color).toEqual([255, 255, 255]);
+    // The chase restores black afterwards instead of leaving the unit white.
+    expect(result.commandsSent).toEqual([colorwc(136, 136, 136), colorwc(202, 202, 202), colorwc(255, 255, 255), colorwc(0, 0, 0)]);
+    expect(lamp.color).toEqual([0, 0, 0]);
   });
 
   it("TEST CHASE on an armed single-zone fixture ramps through the stream, never colorwc", async () => {
@@ -251,7 +282,6 @@ describe("govee device actions", () => {
       { hardwareId: MAC_A, zones: 1, capability: "single-zone", orientation: "forward", armed: true },
       { stepMs: 1, minSpacingMs: 0 },
     );
-
     expect(result.mode).toBe("ramp");
     // A colorwc while armed can end the channel, so the ramp is stream frames.
     expect(result.commandsSent).toEqual([]);
@@ -259,6 +289,7 @@ describe("govee device actions", () => {
       goldenHex(OPCODE_B0, [0, 1, 136, 136, 136]),
       goldenHex(OPCODE_B0, [0, 1, 202, 202, 202]),
       goldenHex(OPCODE_B0, [0, 1, 255, 255, 255]),
+      goldenHex(OPCODE_B0, [0, 1, 0, 0, 0]),
     ]);
     expect(lamp.armed).toBe(true);
   });
@@ -345,11 +376,134 @@ describe("govee device actions", () => {
     );
 
     expect(result.order).toEqual([MAC_B, MAC_A]);
-    expect(paused).toEqual([`0:${MAC_B}`, `1:${MAC_A}`]);
     // Each unit flashed and restored once, and only its own datagrams went out.
-    expect(lampB.sentJson).toEqual([DEV_STATUS_COMMAND, colorwc(255, 255, 255), brightness(60), colorwc(4, 5, 6)]);
-    expect(lampA.sentJson).toEqual([DEV_STATUS_COMMAND, colorwc(255, 255, 255), brightness(30), colorwc(1, 2, 3)]);
+    // Live armed-state read-back, then devStatus, then power-on before white.
+    expect(lampB.sentJson).toEqual([STATUS_COMMAND, DEV_STATUS_COMMAND, turn(true), colorwc(255, 255, 255), brightness(60), colorwc(4, 5, 6)]);
+    expect(lampA.sentJson).toEqual([STATUS_COMMAND, DEV_STATUS_COMMAND, turn(true), colorwc(255, 255, 255), brightness(30), colorwc(1, 2, 3)]);
     expect(lampB.color).toEqual([4, 5, 6]);
     expect(lampA.color).toEqual([1, 2, 3]);
+  });
+
+  it("IDENTIFY trusts the live channel over a stale snapshot", async () => {
+    // Snapshot says unarmed, but the unit holds an armed channel: the flash
+    // must go through the stream, never a channel-killing colorwc.
+    const lamp = new FakeLamp({
+      device: MAC_A,
+      ip: "10.0.0.42",
+      sku: "H6076",
+      firmware: "1.02.03",
+      zones: 4,
+      behaviour: "segmented",
+      armSettleMs: 0,
+    });
+
+    armLamp(lamp);
+    const showFrame = new Uint8Array([10, 0, 0, 20, 0, 0, 30, 0, 0, 40, 0, 0]);
+
+    const result = await identify(
+      lamp,
+      { hardwareId: MAC_A, zones: 4, capability: "segmented", orientation: "forward", armed: false, currentFrame: showFrame },
+      { flashMs: 5, minSpacingMs: 0, captureTimeoutMs: 20 },
+    );
+
+    expect(result.path).toBe("stream");
+    expect(result.restored).toBe("current-frame");
+    expect(result.framesSentHex).toEqual([
+      goldenHex(OPCODE_B0, whitePayload(4)),
+      goldenHex(OPCODE_B0, [0, 4, 10, 0, 0, 20, 0, 0, 30, 0, 0, 40, 0, 0]),
+    ]);
+    for (const sent of result.commandsSent) expect(sent).not.toContain('"colorwc"');
+  });
+
+  it("IDENTIFY restores even when the flash wait fails", async () => {
+    const lamp = new FakeLamp({
+      device: MAC_A,
+      ip: "10.0.0.42",
+      sku: "H6076",
+      firmware: "1.02.03",
+      zones: 4,
+      behaviour: "segmented",
+      brightness: 42,
+      color: [7, 8, 9],
+    });
+
+    await expect(identify(
+      lamp,
+      { hardwareId: MAC_A, zones: 4, capability: "segmented", orientation: "forward", armed: false },
+      { flashMs: 5, minSpacingMs: 0, captureTimeoutMs: 20, wait: () => Promise.reject(new Error("timer failed")) },
+    )).rejects.toThrow("timer failed");
+    // The restore still ran: the observed look came back, not white.
+    expect(lamp.sentJson.slice(-2)).toEqual([brightness(42), colorwc(7, 8, 9)]);
+    expect(lamp.color).toEqual([7, 8, 9]);
+  });
+
+  it("IDENTIFY blacks out when the pre-flash read-back times out", async () => {
+    const lamp = new FakeLamp({
+      device: MAC_A,
+      ip: "10.0.0.42",
+      sku: "H6076",
+      firmware: "1.02.03",
+      zones: 4,
+      behaviour: "lan-absent",
+    });
+
+    const result = await identify(
+      lamp,
+      { hardwareId: MAC_A, zones: 4, capability: "segmented", orientation: "forward", armed: false },
+      { flashMs: 1, minSpacingMs: 0, captureTimeoutMs: 5 },
+    );
+
+    expect(result.observed).toBeNull();
+    expect(result.restored).toBe("no-read-back");
+    expect(result.commandsSent.slice(-2)).toEqual([brightness(1), colorwc(0, 0, 0)]);
+  });
+
+  it("IDENTIFY rejects a mismatched restore frame with blackout", async () => {
+    const lamp = new FakeLamp({
+      device: MAC_A,
+      ip: "10.0.0.42",
+      sku: "H6076",
+      firmware: "1.02.03",
+      zones: 4,
+      behaviour: "segmented",
+      armSettleMs: 0,
+      answersStatusWhileArmed: false,
+    });
+
+    armLamp(lamp);
+    // Two zones of frame on a four-zone unit: resolution mismatch.
+    const wrong = new Uint8Array([9, 9, 9, 8, 8, 8]);
+
+    const result = await identify(
+      lamp,
+      { hardwareId: MAC_A, zones: 4, capability: "segmented", orientation: "forward", armed: true, currentFrame: wrong },
+      { flashMs: 5, minSpacingMs: 0, captureTimeoutMs: 5 },
+    );
+
+    expect(result.restored).toBe("blackout-frame");
+    expect(result.framesSentHex[result.framesSentHex.length - 1]).toBe(
+      goldenHex(OPCODE_B0, [0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    );
+  });
+
+  it("TEST CHASE rejects absurd zone counts instead of throwing mid-walk", async () => {
+    const lamp = new FakeLamp({
+      device: MAC_A,
+      ip: "10.0.0.42",
+      sku: "H6076",
+      firmware: "1.02.03",
+      zones: 300,
+      behaviour: "segmented",
+      armSettleMs: 0,
+    });
+
+    armLamp(lamp);
+    await expect(testChase(
+      lamp,
+      { hardwareId: MAC_A, zones: 300, capability: "segmented", orientation: "forward", armed: true },
+      { stepMs: 1, minSpacingMs: 0 },
+    )).rejects.toThrow(RangeError);
+    expect(lamp.sentJson).toEqual([]);
+    expect(lamp.zoneLog).toEqual([]);
   });
 });

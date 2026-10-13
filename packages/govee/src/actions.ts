@@ -30,12 +30,12 @@ import {
   CommandSequencer,
   DeviceLink,
   PROBE_DEFAULTS,
+  readB2Status,
   readDevStatus,
   sleep,
   type LanExchange,
   type Waiter,
 } from "./probe.js";
-
 /** What an action needs to know about the unit: its identity and its qualified
  *  capability. The T-GOV-10 probe decides `capability` and the wizard decides
  *  `zones` and `orientation`; neither is ever assumed from the SKU. */
@@ -99,10 +99,12 @@ export interface IdentifyResult {
 }
 
 /**
- * Flashes rgb white for `govee.identify.flashMs` and restores the previous
- * look: the current show frame when the stream is armed, otherwise the state
- * the unit reported before the flash. Never sends `turn` while armed, and never
- * sends a white `colorwc` while armed.
+ * Flashes rgb white and restores the previous look: the current show frame
+ * when the channel is armed at action time (read back live, never the
+ * caller's snapshot), otherwise the state the unit reported before the flash.
+ * Armed state is read back on entry because a `turn`/white `colorwc` while
+ * armed can end the channel. Never sends `turn` while armed, and never sends
+ * a white `colorwc` while armed.
  */
 export async function identify(
   exchange: LanExchange,
@@ -110,12 +112,20 @@ export async function identify(
   options: IdentifyOptions,
 ): Promise<IdentifyResult> {
   const wait = options.wait ?? sleep;
-  const zones = Math.max(1, fixture.zones);
+  const zones = Math.max(1, Math.floor(fixture.zones));
+  if (zones > 255) throw new RangeError(`identify needs at most 255 zones, got ${zones}`);
   const link = actionLink(exchange, fixture.hardwareId, options);
   const captureTimeoutMs = Math.max(1, options.captureTimeoutMs ?? 250);
+  const readOpts = { retryMs: captureTimeoutMs, deadlineMs: captureTimeoutMs };
   const atMs = Date.now();
 
-  const capture = await readDevStatus(link, { retryMs: captureTimeoutMs, deadlineMs: captureTimeoutMs });
+  // Live armed state, not the caller's snapshot: the real channel may have
+  // opened or closed between snapshot and action.
+  const b2 = await readB2Status(link, readOpts);
+  const armed = b2.status?.armed ?? fixture.armed;
+  const capture = armed
+    ? { status: null, answered: false, rttMs: null as number | null }
+    : await readDevStatus(link, readOpts);
 
   const observed = capture.status === null
     ? null
@@ -130,35 +140,55 @@ export async function identify(
   let path: IdentifyResult["path"];
   let restored: IdentifyResult["restored"];
 
-  if (fixture.armed) {
-    path = "stream";
-    await link.sendRaw(paint(whiteHitPayload(zones, 1)));
-    await wait(options.flashMs);
-    const restoreFrame = fixture.currentFrame ?? null;
+  // The restore must run on every exit path: a mid-flash failure must not
+  // leave the unit stuck in white RGB.
+  const restore = async (): Promise<IdentifyResult["restored"]> => {
+    if (armed) {
+      const restoreFrame = fixture.currentFrame ?? null;
 
-    if (restoreFrame !== null) {
-      restored = "current-frame";
-      await link.sendRaw(paint(restoreFrame));
-    } else {
+      if (restoreFrame !== null && restoreFrame.length === zones * 3) {
+        await link.sendRaw(paint(restoreFrame));
+
+        return "current-frame";
+      }
       // No show frame to go back to: stream RGB zeros, never a power command.
-      restored = "blackout-frame";
       await link.sendRaw(paint(new Uint8Array(zones * 3)));
-    }
-  } else {
-    path = "colorwc";
-    await link.sendJson(colorCommand(255, 255, 255));
-    await wait(options.flashMs);
 
-    if (observed === null) {
-      restored = "no-read-back";
-    } else if (!observed.onOff) {
-      restored = "observed-state";
-      await link.sendJson(turnCommand(false));
-    } else {
-      restored = "observed-state";
-      await link.sendJson(brightnessCommand(observed.brightness));
-      await link.sendJson(colorCommand(observed.r, observed.g, observed.b));
+      return "blackout-frame";
     }
+    if (observed === null) {
+      // No read-back: blackout rather than leaving the unit at full white.
+      await link.sendJson(brightnessCommand(1));
+      await link.sendJson(colorCommand(0, 0, 0));
+
+      return "no-read-back";
+    }
+    if (!observed.onOff) {
+      await link.sendJson(turnCommand(false));
+
+      return "observed-state";
+    }
+    await link.sendJson(brightnessCommand(observed.brightness));
+    await link.sendJson(colorCommand(observed.r, observed.g, observed.b));
+
+    return "observed-state";
+  };
+
+  path = armed ? "stream" : "colorwc";
+
+  try {
+    if (armed) {
+      await link.sendRaw(paint(whiteHitPayload(zones, 1)));
+    } else {
+      // Power on first so the white flash is visible on an off unit.
+      await link.sendJson(turnCommand(true));
+      await link.sendJson(colorCommand(255, 255, 255));
+    }
+    await wait(options.flashMs);
+    restored = await restore();
+  } catch (error) {
+    restored = await restore();
+    throw error;
   }
 
   return {
@@ -167,8 +197,8 @@ export async function identify(
     path,
     flashMs: options.flashMs,
     observed,
-    observedAnswered: capture.answered,
-    observedRttMs: capture.rttMs,
+    observedAnswered: armed ? b2.answered : capture.answered,
+    observedRttMs: armed ? b2.rttMs : capture.rttMs,
     restored,
     framesSentHex: link.framesSentHex(),
     commandsSent: [...link.commands],
@@ -183,6 +213,21 @@ export async function identify(
 export interface ChaseOptions extends ActionOptions {
   /** govee.testChase.stepMs. */
   stepMs: number;
+}
+
+export interface ChaseResult {
+  action: "chase";
+  hardwareId: string;
+  /** "stream" for a qualified segmented fixture, "ramp" for single-zone. */
+  mode: "stream" | "ramp";
+  stepMs: number;
+  directions: readonly ("forward" | "reverse")[];
+  /** The zone lit at each step, in order, for assertions and the UI. */
+  zoneOrder: number[];
+  frameCount: number;
+  framesSentHex: string[];
+  commandsSent: string[];
+  atMs: number;
 }
 
 /** One zone travels from one end to the other. Pure, so the bytes can be
@@ -203,21 +248,6 @@ export function chaseFrames(zones: number, direction: "forward" | "reverse"): Ui
   return frames;
 }
 
-export interface ChaseResult {
-  action: "chase";
-  hardwareId: string;
-  /** "stream" for a qualified segmented fixture, "ramp" for single-zone. */
-  mode: "stream" | "ramp";
-  stepMs: number;
-  directions: readonly ("forward" | "reverse")[];
-  /** The zone lit at each step, in order, for assertions and the UI. */
-  zoneOrder: number[];
-  frameCount: number;
-  framesSentHex: string[];
-  commandsSent: string[];
-  atMs: number;
-}
-
 /**
  * Walks one zone start to end and back at `govee.testChase.stepMs`. On a
  * verified single-zone fixture the same call is a three-step brightness ramp in
@@ -229,7 +259,8 @@ export async function testChase(
   options: ChaseOptions,
 ): Promise<ChaseResult> {
   const wait = options.wait ?? sleep;
-  const zones = Math.max(1, fixture.zones);
+  const zones = Math.max(1, Math.floor(fixture.zones));
+  if (zones > 255) throw new RangeError(`testChase needs at most 255 zones, got ${zones}`);
   const link = actionLink(exchange, fixture.hardwareId, options);
   const atMs = Date.now();
 
@@ -240,16 +271,30 @@ export async function testChase(
     // armed can end the channel; unarmed it is the whole-fixture command.
     const intensities = [0.25, 0.6, 1] as const;
 
-    for (const intensity of intensities) {
-      const white = whiteHitPayload(1, intensity);
+    try {
+      for (const intensity of intensities) {
+        const white = whiteHitPayload(1, intensity);
+
+        if (fixture.armed) {
+          await link.sendRaw(paint(white));
+        } else {
+          await link.sendJson(colorCommand(white[0] ?? 0, white[1] ?? 0, white[2] ?? 0));
+        }
+
+        await wait(options.stepMs);
+      }
+    } finally {
+      // Restore the look that preceded the chase instead of leaving white.
+      const restore = fixture.currentFrame !== null && fixture.currentFrame !== undefined
+        && fixture.currentFrame.length === 3
+        ? fixture.currentFrame
+        : new Uint8Array([0, 0, 0]);
 
       if (fixture.armed) {
-        await link.sendRaw(paint(white));
+        await link.sendRaw(paint(restore));
       } else {
-        await link.sendJson(colorCommand(white[0] ?? 0, white[1] ?? 0, white[2] ?? 0));
+        await link.sendJson(colorCommand(restore[0] ?? 0, restore[1] ?? 0, restore[2] ?? 0));
       }
-
-      await wait(options.stepMs);
     }
 
     return {
@@ -274,18 +319,27 @@ export async function testChase(
   const zoneOrder: number[] = [];
   let frameCount = 0;
 
-  for (const direction of directions) {
-    const frames = chaseFrames(zones, direction);
+  try {
+    for (const direction of directions) {
+      const frames = chaseFrames(zones, direction);
 
-    for (let step = 0; step < frames.length; step++) {
-      const frame = frames[step];
+      for (let step = 0; step < frames.length; step++) {
+        const frame = frames[step];
 
-      if (frame === undefined) continue;
-      await link.sendRaw(paint(frame));
-      await wait(options.stepMs);
-      zoneOrder.push(direction === "forward" ? step : zones - 1 - step);
-      frameCount += 1;
+        if (frame === undefined) continue;
+        await link.sendRaw(paint(frame));
+        await wait(options.stepMs);
+        zoneOrder.push(direction === "forward" ? step : zones - 1 - step);
+        frameCount += 1;
+      }
     }
+  } finally {
+    // Restore the look that preceded the chase instead of the last travel frame.
+    const current = fixture.currentFrame ?? null;
+    const restore = current !== null && current.length === zones * 3
+      ? current
+      : new Uint8Array(zones * 3);
+    await link.sendRaw(paint(restore));
   }
 
   return {
@@ -301,6 +355,7 @@ export async function testChase(
     atMs,
   };
 }
+
 
 // ---------------------------------------------------------------------------
 // RECALIBRATE
