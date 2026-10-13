@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { writeFileSync } from "node:fs";
-import { app, BrowserWindow, session, type WebContents } from "electron";
+import { app, BrowserWindow, session, type BrowserWindowConstructorOptions, type WebContents } from "electron";
 import { createIpc } from "./services/ipc-router.js";
 import {
   createShowService,
@@ -18,6 +18,7 @@ import {
 import { closeStorageService, openStorageService } from "./services/storage-service.js";
 import { getConfigService } from "./services/config-service.js";
 import { audit, initAuditLog } from "./services/audit-log.js";
+import type { TestApi, TestApiStage } from "./test-api-contract.js";
 
 // Build-time constant injected by scripts/build-main.mjs (true only for
 // `--test` builds); release bundles dead-code-eliminate the test surface.
@@ -73,12 +74,12 @@ function registerTestApi(): void {
   const t0 = Date.now();
   const at = (name: string): number => __testStageAt.get(name) ?? t0;
 
-  const stages = (): { name: string; atMs: number }[] =>
+  const stages = (): TestApiStage[] =>
     (["db", "show-worker", "govee", "dj-adapter", "library", "analysis", "venue", "tracks", "plans", "arm", "ready"] as const).map((name) => ({ name, atMs: at(name) - t0 }));
 
   // The loop starts lazily on first use so a stages-only probe never pays
   // for UDP sockets; every method below awaits the same singleton.
-  const api: Record<string, (arg: unknown) => Promise<unknown> | unknown> = {
+  const api: TestApi = {
     stages: async () => {
       await __testShowLoop();
 
@@ -96,20 +97,14 @@ function registerTestApi(): void {
     commands: async () => (await __testShowLoop()).commands(),
     snapshot: async () => (await __testShowLoop()).snapshot(),
     "resume-status": async () => (await __testShowLoop()).resumeStatus(),
-    "freeze-renderer": async (arg) => {
-      const ms = (arg as { ms?: unknown } | undefined)?.ms;
-
-      return (await __testShowLoop()).freezeRenderer(typeof ms === "number" ? ms : 5000);
-    },
-    key: async (arg) => {
-      const key = (arg as { key?: unknown } | undefined)?.key;
-
-      return (await __testShowLoop()).key(typeof key === "string" ? key : "");
-    },
+    "freeze-renderer": async (arg) => (await __testShowLoop()).freezeRenderer(arg?.ms ?? 5000),
+    key: async (arg) => (await __testShowLoop()).key(arg?.key ?? ""),
     shutdown: async () => (await __testShowLoop()).shutdown(),
   };
 
-  (globalThis as unknown as { __autolightTestApi?: unknown }).__autolightTestApi = api;
+  // SAFETY: the only writer of __autolightTestApi in this process; the
+  // shared TestApi contract pins the shape for the harness consumer.
+  (globalThis as { __autolightTestApi?: TestApi }).__autolightTestApi = api;
   __testMarkStage("db");
 }
 
@@ -308,15 +303,12 @@ export async function boot(): Promise<void> {
   console.info(`[storage] ${openStorageService().statusLine()}`);
   const settings = securitySettings(join(__dirname, "preload.cjs"));
 
-  const win = new BrowserWindow({
+  const windowOptions: BrowserWindowConstructorOptions = {
     width: 1440,
     height: 900,
     minWidth: 1024,
     minHeight: 680,
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "hidden",
-    ...(process.platform !== "darwin"
-      ? { titleBarOverlay: { height: 44 } }
-      : {}),
     backgroundColor: "#111318",
     webPreferences: {
       preload: settings.webPreferences.preload,
@@ -325,7 +317,12 @@ export async function boot(): Promise<void> {
       nodeIntegration: settings.webPreferences.nodeIntegration,
       webSecurity: settings.webPreferences.webSecurity,
     },
-  });
+  };
+
+  // Non-macOS title bars overlay content instead of insetting it.
+  if (process.platform !== "darwin") windowOptions.titleBarOverlay = { height: 44 };
+
+  const win = new BrowserWindow(windowOptions);
 
   // New-window guard: deny every popup; external links must go through an
   // explicit shell.openExternal intent (none exists yet, so deny all).
@@ -389,6 +386,7 @@ export async function boot(): Promise<void> {
   // and a re-entrant before-quit can never start a second full run.
   let shutdownRun: Promise<void> | null = null;
   let shutdownSettled = false;
+
   const beginGracefulShutdown = (): Promise<void> => {
     if (!shutdownRun) {
       shutdownRun = runGracefulShutdown().finally(() => {
@@ -461,8 +459,8 @@ export function markShuttingDown(): void {
 // instead of running on with corrupted main-process state.
 let processCrashCount = 0;
 
-function writeCrashRecord(kind: string, err: unknown): void {
-  const detail = err instanceof Error ? (err.stack ?? err.message) : String(err);
+function writeCrashRecord(kind: string, cause: unknown): void {
+  const detail = cause instanceof Error ? (cause.stack ?? cause.message) : String(cause);
 
   try {
     writeFileSync(crashRecordPath(), JSON.stringify({
@@ -475,10 +473,10 @@ function writeCrashRecord(kind: string, err: unknown): void {
   } catch { /* crash path must never throw */ }
 }
 
-function handleProcessCrash(kind: "uncaught-exception" | "unhandled-rejection", err: unknown): void {
-  const detail = err instanceof Error ? (err.stack ?? err.message) : String(err);
+function handleProcessCrash(kind: "uncaught-exception" | "unhandled-rejection", cause: unknown): void {
+  const detail = cause instanceof Error ? (cause.stack ?? cause.message) : String(cause);
 
-  writeCrashRecord(kind, err);
+  writeCrashRecord(kind, cause);
   audit("lifecycle", { event: kind, error: detail.slice(0, 500) });
 
   if (kind === "unhandled-rejection") return;
@@ -500,9 +498,9 @@ function handleProcessCrash(kind: "uncaught-exception" | "unhandled-rejection", 
 // A boot rejection would otherwise vanish into an unhandledRejection before
 // the crash handlers above are registered; record it and exit deterministically.
 if (process.versions["electron"] !== undefined) {
-  boot().catch((err: unknown) => {
-    writeCrashRecord("boot-failed", err);
-    audit("lifecycle", { event: "boot-failed", error: (err instanceof Error ? (err.stack ?? err.message) : String(err)).slice(0, 500) });
+  boot().catch((cause: unknown) => {
+    writeCrashRecord("boot-failed", cause);
+    audit("lifecycle", { event: "boot-failed", error: (cause instanceof Error ? (cause.stack ?? cause.message) : String(cause)).slice(0, 500) });
     quitApp();
   });
 }
