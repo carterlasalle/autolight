@@ -1,5 +1,6 @@
-import { writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { arch, cpus, platform, release, totalmem } from "node:os";
+import { dirname } from "node:path";
 
 // Performance harness core (T-QA-05, spec 117). It measures: show host tick
 // period and jitter, render time per tick with 2,000 cells, IPC latency, UI
@@ -113,7 +114,7 @@ export function summarise(
     p50: percentile(samples, 50),
     p95: percentile(samples, 95),
     p99: percentile(samples, 99),
-    max: samples.length > 0 ? Math.max(...samples) : 0,
+    max: samples.reduce((acc, v) => (v > acc ? v : acc), 0),
     mean,
     threshold: options.threshold,
     statistic,
@@ -182,6 +183,11 @@ function busyWait(now: () => number, ms: number): void {
 export async function measureTickJitter(options: TickOptions): Promise<number[]> {
   const now = options.now ?? (() => performance.now());
   const sleep = options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(() => resolve(), ms)));
+  if (!Number.isFinite(options.hz) || options.hz <= 0 || !Number.isFinite(options.durationMs) || options.durationMs <= 0) {
+    throw new RangeError(
+      `measureTickJitter: hz and durationMs must be finite and positive (hz=${options.hz}, durationMs=${options.durationMs})`,
+    );
+  }
   const period = 1000 / options.hz;
   const started = now();
   const samples: number[] = [];
@@ -204,6 +210,7 @@ export async function measureTickJitter(options: TickOptions): Promise<number[]>
 }
 
 export function stallDetected(samples: readonly number[], stallMs: number): boolean {
+  if (!(stallMs > 0)) return false;
   const floor = stallMs * 0.5;
 
   return samples.some((sample) => sample > floor);
@@ -266,11 +273,12 @@ export function createMeasurementFile(input: MeasurementFileInput): MeasurementF
 }
 
 export function writeMeasurement(path: string, file: MeasurementFile): void {
+  mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, `${JSON.stringify(file, null, 2)}\n`, "utf8");
 }
 
 export function failedMeasurements(file: MeasurementFile): Measurement[] {
-  return file.measurements.filter((m) => m.measured && !m.pass);
+  return file.measurements.filter((m) => !m.pass);
 }
 
 export function unmeasured(file: MeasurementFile): Measurement[] {

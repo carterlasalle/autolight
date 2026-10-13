@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
@@ -178,8 +178,11 @@ describe("performance harness (T-QA-05, spec 117)", () => {
     expect(jitter?.max).toBeGreaterThan(10);
     expect(renderMs.length).toBe(200);
     // Everything measured passes except the injected stall, which is the
-    // saved red run for the jitter report.
-    expect(failedMeasurements(file).map((m) => m.name)).toEqual(["showHost.tickJitterWith20msStall"]);
+    // saved red run for the jitter report; fail-closed also reports the
+    // unmeasured live frame metric as failed (never silently absent).
+    const failed = failedMeasurements(file).map((m) => m.name);
+    expect(failed).toEqual(expect.arrayContaining(["showHost.tickJitterWith20msStall"]));
+    expect(failed).toContain("ui.frameTimeLive");
   });
 
   it("records relaxed thresholds for CI runs without comparing to the reference machine", () => {
