@@ -272,7 +272,7 @@ const audioWindowUrls = new Set<string>();
 
 // The main window's webContents, captured at creation. MIDI permission is
 // granted by identity against this live handle — a local URL check alone
-// would hand full hardware access to any future local page.
+// would hand full hardware access to any other local page.
 let mainWindowContents: WebContents | null = null;
 
 export function registerAudioWindow(url: string): void {
