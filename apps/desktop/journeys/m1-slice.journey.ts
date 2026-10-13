@@ -1,3 +1,5 @@
+import { readdirSync } from "node:fs";
+import { basename } from "node:path";
 import { test, expect } from "@playwright/test";
 import { launchAutolight } from "./_harness.js";
 
@@ -13,8 +15,14 @@ test("m1 slice: clean launch to graceful shutdown in Simulator mode", async () =
   try {
     // 1. Clean userData. Launch the built app (not `yarn dev`).
     await test.step("step 1: clean profile launches the built app", async () => {
-      expect(harness.userDataDir.length).toBeGreaterThan(0);
-      expect(await harness.window.title()).toEqual(expect.any(String));
+      // Fresh isolated profile: the harness mints a new autolight-e2e- temp
+      // dir holding only its screenshots folder, no app state or databases.
+      expect(basename(harness.userDataDir).startsWith("autolight-e2e-")).toBe(true);
+      expect(readdirSync(harness.userDataDir).sort()).toEqual(["screenshots"]);
+      // A loaded window reports a non-empty title; a blank/never-loaded
+      // window reports "".
+      const title = await harness.window.title();
+      expect(title.length).toBeGreaterThan(0);
       await harness.screenshot("m1-step1-launch");
     });
 
@@ -98,11 +106,15 @@ test("m1 slice: clean launch to graceful shutdown in Simulator mode", async () =
       expect(
         commands.filter((c) => c.cmd === "colorwc" && typeof c.kelvin === "number" && c.kelvin > 0).length,
       ).toBe(0);
+      // One arm for the session, at the 25 Hz render tick: a silent drip or
+      // a racing transport fails the rate band while still varying colours.
       const first = frames[0]?.sentAtMs ?? 0;
       const last = frames[frames.length - 1]?.sentAtMs ?? 0;
       const spanMs = last - first;
-      const rateHz = spanMs > 0 ? (frames.length / spanMs) * 1000 : 0;
+      expect(spanMs).toBeGreaterThan(0);
+      const rateHz = (frames.length / spanMs) * 1000;
       console.log(`m1-step7: ${frames.length} frames over ${spanMs} ms (${rateHz.toFixed(1)} Hz), zero turn commands`);
+      expect(rateHz).toBeGreaterThan(5);
       await harness.screenshot("m1-step7-show");
     });
 
@@ -114,33 +126,49 @@ test("m1 slice: clean launch to graceful shutdown in Simulator mode", async () =
       };
 
       const frames = await harness.readFrames();
-
-      const match = frames.find(
-        (f) =>
-          f.cells.length === snapshot.cells.length &&
-          f.cells.every(
-            (c, i) =>
-              c[0] === snapshot.cells[i]?.[0] &&
-              c[1] === snapshot.cells[i]?.[1] &&
-              c[2] === snapshot.cells[i]?.[2],
-          ),
-      );
-
-      expect(match).toBeDefined();
+      expect(snapshot.cells.length).toBeGreaterThan(0);
+      // The snapshot reads back the last transported frame (simulator-show),
+      // so it must equal the latest frame, not any stale earlier one.
+      const latest = frames[frames.length - 1];
+      expect(latest).toBeDefined();
+      expect(latest?.cells.length).toBe(snapshot.cells.length);
+      expect(latest?.cells).toEqual(snapshot.cells);
     });
 
     // 9. Press B: black frames within 100 ms, stream still armed; press A:
     // resume on the next bar.
     await test.step("step 9: B blacks out within 100 ms, A resumes on the next bar", async () => {
       const t0 = await harness.pressWithTimestamp("b");
-      const frames = await harness.readFrames();
-      const zero = harness.firstZeroFrameAfter(frames, t0.wallMs);
+      // Both stamps share the Date.now() wall clock (harness wallMs and the
+      // recorder's sentAtMs), and the blackout tick may lag the keypress:
+      // poll until the zero frame lands.
+      let zero: { sentAtMs: number } | null = null;
+      const deadline = Date.now() + 5000;
+
+      while (zero === null && Date.now() < deadline) {
+        zero = harness.firstZeroFrameAfter(await harness.readFrames(), t0.wallMs);
+
+        if (zero === null) await new Promise((r) => setTimeout(r, 25));
+      }
+
       expect(zero).not.toBeNull();
       expect((zero?.sentAtMs ?? 0) - t0.wallMs).toBeLessThan(100);
-      const resume = await harness.pressWithTimestamp("a");
+      await harness.pressWithTimestamp("a");
       const status = (await harness.invokeTestChannel("resume-status")) as { resumedAt: string };
       expect(status.resumedAt).toBe("bar");
-      expect(resume.wallMs).toBeGreaterThan(t0.wallMs);
+      // Resume paints light again: the latest frame after A is non-black.
+      let lit = false;
+      const resumeDeadline = Date.now() + 5000;
+
+      while (!lit && Date.now() < resumeDeadline) {
+        const frames = await harness.readFrames();
+        const last = frames[frames.length - 1];
+        lit = last !== undefined && last.cells.some(([r, g, b]) => r !== 0 || g !== 0 || b !== 0);
+
+        if (!lit) await new Promise((r) => setTimeout(r, 25));
+      }
+
+      expect(lit).toBe(true);
     });
 
     // 10. Pause the renderer for 5 s: frames keep flowing (P-56).
@@ -150,10 +178,20 @@ test("m1 slice: clean launch to graceful shutdown in Simulator mode", async () =
       await harness.invokeTestChannel("freeze-renderer", { ms: 5000 });
       const after = await harness.readFrames();
       const during = after.filter((f) => f.sentAtMs > lastBefore);
-      expect(during.length).toBeGreaterThan(0);
+      // Coverage across the whole freeze window: frames must span from near
+      // its start to near its end with no stall at either edge, and roughly
+      // the 25 Hz tick's frame count.
+      expect(during.length).toBeGreaterThanOrEqual(50);
+      const freezeMs = 5000;
+      expect((during[0]?.sentAtMs ?? 0) - lastBefore).toBeLessThan(500);
+      expect((during[during.length - 1]?.sentAtMs ?? 0) - lastBefore).toBeGreaterThanOrEqual(freezeMs - 500);
+      let prev = lastBefore;
 
-      for (let i = 1; i < during.length; i++) {
-        expect((during[i]?.sentAtMs ?? 0) - (during[i - 1]?.sentAtMs ?? 0)).toBeLessThan(500);
+      for (const f of during) {
+        const gap = f.sentAtMs - prev;
+        expect(gap).toBeGreaterThanOrEqual(0);
+        expect(gap).toBeLessThan(500);
+        prev = f.sentAtMs;
       }
     });
 

@@ -39,11 +39,17 @@ export class ServiceTracker {
   constructor(private readonly serviceName: string) {}
 
   set(state: ServiceState, detail?: string): void {
+    const previous = this.state;
     this.state = state;
     this.detail = detail;
 
     if (state === "running" || state === "degraded") {
-      this.startedAtMs ??= Date.now();
+      // Refresh on (re)start from a non-running state; ??= would keep the
+      // first-ever start time across stop/start cycles and report stale.
+      if (previous !== "running" && previous !== "degraded") {
+        this.startedAtMs = Date.now();
+      }
+
       this.stoppedAtMs = undefined;
     }
 
@@ -81,28 +87,38 @@ export class ServiceTracker {
   }
 }
 
-export interface ServiceError {
-  ok: false;
-  error: { code: string; message: string };
-}
-
 // Error text normalization used by every service's typed error paths; the
 // alternative is the same three-line instanceof dance copied eleven times.
 export function messageOf(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
+  if (err instanceof Error) return err.message;
+
+  if (err !== null && typeof err === "object" && "message" in err && typeof err.message === "string") {
+    return err.message;
+  }
+
+  return String(err);
 }
 
-// Electron owns userData. The import is dynamic because `electron` has no app
-// object in plain Node (vitest imports these services directly), so a static
-// import would fail at module load in the test runner.
+// Electron owns userData. The import stays dynamic because `electron` has no
+// app object in plain Node (vitest imports these services directly), so a
+// static import would fail at module load in the test runner.
 export async function resolveUserDataDir(explicit?: string): Promise<string | undefined> {
-  if (explicit !== undefined) return explicit;
+  if (explicit !== undefined && explicit.length > 0) return explicit;
+
+  let app: { getPath(name: string): string } | undefined;
 
   try {
-    const { app } = await import("electron");
-
-    return app.getPath("userData");
+    const mod: { app?: { getPath(name: string): string } } = await import("electron");
+    app = mod.app;
   } catch {
+    // Electron unavailable (plain Node/vitest): no userData dir.
     return undefined;
   }
+
+  if (app === undefined) return undefined;
+  // A genuine getPath failure throws to the caller: it must not be
+  // mistaken for "electron not installed".
+  const dir = app.getPath("userData");
+
+  return dir.length > 0 ? dir : undefined;
 }

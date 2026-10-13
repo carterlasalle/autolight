@@ -1,5 +1,8 @@
 {
   "platform": "windows",
+  "capture": "synthetic",
+  "verified": false,
+  "transportSemantics": "Transport Button label names the action applied on press: 'Pause' while the deck is playing, 'Play' while paused. The ax.ts parser maps Pause to playing:false and Play to playing:true; confirm against a real UIA toggle dump in runbook HW-RB-AX-01.",
   "note": "Hand-shaped from Rekordbox's Windows UI Automation structure (UIA_Pane deck containers, Text elements, Button elements). Not a hardware capture: runbook HW-RB-AX-01 records the real tree and the element dump for the UNAVAILABLE_ON_THIS_DEVICE evidence if the elements are not exposed.",
   "root": [
     {
@@ -21,8 +24,9 @@
       "children": [
         { "role": "Text", "position": 0, "label": "track title", "value": "Homecoming" },
         { "role": "Text", "position": 1, "label": "artist", "value": "Kanye West" },
-        { "role": "Text", "position": 2, "label": "elapsed", "value": "1:05" },
-        { "role": "Button", "position": 3, "label": "Play", "value": "" }
+        { "role": "Text", "position": 2, "label": "elapsed", "value": "+1:05" },
+        { "role": "Text", "position": 3, "label": "remaining", "value": "-1:55" },
+        { "role": "Button", "position": 4, "label": "Play", "value": "" }
       ]
     }
   ]

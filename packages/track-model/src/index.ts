@@ -1,4 +1,4 @@
-import type { TrackIdentity, TrackModel } from "@autolight/contracts";
+import type { ReadinessLevel, TrackIdentity, TrackModel } from "@autolight/contracts";
 
 // Canonical identity resolution (§12): native ID → path → file hash → PCM
 // fingerprint. Never title/artist strings alone.
@@ -11,14 +11,15 @@ export function resolveIdentity(parts: {
   fileHash?: string;
   pcmFingerprint?: string;
 }): TrackIdentity {
-  const key = parts.rekordboxId ?? parts.seratoPath ?? parts.canonicalPath ?? parts.fileHash ?? parts.pcmFingerprint;
+  const path = parts.seratoPath ?? parts.canonicalPath;
+  const key = parts.rekordboxId ?? path ?? parts.fileHash ?? parts.pcmFingerprint;
 
   if (!key) throw new Error("track identity needs a native id, path, or fingerprint (§12)");
 
   const id = parts.rekordboxId ? `rb:${parts.rekordboxId}`
-    : parts.fileHash ? `hash:${parts.fileHash.slice(0, 16)}`
-    : parts.pcmFingerprint ? `pcm:${parts.pcmFingerprint.slice(0, 16)}`
-    : `path:${parts.seratoPath ?? parts.canonicalPath}`;
+    : path ? `path:${path}`
+    : parts.fileHash ? `hash:${parts.fileHash}`
+    : `pcm:${parts.pcmFingerprint}`;
 
   const identity: TrackIdentity = { id, sourceIds: {} };
 
@@ -39,13 +40,12 @@ export function resolveIdentity(parts: {
   return identity;
 }
 
-// Capability level (§70): FULL → STRUCTURED → ADAPTIVE, never silent failure.
-export type Coverage = "full" | "structured" | "adaptive";
+// Capability level (§70): the worker-issued level, surfaced for UI badges.
+// This helper never re-derives the level from grid/section shapes: the
+// analysis worker owns readiness, so a declared level is returned as-is and
+// cannot contradict it.
+export type Coverage = ReadinessLevel;
 
 export function coverageOf(model: Pick<TrackModel, "beatGrid" | "sections" | "analysisCoverage">): Coverage {
-  if (model.analysisCoverage === "full" && model.sections.length > 0) return "full";
-
-  if (model.beatGrid.beats.length > 0) return "structured";
-
-  return "adaptive";
+  return model.analysisCoverage;
 }
