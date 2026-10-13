@@ -1,24 +1,27 @@
 import { describe, expect, it } from "vitest";
-import { applyLogicalOrder } from "./placement.js";
-import { fitRunMapping } from "./placement.js";
-import { computeFields, fieldCellsFromMap, zeroSFor } from "./fields.js";
-import { computeFields as compute, fieldCellsForReference, referenceById, squareMirrored } from "./index.js";
+import { applyLogicalOrder, fitRunMapping, topologyForRuns } from "./placement.js";
+import { computeFields, computeFields as compute, fieldCellsFromMap, zeroSFor } from "./fields.js";
+import { fieldCellsForReference, referenceById, squareMirrored } from "./index.js";
+import { splitWeights } from "./groups.js";
 import { setLogicalZero, emptyVenue } from "./venue.js";
 import { rectangleRoom } from "./room.js";
-import { topologyForRuns } from "./placement.js";
 
 function squareSetup(seamS: number, zeroMode: string, logicalZeroS: number) {
   const ref = referenceById("square-loop");
   const room = { ...ref.room, logicalZeroS, perimeterDirection: "clockwise" as const };
+  const runs = ref.runs.map((r) => ({ ...r, controllerS: seamS }));
+
+  const zeroS = zeroMode === "dj-nearest" || zeroMode === "front-center"
+    ? zeroSFor(room, room.outline, zeroMode)
+    : logicalZeroS;
+
   const built = fieldCellsForReference(ref);
   const mapped = built.cells.map((_, i) => ({ physicalIndex: i, logicalIndex: i, positions: [] as never[] }));
-  const order = applyLogicalOrder(mapped, built.midS, logicalZeroS, "clockwise");
+  const order = applyLogicalOrder(mapped, built.midS, zeroS, "clockwise");
   const cells = built.cells.map((c, i) => ({ ...c, logicalIndex: order[i]!.logicalIndex }));
-  const fields = compute(room, cells, ref.runs, { zeroS: logicalZeroS });
-  void seamS;
-  void zeroMode;
+  const fields = compute(room, cells, runs, { zeroS });
 
-  return { ref, room, fields, cells };
+  return { ref, room, fields, cells, zeroS };
 }
 
 function orbitLevel(s: number, beat: number, beatsPerRevolution: number, tailCells: number, count: number): number {
@@ -56,7 +59,8 @@ describe("P-ROOM probes on SIM", () => {
     }
 
     expect(fields.physical[best]).not.toBe(0);
-    expect(fields.gDj[best]! < 0.6 || fields.dDj[best]! < 0.5).toBe(true);
+    expect(fields.gDj[best]!).toBeLessThan(0.6);
+    expect(fields.dDj[best]!).toBeLessThan(0.5);
   });
 
   it("P-ROOM-02 orbit crosses the seam without a dark frame", () => {
@@ -68,16 +72,15 @@ describe("P-ROOM probes on SIM", () => {
       const beat = tick * 0.25;
       let best = 0;
       let bestV = -1;
-      let total = 0;
 
       for (let i = 0; i < fields.count; i++) {
         const v = orbitLevel(fields.s[i]!, beat, 4, 3, fields.count);
-        total += v;
 
         if (v > bestV) { bestV = v; best = i; }
       }
 
-      expect(total).toBeGreaterThan(0.5);
+      // Peak cell stays lit every tick: no dark frame at the seam crossing.
+      expect(bestV).toBeGreaterThan(0.5);
 
       if (prev >= 0) {
         const jump = Math.min(Math.abs(best - prev), fields.count - Math.abs(best - prev));
@@ -92,16 +95,23 @@ describe("P-ROOM probes on SIM", () => {
 
   it("P-ROOM-03 half-room strobe alternates sides with DS-33 feather", () => {
     const { fields } = squareSetup(0, "dj-nearest", 0);
+    // Production side assignment plus feather: cells on the split line carry
+    // intermediate weights, so a hard switch cannot pass.
+    const w = splitWeights(fields, { id: "halves", kind: "halves" }, { featherM: 10 });
     const leftIdx: number[] = [];
     const rightIdx: number[] = [];
 
     for (let i = 0; i < fields.count; i++) {
       if (fields.signedSplit[i]! >= 0) leftIdx.push(i);
       else rightIdx.push(i);
+
+      expect(w[0]![i]! + w[1]![i]!).toBeCloseTo(1, 6);
     }
 
     expect(leftIdx.length).toBeGreaterThan(0);
     expect(rightIdx.length).toBeGreaterThan(0);
+    expect(leftIdx.every((i) => w[0]![i]! > w[1]![i]!)).toBe(true);
+    expect(rightIdx.every((i) => w[1]![i]! > w[0]![i]!)).toBe(true);
 
     for (const i of leftIdx) {
       expect(splitLevel(fields.signedSplit[i]!, 0, 0.5)).toBe(1);
@@ -114,21 +124,28 @@ describe("P-ROOM probes on SIM", () => {
     }
   });
 
-  it("P-ROOM-04 two-way pulse meets at the antipode on beat 5", () => {
+  it("P-ROOM-04 two-way pulse meets at the antipode on beat 4", () => {
     const { fields } = squareSetup(0, "dj-nearest", 0);
+    // Antipode from production fields: gDj peaks opposite the DJ projection.
+    let far = 0;
+
+    for (let i = 1; i < fields.count; i++) {
+      if (fields.gDj[i]! > fields.gDj[far]!) far = i;
+    }
+
+    expect(fields.gDj[far]!).toBeGreaterThan(0.5);
     let bestBeat = 0;
     let bestFar = -1;
 
     for (let b = 0; b <= 20; b++) {
       const beat = b * 0.25;
-      const far = rippleLevel(1, beat, 0.125, 0.2);
+      const level = rippleLevel(fields.gDj[far]!, beat, 0.125, 0.2);
 
-      if (far > bestFar) { bestFar = far; bestBeat = beat; }
+      if (level > bestFar) { bestFar = level; bestBeat = beat; }
     }
 
     expect(bestFar).toBeGreaterThan(0.3);
     expect(Math.abs(bestBeat - 4)).toBeLessThanOrEqual(1.5);
-    void fields;
   });
 
   it("P-ROOM-05 mirrored strip is classified split-mirrored and cannot orbit", () => {
@@ -167,9 +184,9 @@ describe("P-ROOM probes on SIM", () => {
     const room = { ...ref.room, logicalZeroS: 0, perimeterDirection: "clockwise" as const };
     const built = fieldCellsForReference(ref);
     const fields = computeFields(room, built.cells, ref.runs, { zeroS: 0 });
-    let lit = 0;
+    let peak = 0;
 
-    for (let i = 0; i < fields.count; i++) lit += orbitLevel(fields.s[i]!, 1, 4, 3, fields.count);
-    expect(lit).toBeGreaterThan(0.5);
+    for (let i = 0; i < fields.count; i++) peak = Math.max(peak, orbitLevel(fields.s[i]!, 1, 4, 3, fields.count));
+    expect(peak).toBeGreaterThan(0.5);
   });
 });

@@ -28,6 +28,7 @@ class ProtocolError(Exception):
 _PROTOCOL_LOCK = threading.Lock()
 _PROTOCOL_FD: int | None = None
 
+
 def protect_stdout() -> int:
     """Duplicate fd 1 for protocol use, then redirect prints to stderr.
 
@@ -103,7 +104,6 @@ class FrameWriter:
             while view:
                 written = os.write(self._fd, view)
                 view = view[written:]
-
 
     def __init__(
         self, writer: FrameWriter, interval_ms: int = HEARTBEAT_DEFAULT_MS

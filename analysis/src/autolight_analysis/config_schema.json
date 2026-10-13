@@ -2,6 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "autolight-config",
   "type": "object",
+  "additionalProperties": false,
   "properties": {
     "runtime.host": {
       "type": "string",
@@ -289,7 +290,21 @@
         "number",
         "boolean"
       ],
-      "default": "{intro:.3, verse:.45, prechorus:.6, build:.8, drop:1, chorus:.9, breakdown:.25, bridge:.5, instrumental:.6, solo:.7, outro:.3, transition:.5, unknown:.5}",
+      "default": {
+        "intro": 0.3,
+        "verse": 0.45,
+        "prechorus": 0.6,
+        "build": 0.8,
+        "drop": 1,
+        "chorus": 0.9,
+        "breakdown": 0.25,
+        "bridge": 0.5,
+        "instrumental": 0.6,
+        "solo": 0.7,
+        "outro": 0.3,
+        "transition": 0.5,
+        "unknown": 0.5
+      },
       "description": "map  [was `SECTION_ENERGY` (`show-planner/src/index.ts:65-69`)]"
     },
     "planner.drop.minConfidence": {
@@ -385,14 +400,67 @@
       "description": "OKLab distance  [unmeasured]"
     },
     "planner.events.minConfidence": {
-      "type": "string",
-      "default": "per event type map, 0.5 default",
-      "description": "ratio  [unmeasured]"
+      "type": [
+        "array",
+        "object",
+        "string",
+        "number",
+        "boolean"
+      ],
+      "default": {},
+      "description": "map of event type to ratio, empty means 0.5 default  [unmeasured]"
     },
     "planner.evaluation.bounds": {
-      "type": "string",
-      "default": "map of the ten spec 115 diagnostics to allowed ranges",
-      "description": "map  [unmeasured]"
+      "type": [
+        "array",
+        "object",
+        "string",
+        "number",
+        "boolean"
+      ],
+      "default": {
+        "activeDensity": [
+          0,
+          1
+        ],
+        "darknessPct": [
+          0,
+          1
+        ],
+        "colourChangeRate": [
+          0,
+          2
+        ],
+        "whiteHits": [
+          0,
+          12
+        ],
+        "blackouts": [
+          0,
+          12
+        ],
+        "strobeBeats": [
+          0,
+          32
+        ],
+        "patternRecurrence": [
+          0,
+          1
+        ],
+        "spatialEntropy": [
+          0,
+          3
+        ],
+        "sectionContrast": [
+          0,
+          1
+        ],
+        "intensityArc": [
+          0,
+          1
+        ]
+      },
+      "description": "map of the ten spec 115 diagnostics to allowed ranges  [unmeasured]"
     },
     "planner.compile.budgetMs": {
       "type": "number",
@@ -422,8 +490,8 @@
     },
     "audio.capture.deviceId": {
       "type": "string",
-      "default": "\"\" (none)",
-      "description": "string  [user]"
+      "default": "",
+      "description": "string, empty means none  [user]"
     },
     "audio.fftSize": {
       "type": "number",
@@ -510,9 +578,9 @@
       "description": "path  [T-ANA-05]"
     },
     "analysis.ml.offlineOnly": {
-      "type": "string",
-      "default": "true during Live",
-      "description": "bool  [spec 110]"
+      "type": "boolean",
+      "default": true,
+      "description": "bool, true during Live  [spec 110]"
     },
     "analysis.stems.mode": {
       "type": "string",
@@ -547,7 +615,24 @@
         "number",
         "boolean"
       ],
-      "default": "{bass:[20,150], lowMid:[150,500], mid:[500,2000], high:[2000,20000]}",
+      "default": {
+        "bass": [
+          20,
+          150
+        ],
+        "lowMid": [
+          150,
+          500
+        ],
+        "mid": [
+          500,
+          2000
+        ],
+        "high": [
+          2000,
+          20000
+        ]
+      },
       "description": "Hz  [was hardcoded (`stems.py:51-59`)]"
     },
     "analysis.build.windows": {
@@ -667,7 +752,7 @@
         "number",
         "boolean"
       ],
-      "default": "[] (all eligible)",
+      "default": [],
       "description": "list of interface names  [spec 111]"
     },
     "govee.lan.discovery.multicast": {
@@ -737,9 +822,9 @@
       "description": "Hz  [spec 117 logical rate; per device capped by qualification]"
     },
     "govee.lan.stream.keepaliveMs": {
-      "type": "string",
-      "default": "0 (off)",
-      "description": "ms  [only if qualification shows the unit drops an idle stream]"
+      "type": "number",
+      "default": 0,
+      "description": "ms, 0 means off  [only if qualification shows the unit drops an idle stream]"
     },
     "govee.lan.stream.maxRearmAttempts": {
       "type": "number",
@@ -807,9 +892,9 @@
       "description": "ms  [unmeasured]"
     },
     "govee.ble.colorQuantizeLevels": {
-      "type": "string",
-      "default": "0 (off)",
-      "description": "levels per channel  [unmeasured]"
+      "type": "number",
+      "default": 0,
+      "description": "levels per channel, 0 means off  [unmeasured]"
     },
     "govee.ble.hostColorChannel": {
       "type": "boolean",
@@ -865,28 +950,6 @@
       "type": "number",
       "default": 10000,
       "description": "ms  [unmeasured]"
-    },
-    "govee.device.<fixtureId>.transportMode": {
-      "type": "string",
-      "default": "hybrid",
-      "description": "enum DS-31  [owner (per device)]"
-    },
-    "govee.device.<fixtureId>.transportOrder": {
-      "type": [
-        "array",
-        "object",
-        "string",
-        "number",
-        "boolean"
-      ],
-      "default": [
-        "lan-razer",
-        "ble-segmented",
-        "lan-json",
-        "ble-single",
-        "matter"
-      ],
-      "description": "ordered list  [spec 148]"
     },
     "live.provider": {
       "type": "string",
@@ -1020,7 +1083,7 @@
         "number",
         "boolean"
       ],
-      "default": "[] (all eligible)",
+      "default": [],
       "description": "list  [spec 111]"
     },
     "live.ax.cpuBudgetPercent": {
@@ -1079,9 +1142,22 @@
       "description": "ms  [unmeasured]"
     },
     "flx4.hints.enabled": {
-      "type": "string",
-      "default": "all hint types",
-      "description": "list  [spec 11]"
+      "type": [
+        "array",
+        "object",
+        "string",
+        "number",
+        "boolean"
+      ],
+      "default": [
+        "fader-rise",
+        "filter-sweep",
+        "transport",
+        "loop-change",
+        "roll",
+        "eq-kill"
+      ],
+      "description": "list of hint types, all on  [spec 11]"
     },
     "serato.remote.enabled": {
       "type": "boolean",
@@ -1284,14 +1360,9 @@
       "description": "bool  [spec 145]"
     },
     "update.neverDuringLive": {
-      "type": "string",
-      "default": "read-only invariant",
-      "description": "  [spec 145]"
-    },
-    "ui.shortcuts.*": {
-      "type": "string",
-      "default": "B blackout, W white, F freeze, A auto, M manual, Up and Down master, 1 to 9 presets",
-      "description": "map  [spec 94]"
+      "type": "boolean",
+      "default": true,
+      "description": "bool read-only invariant  [spec 145]"
     },
     "ui.shortcuts.whiteMode": {
       "type": "string",
@@ -1314,14 +1385,30 @@
       "description": "beats  [unmeasured target]"
     },
     "qa.events.minRecall": {
-      "type": "string",
-      "default": "per event type map, 0.8 default",
-      "description": "ratio  [unmeasured target]"
+      "type": [
+        "array",
+        "object",
+        "string",
+        "number",
+        "boolean"
+      ],
+      "default": {
+        "default": 0.8
+      },
+      "description": "map, 0.8 default  [unmeasured target]"
     },
     "qa.events.minPrecision": {
-      "type": "string",
-      "default": "per event type map, 0.7 default",
-      "description": "ratio  [unmeasured target]"
+      "type": [
+        "array",
+        "object",
+        "string",
+        "number",
+        "boolean"
+      ],
+      "default": {
+        "default": 0.7
+      },
+      "description": "map, 0.7 default  [unmeasured target]"
     },
     "qa.key.minAccuracy": {
       "type": "number",
@@ -1332,11 +1419,6 @@
       "type": "number",
       "default": 5,
       "description": "ms  [unmeasured target]"
-    },
-    "qa.faults.*": {
-      "type": "string",
-      "default": "scenario parameter maps",
-      "description": "map  [spec 104 to 107]"
     },
     "qa.perf.ciSlack": {
       "type": "number",
@@ -1362,6 +1444,24 @@
       "type": "number",
       "default": 3,
       "description": "tracks  [spec 116]"
+    }
+  },
+  "patternProperties": {
+    "^govee\\.device\\..+\\.transportMode$": {
+      "type": "string",
+      "description": "enum DS-31 [owner (per device)]"
+    },
+    "^govee\\.device\\..+\\.transportOrder$": {
+      "type": "array",
+      "description": "ordered list [spec 148]"
+    },
+    "^ui\\.shortcuts\\.[a-zA-Z0-9_-]+$": {
+      "type": "string",
+      "description": "shortcut key [spec 94]"
+    },
+    "^qa\\.faults\\.[a-zA-Z0-9_-]+$": {
+      "type": "object",
+      "description": "scenario parameter map [spec 104 to 107]"
     }
   }
 }

@@ -88,11 +88,15 @@ export function derivedGroups(
     if (z <= 0.6) FLOOR.push(k);
     const span = Math.abs(fields.extent[i * 6 + 5]! - fields.extent[i * 6 + 2]!);
 
-    if (z >= ceilZ) {
-      HORIZONTALS.push(k);
-      PERIMETER.push(k);
-    } else if (span > 0.5) VERTICALS.push(k);
+    if (z >= ceilZ) HORIZONTALS.push(k);
+    else if (span > 0.5) VERTICALS.push(k);
     else HORIZONTALS.push(k);
+
+    // PERIMETER is the outline loop, not the ceiling: corner-adjacent
+    // fixtures plus the ceiling loop ends (z at/above the loop height).
+    // VenueFields carries no run membership, so wall-midpoint fixtures far
+    // from a corner stay out rather than guessing.
+    if (z >= ceilZ || fields.corner[i]! <= cornerM) PERIMETER.push(k);
 
     if (fields.corner[i]! <= cornerM) CORNERS.push(k);
 
@@ -125,8 +129,8 @@ export function splitWeights(
         return fields.side[i] === SIDE_LEFT ? 0 : 1;
       case "quadrants":
       case "sectors": {
-        const n = split.sectors ?? 4;
-        const off = split.offset ?? 0;
+        const n = Math.max(1, Math.floor(split.sectors ?? 4));
+        const off = (split.offset ?? 0) + (split.angleRad ?? 0);
         const t = ((fields.theta[i]! - off) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
 
         return Math.min(n - 1, Math.floor((t / (Math.PI * 2)) * n));
@@ -149,6 +153,7 @@ export function splitWeights(
         return fields.wall[i]!;
       case "drawn": {
         if (split.parts) {
+          if (split.parts.length === 0) throw new Error(`split ${split.id}: drawn with empty parts`);
           const k = keyOf(fields, i);
 
           for (let p = 0; p < split.parts.length; p++) {
@@ -158,26 +163,15 @@ export function splitWeights(
           return 0;
         }
 
-        if (split.line) {
-          const { a, b } = split.line;
-          const dx = b.x - a.x;
-          const dy = b.y - a.y;
-          const len = Math.hypot(dx, dy) || 1;
-          const d = ((fields.pos[i * 3]! - a.x) * -dy + (fields.pos[i * 3 + 1]! - a.y) * dx) / len;
-
-          return d >= 0 ? 0 : 1;
-        }
-
         return 0;
       }
+
+      default:
+        throw new Error(`split ${split.id}: unknown kind ${(split as { kind: string }).kind}`);
     }
   };
 
-  const parts = split.kind === "alternate" ? Math.max(2, split.k ?? 2)
-    : split.kind === "rings" ? Math.max(2, split.rings ?? 2)
-    : split.kind === "quadrants" || split.kind === "sectors" ? (split.sectors ?? 4)
-    : split.kind === "walls" ? Math.max(1, ...Array.from({ length: fields.count }, (_, i) => fields.wall[i]!)) + 1
-    : split.parts?.length ?? 2;
+  const parts = partCount(split, fields);
 
   const weights: Float32Array[] = Array.from({ length: parts }, () => new Float32Array(fields.count));
 
@@ -192,12 +186,30 @@ export function splitWeights(
 
       if (weights[1]) weights[1]![i] = 1 - f;
     } else {
-      const p = partOf(i);
+      const p = Math.min(weights.length - 1, Math.max(0, partOf(i)));
       weights[p]![i] = 1;
     }
   }
 
   return weights;
+}
+
+function partCount(split: SplitDef, fields: VenueFields): number {
+  switch (split.kind) {
+    case "alternate":
+      return Math.max(2, split.k ?? 2);
+    case "rings":
+      return Math.max(2, split.rings ?? 2);
+    case "quadrants":
+    case "sectors":
+      return Math.max(1, Math.floor(split.sectors ?? 4));
+    case "walls":
+      return Math.max(1, ...Array.from({ length: fields.count }, (_, i) => fields.wall[i]!)) + 1;
+    case "halves":
+      return 2;
+    case "drawn":
+      return Math.max(2, split.parts?.length ?? 2);
+  }
 }
 
 function signedLineDist(fields: VenueFields, i: number, line: { a: { x: number; y: number }; b: { x: number; y: number } }): number {
@@ -318,12 +330,23 @@ export function resolveSelector(
     }
 
     case "anchor": {
+      // anchorId resolves against the fixture keys first (a fixture-anchored
+      // selection centers on that fixture); otherwise the explicit position.
+      // maxDist clamps the effective radius so the result stays bounded.
+      const radius = Math.min(sel.radiusM, sel.maxDist);
+      let center = sel.anchorPos;
+      const anchorIdx = fields.keys.indexOf(sel.anchorId);
+
+      if (anchorIdx >= 0) {
+        center = { x: fields.pos[anchorIdx * 3]!, y: fields.pos[anchorIdx * 3 + 1]! };
+      }
+
       const out: string[] = [];
 
       for (let i = 0; i < fields.count; i++) {
-        const d = Math.hypot(fields.pos[i * 3]! - sel.anchorPos.x, fields.pos[i * 3 + 1]! - sel.anchorPos.y);
+        const d = Math.hypot(fields.pos[i * 3]! - center.x, fields.pos[i * 3 + 1]! - center.y);
 
-        if (d <= sel.radiusM) out.push(keyOf(fields, i));
+        if (d <= radius) out.push(keyOf(fields, i));
       }
 
       return out;

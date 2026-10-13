@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 // Registry only (pure zod, no node: imports). The barrel re-exports the
 // file-backed store and blank-screens dev the same way dgram did.
 import { KEYS } from "@autolight/config/registry";
@@ -9,6 +9,30 @@ import { Input } from "../../components/ui/input.js";
 import { ConfigField } from "../../components/kit.js";
 import { routeConfigChange, settingsGroup, type PendingChange } from "../../routes/diagnostics/diagnostics-model.js";
 
+const PENDING_KEY = "autolight.settings.pending";
+
+function loadPending(): PendingChange[] {
+  try {
+    const raw = localStorage.getItem(PENDING_KEY);
+
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed.filter((p): p is PendingChange =>
+      typeof p === "object" && p !== null && "key" in p && "scope" in p && typeof p.key === "string" && typeof p.scope === "string");
+  } catch {
+    return [];
+  }
+}
+
+function savePending(next: PendingChange[]): void {
+  try {
+    localStorage.setItem(PENDING_KEY, JSON.stringify(next));
+  } catch { /* private mode: queue stays in memory for the session */ }
+}
+
 // Settings (T-UI-11, T-CFG-05): every registry key visible with effective
 // value, default, unit, range, receipt, live-safe badge, reset, and per-scope
 // editing. Non-live-safe edits queue while Live is active with a visible
@@ -17,8 +41,10 @@ export function SettingsView(): JSX.Element {
   const live = useShell((s) => s.live);
   const [query, setQuery] = useState("");
   const [changedOnly, setChangedOnly] = useState(false);
-  const [pending, setPending] = useState<PendingChange[]>([]);
+  const [pending, setPending] = useState<PendingChange[]>(() => loadPending());
   const [edits, setEdits] = useState<Record<string, string>>({});
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  useEffect(() => { savePending(pending); }, [pending]);
 
   const rows = useMemo(() => {
     const q = query.toLowerCase();
@@ -47,7 +73,10 @@ export function SettingsView(): JSX.Element {
   }, [rows]);
 
   const commit = (key: string, scope: "app" | "venue" | "device" | "style" | "session", liveSafe: boolean): void => {
-    const value = edits[key] ?? "";
+    const value = edits[key];
+
+    if (value === undefined) return;
+
     const routing = routeConfigChange({ key, scope, value, liveSafe }, live !== null);
 
     if (routing === "queue-until-live-ends") {
@@ -56,18 +85,71 @@ export function SettingsView(): JSX.Element {
       return;
     }
 
-    void invoke("config/set", { version: 1, scope, key, value });
-    setEdits((prev) => {
-      const next = { ...prev };
-      delete next[key];
+    void invoke("config/set", { version: 1, scope, key, value }).then((raw) => {
+      const failed = raw === null || (typeof raw === "object" && "ok" in raw && raw.ok === false);
 
-      return next;
+      if (failed) {
+        setErrors((prev) => ({ ...prev, [key]: "Write failed — value kept. Retry Set." }));
+
+        return;
+      }
+
+      setEdits((prev) => {
+        const next = { ...prev };
+        delete next[key];
+
+        return next;
+      });
+    });
+  };
+
+  const resetRow = (key: string, scope: "app" | "venue" | "device" | "style" | "session"): void => {
+    void invoke("config/reset", { version: 1, scope, key }).then((raw) => {
+      const failed = raw === null || (typeof raw === "object" && "ok" in raw && raw.ok === false);
+
+      if (failed) {
+        setErrors((prev) => ({ ...prev, [key]: "Reset failed — value unchanged." }));
+
+        return;
+      }
+
+      setErrors((prev) => {
+        if (prev[key] === undefined) return prev;
+
+        const next = { ...prev };
+        delete next[key];
+
+        return next;
+      });
+      setEdits((prev) => {
+        if (prev[key] === undefined) return prev;
+
+        const next = { ...prev };
+        delete next[key];
+
+        return next;
+      });
     });
   };
 
   const applyPending = (): void => {
-    for (const p of pending) void invoke("config/set", { version: 1, scope: p.scope, key: p.key, value: p.value });
-    setPending([]);
+    for (const p of pending) {
+      void invoke("config/set", { version: 1, scope: p.scope, key: p.key, value: p.value }).then((raw) => {
+        const failed = raw === null || (typeof raw === "object" && "ok" in raw && raw.ok === false);
+
+        if (failed) return;
+
+        setPending((prev) => prev.filter((q) => q.key !== p.key));
+        setEdits((prev) => {
+          if (prev[p.key] === undefined) return prev;
+
+          const next = { ...prev };
+          delete next[p.key];
+
+          return next;
+        });
+      });
+    }
   };
 
   return (
@@ -103,16 +185,17 @@ export function SettingsView(): JSX.Element {
       </section>
       {groups.map(([group, keys]) => (
         <section key={group} id={`settings-${group}`} aria-label={`${group} settings`} className="scroll-mt-24 rounded-xl border border-border bg-card px-4 py-3">
-          <h2 className="text-base font-medium">{group} · {keys.length}{keys.length > 200 ? " (showing first 200)" : ""}</h2>
+          <h2 className="text-base font-medium">{group} · {keys.length}{keys.length > 500 ? ` (showing first 500 — refine search to reach the rest)` : ""}</h2>
           <div className="mt-2 flex flex-col gap-2">
-            {keys.slice(0, 200).map((k) => (
+            {keys.slice(0, 500).map((k) => (
               <div key={k.key} className="flex min-w-0 flex-wrap items-center gap-2">
                 <Badge variant="secondary">{k.type}</Badge>
                 <Badge variant="outline">{k.scope}</Badge>
                 <ConfigField def={{ key: k.key, value: edits[k.key] ?? k.defaultRaw, unit: k.unit, range: k.range, receipt: k.receipt, liveSafe: k.liveSafe }} />
                 <Input aria-label={`Edit ${k.key}`} placeholder="new value" value={edits[k.key] ?? ""} onChange={(e) => setEdits((prev) => ({ ...prev, [k.key]: e.target.value }))} className="h-8 min-w-0 flex-1" />
                 <Button size="sm" variant="outline" onClick={() => commit(k.key, k.scope, k.liveSafe)}>Set</Button>
-                <Button size="sm" variant="ghost" onClick={() => { void invoke("config/reset", { version: 1, scope: k.scope, key: k.key }); }}>Reset</Button>
+                <Button size="sm" variant="ghost" onClick={() => resetRow(k.key, k.scope)}>Reset</Button>
+                {errors[k.key] ? <p role="alert" className="w-full text-xs text-destructive">{errors[k.key]}</p> : null}
               </div>
             ))}
           </div>

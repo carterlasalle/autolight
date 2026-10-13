@@ -272,6 +272,10 @@ describe("composite-flx4 provider (T-LIVE-07)", () => {
       "/music/set/opener.mp3",
       "/music/set/closer.FLAC",
     ]);
+    // Prefix lookalikes stay out; matching is case-insensitive.
+    expect(matchLibraryAudio(["/music-other/stray.mp3", "/MUSIC/set/opener.mp3"], ["/music"])).toEqual([
+      "/MUSIC/set/opener.mp3",
+    ]);
   });
 
   it("maps grid beats and tempo", () => {
@@ -328,5 +332,61 @@ describe("composite-flx4 provider (T-LIVE-07)", () => {
     provider.tick(now);
     expect(provider.getDecks().find((d) => d.deckId === 1)?.playheadSeconds).toBeCloseTo(12.5, 6);
     expect(compositeFuseAxPlayhead({ anchorPosSeconds: 3, anchorAtNs: now, axPlayheadSeconds: Number.NaN, atNs: now }).fused).toBe(false);
+    // A stale sample cannot drag the playhead backwards while playing.
+    expect(compositeFuseAxPlayhead({ anchorPosSeconds: 12.5, anchorAtNs: now, axPlayheadSeconds: 3, atNs: now + 1_000_000n, playing: true }).fused).toBe(false);
+    expect(compositeFuseAxPlayhead({ anchorPosSeconds: 12.5, anchorAtNs: now, axPlayheadSeconds: 13, atNs: now + 1_000_000n, playing: true }).fused).toBe(true);
+  });
+
+  it("shares the link-tempo freshness window between value and label", () => {
+    let now = 7_000_000_000_000n;
+    let link: { bpm: number; beat: number; atNs: bigint } | null = null;
+
+    const provider = new CompositeProvider({
+      now: () => now,
+      resolveTrack: () => resolution("rb:link", false),
+      listOpenFiles: () => ["/music/link.mp3"],
+      libraryRoots: ["/music"],
+      linkTempo: () => link,
+    });
+
+    provider.ingestControllerEvent({ deck: 1, control: "load", value: 1, pad: null, atNs: now });
+    now += 5_000_000n;
+    provider.pollOpenFiles(now);
+    now += 5_000_000n;
+    provider.ingestControllerEvent({ deck: 1, control: "play", value: 1, pad: null, atNs: now });
+    // Fresh link tempo drives both the value and the derived label.
+    link = { bpm: 130, beat: 1, atNs: now };
+    provider.tick(now);
+    const fresh = provider.getDecks().find((d) => d.deckId === 1);
+    expect(fresh?.effectiveBpm).toBe(130);
+    expect(fresh?.quality.effectiveBpm).toBe("derived");
+    // A future sample (clock skew) is ignored; a stale one is ignored too.
+    link = { bpm: 140, beat: 1, atNs: now + 5_000_000_000n };
+    provider.tick(now);
+    expect(provider.getDecks().find((d) => d.deckId === 1)?.effectiveBpm).not.toBe(140);
+    link = { bpm: 140, beat: 1, atNs: now - 3_000_000_000n };
+    provider.tick(now);
+    const stale = provider.getDecks().find((d) => d.deckId === 1);
+    expect(stale?.effectiveBpm).not.toBe(140);
+    expect(stale?.quality.effectiveBpm).toBe("estimated");
+  });
+
+  it("attributes simultaneous LOAD presses in press order", () => {
+    let now = 8_000_000_000_000n;
+
+    const provider = new CompositeProvider({
+      now: () => now,
+      resolveTrack: (_deck, query) => resolution(`rb:${query.path?.split("/").pop()}`, false),
+      listOpenFiles: () => ["/music/a.mp3", "/music/b.mp3"],
+      libraryRoots: ["/music"],
+    });
+
+    // Deck 2 presses first but deck 1 is polled first: press order wins.
+    provider.ingestControllerEvent({ deck: 1, control: "load", value: 1, pad: null, atNs: now + 2_000_000n });
+    provider.ingestControllerEvent({ deck: 2, control: "load", value: 1, pad: null, atNs: now + 1_000_000n });
+    now += 5_000_000n;
+    provider.pollOpenFiles(now);
+    expect(provider.getDecks().find((d) => d.deckId === 2)?.track?.id).toBe("rb:a.mp3");
+    expect(provider.getDecks().find((d) => d.deckId === 1)?.track?.id).toBe("rb:b.mp3");
   });
 });

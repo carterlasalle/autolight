@@ -12,7 +12,7 @@ describe("T-PLAN-12 scoring hook (P-113)", () => {
     clearEvaluators();
     registerEvaluator("loud", (c) => c.meanIntensity);
     const cs = [0, 1, 2].map((i) => ({ index: i, cues: 4, meanIntensity: 0.2 + i * 0.3, darkness: 0.2, density: 0.5, variant: i, seed: "s" + i }));
-    expect(scoreCandidate(cs[2]!)).toBeGreaterThan(scoreCandidate(cs[0]!));
+    expect(scoreCandidate(cs[2]!).score).toBeGreaterThan(scoreCandidate(cs[0]!).score);
     expect(pickCandidate(cs, "scored").winner).toBe(2);
     expect(pickCandidate(cs, "scored").winner).toBe(2);
   });

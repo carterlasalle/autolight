@@ -66,7 +66,7 @@ export const KEYS: readonly KeyDef[] = [
   { key: "render.tickBudgetMs", type: "number", defaultRaw: "4", unit: "ms per tick (2,000 cells, two decks)", range: "1 to 16", receipt: "unmeasured target", liveSafe: false, scope: "style" },
   { key: "planner.version", type: "string", defaultRaw: "read-only", unit: "string", range: "", receipt: "code", liveSafe: false, scope: "style" },
   { key: "planner.mode", type: "string", defaultRaw: "rules-with-veto", unit: "enum DS-19", range: "", receipt: "spec 113 (combined mode)", liveSafe: false, scope: "style" },
-  { key: "planner.sectionEnergy", type: "json", defaultRaw: "{intro:.3, verse:.45, prechorus:.6, build:.8, drop:1, chorus:.9, breakdown:.25, bridge:.5, instrumental:.6, solo:.7, outro:.3, transition:.5, unknown:.5}", unit: "map", range: "", receipt: "was `SECTION_ENERGY` (`show-planner/src/index.ts:65-69`)", liveSafe: true, scope: "style" },
+  { key: "planner.sectionEnergy", type: "json", defaultRaw: "{\"intro\":0.3,\"verse\":0.45,\"prechorus\":0.6,\"build\":0.8,\"drop\":1,\"chorus\":0.9,\"breakdown\":0.25,\"bridge\":0.5,\"instrumental\":0.6,\"solo\":0.7,\"outro\":0.3,\"transition\":0.5,\"unknown\":0.5}", unit: "map", range: "", receipt: "was `SECTION_ENERGY` (`show-planner/src/index.ts:65-69`)", liveSafe: true, scope: "style" },
   { key: "planner.drop.minConfidence", type: "number", defaultRaw: "0.5", unit: "ratio", range: "", receipt: "unmeasured", liveSafe: true, scope: "style" },
   { key: "planner.drop.stages", type: "json", defaultRaw: "[8,8,8,4,4]", unit: "beats list", range: "", receipt: "spec 36 example", liveSafe: true, scope: "style" },
   { key: "planner.drop.preDarknessBeats", type: "number", defaultRaw: "1", unit: "beats", range: "", receipt: "spec 35, 36", liveSafe: true, scope: "style" },
@@ -83,12 +83,12 @@ export const KEYS: readonly KeyDef[] = [
   { key: "planner.candidates.perSection", type: "number", defaultRaw: "4", unit: "count", range: "", receipt: "DS-19", liveSafe: true, scope: "style" },
   { key: "planner.chase.basePeriodBeats", type: "number", defaultRaw: "8", unit: "beats", range: "", receipt: "was hardcoded", liveSafe: true, scope: "style" },
   { key: "planner.palette.minDistance", type: "number", defaultRaw: "0.12", unit: "OKLab distance", range: "", receipt: "unmeasured", liveSafe: true, scope: "style" },
-  { key: "planner.events.minConfidence", type: "string", defaultRaw: "per event type map, 0.5 default", unit: "ratio", range: "", receipt: "unmeasured", liveSafe: true, scope: "style" },
-  { key: "planner.evaluation.bounds", type: "string", defaultRaw: "map of the ten spec 115 diagnostics to allowed ranges", unit: "map", range: "", receipt: "unmeasured", liveSafe: true, scope: "style" },
+  { key: "planner.events.minConfidence", type: "json", defaultRaw: "{}", unit: "map of event type to ratio, empty means 0.5 default", range: "", receipt: "unmeasured", liveSafe: true, scope: "style" },
+  { key: "planner.evaluation.bounds", type: "json", defaultRaw: "{\"activeDensity\":[0,1],\"darknessPct\":[0,1],\"colourChangeRate\":[0,2],\"whiteHits\":[0,12],\"blackouts\":[0,12],\"strobeBeats\":[0,32],\"patternRecurrence\":[0,1],\"spatialEntropy\":[0,3],\"sectionContrast\":[0,1],\"intensityArc\":[0,1]}", unit: "map of the ten spec 115 diagnostics to allowed ranges", range: "", receipt: "unmeasured", liveSafe: true, scope: "style" },
   { key: "planner.compile.budgetMs", type: "number", defaultRaw: "2000", unit: "ms p95", range: "", receipt: "unmeasured target", liveSafe: false, scope: "style" },
   { key: "planner.validation.rejectOn", type: "json", defaultRaw: "[\"exclusive-overlap\",\"negative-duration\",\"out-of-range\",\"unsupported-capability\"]", unit: "list", range: "", receipt: "spec 114", liveSafe: false, scope: "style" },
   { key: "audio.capture.host", type: "string", defaultRaw: "audio-window", unit: "enum DS-14", range: "", receipt: "owner", liveSafe: false, scope: "app" },
-  { key: "audio.capture.deviceId", type: "string", defaultRaw: "\"\" (none)", unit: "string", range: "", receipt: "user", liveSafe: true, scope: "app" },
+  { key: "audio.capture.deviceId", type: "string", defaultRaw: "\"\"", unit: "string, empty means none", range: "", receipt: "user", liveSafe: true, scope: "app" },
   { key: "audio.fftSize", type: "number", defaultRaw: "2048", unit: "samples", range: "", receipt: "unmeasured", liveSafe: false, scope: "app" },
   { key: "audio.melBands", type: "number", defaultRaw: "24", unit: "count", range: "", receipt: "unmeasured", liveSafe: false, scope: "app" },
   { key: "audio.agc.rise", type: "number", defaultRaw: "0.3", unit: "ratio", range: "", receipt: "was hardcoded (`reactive-audio/src/index.ts:11`)", liveSafe: true, scope: "app" },
@@ -104,13 +104,13 @@ export const KEYS: readonly KeyDef[] = [
   { key: "analysis.device", type: "string", defaultRaw: "auto", unit: "enum auto, cpu, cuda", range: "", receipt: "spec 16", liveSafe: false, scope: "app" },
   { key: "analysis.ml.enabled", type: "boolean", defaultRaw: "true", unit: "bool", range: "", receipt: "spec 16", liveSafe: false, scope: "app" },
   { key: "analysis.ml.modelCacheDir", type: "string", defaultRaw: "<userData>/models", unit: "path", range: "", receipt: "T-ANA-05", liveSafe: false, scope: "app" },
-  { key: "analysis.ml.offlineOnly", type: "string", defaultRaw: "true during Live", unit: "bool", range: "", receipt: "spec 110", liveSafe: false, scope: "app" },
+  { key: "analysis.ml.offlineOnly", type: "boolean", defaultRaw: "true", unit: "bool, true during Live", range: "", receipt: "spec 110", liveSafe: false, scope: "app" },
   { key: "analysis.stems.mode", type: "string", defaultRaw: "fusion", unit: "enum DS-10", range: "", receipt: "owner", liveSafe: false, scope: "app" },
   { key: "analysis.structure.mode", type: "string", defaultRaw: "fused", unit: "enum DS-11", range: "", receipt: "spec 19", liveSafe: false, scope: "app" },
   { key: "analysis.metrical.mode", type: "string", defaultRaw: "both", unit: "enum DS-12", range: "", receipt: "spec 17", liveSafe: false, scope: "app" },
   { key: "analysis.frame.hop", type: "number", defaultRaw: "512", unit: "samples", range: "", receipt: "unmeasured (was 1024)", liveSafe: false, scope: "app" },
   { key: "analysis.frame.size", type: "number", defaultRaw: "2048", unit: "samples", range: "", receipt: "was hardcoded", liveSafe: false, scope: "app" },
-  { key: "analysis.bands", type: "json", defaultRaw: "{bass:[20,150], lowMid:[150,500], mid:[500,2000], high:[2000,20000]}", unit: "Hz", range: "", receipt: "was hardcoded (`stems.py:51-59`)", liveSafe: false, scope: "app" },
+  { key: "analysis.bands", type: "json", defaultRaw: "{\"bass\":[20,150],\"lowMid\":[150,500],\"mid\":[500,2000],\"high\":[2000,20000]}", unit: "Hz", range: "", receipt: "was hardcoded (`stems.py:51-59`)", liveSafe: false, scope: "app" },
   { key: "analysis.build.windows", type: "json", defaultRaw: "[8,16,32]", unit: "beats", range: "", receipt: "spec 23", liveSafe: false, scope: "app" },
   { key: "analysis.build.minStrength", type: "number", defaultRaw: "0.05", unit: "ratio", range: "", receipt: "was hardcoded (`structure.py:58`)", liveSafe: false, scope: "app" },
   { key: "analysis.build.minConfidence", type: "number", defaultRaw: "0.5", unit: "ratio", range: "", receipt: "was hardcoded (`structure.py:59`)", liveSafe: false, scope: "app" },
@@ -129,7 +129,7 @@ export const KEYS: readonly KeyDef[] = [
   { key: "govee.lan.ports.scan", type: "number", defaultRaw: "4001", unit: "port", range: "", receipt: "Govee WLAN guide", liveSafe: false, scope: "app" },
   { key: "govee.lan.ports.reply", type: "number", defaultRaw: "4002", unit: "port", range: "", receipt: "Govee WLAN guide", liveSafe: false, scope: "app" },
   { key: "govee.lan.ports.control", type: "number", defaultRaw: "4003", unit: "port", range: "", receipt: "Govee WLAN guide", liveSafe: false, scope: "app" },
-  { key: "govee.lan.interfaces", type: "json", defaultRaw: "[] (all eligible)", unit: "list of interface names", range: "", receipt: "spec 111", liveSafe: false, scope: "app" },
+  { key: "govee.lan.interfaces", type: "json", defaultRaw: "[]", unit: "list of interface names", range: "", receipt: "spec 111", liveSafe: false, scope: "app" },
   { key: "govee.lan.discovery.multicast", type: "boolean", defaultRaw: "true", unit: "bool", range: "", receipt: "govee2mqtt `lan_api.rs`", liveSafe: false, scope: "app" },
   { key: "govee.lan.discovery.perInterfaceBroadcast", type: "boolean", defaultRaw: "true", unit: "bool", range: "", receipt: "govee2mqtt", liveSafe: false, scope: "app" },
   { key: "govee.lan.discovery.globalBroadcast", type: "boolean", defaultRaw: "true", unit: "bool", range: "", receipt: "govee2mqtt", liveSafe: false, scope: "app" },
@@ -142,7 +142,7 @@ export const KEYS: readonly KeyDef[] = [
   { key: "govee.lan.arm.settleMsDefault", type: "number", defaultRaw: "50", unit: "ms", range: "", receipt: "toolkit measurements default", liveSafe: false, scope: "app" },
   { key: "govee.lan.stream.fallbackHz", type: "number", defaultRaw: "10", unit: "Hz", range: "", receipt: "toolkit `FALLBACK_HZ`", liveSafe: false, scope: "app" },
   { key: "govee.lan.stream.targetHz", type: "number", defaultRaw: "60", unit: "Hz", range: "", receipt: "spec 117 logical rate; per device capped by qualification", liveSafe: false, scope: "app" },
-  { key: "govee.lan.stream.keepaliveMs", type: "string", defaultRaw: "0 (off)", unit: "ms", range: "", receipt: "only if qualification shows the unit drops an idle stream", liveSafe: false, scope: "app" },
+  { key: "govee.lan.stream.keepaliveMs", type: "number", defaultRaw: "0", unit: "ms, 0 means off", range: "", receipt: "only if qualification shows the unit drops an idle stream", liveSafe: false, scope: "app" },
   { key: "govee.lan.stream.maxRearmAttempts", type: "number", defaultRaw: "3", unit: "count", range: "", receipt: "unmeasured (spec 147 \"do not spam\")", liveSafe: true, scope: "app" },
   { key: "govee.lan.stream.rearmWindowMs", type: "number", defaultRaw: "60000", unit: "ms", range: "", receipt: "unmeasured", liveSafe: true, scope: "app" },
   { key: "govee.lan.command.minSpacingMs", type: "number", defaultRaw: "40", unit: "ms", range: "", receipt: "unmeasured (toolkit: third back-to-back command dropped)", liveSafe: false, scope: "app" },
@@ -156,7 +156,7 @@ export const KEYS: readonly KeyDef[] = [
   { key: "govee.ble.writeBudgetHzDefault", type: "number", defaultRaw: "100", unit: "Hz", range: "", receipt: "toolkit `devices/H61A0.yaml:273` (one unit)", liveSafe: false, scope: "app" },
   { key: "govee.ble.writeDrainMsDefault", type: "number", defaultRaw: "300", unit: "ms", range: "", receipt: "unmeasured (toolkit says measure per unit)", liveSafe: false, scope: "app" },
   { key: "govee.ble.scanTimeoutMs", type: "number", defaultRaw: "10000", unit: "ms", range: "", receipt: "unmeasured", liveSafe: true, scope: "app" },
-  { key: "govee.ble.colorQuantizeLevels", type: "string", defaultRaw: "0 (off)", unit: "levels per channel", range: "", receipt: "unmeasured", liveSafe: true, scope: "app" },
+  { key: "govee.ble.colorQuantizeLevels", type: "number", defaultRaw: "0", unit: "levels per channel, 0 means off", range: "", receipt: "unmeasured", liveSafe: true, scope: "app" },
   { key: "govee.ble.hostColorChannel", type: "boolean", defaultRaw: "true", unit: "bool", range: "", receipt: "toolkit ble.md section 8", liveSafe: true, scope: "app" },
   { key: "govee.matter.enabled", type: "boolean", defaultRaw: "false", unit: "bool", range: "", receipt: "owner decision per device", liveSafe: false, scope: "app" },
   { key: "govee.matter.commandRateHz", type: "number", defaultRaw: "10", unit: "Hz", range: "", receipt: "unmeasured", liveSafe: true, scope: "app" },
@@ -192,7 +192,7 @@ export const KEYS: readonly KeyDef[] = [
   { key: "live.fusion.switchHoldMs", type: "number", defaultRaw: "500", unit: "ms", range: "", receipt: "unmeasured", liveSafe: true, scope: "app" },
   { key: "live.rkbx.playingEpsilonMs", type: "number", defaultRaw: "5", unit: "ms", range: "", receipt: "unmeasured", liveSafe: true, scope: "app" },
   { key: "live.rkbx.pauseHoldMs", type: "number", defaultRaw: "150", unit: "ms", range: "", receipt: "unmeasured", liveSafe: true, scope: "app" },
-  { key: "live.prolink.interfaces", type: "json", defaultRaw: "[] (all eligible)", unit: "list", range: "", receipt: "spec 111", liveSafe: false, scope: "app" },
+  { key: "live.prolink.interfaces", type: "json", defaultRaw: "[]", unit: "list", range: "", receipt: "spec 111", liveSafe: false, scope: "app" },
   { key: "live.ax.cpuBudgetPercent", type: "number", defaultRaw: "3", unit: "percent", range: "", receipt: "unmeasured", liveSafe: true, scope: "app" },
   { key: "live.composite.openFilePollMs", type: "number", defaultRaw: "500", unit: "ms", range: "", receipt: "unmeasured", liveSafe: true, scope: "app" },
   { key: "live.composite.correlationWindowMs", type: "number", defaultRaw: "4000", unit: "ms", range: "", receipt: "unmeasured", liveSafe: true, scope: "app" },
@@ -204,7 +204,7 @@ export const KEYS: readonly KeyDef[] = [
   { key: "flx4.tempoRange", type: "string", defaultRaw: "source", unit: "enum source, 6, 10, 16, wide", range: "", receipt: "Rekordbox tempo range setting", liveSafe: true, scope: "app" },
   { key: "flx4.hotplugPollMs", type: "number", defaultRaw: "2000", unit: "ms", range: "", receipt: "unmeasured", liveSafe: true, scope: "app" },
   { key: "flx4.hints.filterWindowMs", type: "number", defaultRaw: "1500", unit: "ms", range: "", receipt: "unmeasured", liveSafe: true, scope: "app" },
-  { key: "flx4.hints.enabled", type: "string", defaultRaw: "all hint types", unit: "list", range: "", receipt: "spec 11", liveSafe: true, scope: "app" },
+  { key: "flx4.hints.enabled", type: "json", defaultRaw: "[\"fader-rise\",\"filter-sweep\",\"transport\",\"loop-change\",\"roll\",\"eq-kill\"]", unit: "list of hint types, all on", range: "", receipt: "spec 11", liveSafe: true, scope: "app" },
   { key: "serato.remote.enabled", type: "boolean", defaultRaw: "true", unit: "bool", range: "", receipt: "spec 3.1", liveSafe: false, scope: "app" },
   { key: "serato.master.inferHoldMs", type: "number", defaultRaw: "750", unit: "ms", range: "", receipt: "unmeasured", liveSafe: true, scope: "app" },
   { key: "library.rekordbox.reader", type: "string", defaultRaw: "auto", unit: "enum DS-15", range: "", receipt: "owner", liveSafe: false, scope: "app" },
@@ -245,14 +245,14 @@ export const KEYS: readonly KeyDef[] = [
   { key: "diagnostics.recorder.maxMb", type: "number", defaultRaw: "512", unit: "MB", range: "", receipt: "unmeasured", liveSafe: false, scope: "app" },
   { key: "security.cloudAllowed", type: "boolean", defaultRaw: "false", unit: "bool", range: "", receipt: "spec 110", liveSafe: false, scope: "app" },
   { key: "update.checkOnLaunch", type: "boolean", defaultRaw: "false", unit: "bool", range: "", receipt: "spec 145", liveSafe: false, scope: "app" },
-  { key: "update.neverDuringLive", type: "string", defaultRaw: "read-only invariant", unit: "", range: "", receipt: "spec 145", liveSafe: false, scope: "app" },
+  { key: "update.neverDuringLive", type: "boolean", defaultRaw: "true", unit: "bool read-only invariant", range: "", receipt: "spec 145", liveSafe: false, scope: "app" },
   { key: "ui.shortcuts.*", type: "string", defaultRaw: "B blackout, W white, F freeze, A auto, M manual, Up and Down master, 1 to 9 presets", unit: "map", range: "", receipt: "spec 94", liveSafe: true, scope: "app" },
   { key: "ui.shortcuts.whiteMode", type: "string", defaultRaw: "hold", unit: "enum hold, toggle", range: "", receipt: "owner", liveSafe: true, scope: "app" },
   { key: "ui.live.minTimingFontPx", type: "number", defaultRaw: "48", unit: "px", range: "", receipt: "spec 143", liveSafe: true, scope: "app" },
   { key: "ui.live.minBodyFontPx", type: "number", defaultRaw: "16", unit: "px", range: "", receipt: "spec 143", liveSafe: true, scope: "app" },
   { key: "qa.events.toleranceBeats", type: "number", defaultRaw: "1", unit: "beats", range: "", receipt: "unmeasured target", liveSafe: false, scope: "app" },
-  { key: "qa.events.minRecall", type: "string", defaultRaw: "per event type map, 0.8 default", unit: "ratio", range: "", receipt: "unmeasured target", liveSafe: false, scope: "app" },
-  { key: "qa.events.minPrecision", type: "string", defaultRaw: "per event type map, 0.7 default", unit: "ratio", range: "", receipt: "unmeasured target", liveSafe: false, scope: "app" },
+  { key: "qa.events.minRecall", type: "json", defaultRaw: "{\"default\":0.8}", unit: "map, 0.8 default", range: "", receipt: "unmeasured target", liveSafe: false, scope: "app" },
+  { key: "qa.events.minPrecision", type: "json", defaultRaw: "{\"default\":0.7}", unit: "map, 0.7 default", range: "", receipt: "unmeasured target", liveSafe: false, scope: "app" },
   { key: "qa.key.minAccuracy", type: "number", defaultRaw: "0.7", unit: "ratio", range: "", receipt: "unmeasured target", liveSafe: false, scope: "app" },
   { key: "qa.replay.timeToleranceMs", type: "number", defaultRaw: "5", unit: "ms", range: "", receipt: "unmeasured target", liveSafe: false, scope: "app" },
   { key: "qa.faults.*", type: "string", defaultRaw: "scenario parameter maps", unit: "map", range: "", receipt: "spec 104 to 107", liveSafe: false, scope: "app" },
@@ -267,23 +267,49 @@ export type ConfigKey = (typeof KEYS)[number]["key"];
 
 const byKey = new Map(KEYS.map((k) => [k.key, k]));
 
+// Dynamic key families (per-device / per-shortcut / per-scenario maps)
+// resolve through their listed template rows in KEYS.
+const DEVICE_RE = /^govee\.device\.[^.]+\.(transportMode|transportOrder)$/;
+
+const SHORTCUT_RE = /^ui\.shortcuts\.[a-zA-Z0-9_-]+$/;
+
+const FAULT_RE = /^qa\.faults\.[a-zA-Z0-9_-]+$/;
+
+function templateFor(key: string): KeyDef | undefined {
+  if (DEVICE_RE.test(key)) return byKey.get(key.replace(/^govee\.device\.[^.]+\./, "govee.device.<fixtureId>."));
+
+  if (SHORTCUT_RE.test(key)) return byKey.get("ui.shortcuts.*");
+
+  if (FAULT_RE.test(key)) return byKey.get("qa.faults.*");
+
+  return undefined;
+}
+
 export function defineKey(key: string): KeyDef {
-  const def = byKey.get(key);
+  const def = byKey.get(key) ?? templateFor(key);
+
   if (!def) throw new Error(`unknown-config-key: ${key}`);
+
   return def;
 }
 
 export function defaultFor(key: string): unknown {
   const def = defineKey(key);
+
   if (def.type === "boolean") return def.defaultRaw === "true";
+
   if (def.type === "number") return Number(def.defaultRaw);
+
   if (def.type === "json") { try { return JSON.parse(def.defaultRaw); } catch { return def.defaultRaw; } }
+
   return def.defaultRaw;
 }
 
 export function defaultsObject(): Record<string, unknown> {
   const out: Record<string, unknown> = {};
+
   for (const k of KEYS) out[k.key] = defaultFor(k.key);
+
   return out;
 }
 

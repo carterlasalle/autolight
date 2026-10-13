@@ -58,12 +58,19 @@ export class ConfigService implements Service {
   readonly name = "config-service";
   private readonly tracker = new ServiceTracker("config-service");
   private store: PersistentConfigStore | null = null;
+  // Last 500 changes: a long desktop session plus the shared store (also
+  // mutated by show-service) would otherwise grow this without bound.
   private history: ConfigChange[] = [];
+  private storeUnsubscribe: (() => void) | null = null;
   private readonly listeners = new Set<(change: ConfigChange) => void>();
   private readonly opts: ConfigServiceOptions;
 
   constructor(opts: ConfigServiceOptions = {}) {
     this.opts = opts;
+  }
+
+  sameOptions(other: ConfigServiceOptions): boolean {
+    return this.opts.filePath === other.filePath && this.opts.userDataDir === other.userDataDir && this.opts.store === other.store;
   }
 
   // Electron owns userData; the dynamic import keeps this service importable
@@ -81,7 +88,9 @@ export class ConfigService implements Service {
   }
 
   private subscribeStore(): void {
-    this.store?.subscribe((change) => {
+    this.storeUnsubscribe?.();
+    this.storeUnsubscribe = this.store?.subscribe((change) => {
+      if (this.history.length >= 500) this.history.shift();
       this.history.push(change);
       this.tracker.count("changes");
 
@@ -132,6 +141,8 @@ export class ConfigService implements Service {
       this.store?.save();
     } catch { /* teardown never throws */ }
 
+    this.storeUnsubscribe?.();
+    this.storeUnsubscribe = null;
     this.store = null;
     this.tracker.set("stopped");
 
@@ -190,14 +201,17 @@ export class ConfigService implements Service {
     }
 
     let value: unknown;
+    let layer: Scope | "default";
 
     try {
-      value = this.requireStore().get(key);
+      const store = this.requireStore();
+      value = store.get(key);
+      layer = store.layerOf(key);
     } catch (err) {
       return { ok: false, error: { code: "E_CONFIG_GET", message: `${key}: ${messageOf(err)}` } };
     }
 
-    return { ok: true, key, value, layer: this.requireStore().layerOf(key), liveSafe: def.liveSafe };
+    return { ok: true, key, value, layer, liveSafe: def.liveSafe };
   }
 
   set(scope: Scope, key: string, value: unknown): ConfigSetReply | ConfigErrorReply {
@@ -220,9 +234,21 @@ export class ConfigService implements Service {
     return { ok: true, key, scope, value, layer: store.layerOf(key) };
   }
 
-  reset(scope: Scope, key: string): { ok: true; key: string; scope: string } {
+  reset(scope: Scope, key: string): { ok: true; key: string; scope: string } | ConfigErrorReply {
+    try {
+      defineKey(key);
+    } catch {
+      return { ok: false, error: { code: "E_UNKNOWN_KEY", message: `${key}: unknown key (fix: remove it or pick a registry key)` } };
+    }
+
     const store = this.requireStore();
-    store.reset(scope, key);
+
+    try {
+      store.reset(scope, key);
+    } catch (err) {
+      return { ok: false, error: { code: "E_CONFIG_RESET", message: `${key}: ${messageOf(err)}` } };
+    }
+
     this.tracker.count("resets");
 
     return { ok: true, key, scope };
@@ -281,6 +307,10 @@ let instance: ConfigService | null = null;
 // Singleton used by the IPC router; starting is idempotent so a handler can
 // ask for the service on every call.
 export async function getConfigService(opts: ConfigServiceOptions = {}): Promise<ConfigService> {
+  if (instance && (opts.filePath !== undefined || opts.userDataDir !== undefined || opts.store !== undefined) && !instance.sameOptions(opts)) {
+    throw new Error("config-service already started with different options (fix: stop it first or reuse the existing store)");
+  }
+
   instance ??= new ConfigService(opts);
   const state = instance.status().state;
 
@@ -290,5 +320,9 @@ export async function getConfigService(opts: ConfigServiceOptions = {}): Promise
 }
 
 export function resetConfigServiceForTest(): void {
+  try {
+    instance?.stop();
+  } catch { /* teardown never throws; nulling must still happen */ }
+
   instance = null;
 }

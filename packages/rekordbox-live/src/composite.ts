@@ -140,6 +140,24 @@ export const COMPOSITE_DEFAULTS = {
   jogSecondsPerUnit: 0.1,
 } as const;
 
+// Link tempo is trusted for effective BPM only while fresh; future samples
+// (clock skew between the Link peer and the local clock) never qualify.
+const LINK_TEMPO_FRESHNESS_MS = 2000;
+
+// Nominal host tick rate reported in provider status (touch runs on
+// ingest/tick, not a fixed clock — not a measured rate).
+const COMPOSITE_NOMINAL_HZ = 60;
+
+function freshLinkTempo(link: CompositeLinkTempo | null, atNs: bigint): CompositeLinkTempo | null {
+  if (!link) return null;
+
+  const ageMs = Number(atNs - link.atNs) / 1e6;
+
+  if (ageMs < 0 || ageMs >= LINK_TEMPO_FRESHNESS_MS) return null;
+
+  return link;
+}
+
 // Pure: keep audio files under the library roots. The host lister returns raw
 // process file paths; this filter is the only policy here.
 export function matchLibraryAudio(
@@ -153,7 +171,12 @@ export function matchLibraryAudio(
 
     if (!AUDIO_EXTENSIONS.some((ext) => lower.endsWith(ext))) continue;
 
-    if (!roots.some((root) => file.startsWith(root))) continue;
+    if (!roots.some((root) => {
+      const norm = root.toLowerCase();
+
+      return lower === norm || lower.startsWith(norm.endsWith("/") ? norm : `${norm}/`);
+    })) continue;
+
     out.push(file);
   }
 
@@ -306,6 +329,7 @@ export function estimateTempoRangePercent(
 interface DeckEstimate {
   resolution: CompositeTrackResolution | null;
   hasTrack: boolean;
+  unresolvedId: string | null;
   playing: boolean;
   anchorPosSeconds: number;
   anchorAtNs: bigint;
@@ -332,6 +356,7 @@ function emptyDeck(): DeckEstimate {
   return {
     resolution: null,
     hasTrack: false,
+    unresolvedId: null,
     playing: false,
     anchorPosSeconds: 0,
     anchorAtNs: 0n,
@@ -359,19 +384,29 @@ function emptyDeck(): DeckEstimate {
 // spec 11): AX elapsed plus the ANLZ grid is authoritative while fresh, so
 // it rebases the anchor directly; otherwise it is ignored and the composite
 // keeps its own estimate. The caller gates on `readable` plus a freshness
-// window; this function only guards null/NaN.
+// window and rejects out-of-order samples (composite-boot `fuseAx` tracks
+// the last accepted atNs); this function guards null/NaN plus backward
+// steps while playing, so a stale AX sample can never move the estimate
+// backwards.
 export function compositeFuseAxPlayhead(input: {
   anchorPosSeconds: number;
   anchorAtNs: bigint;
   axPlayheadSeconds: number | null;
   atNs: bigint;
+  playing?: boolean;
 }): { anchorPosSeconds: number; anchorAtNs: bigint; fused: boolean } {
   if (input.axPlayheadSeconds === null || !Number.isFinite(input.axPlayheadSeconds)) {
     return { anchorPosSeconds: input.anchorPosSeconds, anchorAtNs: input.anchorAtNs, fused: false };
   }
 
+  const next = Math.max(0, input.axPlayheadSeconds);
+
+  if (input.playing === true && next < input.anchorPosSeconds) {
+    return { anchorPosSeconds: input.anchorPosSeconds, anchorAtNs: input.anchorAtNs, fused: false };
+  }
+
   return {
-    anchorPosSeconds: Math.max(0, input.axPlayheadSeconds),
+    anchorPosSeconds: next,
     anchorAtNs: input.atNs,
     fused: true,
   };
@@ -634,6 +669,7 @@ export class CompositeProvider extends ProviderBase {
       anchorAtNs: deck.anchorAtNs,
       axPlayheadSeconds,
       atNs,
+      playing: deck.playing,
     });
 
     if (!fused.fused) return false;
@@ -663,22 +699,28 @@ export class CompositeProvider extends ProviderBase {
 
     const assigned = new Set<string>();
 
-    for (const deck of [1, 2] as const) {
-      const state = this.decks.get(deck);
+    // Attribute in LOAD-press order, not deck order: with simultaneous LOAD
+    // presses the earliest press claims the first new file.
+    const waiting = ([1, 2] as const)
+      .map((deck) => ({ deck, state: this.decks.get(deck) }))
+      .filter((w): w is { deck: 1 | 2; state: DeckEstimate } => w.state !== undefined && w.state.pendingLoadAtNs !== null)
+      .sort((a, b) => Number(a.state.pendingLoadAtNs! - b.state.pendingLoadAtNs!));
 
-      if (!state || state.pendingLoadAtNs === null) continue;
+    for (const { deck, state } of waiting) {
+      const pressedAt = state.pendingLoadAtNs;
       const pick = candidates.find((path) => !assigned.has(path)) ?? null;
       state.pendingLoadAtNs = null;
 
       if (pick === null) {
         state.resolution = null;
         state.hasTrack = true;
+        state.unresolvedId = `unresolved:${deck}:${String(pressedAt ?? at)}`;
         state.anchorPosSeconds = 0;
         state.anchorAtNs = at;
         state.cuePointSeconds = 0;
         state.locked = false;
         state.confidence = 0;
-        this.emit(this.stateFor(deck, at, { id: `unresolved:${deck}:${String(at)}` }));
+        this.emit(this.stateFor(deck, at, { id: state.unresolvedId ?? "unresolved" }));
         continue;
       }
 
@@ -694,6 +736,7 @@ export class CompositeProvider extends ProviderBase {
 
       state.resolution = resolution;
       state.hasTrack = true;
+      state.unresolvedId = null;
       state.anchorPosSeconds = 0;
       state.anchorAtNs = at;
       state.cuePointSeconds = 0;
@@ -845,6 +888,7 @@ export class CompositeProvider extends ProviderBase {
     if (!state) return;
     state.resolution = null;
     state.hasTrack = false;
+    state.unresolvedId = null;
     state.playing = false;
     state.anchorPosSeconds = 0;
     state.anchorAtNs = atNs;
@@ -877,9 +921,9 @@ export class CompositeProvider extends ProviderBase {
     const grid = deck.resolution?.grid;
     const pos = this.positionAt(deck, atNs);
     const gridBpm = grid ? gridBpmAt(grid, pos) : null;
-    const link = this.linkTempo();
+    const link = freshLinkTempo(this.linkTempo(), atNs);
 
-    if (link && Number(atNs - link.atNs) / 1e6 < 2000) return link.bpm;
+    if (link !== null) return link.bpm;
 
     if (gridBpm !== null) return gridBpm * deck.rate;
 
@@ -896,29 +940,33 @@ export class CompositeProvider extends ProviderBase {
     const beatInBar =
       beat === null ? null : (((Math.floor(beat) % 4) + 4) % 4 + 1) as 1 | 2 | 3 | 4;
 
+    const link = freshLinkTempo(this.linkTempo(), atNs);
     const effectiveBpm = this.effectiveBpmFor(fallback, atNs);
 
-    const track =
-      forceTrack !== undefined
-        ? toTrackLike(forceTrack)
-        : fallback.resolution
-          ? {
-              id: fallback.resolution.id,
-              ...(fallback.resolution.canonicalPath
-                ? { canonicalPath: fallback.resolution.canonicalPath }
-                : {}),
-              ...(fallback.resolution.title ? { title: fallback.resolution.title } : {}),
-              ...(fallback.resolution.artist ? { artist: fallback.resolution.artist } : {}),
-            }
-          : fallback.hasTrack
-            ? { id: "unknown" }
-            : null;
+    let track: { id: string; title?: string; artist?: string; canonicalPath?: string } | null;
+
+    if (forceTrack !== undefined) {
+      track = toTrackLike(forceTrack);
+    } else if (fallback.resolution) {
+      track = {
+        id: fallback.resolution.id,
+        ...(fallback.resolution.canonicalPath ? { canonicalPath: fallback.resolution.canonicalPath } : {}),
+        ...(fallback.resolution.title ? { title: fallback.resolution.title } : {}),
+        ...(fallback.resolution.artist ? { artist: fallback.resolution.artist } : {}),
+      };
+    } else if (fallback.unresolvedId) {
+      track = { id: fallback.unresolvedId };
+    } else if (fallback.hasTrack) {
+      track = { id: "unknown" };
+    } else {
+      track = null;
+    }
 
     const quality: Partial<Record<keyof ProviderDeckState, QualityLabel>> = {
       playing: "derived",
       playheadSeconds: fallback.locked ? "derived" : "estimated",
       beat: "derived",
-      effectiveBpm: this.linkTempo() ? "derived" : "estimated",
+      effectiveBpm: link !== null ? "derived" : "estimated",
       pitchPercent: "derived",
       channelFader: "exact",
       crossfader: "exact",
@@ -991,7 +1039,7 @@ export class CompositeProvider extends ProviderBase {
       return;
     }
 
-    const updateHz = this.envelopeRateHz > 0 ? 60 : 0;
+    const updateHz = this.envelopeRateHz > 0 ? COMPOSITE_NOMINAL_HZ : 0;
     this.setStatus({ state: "live", updateHz, ageMs });
   }
 }

@@ -213,7 +213,7 @@ literal not listed here, add it. `R:` is the receipt. `LS` is live-safe
 | --- | --- | --- | --- | --- |
 | `planner.version` | read-only | string | code | N |
 | `planner.mode` | `rules-with-veto` | enum DS-19 | spec 113 (combined mode) | N |
-| `planner.sectionEnergy` | `{intro:.3, verse:.45, prechorus:.6, build:.8, drop:1, chorus:.9, breakdown:.25, bridge:.5, instrumental:.6, solo:.7, outro:.3, transition:.5, unknown:.5}` | map | was `SECTION_ENERGY` (`show-planner/src/index.ts:65-69`) | Y |
+| `planner.sectionEnergy` | `{"intro":0.3,"verse":0.45,"prechorus":0.6,"build":0.8,"drop":1,"chorus":0.9,"breakdown":0.25,"bridge":0.5,"instrumental":0.6,"solo":0.7,"outro":0.3,"transition":0.5,"unknown":0.5}` | map | was `SECTION_ENERGY` (`show-planner/src/index.ts:65-69`) | Y |
 | `planner.drop.minConfidence` | 0.5 | ratio | unmeasured | Y |
 | `planner.drop.stages` | `[8,8,8,4,4]` | beats list | spec 36 example | Y |
 | `planner.drop.preDarknessBeats` | 1 | beats | spec 35, 36 | Y |
@@ -230,8 +230,8 @@ literal not listed here, add it. `R:` is the receipt. `LS` is live-safe
 | `planner.candidates.perSection` | 4 | count | DS-19 | Y |
 | `planner.chase.basePeriodBeats` | 8 | beats | was hardcoded | Y |
 | `planner.palette.minDistance` | 0.12 | OKLab distance | unmeasured | Y |
-| `planner.events.minConfidence` | per event type map, 0.5 default | ratio | unmeasured | Y |
-| `planner.evaluation.bounds` | map of the ten spec 115 diagnostics to allowed ranges | map | unmeasured | Y |
+| `planner.events.minConfidence` | `{}` | map of event type to ratio, empty means 0.5 default | unmeasured | Y |
+| `planner.evaluation.bounds` | `{"activeDensity":[0,1],"darknessPct":[0,1],"colourChangeRate":[0,2],"whiteHits":[0,12],"blackouts":[0,12],"strobeBeats":[0,32],"patternRecurrence":[0,1],"spatialEntropy":[0,3],"sectionContrast":[0,1],"intensityArc":[0,1]}` | map of the ten spec 115 diagnostics to allowed ranges | unmeasured | Y |
 | `planner.compile.budgetMs` | 2000 | ms p95 | unmeasured target | N |
 | `planner.validation.rejectOn` | `["exclusive-overlap","negative-duration","out-of-range","unsupported-capability"]` | list | spec 114 | N |
 
@@ -240,7 +240,7 @@ literal not listed here, add it. `R:` is the receipt. `LS` is live-safe
 | Key | Default | Unit | R | LS |
 | --- | --- | --- | --- | --- |
 | `audio.capture.host` | `audio-window` | enum DS-14 | owner | N |
-| `audio.capture.deviceId` | `""` (none) | string | user | Y |
+| `audio.capture.deviceId` | `""` | string, empty means none | user | Y |
 | `audio.fftSize` | 2048 | samples | unmeasured | N |
 | `audio.melBands` | 24 | count | unmeasured | N |
 | `audio.agc.rise` | 0.3 | ratio | was hardcoded (`reactive-audio/src/index.ts:11`) | Y |
@@ -261,13 +261,13 @@ literal not listed here, add it. `R:` is the receipt. `LS` is live-safe
 | `analysis.device` | `auto` | enum auto, cpu, cuda | spec 16 | N |
 | `analysis.ml.enabled` | true | bool | spec 16 | N |
 | `analysis.ml.modelCacheDir` | `<userData>/models` | path | T-ANA-05 | N |
-| `analysis.ml.offlineOnly` | true during Live | bool | spec 110 | N |
+| `analysis.ml.offlineOnly` | true | bool, true during Live | spec 110 | N |
 | `analysis.stems.mode` | `fusion` | enum DS-10 | owner | N |
 | `analysis.structure.mode` | `fused` | enum DS-11 | spec 19 | N |
 | `analysis.metrical.mode` | `both` | enum DS-12 | spec 17 | N |
 | `analysis.frame.hop` | 512 | samples | unmeasured (was 1024) | N |
 | `analysis.frame.size` | 2048 | samples | was hardcoded | N |
-| `analysis.bands` | `{bass:[20,150], lowMid:[150,500], mid:[500,2000], high:[2000,20000]}` | Hz | was hardcoded (`stems.py:51-59`) | N |
+| `analysis.bands` | `{"bass":[20,150],"lowMid":[150,500],"mid":[500,2000],"high":[2000,20000]}` | Hz | was hardcoded (`stems.py:51-59`) | N |
 | `analysis.build.windows` | `[8,16,32]` | beats | spec 23 | N |
 | `analysis.build.minStrength` | 0.05 | ratio | was hardcoded (`structure.py:58`) | N |
 | `analysis.build.minConfidence` | 0.5 | ratio | was hardcoded (`structure.py:59`) | N |
@@ -291,7 +291,7 @@ literal not listed here, add it. `R:` is the receipt. `LS` is live-safe
 | `govee.lan.ports.scan` | 4001 | port | Govee WLAN guide | N |
 | `govee.lan.ports.reply` | 4002 | port | Govee WLAN guide | N |
 | `govee.lan.ports.control` | 4003 | port | Govee WLAN guide | N |
-| `govee.lan.interfaces` | `[]` (all eligible) | list of interface names | spec 111 | N |
+| `govee.lan.interfaces` | `[]` | list of interface names | spec 111 | N |
 | `govee.lan.discovery.multicast` | true | bool | govee2mqtt `lan_api.rs` | N |
 | `govee.lan.discovery.perInterfaceBroadcast` | true | bool | govee2mqtt | N |
 | `govee.lan.discovery.globalBroadcast` | true | bool | govee2mqtt | N |
@@ -304,7 +304,7 @@ literal not listed here, add it. `R:` is the receipt. `LS` is live-safe
 | `govee.lan.arm.settleMsDefault` | 50 | ms | toolkit measurements default | N |
 | `govee.lan.stream.fallbackHz` | 10 | Hz | toolkit `FALLBACK_HZ` | N |
 | `govee.lan.stream.targetHz` | 60 | Hz | spec 117 logical rate; per device capped by qualification | N |
-| `govee.lan.stream.keepaliveMs` | 0 (off) | ms | only if qualification shows the unit drops an idle stream | N |
+| `govee.lan.stream.keepaliveMs` | 0 | ms, 0 means off | only if qualification shows the unit drops an idle stream | N |
 | `govee.lan.stream.maxRearmAttempts` | 3 | count | unmeasured (spec 147 "do not spam") | Y |
 | `govee.lan.stream.rearmWindowMs` | 60000 | ms | unmeasured | Y |
 | `govee.lan.command.minSpacingMs` | 40 | ms | unmeasured (toolkit: third back-to-back command dropped) | N |
@@ -323,7 +323,7 @@ literal not listed here, add it. `R:` is the receipt. `LS` is live-safe
 | `govee.ble.writeBudgetHzDefault` | 100 | Hz | toolkit `devices/H61A0.yaml:273` (one unit) | N |
 | `govee.ble.writeDrainMsDefault` | 300 | ms | unmeasured (toolkit says measure per unit) | N |
 | `govee.ble.scanTimeoutMs` | 10000 | ms | unmeasured | Y |
-| `govee.ble.colorQuantizeLevels` | 0 (off) | levels per channel | unmeasured | Y |
+| `govee.ble.colorQuantizeLevels` | 0 | levels per channel, 0 means off | unmeasured | Y |
 | `govee.ble.hostColorChannel` | true | bool | toolkit ble.md section 8 | Y |
 | `govee.matter.enabled` | false | bool | owner decision per device | N |
 | `govee.matter.commandRateHz` | 10 | Hz | unmeasured | Y |
@@ -364,7 +364,7 @@ literal not listed here, add it. `R:` is the receipt. `LS` is live-safe
 | `live.fusion.switchHoldMs` | 500 | ms | unmeasured | Y |
 | `live.rkbx.playingEpsilonMs` | 5 | ms | unmeasured | Y |
 | `live.rkbx.pauseHoldMs` | 150 | ms | unmeasured | Y |
-| `live.prolink.interfaces` | `[]` (all eligible) | list | spec 111 | N |
+| `live.prolink.interfaces` | `[]` | list | spec 111 | N |
 | `live.ax.cpuBudgetPercent` | 3 | percent | unmeasured | Y |
 | `live.composite.openFilePollMs` | 500 | ms | unmeasured | Y |
 | `live.composite.correlationWindowMs` | 4000 | ms | unmeasured | Y |
@@ -376,7 +376,7 @@ literal not listed here, add it. `R:` is the receipt. `LS` is live-safe
 | `flx4.tempoRange` | `source` | enum source, 6, 10, 16, wide | Rekordbox tempo range setting | Y |
 | `flx4.hotplugPollMs` | 2000 | ms | unmeasured | Y |
 | `flx4.hints.filterWindowMs` | 1500 | ms | unmeasured | Y |
-| `flx4.hints.enabled` | all hint types | list | spec 11 | Y |
+| `flx4.hints.enabled` | `["fader-rise","filter-sweep","transport","loop-change","roll","eq-kill"]` | list of hint types, all on | spec 11 | Y |
 | `serato.remote.enabled` | true | bool | spec 3.1 | N |
 | `serato.master.inferHoldMs` | 750 | ms | unmeasured | Y |
 | `library.rekordbox.reader` | `auto` | enum DS-15 | owner | N |
@@ -427,7 +427,7 @@ literal not listed here, add it. `R:` is the receipt. `LS` is live-safe
 | `diagnostics.recorder.maxMb` | 512 | MB | unmeasured | N |
 | `security.cloudAllowed` | false | bool | spec 110 | N |
 | `update.checkOnLaunch` | false | bool | spec 145 | N |
-| `update.neverDuringLive` | read-only invariant | | spec 145 | N |
+| `update.neverDuringLive` | true | bool read-only invariant | spec 145 | N |
 | `ui.shortcuts.*` | B blackout, W white, F freeze, A auto, M manual, Up and Down master, 1 to 9 presets | map | spec 94 | Y |
 | `ui.shortcuts.whiteMode` | `hold` | enum hold, toggle | owner | Y |
 | `ui.live.minTimingFontPx` | 48 | px | spec 143 | Y |
@@ -438,8 +438,8 @@ literal not listed here, add it. `R:` is the receipt. `LS` is live-safe
 | Key | Default | Unit | R | LS |
 | --- | --- | --- | --- | --- |
 | `qa.events.toleranceBeats` | 1 | beats | unmeasured target | N |
-| `qa.events.minRecall` | per event type map, 0.8 default | ratio | unmeasured target | N |
-| `qa.events.minPrecision` | per event type map, 0.7 default | ratio | unmeasured target | N |
+| `qa.events.minRecall` | `{"default":0.8}` | map, 0.8 default | unmeasured target | N |
+| `qa.events.minPrecision` | `{"default":0.7}` | map, 0.7 default | unmeasured target | N |
 | `qa.key.minAccuracy` | 0.7 | ratio | unmeasured target | N |
 | `qa.replay.timeToleranceMs` | 5 | ms | unmeasured target | N |
 | `qa.faults.*` | scenario parameter maps | map | spec 104 to 107 | N |

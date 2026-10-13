@@ -63,7 +63,21 @@
   "render.tickBudgetMs": 4,
   "planner.version": "read-only",
   "planner.mode": "rules-with-veto",
-  "planner.sectionEnergy": "{intro:.3, verse:.45, prechorus:.6, build:.8, drop:1, chorus:.9, breakdown:.25, bridge:.5, instrumental:.6, solo:.7, outro:.3, transition:.5, unknown:.5}",
+  "planner.sectionEnergy": {
+    "intro": 0.3,
+    "verse": 0.45,
+    "prechorus": 0.6,
+    "build": 0.8,
+    "drop": 1,
+    "chorus": 0.9,
+    "breakdown": 0.25,
+    "bridge": 0.5,
+    "instrumental": 0.6,
+    "solo": 0.7,
+    "outro": 0.3,
+    "transition": 0.5,
+    "unknown": 0.5
+  },
   "planner.drop.minConfidence": 0.5,
   "planner.drop.stages": [
     8,
@@ -86,8 +100,49 @@
   "planner.candidates.perSection": 4,
   "planner.chase.basePeriodBeats": 8,
   "planner.palette.minDistance": 0.12,
-  "planner.events.minConfidence": "per event type map, 0.5 default",
-  "planner.evaluation.bounds": "map of the ten spec 115 diagnostics to allowed ranges",
+  "planner.events.minConfidence": {},
+  "planner.evaluation.bounds": {
+    "activeDensity": [
+      0,
+      1
+    ],
+    "darknessPct": [
+      0,
+      1
+    ],
+    "colourChangeRate": [
+      0,
+      2
+    ],
+    "whiteHits": [
+      0,
+      12
+    ],
+    "blackouts": [
+      0,
+      12
+    ],
+    "strobeBeats": [
+      0,
+      32
+    ],
+    "patternRecurrence": [
+      0,
+      1
+    ],
+    "spatialEntropy": [
+      0,
+      3
+    ],
+    "sectionContrast": [
+      0,
+      1
+    ],
+    "intensityArc": [
+      0,
+      1
+    ]
+  },
   "planner.compile.budgetMs": 2000,
   "planner.validation.rejectOn": [
     "exclusive-overlap",
@@ -96,7 +151,7 @@
     "unsupported-capability"
   ],
   "audio.capture.host": "audio-window",
-  "audio.capture.deviceId": "\"\" (none)",
+  "audio.capture.deviceId": "",
   "audio.fftSize": 2048,
   "audio.melBands": 24,
   "audio.agc.rise": 0.3,
@@ -115,13 +170,30 @@
   "analysis.device": "auto",
   "analysis.ml.enabled": true,
   "analysis.ml.modelCacheDir": "<userData>/models",
-  "analysis.ml.offlineOnly": "true during Live",
+  "analysis.ml.offlineOnly": true,
   "analysis.stems.mode": "fusion",
   "analysis.structure.mode": "fused",
   "analysis.metrical.mode": "both",
   "analysis.frame.hop": 512,
   "analysis.frame.size": 2048,
-  "analysis.bands": "{bass:[20,150], lowMid:[150,500], mid:[500,2000], high:[2000,20000]}",
+  "analysis.bands": {
+    "bass": [
+      20,
+      150
+    ],
+    "lowMid": [
+      150,
+      500
+    ],
+    "mid": [
+      500,
+      2000
+    ],
+    "high": [
+      2000,
+      20000
+    ]
+  },
   "analysis.build.windows": [
     8,
     16,
@@ -147,7 +219,7 @@
   "govee.lan.ports.scan": 4001,
   "govee.lan.ports.reply": 4002,
   "govee.lan.ports.control": 4003,
-  "govee.lan.interfaces": "[] (all eligible)",
+  "govee.lan.interfaces": [],
   "govee.lan.discovery.multicast": true,
   "govee.lan.discovery.perInterfaceBroadcast": true,
   "govee.lan.discovery.globalBroadcast": true,
@@ -160,7 +232,7 @@
   "govee.lan.arm.settleMsDefault": 50,
   "govee.lan.stream.fallbackHz": 10,
   "govee.lan.stream.targetHz": 60,
-  "govee.lan.stream.keepaliveMs": "0 (off)",
+  "govee.lan.stream.keepaliveMs": 0,
   "govee.lan.stream.maxRearmAttempts": 3,
   "govee.lan.stream.rearmWindowMs": 60000,
   "govee.lan.command.minSpacingMs": 40,
@@ -174,7 +246,7 @@
   "govee.ble.writeBudgetHzDefault": 100,
   "govee.ble.writeDrainMsDefault": 300,
   "govee.ble.scanTimeoutMs": 10000,
-  "govee.ble.colorQuantizeLevels": "0 (off)",
+  "govee.ble.colorQuantizeLevels": 0,
   "govee.ble.hostColorChannel": true,
   "govee.matter.enabled": false,
   "govee.matter.commandRateHz": 10,
@@ -186,14 +258,6 @@
   "govee.failover.policy": "hybrid",
   "govee.failover.lanLossMs": 3000,
   "govee.failover.probeIntervalMs": 10000,
-  "govee.device.<fixtureId>.transportMode": "hybrid",
-  "govee.device.<fixtureId>.transportOrder": [
-    "lan-razer",
-    "ble-segmented",
-    "lan-json",
-    "ble-single",
-    "matter"
-  ],
   "live.provider": "fusion",
   "live.provider.staleMs": 500,
   "live.rkbx.oscBind": "127.0.0.1:4460",
@@ -224,7 +288,7 @@
   "live.fusion.switchHoldMs": 500,
   "live.rkbx.playingEpsilonMs": 5,
   "live.rkbx.pauseHoldMs": 150,
-  "live.prolink.interfaces": "[] (all eligible)",
+  "live.prolink.interfaces": [],
   "live.ax.cpuBudgetPercent": 3,
   "live.composite.openFilePollMs": 500,
   "live.composite.correlationWindowMs": 4000,
@@ -236,7 +300,14 @@
   "flx4.tempoRange": "source",
   "flx4.hotplugPollMs": 2000,
   "flx4.hints.filterWindowMs": 1500,
-  "flx4.hints.enabled": "all hint types",
+  "flx4.hints.enabled": [
+    "fader-rise",
+    "filter-sweep",
+    "transport",
+    "loop-change",
+    "roll",
+    "eq-kill"
+  ],
   "serato.remote.enabled": true,
   "serato.master.inferHoldMs": 750,
   "library.rekordbox.reader": "auto",
@@ -277,17 +348,19 @@
   "diagnostics.recorder.maxMb": 512,
   "security.cloudAllowed": false,
   "update.checkOnLaunch": false,
-  "update.neverDuringLive": "read-only invariant",
-  "ui.shortcuts.*": "B blackout, W white, F freeze, A auto, M manual, Up and Down master, 1 to 9 presets",
+  "update.neverDuringLive": true,
   "ui.shortcuts.whiteMode": "hold",
   "ui.live.minTimingFontPx": 48,
   "ui.live.minBodyFontPx": 16,
   "qa.events.toleranceBeats": 1,
-  "qa.events.minRecall": "per event type map, 0.8 default",
-  "qa.events.minPrecision": "per event type map, 0.7 default",
+  "qa.events.minRecall": {
+    "default": 0.8
+  },
+  "qa.events.minPrecision": {
+    "default": 0.7
+  },
   "qa.key.minAccuracy": 0.7,
   "qa.replay.timeToleranceMs": 5,
-  "qa.faults.*": "scenario parameter maps",
   "qa.perf.ciSlack": 3,
   "qa.soak.maxMemSlopeMbPerHour": 5,
   "qa.soak.maxLatencySlopeMsPerHour": 1,
