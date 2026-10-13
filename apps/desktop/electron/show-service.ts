@@ -7,6 +7,7 @@ import { getProviderManager, startProlinkWatch } from "./services/provider-manag
 import { getLiveShowBridge } from "./services/live-show-bridge.js";
 import { getAnalysisSupervisor } from "./services/analysis-supervisor.js";
 import { scaleChannel } from "@autolight/govee";
+import { audit, auditDropped, auditTail } from "./services/audit-log.js";
 import type { DeckState, Fixture, ShowPlan, TrackModel } from "@autolight/contracts";
 // (electron/services/storage-service.ts), which opens userData/autolight.db
 // with the DS-06 driver policy (§80); the show loop never blocks on it (§108).
@@ -343,6 +344,17 @@ export async function pollAxCommand(): Promise<{ ok: true; readings: unknown[] }
   // follow/ax bypassed this and the two caches drifted.
   const readings = await getProviderManager().pollOnce();
   const svc = getShowService();
+  // Ingress trail, transition-only: log when deck readability flips (track
+  // loaded/unloaded) or a poll fails, not the 250ms steady state.
+  const before = svc.ax.map((r) => r.readable).join(",");
+  const after = readings.map((r) => String(r.readable)).join(",");
+  if (before !== after) {
+    audit("ax.transition", {
+      before,
+      after,
+      elapsed: readings.map((r) => r.elapsedSeconds ?? "null").join(","),
+    });
+  }
   svc.ax = readings.map((r) => ({ beat: null, playing: r.playing, readable: r.readable, elapsedSeconds: r.elapsedSeconds }));
   svc.metrics.djUpdateRateHz = 1;
   svc.metrics.djStateAgeMs = 0;
@@ -386,6 +398,8 @@ export function readDiagnostics(): { ok: true; diagnostics: Record<string, unkno
       followMode: svc.followMode,
       showStyle: svc.showStyle,
       simulatorMode: svc.simulatorMode,
+      auditTail: auditTail(50),
+      auditDropped: auditDropped(),
       // §131: show host tick jitter from the isolated worker thread
       // (intervalP50/P99/max ms, missed ticks/hour). Absent until the
       // supervisor spawns the worker on the first master intent.

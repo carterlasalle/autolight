@@ -10,6 +10,7 @@ import {
 } from "./../show-service.js";
 import { ServiceTracker, type Service, type ServiceStatus } from "./base.js";
 import { getConfigService } from "./config-service.js";
+import { audit } from "./audit-log.js";
 // ipc-router (T-ARC-02, spec 87; moved here from electron/ipc.ts by T-ARC-05):
 // typed channels only, sender checked, request and response validated. Main
 // registers it before the window is created. Errors return typed
@@ -66,6 +67,13 @@ const handlers: { [C in Channel]: ChannelHandler<C> } = {
   "config/import": async (req) => (await getConfigService()).importJson(req.json),
   "config/schema": async (req) => (await getConfigService()).schema(req.key),
 };
+// Payload keys, never blobs: enough to identify the button pressed without
+// flooding the file. Full payloads log on error paths only.
+function summarizeReq(req: ChannelRequest<Channel>): string {
+  const keys = Object.keys(req).filter((k) => k !== "version");
+
+  return keys.length === 0 ? "{}" : `{${keys.join(",")}}`;
+}
 
 export class IpcRouter implements Service {
   readonly name = "ipc-router";
@@ -112,12 +120,22 @@ export class IpcRouter implements Service {
       return false;
     }
   }
+  // Hot poll channels log errors only (250ms cadence would flood the file);
+  // every other channel logs one line per call with its result. This is the
+  // button→response trail: the renderer sends every action through invoke,
+  // so channel + payload + ok/error lands here.
+  private static readonly HOT: ReadonlySet<string> = new Set(["follow/ax", "show/live", "show/state"]);
 
   private async dispatch(name: Channel, event: IpcEventLike, payload: unknown): Promise<unknown> {
+    const t0 = Date.now();
+
     if (!this.senderAllowed(event)) {
       this.tracker.count("denied");
+      audit("ipc.denied", { channel: name });
+
       return { ok: false, error: { code: "E_SENDER", message: `sender not allowed for ${name}` } };
     }
+
     try {
       const req = channels[name].request.parse(payload);
       // The handler table is invariant in its channel parameter; the request
@@ -125,11 +143,23 @@ export class IpcRouter implements Service {
       const runHandler = handlers[name] as (r: unknown) => Promise<unknown> | unknown;
       const res = await runHandler(req);
       const responseSchema: { parse: (value: unknown) => unknown } = channels[name].response;
+      const out = responseSchema.parse(res);
       this.tracker.count("handled");
-      return responseSchema.parse(res);
+      const ms = Date.now() - t0;
+      const ok = (out as { ok?: boolean }).ok !== false;
+
+      if (IpcRouter.HOT.has(name)) {
+        if (!ok) audit("ipc.error", { channel: name, ms, error: JSON.stringify(out).slice(0, 500) });
+      } else {
+        audit("ipc", { channel: name, ms, ok, req: summarizeReq(req) });
+      }
+
+      return out;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.tracker.count("errors");
+      audit("ipc.error", { channel: name, ms: Date.now() - t0, error: message.slice(0, 500) });
+
       return { ok: false, error: { code: "E_HANDLER", message: `${name}: ${message}` } };
     }
   }

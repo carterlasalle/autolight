@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { trackModelSchema, showStyleSchema, type DeckState, type Fixture, type ShowPlan, type TrackModel } from "@autolight/contracts";
 import { planShow } from "@autolight/show-planner";
 import { BUILT_IN_STYLES } from "@autolight/show-planner";
+import { audit } from "./audit-log.js";
 
 // Live show bridge (T-LIVE-02/T-RBL-07/T-RUN-08): turns AX deck readings
 // into resolved decks the renderer can display.
@@ -128,11 +129,29 @@ export class LiveShowBridge {
       nativeDir = dirs.find((dir) => !claimed.has(dir)) ?? dirs[0] ?? null;
     }
 
-    if (!nativeDir || !this.analyze) return null;
+    // Egress trail, first-sight only: cached coasts stay silent. Each line
+    // says where deck data went: no ANLZ match, no analyzer, analysis
+    // failed, or resolved with beat count.
+    if (!nativeDir) {
+      audit("bridge.miss", { deck: deckId, reason: "no-anlz-match" });
+
+      return null;
+    }
+
+    if (!this.analyze) {
+      audit("bridge.miss", { deck: deckId, reason: "no-analyzer" });
+
+      return null;
+    }
+
     const trackId = `live-deck${deckId}`;
     const artifactPath = await this.analyze("", nativeDir, trackId);
 
-    if (!artifactPath) return null;
+    if (!artifactPath) {
+      audit("bridge.miss", { deck: deckId, reason: "analysis-failed" });
+
+      return null;
+    }
 
     try {
       const raw = JSON.parse(readFileSync(artifactPath, "utf8")) as unknown;
@@ -149,6 +168,7 @@ export class LiveShowBridge {
 
       const deck: BridgeDeck = { state, track, plan };
       this.decks.set(deckId, deck);
+      audit("bridge.resolved", { deck: deckId, beats: track.beatGrid.beats.length, cues: plan.cues.length });
 
       return deck;
     } catch {
