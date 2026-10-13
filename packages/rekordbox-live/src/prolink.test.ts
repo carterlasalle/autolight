@@ -196,4 +196,27 @@ describe("PRO DJ LINK provider (T-LIVE-05, DS-29)", () => {
     expect(latest?.quality.playheadSeconds).toBe("estimated");
     expect(latest?.pitchPercent).toBe(0);
   });
+
+  it("reads BPM from a status packet without a prior beat packet", () => {
+    const provider = new ProlinkProvider({ now: () => 0n, mode: "passive" });
+    provider.ingestPacket(buildStatusPacket({
+      deviceName: "CDJ-1", deviceNumber: 1, trackId: 555, trackSlot: 1, playState: 3, master: false, sync: false, beatInBar: 1, bpm: 130,
+    }), 0n);
+    expect(provider.getDecks()[0]?.effectiveBpm).toBe(130);
+  });
+
+  it("scales the estimated playhead by the reported pitch", () => {
+    const beat = (pitchRaw: number) =>
+      buildBeatPacket({ deviceName: "CDJ-1", deviceNumber: 1, nextBeatMs: 400, bpm: 120, beatInBar: 1, pitchRaw });
+
+    const nominal = new ProlinkProvider({ now: () => 0n, mode: "passive" });
+    const pitched = new ProlinkProvider({ now: () => 0n, mode: "passive" });
+    nominal.ingestPacket(beat(0x100000), 0n);
+    nominal.ingestPacket(beat(0x100000), 0n);
+    pitched.ingestPacket(beat(0x108000), 0n);
+    pitched.ingestPacket(beat(0x108000), 0n);
+    expect(nominal.getDecks()[0]?.playheadSeconds).toBeCloseTo(0.5, 5);
+    expect(pitched.getDecks()[0]?.playRate).toBeCloseTo(0x108000 / 0x100000, 5);
+    expect(pitched.getDecks()[0]?.playheadSeconds).toBeCloseTo(0.5 / (0x108000 / 0x100000), 5);
+  });
 });

@@ -37,7 +37,34 @@ export interface SessionRecorderOptions {
 }
 
 function stableHash(value: unknown): string {
-  return createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 16);
+  return createHash("sha256").update(canonicalJson(value)).digest("hex").slice(0, 16);
+}
+
+/** Byte budget is real UTF-8 bytes: `JSON.stringify(x).length` counts UTF-16
+ * code units, undercounting non-ASCII payloads and splitting surrogate pairs. */
+function recordBytes(entry: SessionRecord): number {
+  return Buffer.byteLength(JSON.stringify(entry), "utf8");
+}
+
+// Canonical JSON: recursively sorted keys, so key insertion order cannot make
+// two semantically identical inputs hash differently.
+function canonicalJson(value: unknown): string {
+  return JSON.stringify(sortKeys(value));
+}
+
+function sortKeys(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortKeys);
+
+  if (value !== null && typeof value === "object") {
+    const source = value as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+
+    for (const key of Object.keys(source).sort()) out[key] = sortKeys(source[key]);
+
+    return out;
+  }
+
+  return value;
 }
 
 // Deterministic frame hash: the same tick inputs plus the same config
@@ -74,21 +101,23 @@ export class SessionRecorder {
   record(kind: SessionKind, payload: Record<string, unknown>, tMs: number = Date.now()): void {
     if (!this.enabled) return;
     const entry: SessionRecord = { seq: this.seq++, tMs, kind, payload };
-    const size = JSON.stringify(entry).length;
+    const size = recordBytes(entry);
+
+    // An undroppable record must not evict every stored entry before it is
+    // itself dropped.
+    if (size > this.maxBytes) {
+      this.dropped += 1;
+
+      return;
+    }
 
     while (this.len > 0 && this.bytes + size > this.maxBytes) {
       const oldest = this.slots[this.head];
       this.slots[this.head] = undefined;
       this.head = (this.head + 1) % this.slots.length;
       this.len -= 1;
-      this.bytes -= oldest === undefined ? 0 : JSON.stringify(oldest).length;
+      this.bytes -= oldest === undefined ? 0 : recordBytes(oldest);
       this.dropped += 1;
-    }
-
-    if (size > this.maxBytes) {
-      this.dropped += 1;
-
-      return;
     }
 
     if (this.len === this.slots.length) {
@@ -96,7 +125,7 @@ export class SessionRecorder {
       this.slots[this.head] = undefined;
       this.head = (this.head + 1) % this.slots.length;
       this.len -= 1;
-      this.bytes -= oldest === undefined ? 0 : JSON.stringify(oldest).length;
+      this.bytes -= oldest === undefined ? 0 : recordBytes(oldest);
       this.dropped += 1;
     }
 
@@ -131,10 +160,31 @@ export interface SessionReplayResult {
   mismatchedTicks: number[];
 }
 
+const SESSION_KINDS: readonly SessionKind[] = [
+  "dj-event",
+  "deck-state",
+  "provider-status",
+  "show-decision",
+  "tick-input",
+  "frame-hash",
+  "device-health",
+  "error",
+  "config-change",
+];
+
 export function parseSessionNdjson(ndjson: string): SessionRecord[] {
   if (ndjson.trim() === "") return [];
 
-  return ndjson.split("\n").map((line, i) => {
+  const out: SessionRecord[] = [];
+  const lines = ndjson.split("\n");
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i] ?? "";
+
+    // A trailing newline or blank line is not a record: parsing it as JSON
+    // would throw on a perfectly valid file.
+    if (line.trim() === "") continue;
+
     let row: unknown;
 
     try {
@@ -162,8 +212,14 @@ export function parseSessionNdjson(ndjson: string): SessionRecord[] {
       throw new Error(`session line ${i + 1}: bad entry shape`);
     }
 
-    return { seq: row.seq, tMs: row.tMs, kind: row.kind as SessionKind, payload: row.payload as Record<string, unknown> };
-  });
+    if (!SESSION_KINDS.includes(row.kind as SessionKind)) {
+      throw new Error(`session line ${i + 1}: unknown kind ${JSON.stringify(row.kind)}`);
+    }
+
+    out.push({ seq: row.seq, tMs: row.tMs, kind: row.kind as SessionKind, payload: row.payload as Record<string, unknown> });
+  }
+
+  return out;
 }
 
 // Replay: for every recorded frame hash, find the tick input with the same
@@ -191,7 +247,16 @@ export function replaySession(
 
     if (typeof r.payload.tick !== "number" || typeof r.payload.hash !== "string") continue;
     const tick = r.payload.tick;
+
     ticks += 1;
+
+    if (!inputs.has(tick)) {
+      // No tick-input recorded for this frame: report the missing input rather
+      // than rendering unknowns and blaming the renderer.
+      mismatchedTicks.push(tick);
+      continue;
+    }
+
     const again = render(tick, inputs.get(tick), configSnapshot);
 
     if (again === r.payload.hash) matched += 1;

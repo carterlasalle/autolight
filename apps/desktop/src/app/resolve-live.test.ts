@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { makeDeck, makeFixture } from "@autolight/simulator";
-import { buildLive } from "./resolve-live.js";
+import { buildLive, pendingStyleDue, phraseBoundaryAfter } from "./resolve-live.js";
 
 // AL-FLOW-003: the live cursor's computed beat must reach the render sink.
 // buildLive renders the override beat when given (cursor path) and falls
@@ -48,7 +48,7 @@ describe("buildLive beat wiring (AL-FLOW-003)", () => {
     const stale = makeDeck({ deckId: 1, playheadSeconds: 10 });
 
     const live = buildLive(
-      [{ track: track as never, plan: plan as never, deckId: 1, state: stale }],
+      [{ track: track as never, plan: plan as never, state: stale }],
       [makeFixture("f", 2)],
       false,
       { a: 70, b: 1 },
@@ -62,12 +62,28 @@ describe("buildLive beat wiring (AL-FLOW-003)", () => {
     const snap = makeDeck({ deckId: 1, playheadSeconds: 10 });
 
     const live = buildLive(
-      [{ track: track as never, plan: plan as never, deckId: 1, state: snap }],
+      [{ track: track as never, plan: plan as never, state: snap }],
       [makeFixture("f", 2)],
       false,
     );
 
     expect(live?.beat).toBe(10);
     expect(live?.deckA.section).toBe("verse");
+  });
+});
+
+describe("pending style handover", () => {
+  it("arms the next phrase boundary and applies on the first crossing", () => {
+    expect(phraseBoundaryAfter(70)).toBe(96);
+    expect(phraseBoundaryAfter(96)).toBe(128);
+    let decision = pendingStyleDue(70, null);
+
+    expect(decision).toEqual({ due: false, next: 96 });
+    decision = pendingStyleDue(95.5, decision.next);
+    expect(decision.due).toBe(false);
+    // The cursor advances fractionally, so the crossing must apply even when
+    // the beat never lands exactly on the boundary.
+    decision = pendingStyleDue(96.3, decision.next);
+    expect(decision).toEqual({ due: true, next: null });
   });
 });

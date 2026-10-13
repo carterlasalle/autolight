@@ -136,6 +136,7 @@ export abstract class ProviderBase implements DJLiveProvider {
   protected rejected = 0;
   protected queueDepth = 0;
   protected started = false;
+  private starting: Promise<void> | null = null;
   protected lastStateAtNs = 0n;
 
   constructor(id: string, source: "rekordbox" | "serato", now: ClockFn = systemClock) {
@@ -145,15 +146,37 @@ export abstract class ProviderBase implements DJLiveProvider {
   }
 
   async start(): Promise<void> {
+    const inFlight = this.starting;
+
+    // Concurrent callers await the same initialization instead of returning
+    // before it finishes.
+    if (inFlight !== null) return inFlight;
+
     if (this.started) return;
     this.started = true;
-    await this.onStart();
+
+    const run = (async () => {
+      try {
+        await this.onStart();
+      } catch (err) {
+        // A failed start must not leave the provider reporting "running".
+        this.started = false;
+        throw err;
+      } finally {
+        this.starting = null;
+      }
+    })();
+
+    this.starting = run;
+
+    return run;
   }
 
   async stop(): Promise<void> {
     if (!this.started) return;
-    this.started = false;
+    // Clear the flag only once onStop resolves, so a rejecting stop can retry.
     await this.onStop();
+    this.started = false;
   }
 
   protected async onStart(): Promise<void> {}
@@ -193,12 +216,19 @@ export abstract class ProviderBase implements DJLiveProvider {
     this.queueDepth = Math.min(1, this.queueDepth + 1);
 
     if (state.receivedAtNs <= this.lastStateAtNs) {
-      state = { ...state, receivedAtNs: this.lastStateAtNs + 1n };
+      // Mutate the received object so callers and listeners observe the same
+      // monotonic stamp, not two divergent copies.
+      state.receivedAtNs = this.lastStateAtNs + 1n;
     }
 
     this.lastStateAtNs = state.receivedAtNs;
 
-    for (const l of this.listeners) l(state);
+    try {
+      for (const l of this.listeners) l(state);
+    } finally {
+      // Latest-wins dispatch is synchronous: the queue drains when it returns.
+      this.queueDepth = Math.max(0, this.queueDepth - 1);
+    }
   }
 
   protected markRejected(reason: string): void {
@@ -246,23 +276,40 @@ export interface UpdateHint {
 export class DeckGenerationMapper {
   private readonly generations = new Map<number, number>();
   private readonly tracks = new Map<number, ProviderDeckState["track"]>();
+  private readonly trackKeys = new Map<number, string | null>();
   private readonly beats = new Map<number, number>();
+  private readonly qualities = new Map<number, Partial<Record<keyof ProviderDeckState, QualityLabel>>>();
 
   update(providerId: string, hint: UpdateHint): ProviderDeckState {
     const deckId = hint.deckId;
     const incoming = hint.track === undefined ? undefined : toTrack(hint.track);
     const previous = this.tracks.get(deckId) ?? null;
 
-    if (incoming !== undefined && (incoming?.id ?? null) !== (previous?.id ?? null)) {
-      this.generations.set(deckId, (this.generations.get(deckId) ?? 0) + 1);
+    if (incoming !== undefined) {
+      const nextKey = trackKey(incoming);
+
+      if (nextKey !== (this.trackKeys.get(deckId) ?? null)) {
+        this.generations.set(deckId, (this.generations.get(deckId) ?? 0) + 1);
+        // A new generation starts clean: no field from the old track survives.
+        this.beats.delete(deckId);
+        this.qualities.delete(deckId);
+        this.trackKeys.set(deckId, nextKey);
+      }
+
+      this.tracks.set(deckId, incoming);
     }
 
-    if (incoming !== undefined) this.tracks.set(deckId, incoming);
     const track = incoming !== undefined ? incoming : previous;
     const generation = this.generations.get(deckId) ?? 0;
     const beat = hint.beat === undefined ? (this.beats.get(deckId) ?? null) : hint.beat;
 
     if (beat !== null) this.beats.set(deckId, beat);
+
+    // Providers may report quality incrementally; merge so labels for fields
+    // this message did not touch are not silently dropped.
+    const quality = { ...this.qualities.get(deckId), ...hint.quality };
+
+    this.qualities.set(deckId, quality);
 
     const state: ProviderDeckState = {
       source: "rekordbox",
@@ -293,11 +340,19 @@ export class DeckGenerationMapper {
         ...(hint.channelFader !== undefined ? { channelFader: providerId } : {}),
         ...(hint.crossfader !== undefined ? { crossfader: providerId } : {}),
       },
-      quality: hint.quality ?? {},
+      quality,
     };
 
     return state;
   }
+}
+
+// Stable identity for a deck's loaded track: the id plus the fields that keep
+// two distinct id-less tracks from collapsing onto the same sentinel.
+function trackKey(track: ProviderDeckState["track"]): string | null {
+  if (track === null) return null;
+
+  return `${track.id}\u0000${track.canonicalPath ?? ""}\u0000${track.title ?? ""}\u0000${track.artist ?? ""}`;
 }
 
 function toTrack(hint: TrackHint | null): ProviderDeckState["track"] {

@@ -9,17 +9,21 @@ import { resolveTrackId, type IdentityParts, type TrackAliasStore } from "@autol
 
 export type ResolverStepId =
   | "memory-reader-id"
+  | "rekordbox-id"
   | "lighting-ipc-id"
   | "agent-api"
   | "history-table"
+  | "path-library"
   | "title-path";
 
-/** DS-22 chain order. */
+/** DS-22 chain order. `rekordbox-id` and `path-library` keep provenance honest. */
 export const RESOLVER_CHAIN: readonly ResolverStepId[] = [
   "memory-reader-id",
+  "rekordbox-id",
   "lighting-ipc-id",
   "agent-api",
   "history-table",
+  "path-library",
   "title-path",
 ];
 
@@ -78,7 +82,8 @@ export function resolveLiveTrack(
   const steps: ResolverStepOutcome[] = [];
 
   const idSteps: { step: ResolverStepId; confidence: number; id: string | undefined }[] = [
-    { step: "memory-reader-id", confidence: 1, id: input.memoryReaderId ?? input.rekordboxId },
+    { step: "memory-reader-id", confidence: 1, id: input.memoryReaderId },
+    { step: "rekordbox-id", confidence: 1, id: input.rekordboxId },
     { step: "lighting-ipc-id", confidence: 0.95, id: input.lightingIpcId },
     { step: "agent-api", confidence: 0.9, id: input.agentTrackId },
     { step: "history-table", confidence: 0.8, id: input.historyTrackId },
@@ -95,16 +100,17 @@ export function resolveLiveTrack(
       continue;
     }
 
-    const row = input.libraryById?.(id);
+    let row: IdentityParts | undefined;
 
-    const parts: IdentityParts = {
-      ...row,
-      rekordboxId: row?.rekordboxId ?? id,
-      ...(input.fileHash !== undefined ? { fileHash: input.fileHash } : {}),
-      ...(input.pcmFingerprint !== undefined ? { pcmFingerprint: input.pcmFingerprint } : {}),
-    };
+    try {
+      row = input.libraryById?.(id);
+    } catch (err) {
+      // A DB/IPC failure in one hook must not abort the whole DS-22 chain.
+      steps.push({ step, matched: false, confidence: 0, trackId: null, note: `library lookup failed: ${reasonOf(err)}` });
+      continue;
+    }
 
-    const { trackId } = resolveTrackId(store, parts, makeId);
+    const { trackId } = resolveWithParts(store, { ...row, rekordboxId: row?.rekordboxId ?? id }, input, makeId);
     steps.push({ step, matched: true, confidence, trackId });
 
     return { trackId, steps, matchedStep: step, confidence };
@@ -113,24 +119,64 @@ export function resolveLiveTrack(
   const path = input.canonicalPath ?? input.filePath ?? input.anlzPath;
 
   if (path !== undefined && path !== "") {
-    const row = input.libraryByPath?.(path);
+    let row: IdentityParts | undefined;
+    let pathLookupFailed = false;
 
-    const outcome: ResolverStepOutcome = row?.rekordboxId !== undefined
-      ? { step: "title-path", matched: true, confidence: 0.7, trackId: resolveTrackId(store, row, makeId).trackId }
-      : { step: "title-path", matched: false, confidence: 0, trackId: null, note: "path not in library" };
+    try {
+      row = input.libraryByPath?.(path);
+    } catch (err) {
+      pathLookupFailed = true;
+      steps.push({ step: "path-library", matched: false, confidence: 0, trackId: null, note: `library lookup failed: ${reasonOf(err)}` });
+    }
 
-    steps.push(outcome);
+    if (!pathLookupFailed) {
+      const outcome: ResolverStepOutcome = row?.rekordboxId !== undefined
+        ? { step: "path-library", matched: true, confidence: 0.7, trackId: resolveWithParts(store, row, input, makeId).trackId }
+        : {
+          step: "path-library",
+          matched: false,
+          confidence: 0,
+          trackId: null,
+          note: row === undefined ? "path not in library" : "library row lacks a rekordbox ID",
+        };
 
-    if (outcome.matched) return { trackId: outcome.trackId, steps, matchedStep: "title-path", confidence: 0.7 };
+      steps.push(outcome);
+
+      if (outcome.matched) return { trackId: outcome.trackId, steps, matchedStep: "path-library", confidence: 0.7 };
+    }
   }
 
   if (input.title !== undefined && input.title !== "") {
-    const candidates = (input.artist === undefined ? input.titleIndex?.(input.title) : input.titleIndex?.(input.title, input.artist)) ?? [];
+    let candidates: string[];
+
+    try {
+      candidates = (input.artist === undefined ? input.titleIndex?.(input.title) : input.titleIndex?.(input.title, input.artist)) ?? [];
+    } catch (err) {
+      steps.push({ step: "title-path", matched: false, confidence: 0, trackId: null, note: `title index failed: ${reasonOf(err)}` });
+
+      return { trackId: null, steps, matchedStep: null, confidence: 0 };
+    }
 
     if (candidates.length === 1 && candidates[0] !== undefined) {
-      const row = input.libraryById?.(candidates[0]);
-      const fallback: IdentityParts = { rekordboxId: candidates[0], title: input.title };
-      const { trackId } = resolveTrackId(store, row ?? (input.artist === undefined ? fallback : { ...fallback, artist: input.artist }), makeId);
+      let row: IdentityParts | undefined;
+
+      try {
+        row = input.libraryById?.(candidates[0]);
+      } catch (err) {
+        steps.push({ step: "title-path", matched: false, confidence: 0, trackId: null, note: `library lookup failed: ${reasonOf(err)}` });
+
+        return { trackId: null, steps, matchedStep: null, confidence: 0 };
+      }
+
+      // A title-index candidate is a lookup key, not necessarily a Rekordbox
+      // content ID: only the library row may become identity aliases.
+      if (row === undefined) {
+        steps.push({ step: "title-path", matched: false, confidence: 0, trackId: null, note: "title candidate not in library" });
+
+        return { trackId: null, steps, matchedStep: null, confidence: 0 };
+      }
+
+      const { trackId } = resolveWithParts(store, row, input, makeId);
       steps.push({ step: "title-path", matched: true, confidence: 0.5, trackId });
 
       return { trackId, steps, matchedStep: "title-path", confidence: 0.5 };
@@ -150,4 +196,22 @@ export function resolveLiveTrack(
   steps.push({ step: "title-path", matched: false, confidence: 0, trackId: null, note: "nothing to resolve" });
 
   return { trackId: null, steps, matchedStep: null, confidence: 0 };
+}
+
+/** Row identity plus the caller's hash evidence; every step applies the same merge. */
+function resolveWithParts(
+  store: TrackAliasStore,
+  parts: IdentityParts,
+  input: LiveTrackInput,
+  makeId: () => string,
+): { trackId: string } {
+  return resolveTrackId(store, {
+    ...parts,
+    ...(input.fileHash !== undefined ? { fileHash: input.fileHash } : {}),
+    ...(input.pcmFingerprint !== undefined ? { pcmFingerprint: input.pcmFingerprint } : {}),
+  }, makeId);
+}
+
+function reasonOf(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
 }

@@ -115,21 +115,39 @@ export class ProlinkProvider extends ProviderBase {
     const socket = createSocket({ type: "udp4", reuseAddr: true });
     this.socket = socket;
     socket.on("message", (msg: Buffer) => this.ingestPacket(new Uint8Array(msg)));
-    socket.on("error", (err: Error) => {
-      this.setStatus({ state: "failed", error: `prolink socket: ${err.message}` });
-    });
+
+    // One error path at a time: while binding a rejection settles the promise;
+    // after bind, socket errors become provider status (S5, never swallowed).
     const { promise, resolve, reject } = Promise.withResolvers<void>();
-    const onError = (err: Error): void => reject(err);
-    socket.once("error", onError);
+    const onBindError = (err: Error): void => reject(err);
+    socket.once("error", onBindError);
     socket.bind(port, host, () => {
-      socket.off("error", onError);
+      // Keepalives go to 255.255.255.255: without broadcast most platforms
+      // reject them, so virtual-CDJ presence never lands. Enabled after the
+      // bind: the handle is not usable before it (EBADF).
+      socket.setBroadcast(true);
+      socket.off("error", onBindError);
+      socket.on("error", (err: Error) => {
+        this.setStatus({ state: "failed", error: `prolink socket: ${err.message}` });
+      });
       this.setStatus({ state: "live", updateHz: 0, ageMs: 0 });
       resolve();
     });
-    await promise.catch((err: unknown) => {
+
+    try {
+      await promise;
+    } catch (err) {
       this.setStatus({ state: "failed", error: `prolink bind ${this.options.bind ?? ""}: ${err instanceof Error ? err.message : String(err)}` });
+      this.socket = null;
+
+      try {
+        socket.close();
+      } catch {
+        // Never bound: there is nothing to release.
+      }
+
       throw err;
-    });
+    }
   }
 
   protected async onStop(): Promise<void> {
@@ -177,7 +195,7 @@ export class ProlinkProvider extends ProviderBase {
 
   // Keepalives are only ever sent in virtual-cdj mode.
   shouldSendKeepalive(atNs?: bigint): boolean {
-    if (this.effectiveMode() !== "virtual-cdj") return false;
+    if (this.effectiveMode(atNs) !== "virtual-cdj") return false;
     const at = atNs ?? this.now();
 
     if (this.lastKeepaliveNs === null) return true;
@@ -223,10 +241,18 @@ export class ProlinkProvider extends ProviderBase {
 
     if (!this.shouldSendKeepalive(at)) return;
     const bytes = buildKeepalivePacket(this.options.deviceName, this.options.deviceNumber);
-    this.lastKeepaliveNs = at;
 
-    if (this.options.sendDatagram) this.options.sendDatagram(bytes);
-    else if (this.socket) this.socket.send(Buffer.from(bytes), PROLINK_PORTS.keepalive, "255.255.255.255");
+    if (this.options.sendDatagram) {
+      this.options.sendDatagram(bytes);
+      this.lastKeepaliveNs = at;
+    } else if (this.socket) {
+      // Advance only on a successful send: a failed transmit is surfaced and
+      // the next tick retries instead of waiting out another keepaliveMs.
+      this.socket.send(Buffer.from(bytes), PROLINK_PORTS.keepalive, "255.255.255.255", (err) => {
+        if (err) this.setStatus({ state: "failed", error: `prolink keepalive: ${err.message}` });
+        else this.lastKeepaliveNs = at;
+      });
+    }
   }
 
   private expirePeers(atNs: bigint): void {
@@ -272,6 +298,8 @@ export class ProlinkProvider extends ProviderBase {
     buffer.trackId = status.trackId;
     buffer.trackSlot = status.trackSlot;
 
+    if (status.bpm !== null) buffer.bpm = status.bpm;
+
     if (status.beatInBar !== null) buffer.beatInBar = status.beatInBar;
   }
 
@@ -314,11 +342,15 @@ export class ProlinkProvider extends ProviderBase {
     };
   }
 
-  // Beat-counter estimate only: these packets carry no absolute position.
+  // Beat-counter estimate only: these packets carry no absolute position. The
+  // reported playRate (pitch) scales the estimate so it agrees with stateFor.
   private estimatePlayhead(buffer: DeviceBuffer): number {
     if (buffer.bpm === null || buffer.beatCounter === 0) return 0;
+    const rate = buffer.pitch / 0x100000;
 
-    return ((buffer.beatCounter - 1) * 60) / buffer.bpm;
+    if (rate <= 0) return 0;
+
+    return ((buffer.beatCounter - 1) * 60) / (buffer.bpm * rate);
   }
 }
 

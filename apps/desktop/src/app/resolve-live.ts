@@ -19,7 +19,6 @@ const STYLE_ID: Record<string, string> = { House: "house", EDM: "festival", "Hip
 interface LoadedDeck {
   track: TrackModel;
   plan: ShowPlan;
-  deckId: number;
   state: DeckState;
 }
 
@@ -30,6 +29,21 @@ interface ShowLiveResponse {
 
 function styleFor(name: string): (typeof BUILT_IN_STYLES)[keyof typeof BUILT_IN_STYLES] {
   return BUILT_IN_STYLES[STYLE_ID[name] ?? "club"] ?? BUILT_IN_STYLES["club"]!;
+}
+
+/** Beat at which a style chosen at `beat` may take over: the next phrase boundary. */
+export function phraseBoundaryAfter(beat: number, phrase = 32): number {
+  return Math.floor(beat / phrase) * phrase + phrase;
+}
+
+/**
+ * Pending-style decision: arm once (a live beat is fractional, so an exact
+ * multiple of the phrase never lands) then apply on the first crossing.
+ */
+export function pendingStyleDue(beat: number, boundary: number | null): { due: boolean; next: number | null } {
+  const armed = boundary ?? phraseBoundaryAfter(beat);
+
+  return beat >= armed ? { due: true, next: null } : { due: false, next: armed };
 }
 
 function deckSnapshot(track: TrackModel | null, deck: { effectiveBpm: number | null } | null, section: string | undefined): { title: string; artist: string; readiness: "READY" | "NEEDS ANALYSIS"; bpm: number | null; section: string | undefined; countdown: undefined } {
@@ -113,7 +127,7 @@ export async function resolveLiveDecks(): Promise<{ live: LiveState; bpm: number
   const loaded: LoadedDeck[] = [];
 
   for (const d of snap.decks) {
-    if (d.track && d.plan) loaded.push({ track: d.track, plan: d.plan, deckId: d.state.deckId, state: d.state });
+    if (d.track && d.plan) loaded.push({ track: d.track, plan: d.plan, state: d.state });
   }
 
   if (loaded.length === 0) return null;
@@ -133,6 +147,10 @@ export function useLiveCursor(): void {
   const decksRef = useRef<LoadedDeck[] | null>(null);
   const fixturesRef = useRef<Fixture[]>([]);
   const beatRef = useRef<{ a: number; b: number }>({ a: 1, b: 1 });
+  const renderDecksRef = useRef<LoadedDeck[]>([]);
+  const plannedStyleRef = useRef<string | null>(null);
+  const axRef = useRef<{ beat: number | null; playing: boolean | null }>({ beat: null, playing: null });
+  const pendingBoundaryRef = useRef<number | null>(null);
   const style = useShell((s) => s.style);
   const blinder = useShell((s) => s.blinder);
   const followMode = useShell((s) => s.followMode);
@@ -147,11 +165,12 @@ export function useLiveCursor(): void {
       const loaded: LoadedDeck[] = [];
 
       for (const d of snap.decks) {
-        if (d.track && d.plan) loaded.push({ track: d.track, plan: d.plan, deckId: d.state.deckId, state: d.state });
+        if (d.track && d.plan) loaded.push({ track: d.track, plan: d.plan, state: d.state });
       }
 
       if (loaded.length === 0) return;
       decksRef.current = loaded;
+      plannedStyleRef.current = null;
       fixturesRef.current = snap.fixtures;
       beatRef.current = {
         a: loaded[0]?.state.playheadSeconds ?? 1,
@@ -167,6 +186,7 @@ export function useLiveCursor(): void {
     // refetches while empty (guarded against overlap) so tracks loaded
     // after mount still appear — no blind return, no subscription bus.
     let refetching = false;
+    let axInFlight = false;
 
     const timer = setInterval(() => {
       const decks = decksRef.current;
@@ -181,12 +201,13 @@ export function useLiveCursor(): void {
           const loaded: LoadedDeck[] = [];
 
           for (const d of snap.decks) {
-            if (d.track && d.plan) loaded.push({ track: d.track, plan: d.plan, deckId: d.state.deckId, state: d.state });
+            if (d.track && d.plan) loaded.push({ track: d.track, plan: d.plan, state: d.state });
           }
 
           if (loaded.length === 0) return;
 
           decksRef.current = loaded;
+          plannedStyleRef.current = null;
           fixturesRef.current = snap.fixtures;
           beatRef.current = {
             a: loaded[0]?.state.playheadSeconds ?? 1,
@@ -202,43 +223,66 @@ export function useLiveCursor(): void {
 
       const styleObj = styleFor(st.style);
 
-      for (const d of decks) {
-        const want = planShow(d.track, styleObj);
-
-        if (want.seed !== d.plan.seed || want.styleId !== d.plan.styleId) d.plan = want;
+      // Compile only when the style actually changes; the host's loaded plan
+      // stays immutable and the cursor renders from a style-scoped copy.
+      if (plannedStyleRef.current !== styleObj.id) {
+        renderDecksRef.current = decks.map((d) => ({ ...d, plan: planShow(d.track, styleObj) }));
+        plannedStyleRef.current = styleObj.id;
       }
 
-      void (invoke("follow/ax", { version: 1 }) as Promise<unknown>).then((raw: unknown) => {
-        const envelope = raw as { ok?: boolean; readings?: { deckId: number; elapsedSeconds: number | null; playing: boolean | null; readable: boolean }[] } | null;
-        const readings = envelope && envelope.ok !== false && Array.isArray(envelope.readings) ? envelope.readings : [];
-        const grid = decks[0]?.track.beatGrid.beats ?? [];
+      const renderDecks = renderDecksRef.current;
+      const grid = renderDecks[0]?.track.beatGrid.beats ?? [];
+      const bpmA = renderDecks[0]?.track.beatGrid.beats[0]?.bpm ?? 120;
 
-        const axBeat = readings[0]?.readable
-          ? axBeatToPlayhead({ deckId: 1, elapsedSeconds: readings[0]?.elapsedSeconds ?? null, playing: readings[0]?.playing ?? null, readable: true, sampledAtNs: 0n }, grid)
-          : null;
+      // Guard the ~1Hz AX poll against overlapping with the 250ms tick: a slow
+      // round trip must not write a stale beat after a newer one landed.
+      if (!axInFlight) {
+        axInFlight = true;
+        void (invoke("follow/ax", { version: 1 }) as Promise<unknown>).then((raw: unknown) => {
+          axInFlight = false;
+          const envelope = raw as { ok?: boolean; readings?: { deckId: number; elapsedSeconds: number | null; playing: boolean | null; readable: boolean }[] } | null;
+          const readings = envelope && envelope.ok !== false && Array.isArray(envelope.readings) ? envelope.readings : [];
 
-        const combined = combineTransport({
-          prolink: { beat: null, playing: null, bpm: null, peerPresent: false },
-          ax: { beat: axBeat, playing: readings[0]?.playing ?? null },
-          estimatedBeat: beatRef.current.a + 0.25 * ((decks[0]?.track.beatGrid.beats[0]?.bpm ?? 120) / 60),
-          estimatedBpm: decks[0]?.track.beatGrid.beats[0]?.bpm ?? null,
+          axRef.current = {
+            beat: readings[0]?.readable
+              ? axBeatToPlayhead({ deckId: 1, elapsedSeconds: readings[0]?.elapsedSeconds ?? null, playing: readings[0]?.playing ?? null, readable: true, sampledAtNs: 0n }, grid)
+              : null,
+            playing: readings[0]?.playing ?? null,
+          };
         });
+      }
 
-        const useAx = st.followMode === "ax-beat" || st.followMode === "prolink";
-        const nextA = useAx && combined.beat !== null ? combined.beat : beatRef.current.a + 0.25 * ((decks[0]?.track.beatGrid.beats[0]?.bpm ?? 120) / 60) * 0.1;
-        beatRef.current = { a: Math.min(nextA, grid.length || nextA), b: beatRef.current.b + 0.02 };
-        const live = buildLive(decks, fixturesRef.current, st.blinder, beatRef.current);
+      const ax = axRef.current;
 
-        if (live) {
-          set({ live, bpm: live.bpm, reactiveLevel: Math.min(1, reactive * 0.2), liveBeat: live.beat ?? 0 });
-
-          if (st.pendingStyle !== null && st.pendingStyle !== st.style) {
-            const boundary = Math.ceil((live.beat ?? 0) / 32) * 32;
-
-            if ((live.beat ?? 0) >= boundary) set({ style: st.pendingStyle, pendingStyle: null });
-          }
-        }
+      const combined = combineTransport({
+        prolink: { beat: null, playing: null, bpm: null, peerPresent: false },
+        ax: { beat: ax.beat, playing: ax.playing },
+        estimatedBeat: beatRef.current.a + 0.25 * (bpmA / 60),
+        estimatedBpm: renderDecks[0]?.track.beatGrid.beats[0]?.bpm ?? null,
       });
+
+      const useAx = st.followMode === "ax-beat" || st.followMode === "prolink";
+      const nextA = useAx && combined.beat !== null ? combined.beat : beatRef.current.a + 0.25 * (bpmA / 60);
+      const deckB = renderDecks[1];
+      const bpmB = deckB?.state.effectiveBpm ?? deckB?.track.beatGrid.beats[0]?.bpm ?? 120;
+      const nextB = deckB?.state.playing ? beatRef.current.b + 0.25 * (bpmB / 60) : beatRef.current.b;
+
+      beatRef.current = { a: nextA, b: nextB };
+      const live = buildLive(renderDecks, fixturesRef.current, st.blinder, beatRef.current);
+
+      if (live) {
+        set({ live, bpm: live.bpm, reactiveLevel: Math.min(1, reactive * 0.2), liveBeat: live.beat ?? 0 });
+
+        if (st.pendingStyle !== null && st.pendingStyle !== st.style) {
+          const decision = pendingStyleDue(live.beat ?? 0, pendingBoundaryRef.current);
+
+          pendingBoundaryRef.current = decision.next;
+
+          if (decision.due) set({ style: st.pendingStyle, pendingStyle: null });
+        } else {
+          pendingBoundaryRef.current = null;
+        }
+      }
     }, 250);
 
     return () => { clearInterval(timer); };
