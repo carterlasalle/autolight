@@ -229,6 +229,7 @@ __metadata:
     govee-toolkit: "npm:0.5.0"
     typescript: "npm:^5.6.3"
     vitest: "npm:^4.1.11"
+    zod: "npm:^3.23.8"
   dependenciesMeta:
     govee-toolkit:
       optional: true

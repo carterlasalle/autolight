@@ -30,6 +30,7 @@ import {
   parseStatus,
   turnCommand,
   type LanDeviceStatus,
+  type LanInbound,
   type StreamTransport,
 } from "./razer.js";
 
@@ -45,6 +46,10 @@ export const PROBE_DEFAULTS = {
   // third (lan.md section 1).
   minSpacingMs: 40,
 } as const;
+
+/** B0 and B4 both carry the zone count in one byte (razer.ts `paint`), so this
+ *  is the protocol's zone ceiling: more zones make `paint` throw. */
+export const PROTOCOL_MAX_ZONES = 255;
 
 /** The undocumented `status` command; its reply carries the B2 armed frame. */
 export const STATUS_COMMAND = JSON.stringify({ msg: { cmd: "status", data: {} } });
@@ -112,6 +117,11 @@ export class CommandSequencer {
   private readonly clock: () => number;
   private readonly minSpacingMs: number;
   private lastAt = 0;
+  /** Overlapping callers are chained instead of racing: without this, two
+   *  sends observe the same `lastAt`, both wait out the same remainder and
+   *  both land at once — the back-to-back datagram this class exists to
+   *  prevent. */
+  private queued: Promise<void> = Promise.resolve();
 
   constructor(opts: SequencerOptions) {
     this.minSpacingMs = Math.max(0, opts.minSpacingMs);
@@ -119,11 +129,26 @@ export class CommandSequencer {
     this.clock = opts.clock ?? (() => Date.now());
   }
 
-  async next(): Promise<void> {
-    const remaining = this.lastAt + this.minSpacingMs - this.clock();
+  next(): Promise<void> {
+    const run = this.queued.then(() => this.space());
 
-    if (remaining > 0) await this.wait(remaining);
-    this.lastAt = this.clock();
+    // The chain must survive a failed wait, so the rejection is handled on the
+    // queue copy while the caller still sees it on the returned promise.
+    this.queued = run.catch(() => undefined);
+
+    return run;
+  }
+
+  private async space(): Promise<void> {
+    try {
+      const remaining = this.lastAt + this.minSpacingMs - this.clock();
+
+      if (remaining > 0) await this.wait(remaining);
+    } finally {
+      // Stamped even when the wait failed: the next send spaces from here
+      // rather than from a stale time that would put it back to back.
+      this.lastAt = this.clock();
+    }
   }
 }
 
@@ -190,12 +215,21 @@ export interface ReadbackOptions {
   retryMs?: number;
   deadlineMs?: number;
   wait?: Waiter;
+  /** The same clock the sequencer spaces on. A caller driving the probe with a
+   *  fake or paced clock must see the resend cadence and the deadline advance
+   *  on that clock too, or the two diverge. */
+  clock?: () => number;
 }
 
 /** Keep the resend cadence at govee.lan.status.retryMs even when a transport
  *  answers with null immediately instead of waiting out the window. */
-async function paceRetry(sentAt: number, retryMs: number, wait: Waiter): Promise<void> {
-  const elapsed = Date.now() - sentAt;
+async function paceRetry(
+  sentAt: number,
+  retryMs: number,
+  wait: Waiter,
+  clock: () => number,
+): Promise<void> {
+  const elapsed = clock() - sentAt;
 
   if (elapsed < retryMs) await wait(retryMs - elapsed);
 }
@@ -210,23 +244,24 @@ export async function readB2Status(
   const retryMs = Math.max(1, opts.retryMs ?? PROBE_DEFAULTS.statusRetryMs);
   const deadlineMs = Math.max(1, opts.deadlineMs ?? PROBE_DEFAULTS.statusDeadlineMs);
   const wait = opts.wait ?? sleep;
-  const started = Date.now();
+  const clock = opts.clock ?? (() => Date.now());
+  const started = clock();
   let answers = 0;
   let rttMs: number | null = null;
   let status: B2Readback["status"] = null;
 
-  while (Date.now() - started <= deadlineMs) {
-    const sentAt = Date.now();
+  while (clock() - started <= deadlineMs) {
+    const sentAt = clock();
     await link.sendJson(STATUS_COMMAND);
     const text = await link.reply(retryMs);
 
     if (text !== null) {
       answers += 1;
-      rttMs = Date.now() - sentAt;
-      let decoded: unknown = null;
+      rttMs = clock() - sentAt;
+      let decoded: LanInbound = null;
 
       try {
-        decoded = JSON.parse(text) as unknown;
+        decoded = JSON.parse(text);
       } catch {
         decoded = null;
       }
@@ -239,7 +274,7 @@ export async function readB2Status(
       }
     }
 
-    await paceRetry(sentAt, retryMs, wait);
+    await paceRetry(sentAt, retryMs, wait, clock);
   }
 
   return { answered: answers > 0, answers, rttMs, status };
@@ -253,23 +288,24 @@ export async function readDevStatus(
   const retryMs = Math.max(1, opts.retryMs ?? PROBE_DEFAULTS.statusRetryMs);
   const deadlineMs = Math.max(1, opts.deadlineMs ?? PROBE_DEFAULTS.statusDeadlineMs);
   const wait = opts.wait ?? sleep;
-  const started = Date.now();
+  const clock = opts.clock ?? (() => Date.now());
+  const started = clock();
   let answers = 0;
   let rttMs: number | null = null;
   let status: LanDeviceStatus | null = null;
 
-  while (Date.now() - started <= deadlineMs) {
-    const sentAt = Date.now();
+  while (clock() - started <= deadlineMs) {
+    const sentAt = clock();
     await link.sendJson(devStatusCommand());
     const text = await link.reply(retryMs);
 
     if (text !== null) {
       answers += 1;
-      rttMs = Date.now() - sentAt;
-      let decoded: unknown = null;
+      rttMs = clock() - sentAt;
+      let decoded: LanInbound = null;
 
       try {
-        decoded = JSON.parse(text) as unknown;
+        decoded = JSON.parse(text);
       } catch {
         decoded = null;
       }
@@ -282,7 +318,7 @@ export async function readDevStatus(
       }
     }
 
-    await paceRetry(sentAt, retryMs, wait);
+    await paceRetry(sentAt, retryMs, wait, clock);
   }
 
   return { answered: answers > 0, answers, rttMs, status };
@@ -418,7 +454,7 @@ export async function probeSegmentedCapability(
   const startedAt = Date.now();
   const clock = options.clock ?? (() => Date.now());
   const wait = options.wait ?? sleep;
-  const attemptedZones = Math.max(1, Math.floor(options.zones));
+  const attemptedZones = Math.min(PROTOCOL_MAX_ZONES, Math.max(1, Math.floor(options.zones)));
   const armSettleMs = options.armSettleMs ?? PROBE_DEFAULTS.armSettleMs;
 
   const link = new DeviceLink(
@@ -431,19 +467,22 @@ export async function probeSegmentedCapability(
     }),
   );
 
-  const readOpts: ReadbackOptions = { wait };
+  const readOpts: ReadbackOptions = { wait, clock };
 
   if (options.retryMs !== undefined) readOpts.retryMs = options.retryMs;
 
   if (options.deadlineMs !== undefined) readOpts.deadlineMs = options.deadlineMs;
 
   const before = await readB2Status(link, readOpts);
-  const devBefore = before.status !== null ? null : await readDevStatus(link, readOpts);
+  // devStatus is read whatever `status` did: a unit that answers `status` may
+  // well answer the official API too, and the recorded capability has to say
+  // what this unit did, not what the probe skipped.
+  const devBefore = await readDevStatus(link, readOpts);
   // Reachable means the unit answered at all: a reply we could not parse is
   // still a LAN channel, and the paints that follow are what decide the
   // capability. Only silence gets the LAN-unavailable flag.
-  const reachable = before.answered || devBefore?.answered === true;
-  const devStatusAnswered = devBefore?.answered === true;
+  const reachable = before.answered || devBefore.answered;
+  const devStatusAnswered = devBefore.answered;
 
   const finish = (verdict: ProbeVerdict, armedReadBack: CapabilityProbe["armedReadBack"], b0: boolean, b4: boolean): CapabilityProbe => {
     const probe: CapabilityProbe = {
@@ -490,23 +529,34 @@ export async function probeSegmentedCapability(
   // sent only here, before the channel exists.
   await link.sendJson(turnCommand(true));
   await link.sendRaw(arm(true));
-  await wait(armSettleMs);
 
-  const armedProbe = before.status !== null ? await readB2Status(link, readOpts) : null;
+  // Everything after the arm runs under the disarm: a paint the codec rejects
+  // (>255 zones), a read-back that throws or a confirmation the user rejects
+  // must not leave the unit armed on a live razer channel. The disarm frame
+  // stays in the receipt on both paths, so a failed probe still shows what the
+  // unit was sent.
+  let armedReadBack: CapabilityProbe["armedReadBack"] = "silent";
+  let b0 = false;
+  let b4 = false;
 
-  const armedReadBack: CapabilityProbe["armedReadBack"] =
-    armedProbe?.status == null ? "silent" : armedProbe.status.armed ? "armed" : "disarmed";
+  try {
+    await wait(armSettleMs);
 
-  // B0: two colours at the candidate count. The paint never acknowledges.
-  await link.sendRaw(paint(twoColourFrame(attemptedZones)));
-  const b0 = await user.confirmPaint("B0-two-colour");
+    const armedProbe = before.status !== null ? await readB2Status(link, readOpts) : null;
 
-  // B4: the zoned variant exists on some models; record it, do not require it.
-  await link.sendRaw(paintZoned(zonedProbeEntries(attemptedZones)));
-  const b4 = await user.confirmPaint("B4-zoned");
+    armedReadBack = armedProbe?.status == null ? "silent" : armedProbe.status.armed ? "armed" : "disarmed";
 
-  // Disarm: the unit returns to the colour its last non-stream command left.
-  await link.sendRaw(arm(false));
+    // B0: two colours at the candidate count. The paint never acknowledges.
+    await link.sendRaw(paint(twoColourFrame(attemptedZones)));
+    b0 = await user.confirmPaint("B0-two-colour");
+
+    // B4: the zoned variant exists on some models; record it, do not require it.
+    await link.sendRaw(paintZoned(zonedProbeEntries(attemptedZones)));
+    b4 = await user.confirmPaint("B4-zoned");
+  } finally {
+    // Disarm: the unit returns to the colour its last non-stream command left.
+    await link.sendRaw(arm(false));
+  }
 
   const verdict: ProbeVerdict =
     b0 || b4
@@ -526,7 +576,7 @@ export async function probeSegmentedCapability(
           zones: 1,
           fallbackMode: "lan-json-colorwc",
           demonstration:
-            "the whole-fixture colorwc mode answered read-back on this unit, so it is the verified fallback; the segmented channel is not verified and must not be streamed",
+            "the whole-fixture colorwc fallback is the protocol default and stays unverified on this unit — the probe never sent colorwc; the segmented channel is not verified and must not be streamed",
         };
 
   return finish(verdict, armedReadBack, b0, b4);

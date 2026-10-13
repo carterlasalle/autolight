@@ -21,9 +21,18 @@
 // strobes, white hits, blackouts — travels the razer stream, never colorwc.
 // colorwc is for slow fades and static looks, where the easing is welcome.
 
+import { z } from "zod";
+
 export const OPCODE = { ARM: 0xb1, RGB_STREAM: 0xb0, ZONED: 0xb4, ARM_STATUS: 0xb2 } as const;
 
 export const PORTS = { DISCOVER_MCAST: 4001, DISCOVER_RESP: 4002, CONTROL: 4003 } as const;
+
+/**
+ * JSON value exactly as a LAN datagram delivers it. Every reply parser below
+ * validates this against a message schema before touching a field — this is
+ * the raw side of the UDP boundary.
+ */
+export type LanInbound = string | number | boolean | null | LanInbound[] | { [key: string]: LanInbound };
 
 export function encodeRaw(opcode: number, payload: Uint8Array): Uint8Array {
   const out = new Uint8Array(1 + 2 + 1 + payload.length + 1);
@@ -94,17 +103,25 @@ export function paintZoned(entries: { r: number; g: number; b: number; zone: num
   return encodeRaw(OPCODE.ZONED, payload);
 }
 
-export function parseStatus(raw: unknown): { onOff: boolean; brightness: number; armed: boolean } | null {
-  if (typeof raw !== "object" || raw === null) return null;
+const statusMessageSchema = z.object({
+  msg: z.object({
+    cmd: z.literal("status"),
+    data: z.object({
+      onOff: z.number().optional(),
+      brightness: z.number().optional(),
+      pt: z.string().optional(),
+    }),
+  }),
+});
 
-  if (!("msg" in raw) || typeof raw.msg !== "object" || raw.msg === null) return null;
-  const msg = raw.msg as { cmd?: unknown; data?: unknown };
+export function parseStatus(raw: LanInbound): { onOff: boolean; brightness: number; armed: boolean } | null {
+  const parsed = statusMessageSchema.safeParse(raw);
 
-  if (msg.cmd !== "status" || typeof msg.data !== "object" || msg.data === null) return null;
-  const data = msg.data as { onOff?: unknown; brightness?: unknown; pt?: unknown };
+  if (!parsed.success) return null;
+  const data = parsed.data.msg.data;
   let armed = false;
 
-  if (typeof data.pt === "string" && data.pt.length > 0) {
+  if (data.pt !== undefined && data.pt.length > 0) {
     let bytes: Uint8Array | null = null;
 
     try {
@@ -122,7 +139,7 @@ export function parseStatus(raw: unknown): { onOff: boolean; brightness: number;
 
   return {
     onOff: data.onOff === 1,
-    brightness: typeof data.brightness === "number" ? data.brightness : 0,
+    brightness: data.brightness ?? 0,
     armed,
   };
 }
@@ -146,20 +163,34 @@ export interface ScanReply {
   wifiVersionSoft: string;
 }
 
-export function parseScanReply(raw: unknown): ScanReply | null {
-  if (typeof raw !== "object" || raw === null) return null;
-  const data = (raw as { msg?: { cmd?: unknown; data?: unknown } }).msg?.data as Record<string, unknown> | undefined;
+const scanReplySchema = z.object({
+  msg: z.object({
+    data: z.object({
+      ip: z.string(),
+      device: z.string(),
+      sku: z.string(),
+      bleVersionHard: z.string().optional(),
+      bleVersionSoft: z.string().optional(),
+      wifiVersionHard: z.string().optional(),
+      wifiVersionSoft: z.string().optional(),
+    }),
+  }),
+});
 
-  if (!data || typeof data["ip"] !== "string" || typeof data["device"] !== "string" || typeof data["sku"] !== "string") return null;
+export function parseScanReply(raw: LanInbound): ScanReply | null {
+  const parsed = scanReplySchema.safeParse(raw);
+
+  if (!parsed.success) return null;
+  const data = parsed.data.msg.data;
 
   return {
-    ip: data["ip"] as string,
-    device: data["device"] as string,
-    sku: data["sku"] as string,
-    bleVersionHard: typeof data["bleVersionHard"] === "string" ? data["bleVersionHard"] as string : "",
-    bleVersionSoft: typeof data["bleVersionSoft"] === "string" ? data["bleVersionSoft"] as string : "",
-    wifiVersionHard: typeof data["wifiVersionHard"] === "string" ? data["wifiVersionHard"] as string : "",
-    wifiVersionSoft: typeof data["wifiVersionSoft"] === "string" ? data["wifiVersionSoft"] as string : "",
+    ip: data.ip,
+    device: data.device,
+    sku: data.sku,
+    bleVersionHard: data.bleVersionHard ?? "",
+    bleVersionSoft: data.bleVersionSoft ?? "",
+    wifiVersionHard: data.wifiVersionHard ?? "",
+    wifiVersionSoft: data.wifiVersionSoft ?? "",
   };
 }
 
@@ -190,22 +221,38 @@ export interface LanDeviceStatus {
   colorTemInKelvin: number;
 }
 
-export function parseDevStatus(raw: unknown): LanDeviceStatus | null {
-  if (typeof raw !== "object" || raw === null) return null;
-  const data = (raw as { msg?: { cmd?: unknown; data?: unknown } }).msg?.data as Record<string, unknown> | undefined;
+const devStatusSchema = z.object({
+  msg: z.object({
+    data: z.object({
+      onOff: z.number(),
+      brightness: z.number(),
+      color: z
+        .object({
+          r: z.number().optional(),
+          g: z.number().optional(),
+          b: z.number().optional(),
+        })
+        .optional(),
+      colorTemInKelvin: z.number().optional(),
+    }),
+  }),
+});
 
-  if (!data || typeof data["onOff"] !== "number" || typeof data["brightness"] !== "number") return null;
-  const color = data["color"] as { r?: unknown; g?: unknown; b?: unknown } | undefined;
+export function parseDevStatus(raw: LanInbound): LanDeviceStatus | null {
+  const parsed = devStatusSchema.safeParse(raw);
+
+  if (!parsed.success) return null;
+  const data = parsed.data.msg.data;
 
   return {
-    onOff: (data["onOff"] as number) === 1,
-    brightness: data["brightness"] as number,
+    onOff: data.onOff === 1,
+    brightness: data.brightness,
     color: {
-      r: typeof color?.r === "number" ? color.r as number : 0,
-      g: typeof color?.g === "number" ? color.g as number : 0,
-      b: typeof color?.b === "number" ? color.b as number : 0,
+      r: data.color?.r ?? 0,
+      g: data.color?.g ?? 0,
+      b: data.color?.b ?? 0,
     },
-    colorTemInKelvin: typeof data["colorTemInKelvin"] === "number" ? data["colorTemInKelvin"] as number : 0,
+    colorTemInKelvin: data.colorTemInKelvin ?? 0,
   };
 }
 
@@ -221,8 +268,10 @@ export interface StreamTransport {
   sendJson(deviceId: string, text: string): void;
 }
 
-// Opaque timer handle owned by the scheduler implementation.
-export type TimerHandle = unknown;
+// Timer handle minted by a scheduler: Node and Electron mint Timeout objects,
+// browsers and deterministic fakes mint numeric ids. Callers never inspect it —
+// they store it and hand it back to the same scheduler.
+export type TimerHandle = number | ReturnType<typeof globalThis.setInterval>;
 
 export interface Scheduler {
   now(): number;
@@ -232,19 +281,16 @@ export interface Scheduler {
   clearTimeout(handle: TimerHandle): void;
 }
 
-const wallNow = (): number =>
-  typeof performance !== "undefined" && typeof performance.now === "function"
-    ? performance.now()
-    : Date.now();
+const wallNow = (): number => (typeof performance !== "undefined" ? performance.now() : Date.now());
 
 // `fn`: no callback arguments are supplied (setTimeout/setInterval pass none),
 // so the wrappers hand nothing to the paced loop.
 export const WALL_SCHEDULER: Scheduler = {
   now: wallNow,
   setInterval: (fn, ms) => globalThis.setInterval(fn, ms),
-  clearInterval: (handle) => { globalThis.clearInterval(handle as number); },
+  clearInterval: (handle) => { globalThis.clearInterval(handle); },
   setTimeout: (fn, ms) => globalThis.setTimeout(fn, ms),
-  clearTimeout: (handle) => { globalThis.clearTimeout(handle as number); },
+  clearTimeout: (handle) => { globalThis.clearTimeout(handle); },
 };
 
 export interface StreamOptions {
@@ -345,7 +391,6 @@ export class PacingStream implements SegmentStreamLike {
   private latest: Uint8Array | null = null;
   private current: Uint8Array | null = null;
   private lastSentHex: string | null = null;
-  private started = false;
   private armed = false;
   private closed = false;
   private lastAt: number;
@@ -381,7 +426,6 @@ export class PacingStream implements SegmentStreamLike {
   // paint right after arming is lost (toolkit lan.md, sequence).
   private startStream(): void {
     if (this.closed) return;
-    this.started = true;
     this.interval = this.clock.setInterval(() => { this.emit(); }, this.intervalMs);
 
     if (this.latest !== null) this.emit();
