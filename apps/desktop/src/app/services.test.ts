@@ -189,6 +189,40 @@ describe("identity-service", () => {
     const strings = svc.resolve({ title: "A", artist: "B" });
     expect(strings).toMatchObject({ ok: false, error: { code: "E_NO_IDENTITY_KEY" } });
   });
+  it("re-resolves when a stronger identifier set arrives and skips blanks", () => {
+    const svc = new IdentityService();
+    svc.start();
+    const pathOnly = svc.resolve({ canonicalPath: "/a/b" });
+    expect(pathOnly.ok).toBe(true);
+
+    if (!pathOnly.ok) throw new Error("path should resolve");
+    expect(pathOnly.identity.id).toBe("path:/a/b");
+    // Same path plus a file hash must re-resolve to the hash identity,
+    // not serve the stale path-only entry.
+    const hashed = svc.resolve({ canonicalPath: "/a/b", fileHash: "H" });
+    expect(hashed.ok).toBe(true);
+
+    if (!hashed.ok) throw new Error("hash should resolve");
+    expect(hashed.identity.id).toBe("hash:H");
+    expect(hashed.cached).toBe(false);
+    // A blank native id fails over to the valid path instead of erroring.
+    const blank = svc.resolve({ rekordboxId: "  ", canonicalPath: "/a/b" });
+    expect(blank.ok).toBe(true);
+  });
+  it("returns copies so callers cannot corrupt the cache", () => {
+    const svc = new IdentityService();
+    svc.start();
+    const first = svc.resolve({ rekordboxId: "99" });
+    expect(first.ok).toBe(true);
+
+    if (!first.ok) throw new Error("native id should resolve");
+    first.identity.sourceIds.rekordboxId = "MUTATED";
+    const second = svc.resolve({ rekordboxId: "99" });
+    expect(second.ok).toBe(true);
+
+    if (!second.ok) throw new Error("cache hit should resolve");
+    expect(second.identity.sourceIds.rekordboxId).toBe("99");
+  });
 });
 
 describe("analysis-supervisor", () => {
@@ -402,6 +436,40 @@ describe("matter-bridge", () => {
     expect(svc.status().counters["restarts"]).toBe(1);
     expect(svc.status().state).toBe("running");
     expect(svc.stop().state).toBe("stopped");
+  });
+
+  it("never respawns after stop, ignores stale exits, and isolates faulty listeners", () => {
+    const exits: ((code: number | null) => void)[] = [];
+    let spawned = 0;
+
+    const port: MatterProcessPort = {
+      name: "matter-lifecycle",
+      postMessage: () => {
+        throw new Error("crashed between exit and handler");
+      },
+      onMessage: (listener) => { listener({ ready: true }); },
+      onExit: (listener) => { exits.push(listener); },
+      kill: () => {
+        // Intentional shutdown must not respawn via the async exit handler.
+        for (const exit of exits.splice(0)) exit(0);
+      },
+    };
+    const svc = new MatterBridge({ spawn: () => { spawned += 1; return port; } });
+    const seen: unknown[] = [];
+
+    svc.onMessage(() => seen.push("ok"));
+    svc.onMessage(() => { throw new Error("faulty subscriber"); });
+    svc.onMessage(() => seen.push("also ok"));
+    expect(svc.start().state).toBe("running");
+    expect(seen).toEqual(["ok", "also ok"]);
+    // Dead port between exit and handler: boolean contract, no throw.
+    expect(svc.send({ op: "ping" })).toBe(false);
+    expect(svc.stop().state).toBe("stopped");
+    expect(spawned).toBe(1);
+    // Stale exit after stop: no respawn, no orphan.
+    for (const exit of exits.splice(0)) exit(1);
+    expect(spawned).toBe(1);
+    expect(svc.status().state).toBe("stopped");
   });
 });
 
@@ -769,7 +837,7 @@ describe("ipc handlers have real effects (T-TRU-03)", () => {
       expect(afterReset).toMatchObject({ ok: true, layer: "default" });
       const exported = await call("config/export", { version: 1 });
       expect(typeof exported["json"]).toBe("string");
-      const imported = await call("config/import", { version: 1, json: JSON.stringify({ values: {} }) });
+      const imported = await call("config/import", { version: 1, json: JSON.stringify({ version: 1, values: {} }) });
       expect(imported).toMatchObject({ ok: true, applied: 0 });
       // Every mutating channel above recorded into the session recorder.
       expect(svc.recorder.count()).toBeGreaterThan(seenEvents);
