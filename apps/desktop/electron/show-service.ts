@@ -311,10 +311,12 @@ export function runShutdown(opts: ShutdownOptions): Promise<void> {
           }),
         ]);
         opts.onStep?.(step.name, Date.now() - started);
+        audit("shutdown.step", { step: step.name, ms: Date.now() - started });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         const timedOut = message.startsWith("shutdown step timeout:");
         svc.recorder.record(timedOut ? "shutdown/step-timeout" : "shutdown/step-error", { step: step.name, message });
+        audit("shutdown.step", { step: step.name, ms: Date.now() - started, error: message.slice(0, 200) });
         opts.onStep?.(step.name, Date.now() - started);
       }
     }
