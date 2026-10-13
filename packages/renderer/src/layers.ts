@@ -78,17 +78,61 @@ export function cellKey(fixtureId: string, cellIndex: number): string {
 }
 
 // Cue type to spec 33 layer. An explicit tag from the planner (T-PLAN-13)
-// wins; the mapping is the fallback, never a priority heuristic.
+// wins; the mapping is the fallback, never a priority heuristic. It mirrors
+// the shared spelling in show-planner/src/layers-fallback.ts so untagged
+// legacy cues land on the same layer the planner would tag them with.
 const CUE_LAYER: Record<string, RenderLayer> = {
+  "static-look": "base",
   "section-look": "base",
+  "gradient-look": "base",
   "breakdown-look": "base",
+  "outro-release": "base",
+  orbit: "spatial",
+  "perimeter-orbit": "spatial",
+  ripple: "spatial",
+  "radial-pulse": "spatial",
+  "opposed-pulse": "spatial",
+  converge: "spatial",
+  diverge: "spatial",
+  radar: "spatial",
+  "split-alternate": "spatial",
+  "quadrant-rotate": "spatial",
+  "wall-step": "spatial",
+  "corner-hits": "spatial",
+  fill: "spatial",
+  unfill: "spatial",
+  "gradient-rotate": "spatial",
+  spiral: "spatial",
+  breathe: "spatial",
+  mirror: "spatial",
+  "symmetric-sweep": "spatial",
+  "spatial-wipe": "spatial",
+  "group-handoff": "spatial",
+  "texture-hold": "spatial",
+  chase: "spatial",
   "chase-flip": "spatial",
+  sweep: "spatial",
+  "mirror-sweep": "spatial",
+  alternate: "spatial",
+  split: "spatial",
+  wave: "spatial",
+  pulse: "rhythm",
+  bump: "rhythm",
+  "decay-hit": "rhythm",
+  "roll-pattern": "rhythm",
   "build-ramp": "accents",
-  "white-hit": "exclusive",
+  "phrase-turn": "accents",
+  "fill-accent": "accents",
+  "vocal-focus": "accents",
+  "drop-pattern": "accents",
+  "final-hit": "accents",
   impact: "exclusive",
-  strobe: "exclusive",
+  "white-hit": "exclusive",
   blackout: "exclusive",
   dip: "exclusive",
+  reveal: "exclusive",
+  "strobe-burst": "exclusive",
+  strobe: "exclusive",
 };
 
 const LAYER_LOOKUP: Record<RenderLayer, true> = {
@@ -123,7 +167,9 @@ export function compositeLayers(layers: readonly LayerContribution[]): LinearCel
 
   for (const layer of ordered) {
     for (const [key, contribution] of layer.cells) {
-      const previous: [number, number, number] = out.get(key) ?? [0, 0, 0];
+      // Multiply is relative to the light underneath: seed empty cells with
+      // 1 so a lone dip keeps the light it names instead of going black.
+      const previous: [number, number, number] = out.get(key) ?? (contribution.blend === "multiply" ? [1, 1, 1] : [0, 0, 0]);
       out.set(key, blend(previous, contribution));
     }
   }

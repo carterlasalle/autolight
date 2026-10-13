@@ -16,6 +16,12 @@ export interface SeedInput {
   nativeId?: string;
 }
 
+export interface SeedPick {
+  value: string;
+  source: SeedSource;
+  weak: boolean;
+}
+
 export interface PlannerSeed {
   seed: string;
   seedSource: SeedSource;
@@ -30,12 +36,17 @@ export interface PlannerSeed {
  * plan.determinism.
  */
 export function derivePlannerSeed(input: SeedInput, plannerVersion: string, styleId: string): PlannerSeed {
-  const pick: { value: string; source: SeedSource; weak: boolean } =
-    input.pcmFingerprint !== undefined && input.pcmFingerprint !== ""
-      ? { value: `pcm:${input.pcmFingerprint}`, source: "pcm-fingerprint", weak: false }
-      : input.fileHash !== undefined && input.fileHash !== ""
-        ? { value: `hash:${input.fileHash}`, source: "file-hash", weak: false }
-        : { value: `id:${input.nativeId ?? "unknown"}`, source: "native-id-weak", weak: true };
+  let pick: SeedPick;
+
+  if (input.pcmFingerprint !== undefined && input.pcmFingerprint !== "") {
+    pick = { value: `pcm:${input.pcmFingerprint}`, source: "pcm-fingerprint", weak: false };
+  } else if (input.fileHash !== undefined && input.fileHash !== "") {
+    pick = { value: `hash:${input.fileHash}`, source: "file-hash", weak: false };
+  } else if (input.nativeId !== undefined && input.nativeId !== "") {
+    pick = { value: `id:${input.nativeId}`, source: "native-id-weak", weak: true };
+  } else {
+    throw new Error("derivePlannerSeed needs a pcmFingerprint, fileHash, or nativeId; refusing the shared id:unknown sentinel");
+  }
 
   const seed = createHash("sha256")
     .update(`${pick.value}|${plannerVersion}|${styleId}`)
@@ -47,7 +58,16 @@ export function derivePlannerSeed(input: SeedInput, plannerVersion: string, styl
 
 /** Mulberry32 stream for the planner; kept here so the seed has one consumer. */
 export function seedStream(seedHex: string): () => number {
-  let a = parseInt(seedHex.slice(0, 8), 16) >>> 0;
+  if (!/^[0-9a-fA-F]{8,16}$/.test(seedHex)) {
+    throw new Error("seedStream needs 8-16 hex chars");
+  }
+
+  const hi = parseInt(seedHex.slice(0, 8), 16) >>> 0;
+  const loHex = seedHex.slice(8, 16);
+  const lo = loHex.length > 0 ? parseInt(loHex.padEnd(8, "0"), 16) >>> 0 : 0;
+  // Fold both digest halves into the 32-bit state so seeds that differ
+  // only past char 8 still diverge; 8-char legacy seeds keep state hi.
+  let a = (hi ^ lo) >>> 0;
 
   return () => {
     a |= 0;

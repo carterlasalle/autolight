@@ -115,9 +115,13 @@ describe("planner", () => {
   it("regenerates one section, keeps locked cues", () => {
     const plan = planShow(track, style);
     const idx = plan.cues.findIndex((c) => c.startBeat === 64);
+    expect(idx).toBeGreaterThanOrEqual(0);
+    const locked = plan.cues[idx]!;
     const fresh = [{ type: "section-look", startBeat: 64, durationBeats: 32, intensity: 0.5, target: "PRIMARY", priority: 10 }];
     const regen = regenerateSection(plan, 64, 96, fresh, [idx]);
     expect(regen.cues.filter((c) => c.startBeat === 64)).toHaveLength(2);
+    expect(regen.cues).toContain(locked);
+    expect(regen.cues.some((c) => c.intensity === 0.5 && c.target === "PRIMARY")).toBe(true);
     const regen2 = regenerateSection(plan, 64, 96, fresh, []);
     expect(regen2.cues.filter((c) => c.startBeat === 64)).toHaveLength(1);
   });

@@ -96,20 +96,30 @@ describe("T-PLAN-10 validator and evaluator (P-114, P-115)", () => {
     expect(ps.some((p) => p.includes("unknown primitive"))).toBe(true);
     expect(ps.some((p) => p.includes("level violation"))).toBe(true);
   });
-  it("rejects capabilities the venue lacks", () => {
+  it("rejects the closed-loop topology and the strobe flag independently", () => {
     const plan = good();
-    const ps = validateCompiledPlan(plan, 400, cfg, { venue: { ...DEFAULT_VENUE_CLASS, topologies: ["vertical-line"], flags: { ...DEFAULT_VENUE_CLASS.flags, strobe: false } } });
-    expect(ps.some((p) => p.includes("unsupported capability"))).toBe(true);
+    const noLoop = validateCompiledPlan(plan, 400, cfg, { venue: { ...DEFAULT_VENUE_CLASS, topologies: ["vertical-line"] } });
+
+    expect(noLoop.some((p) => p.includes("unsupported capability closed-loop"))).toBe(true);
+    expect(noLoop.some((p) => p.includes("unsupported capability strobe"))).toBe(false);
+    const noStrobe = validateCompiledPlan(plan, 400, cfg, { venue: { ...DEFAULT_VENUE_CLASS, flags: { ...DEFAULT_VENUE_CLASS.flags, strobe: false } } });
+
+    expect(noStrobe.some((p) => p.includes("unsupported capability strobe"))).toBe(true);
   });
   it("computes all ten spec 115 diagnostics and flags out-of-bounds generations", () => {
-    const d = evaluateCompiledPlan(good(), cfg);
+    const plan = good();
+    const template = plan.cues[0]!;
+    const guarantee = { ...template, id: "seed-hit", type: "white-hit", startBeat: 64, durationBeats: 1, intensity: 1, target: "ALL", priority: 100, reason: "guaranteed white hit for the bounds check" };
+    const withHit = { ...plan, cues: plan.cues.some((c) => c.type === "white-hit") ? plan.cues : [...plan.cues, guarantee] };
+    const d = evaluateCompiledPlan(withHit, cfg);
 
     for (const k of ["activeDensity","darknessPct","colourChangeRate","whiteHits","blackouts","strobeBeats","patternRecurrence","spatialEntropy","sectionContrast","intensityArc"] as const) {
-      expect(typeof d[k]).toBe("number");
+      expect(Number.isFinite(d[k])).toBe(true);
     }
 
     const tight = { ...cfg, evaluationBounds: { ...cfg.evaluationBounds, whiteHits: [0, 0] as readonly [number, number] } };
 
-    if (d.whiteHits > 0) expect(diagnosticsOutOfBounds(d, tight).some((x) => x.includes("whiteHits"))).toBe(true);
+    expect(d.whiteHits).toBeGreaterThan(0);
+    expect(diagnosticsOutOfBounds(d, tight).some((x) => x.includes("whiteHits"))).toBe(true);
   });
 });

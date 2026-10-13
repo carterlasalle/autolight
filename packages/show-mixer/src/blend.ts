@@ -115,18 +115,26 @@ export function blendColors(entries: ColourEntry[], space: BlendSpace = DEFAULT_
 
   if (audible.length === 0) return { rgb: { r: 0, g: 0, b: 0 }, intensity: 0 };
   const total = audible.reduce((sum, e) => sum + e.weight, 0);
-  const intensity = Math.min(1, total);
+  const gain = Math.min(1, total);
 
   if (space === "srgb-legacy") {
-    return { rgb: linearToRgb(rgbToLinear(scale(mixSrgb(audible, total), intensity))), intensity };
+    const mixed = rgbToLinear(mixSrgb(audible, total));
+
+    return { rgb: linearToRgb([mixed[0] * gain, mixed[1] * gain, mixed[2] * gain]), intensity: total };
+  }
+
+  if (space === "oklab-hue-linear-intensity") {
+    const mixed = mixOklabHueLinearIntensity(audible, total);
+
+    return { rgb: linearToRgb([mixed[0] * gain, mixed[1] * gain, mixed[2] * gain]), intensity: total };
   }
 
   const colour =
     space === "linear-rgb" ? mixLinearRgb(audible, total) : oklabToLinear(mixOklab(audible, total));
 
-  const scaled: [number, number, number] = [colour[0] * intensity, colour[1] * intensity, colour[2] * intensity];
+  const scaled: [number, number, number] = [colour[0] * gain, colour[1] * gain, colour[2] * gain];
 
-  return { rgb: linearToRgb(scaled), intensity };
+  return { rgb: linearToRgb(scaled), intensity: total };
 }
 
 function mixSrgb(entries: ColourEntry[], total: number): Rgb {
@@ -172,6 +180,13 @@ function mixOklab(entries: ColourEntry[], total: number): Lab {
   return out;
 }
 
-function scale(rgb: Rgb, factor: number): Rgb {
-  return { r: rgb.r * factor, g: rgb.g * factor, b: rgb.b * factor };
+// DS-09 combined mode: hue mixes perceptually (the a/b mean, as in plain
+// OKLab) while lightness mixes in linear light (the L of the linear-RGB
+// mean), so equal-weight mixes keep linear-light intensity semantics.
+function mixOklabHueLinearIntensity(entries: ColourEntry[], total: number): [number, number, number] {
+  const lab = mixOklab(entries, total);
+  const lightness = linearToOklab(mixLinearRgb(entries, total)).L;
+
+  return oklabToLinear({ L: lightness, a: lab.a, b: lab.b });
 }
+
