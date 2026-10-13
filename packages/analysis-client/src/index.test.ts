@@ -12,11 +12,11 @@ describe("analysis-client", () => {
   it("rejects on failure and requeues manually", () => {
     const c = new AnalysisClient();
     const p = c.analyze({ trackId: "t2", audioPath: "/m/b.mp3" });
-    // analyze() enqueues the job; the failure leaves that entry queued, so a
-    // manual requeue of identical inputs makes two queued entries.
+    // analyze() enqueues the job; the failure clears that entry (dequeue on
+    // clear), so a manual requeue of identical inputs makes one queued entry.
     c.handleMessage({ type: "failed", trackId: "t2", error: "boom" });
     expect(p).rejects.toThrow("boom");
     c.requeue({ trackId: "t2", audioPath: "/m/b.mp3" });
-    expect(c.queuedCount()).toBe(2);
+    expect(c.queuedCount()).toBe(1);
   });
 });
