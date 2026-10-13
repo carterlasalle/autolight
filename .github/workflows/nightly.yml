@@ -28,15 +28,15 @@ jobs:
         run: |
           for PKG in contracts show-runtime show-mixer renderer show-planner venue govee rekordbox-live controller-flx4; do
             mkdir -p "/tmp/stryker-$PKG"
-            cat > "/tmp/stryker-$PKG/stryker.config.json" <<EOF
-            {
-              "testRunner": "vitest",
-              "coverageAnalysis": "perTest",
-              "tsconfigFile": "tsconfig.json",
-              "thresholds": { "high": 85, "low": 85, "break": 85 },
-              "mutate": ["src/index.ts"]
-            }
-            EOF
+          cat > "/tmp/stryker-$PKG/stryker.config.json" <<EOF
+          {
+            "testRunner": "vitest",
+            "coverageAnalysis": "perTest",
+            "tsconfigFile": "tsconfig.json",
+            "thresholds": { "high": 85, "low": 85, "break": 85 },
+            "mutate": ["src/index.ts"]
+          }
+          EOF
             yarn stryker run --configFile "/tmp/stryker-$PKG/stryker.config.json" --project packages/$PKG
           done
       - name: Mutation survivors in the safety-critical list (T-TRU-08)

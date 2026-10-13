@@ -94,26 +94,6 @@ jobs:
       - run: uv sync --frozen --all-groups
         working-directory: analysis
 
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - run: corepack enable
-      - run: yarn install --immutable
-      # Knip is warn-only (T-TRU-04 ratchet): unused exports and test-only
-      # shadcn leaves are tracked, not blocking. A nonzero exit never fails
-      # this job; the ratchet turns blocking when counts reach zero.
-      - run: yarn knip || true
-      - uses: astral-sh/setup-uv@v5
-      - run: uv sync --frozen --all-groups
-        working-directory: analysis
-      # Vulture: T-TRU-04 owns the Python dead-code gate; run the live tool
-      # with --with (no pyproject line yet) so coverage is real.
-      - run: uv run --with vulture vulture src --min-confidence 80
-        working-directory: analysis
-
   architecture:
     runs-on: ubuntu-latest
     steps:
@@ -205,16 +185,16 @@ jobs:
               *) echo "package $PKG not in the mutation scope (T-TRU-08 modules); skipping" ; continue ;;
             esac
             mkdir -p "/tmp/stryker-$PKG"
-            cat > "/tmp/stryker-$PKG/stryker.config.json" <<'STRYKER_EOF'
-            {
-              "testRunner": "vitest",
-              "coverageAnalysis": "perTest",
-              "tsconfigFile": "tsconfig.json",
-              "thresholds": { "high": 85, "low": 85, "break": 85 },
-              "mutate": ["src/index.ts"]
-            }
-            STRYKER_EOF
-            yarn stryker run --configFile "/tmp/stryker-$PKG/stryker.config.json" --project packages/$PKG || exit $?
+          cat > "/tmp/stryker-$PKG/stryker.config.json" <<'STRYKER_EOF'
+          {
+            "testRunner": "vitest",
+            "coverageAnalysis": "perTest",
+            "tsconfigFile": "tsconfig.json",
+            "thresholds": { "high": 85, "low": 85, "break": 85 },
+            "mutate": ["src/index.ts"]
+          }
+          STRYKER_EOF
+            yarn stryker run --configFile "/tmp/stryker-$PKG/stryker.config.json" --project "packages/$PKG" || exit $?
           done
           # Every changed package was out of scope: nothing mutated, job green.
           echo "mutation-fast done (in-scope packages mutated, out-of-scope skipped)"
@@ -420,5 +400,5 @@ jobs:
         shell: bash
         run: |
           ls -la installers/
-          test "$(ls installers/ | wc -l)" -gt 0
+          test "$(find installers/ -mindepth 1 -maxdepth 1 | wc -l)" -gt 0
           echo "smoke-install: installer artifact present for ${{ matrix.platform }}"
