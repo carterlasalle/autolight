@@ -4,12 +4,14 @@ import type { DeviceTile } from "../features/venue/venue.js";
 
 // LiveState: resolved show for the decks actually loaded right now.
 // null = nothing resolved yet — UI shows empty states, never fixture tracks.
+export interface DeckSnapshot { title: string; artist: string; readiness: "READY" | "NEEDS ANALYSIS"; bpm: number | null; section: string | undefined; countdown: string | undefined }
+
 export interface LiveState {
   source: "REKORDBOX" | "SERATO";
   bpm: number | null;
   beat: number | undefined;
-  deckA: { title: string; artist: string; readiness: "READY" | "NEEDS ANALYSIS"; bpm: number | null; section: string | undefined; countdown: string | undefined };
-  deckB: { title: string; artist: string; readiness: "READY" | "NEEDS ANALYSIS"; bpm: number | null; section: string | undefined; countdown: string | undefined };
+  deckA: DeckSnapshot;
+  deckB: DeckSnapshot;
   cues: ShowCue[];
   cells: { x: number; color: string }[];
 }
@@ -23,21 +25,37 @@ declare global {
 
 // T-ARC-02: IPC errors surface in diagnostics status, never swallowed into
 // undefined. Callers that tolerate absence check for null explicitly.
-export async function invoke(channel: string, payload: unknown): Promise<unknown | null> {
+export async function invoke(channel: string, payload: unknown): Promise<unknown> {
+  const key = `ipc:${channel}`;
+
+  const recordDiagnostic = (message: string): void => {
+    const { diagnostics, set } = useShell.getState();
+    set({ diagnostics: { ...diagnostics, [key]: message } });
+  };
+
+  const clearDiagnostic = (): void => {
+    const { diagnostics, set } = useShell.getState();
+
+    if (!(key in diagnostics)) return;
+    const next = { ...diagnostics };
+    delete next[key];
+    set({ diagnostics: next });
+  };
+
   try {
     if (!window.autolight) {
-      useShell.getState().diagnostics[`ipc:${channel}`] = "unavailable: preload missing";
+      recordDiagnostic("unavailable: preload missing");
 
       return null;
     }
 
-    return await window.autolight.invoke(channel, payload);
+    const result = await window.autolight.invoke(channel, payload);
+    clearDiagnostic();
+
+    return result;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-
-    try {
-      useShell.getState().diagnostics[`ipc:${channel}`] = message;
-    } catch { /* store not ready: error still propagates */ }
+    recordDiagnostic(message);
 
     return null;
   }
@@ -78,6 +96,8 @@ interface ShellState {
   running: boolean;
   manual: boolean;
   tier: EnergyTier | null;
+  blackout: boolean;
+  frozen: boolean;
   sensitivity: number;
   flashOn: boolean;
   flashMode: "static" | "cycle";
@@ -118,6 +138,8 @@ export const useShell = create<ShellState>((set) => ({
   blinder: true,
   running: true,
   manual: false,
+  blackout: false,
+  frozen: false,
   tier: null,
   sensitivity: 1,
   flashOn: true,

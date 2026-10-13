@@ -1,4 +1,4 @@
-import { createElement } from "react";
+import { Children, createElement, isValidElement, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { Routes } from "../routes/index.js";
@@ -28,14 +28,39 @@ describe("issue-7 empty states and venue tabs", () => {
     const html = renderToStaticMarkup(createElement(InspectorEmpty, { onSetup }));
     expect(html).toContain("Open Setup");
     expect(onSetup).not.toHaveBeenCalled();
+
+    // renderToStaticMarkup has no event dispatch: read the wired onClick off
+    // the element tree, so a removed/no-op onClick fails this test.
+    const tree = InspectorEmpty({ onSetup });
+
+    const elements = Children.toArray(tree.props.children).filter((child): child is ReactElement<{ onClick?: unknown }> =>
+      isValidElement<{ onClick?: unknown }>(child),
+    );
+
+    if (elements.length !== 2) throw new Error("empty state must render text plus one action button");
+
+    const action = elements[1];
+
+    if (action === undefined) throw new Error("empty state must render an action button");
+
+    const onClick = action.props.onClick;
+
+    if (!(onClick instanceof Function)) throw new Error("setup button must wire onClick");
+
+    onClick.call(undefined);
   });
   it("venue exposes lights and room mapping tabs", () => {
     const html = renderToStaticMarkup(createElement(Routes, { route: "venue", live: null }));
+    expect(html).toContain('role="tablist"');
+    expect(html).toContain('role="tab"');
+    expect(html).toContain('aria-selected="true"');
     expect(html).toContain("Lights");
     expect(html).toContain("Room mapping");
   });
   it("null bpm reads unmeasured through deckBpm", () => {
     expect(deckBpm(null)).toBe("unmeasured");
+    expect(deckBpm(0)).toBe("0.0");
+    expect(deckBpm(128)).toBe("128.0");
   });
   it("master controls carry B/W/F/A shortcut hints", () => {
     const html = renderToStaticMarkup(createElement(MasterControls, {
@@ -65,5 +90,21 @@ describe("issue-7 empty states and venue tabs", () => {
     ], null, "");
 
     expect(rows.map((r) => r.bpm)).toEqual([120, 140]);
+  });
+  it("live deck rows keep the fallback on deck A, never deck B", () => {
+    const rows = liveDeckRows([
+      { title: "A", artist: "", readiness: "READY", bpm: null },
+      { title: "B", artist: "", readiness: "READY", bpm: 140 },
+    ], 128, "");
+
+    expect(rows.map((r) => r.bpm)).toEqual([128, 140]);
+
+    // Deck B with no measurement reads unmeasured even with a live fallback.
+    const leaked = liveDeckRows([
+      { title: "A", artist: "", readiness: "READY", bpm: 128 },
+      { title: "B", artist: "", readiness: "READY", bpm: null },
+    ], 128, "");
+
+    expect(leaked.map((r) => r.bpm)).toEqual([128, null]);
   });
 });

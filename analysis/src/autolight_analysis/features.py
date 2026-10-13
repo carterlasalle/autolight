@@ -2,9 +2,10 @@
 
 All 22 spec 18 features as frame series at ``analysis.frame.hop`` /
 ``analysis.frame.size``, aggregated to sub-beat (``analysis.aggregate.
-subdivisions``, default 4), beat, bar and phrase using the actual beat
+subdivisions``, default 4), beat and bar using the actual beat
 timestamps: each beat window runs from its time to the next beat time, with
-partial edge windows divided by their true length (F-ANA-19).
+partial edge windows divided by their true length (F-ANA-19). Phrase-level
+structure comes from PSSI/ML in structure.py, not from this aggregation.
 """
 
 from __future__ import annotations
@@ -215,12 +216,24 @@ def aggregate_to_beats(
 
     Each beat window runs from its time to the next beat time; sub-beat splits
     divide evenly. Partial edge windows divide by their true frame count.
+    Empty input (no frames, or no beats) degrades to zeros, never raises.
     """
     n_frames = len(next(iter(frames.values()))) if frames else 0
     frame_times = np.arange(n_frames) * hop / rate
     n_beats = len(beat_times)
     beat_means: dict[str, list[float]] = {k: [] for k in frames}
     subbeat: dict[str, list[float]] = {k: [] for k in frames}
+    if n_frames == 0 or n_beats == 0:
+        for _ in range(n_beats if n_frames == 0 and n_beats else 0):
+            for k in frames:
+                beat_means[k].append(0.0)
+                subbeat[k].extend([0.0] * subdivisions)
+        bars: dict[str, list[float]] = {k: [] for k in frames}
+        for b in range(0, n_beats, 4):
+            for k in frames:
+                window = beat_means[k][b : b + 4]
+                bars[k].append(float(np.mean(window)) if window else 0.0)
+        return {"beat": beat_means, "subbeat": subbeat, "bar": bars}
     spans = [beat_times[1] - beat_times[0]] if n_beats > 1 else [0.5]
     spans += [beat_times[i + 1] - beat_times[i] for i in range(1, max(1, n_beats - 1))]
     if n_beats > 1:
@@ -228,6 +241,11 @@ def aggregate_to_beats(
     for i in range(n_beats):
         start = beat_times[i]
         end = beat_times[i + 1] if i + 1 < n_beats else start + spans[-1]
+        edges = np.linspace(start, end, subdivisions + 1)
+        sub_masks = [
+            (frame_times >= edges[s]) & (frame_times < edges[s + 1])
+            for s in range(subdivisions)
+        ]
         mask = (frame_times >= start) & (frame_times < end)
         if not mask.any():
             nearest = int(np.argmin(np.abs(frame_times - start)))
@@ -235,13 +253,12 @@ def aggregate_to_beats(
             mask[min(nearest, n_frames - 1)] = True
         for k, series in frames.items():
             beat_means[k].append(float(series[mask].mean()))
-            edges = np.linspace(start, end, subdivisions + 1)
             for s in range(subdivisions):
-                sm = (frame_times >= edges[s]) & (frame_times < edges[s + 1])
+                sm = sub_masks[s]
                 subbeat[k].append(
                     float(series[sm].mean()) if sm.any() else beat_means[k][-1]
                 )
-    bars: dict[str, list[float]] = {k: [] for k in frames}
+    bars = {k: [] for k in frames}
     for b in range(0, n_beats, 4):
         for k in frames:
             bars[k].append(float(np.mean(beat_means[k][b : b + 4])))

@@ -1,15 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { Flx4Decoder } from "./map.js";
+ import { Flx4Decoder, type Flx4Event } from "./map.js";
 import {
+  type CompositeControllerInput,
   Flx4Feed,
   confirmControllerAudible,
   deriveExpressiveHints,
   driveCompositeFromFeed,
   feedEventFromDecoded,
+  type Flx4FeedEvent,
+  type Flx4ModelLike,
+  type Flx4ServiceLike,
   mapHintToMixer,
   subscribeServiceToComposite,
-  type Flx4FeedEvent,
 } from "./integration.js";
+import type { Flx4Signal } from "./signals.js";
 
 function at(ms: number): bigint {
   return BigInt(Math.round(ms)) * 1_000_000n;
@@ -69,7 +73,8 @@ describe("flx4 composite integration (T-FLX-06)", () => {
 
     // Recorded session on real bytes: LOAD deck 1, PLAY, tempo pair, channel
     // fader pair, crossfader pair. Each 14-bit MSB arrives incomplete and is
-    // kept as unknown; the completed LSB carries the full value.
+    // kept as unknown until its LSB completes the pair; the completed LSB
+    // carries the full value.
     const session: [number, number, number][] = [
       [0x96, 0x46, 0x7f],
       [0x90, 0x0b, 0x7f],
@@ -89,13 +94,21 @@ describe("flx4 composite integration (T-FLX-06)", () => {
     }
 
     expect(feed.unknownEvents()).toHaveLength(3);
+    expect(feed.unknownEvents().map((e) => [...e.raw])).toEqual([
+      [0xb0, 0x00, 0x48],
+      [0xb0, 0x13, 0x60],
+      [0xb6, 0x1f, 0x30],
+    ]);
     const drained = driveCompositeFromFeed(feed, composite);
-    expect(drained).toBeGreaterThan(0);
-    expect(seen.some((e) => e.control === "load" && e.deck === 1)).toBe(true);
-    expect(seen.some((e) => e.control === "play" && e.deck === 1)).toBe(true);
-    expect(seen.some((e) => e.control === "tempo" && e.deck === 1)).toBe(true);
-    expect(seen.some((e) => e.control === "channel-fader" && e.deck === 1)).toBe(true);
-    expect(seen.some((e) => e.control === "crossfader")).toBe(true);
+    expect(drained).toBe(5);
+    expect(seen.map((e) => `${e.deck}:${e.control}`)).toEqual([
+      "1:load",
+      "1:play",
+      "1:tempo",
+      "1:channel-fader",
+      "0:crossfader",
+    ]);
+    expect(seen.map((e) => Math.round(e.value * 1000) / 1000)).toEqual([1, 1, 0.564, 0.751, 0.376]);
   });
 
   it("keeps unknown messages with raw bytes instead of dropping them", () => {
@@ -103,7 +116,7 @@ describe("flx4 composite integration (T-FLX-06)", () => {
     const unknown = feed.ingestDecoded({ type: "unknown", raw: [0xb0, 0x77, 0x01], receivedAtNs: at(0) });
     expect(unknown).toBeNull();
     expect(feed.unknownEvents()).toHaveLength(1);
-    expect(feed.unknownEvents()[0]).toMatchObject({ type: "unknown" });
+    expect(feed.unknownEvents()[0]).toMatchObject({ type: "unknown", raw: [0xb0, 0x77, 0x01], receivedAtNs: at(0) });
   });
 
   it("bounds the queue with a drop counter", () => {
@@ -115,7 +128,13 @@ describe("flx4 composite integration (T-FLX-06)", () => {
     expect(feed.depth()).toBe(2);
     feed.push(deckEvent(1, "channel-fader", 0.9, 30));
     feed.push(deckEvent(2, "channel-fader", 0.8, 40));
-    expect(feed.droppedCount()).toBeGreaterThan(0);
+    expect(feed.droppedCount()).toBe(2);
+    expect(feed.depth()).toBe(2);
+    const drained = feed.drain();
+    expect(drained.map((e) => [e.deck, e.control, e.value])).toEqual([
+      [1, "channel-fader", 0.9],
+      [2, "channel-fader", 0.8],
+    ]);
   });
 
   it("wires service, model, deriver and composite in one subscription", () => {
@@ -123,46 +142,56 @@ describe("flx4 composite integration (T-FLX-06)", () => {
     const feed = new Flx4Feed();
     const compositeSeen: string[] = [];
 
-    const composite = {
+    const composite: CompositeControllerInput = {
       ingestControllerEvent: (event: { deck: 1 | 2 | 0; control: string; value: number; pad: number | null; atNs: bigint }) => {
         compositeSeen.push(`${event.deck}:${event.control}`);
       },
     };
 
     const applied: string[] = [];
-    const model = { apply: (event: { type: string }) => applied.push(event.type) };
-    const listeners = new Set<(event: never) => void>();
+    const model: Flx4ModelLike = { apply: (event) => applied.push(event.type) };
+    const listeners = new Set<(event: Flx4Event) => void>();
 
-    const service = { onEvent: (listener: (event: never) => void) => {
+    const service: Flx4ServiceLike = { onEvent: (listener) => {
       listeners.add(listener);
 
-      return () => listeners.delete(listener);
+      return () => { listeners.delete(listener); };
     } };
 
     const wiring = subscribeServiceToComposite(
       service,
       model,
-      () => [{ kind: "fader", deck: 1, value: 0.5, atNs: at(0), quality: "observed", source: "controller" } as const],
+      (event): Flx4Signal[] => [{
+        kind: "fader", deck: 1, value: 0.5, atNs: event.receivedAtNs, quality: "observed", source: "controller",
+      }],
       composite,
       feed,
     );
 
-    const emit = (event: never): void => {
+    const emit = (event: Flx4Event): void => {
       for (const listener of listeners) listener(event);
     };
 
-    emit(decoder.decode({ status: 0x90, data1: 0x0b, data2: 0x7f, receivedAtNs: at(0) }) as never);
+    emit(decoder.decode({ status: 0x90, data1: 0x0b, data2: 0x7f, receivedAtNs: at(0) }));
     expect(applied).toEqual(["control"]);
-    expect(wiring.signals()).toHaveLength(1);
+    expect(wiring.signals()).toMatchObject([{ kind: "fader", deck: 1, value: 0.5, quality: "observed", source: "controller" }]);
     expect(wiring.consumed()).toBe(1);
     expect(compositeSeen).toEqual(["1:play"]);
     wiring.stop();
+    expect(listeners.size).toBe(0);
+    emit(decoder.decode({ status: 0x90, data1: 0x0b, data2: 0x7f, receivedAtNs: at(10) }));
+    expect(applied).toHaveLength(1);
+    expect(compositeSeen).toHaveLength(1);
   });
 
   it("confirms audibility only when both sources agree", () => {
     expect(confirmControllerAudible(0.8, 0.5)).toBe(true);
     expect(confirmControllerAudible(0, 0.5)).toBe(false);
+    // Documented fail-open: a missing controller fader defers to the DJ
+    // weight so hints keep flowing without hardware; this is the null branch
+    // of the contract above, not a second source agreeing.
     expect(confirmControllerAudible(null, 0.5)).toBe(true);
+    expect(confirmControllerAudible(null, 0)).toBe(false);
   });
 });
 

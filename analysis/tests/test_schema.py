@@ -1,3 +1,6 @@
+import pathlib
+
+from autolight_analysis.events import EVENT_TYPES_19
 from autolight_analysis.schema import (
     EVENT_TYPES,
     SCHEMA_VERSION,
@@ -7,7 +10,11 @@ from autolight_analysis.schema import (
 
 
 def test_valid_model_passes():
+    from autolight_analysis.readiness import blank_inputs
+
     grid = [{"index": 0, "beatInBar": 1, "sourceTimeMs": 0.0, "bpm": 128.0}]
+    inputs = blank_inputs()
+    inputs["source.audio"] = {"status": "absent", "reason": "not attempted"}
     model = {
         "schemaVersion": SCHEMA_VERSION,
         "identity": {"id": "t", "sourceIds": {}},
@@ -24,6 +31,8 @@ def test_valid_model_passes():
         ],
         "musicalEvents": [{"type": "drop", "beat": 0, "confidence": 0.9}],
         "analysisCoverage": "structured",
+        "readinessLevel": "adaptive",
+        "analysisCoverage2": {"level": "adaptive", "inputs": inputs},
     }
     assert validate_track_model(model) == []
 
@@ -40,6 +49,14 @@ def test_invalid_model_lists_problems():
         }
     )
     assert len(problems) >= 5
+    assert any("schemaVersion=99" in p for p in problems)
+    assert any("identity.id missing" in p for p in problems)
+    assert any("beatInBar=5" in p for p in problems)
+    assert any("bpm=0" in p for p in problems)
+    assert any("section kind=nope" in p for p in problems)
+    assert any("event type=nope" in p for p in problems)
+    assert any("coverage=nope" in p for p in problems)
+    assert any("sourceTimeMs missing" in p for p in problems)
 
 
 def test_vocab_covers_contract():
@@ -47,21 +64,27 @@ def test_vocab_covers_contract():
     assert "major-section-transition" in EVENT_TYPES
     assert "drop-continuation" in EVENT_TYPES
     assert "bass-re-entry" in EVENT_TYPES
-    assert len(EVENT_TYPES) == 19
+    assert set(EVENT_TYPES) == set(EVENT_TYPES_19)
+    assert len(EVENT_TYPES) == len(EVENT_TYPES_19)
+
+
+def _repo_root(start: pathlib.Path) -> pathlib.Path:
+    for parent in (start, *start.parents):
+        if (parent / "test-fixtures" / "analysis").is_dir():
+            return parent
+    raise AssertionError(f"test-fixtures/analysis not found above {start}")
 
 
 def test_parity_fixture_parses_both_sides():
     import json
-    import pathlib
 
-    path = (
-        pathlib.Path(__file__).parent.parent.parent
-        / "test-fixtures"
-        / "analysis"
-        / "trackmodel-v2.fixture.json"
-    )
+    root = _repo_root(pathlib.Path(__file__).resolve())
+    path = root / "test-fixtures" / "analysis" / "trackmodel-v2.fixture.json"
+    assert path.is_file(), f"parity fixture missing: {path}"
     model = json.loads(path.read_text())
     assert validate_track_model(model) == []
-    assert json.dumps(model, sort_keys=True) == json.dumps(
-        json.loads(json.dumps(model, sort_keys=True)), sort_keys=True
-    )
+    assert model["schemaVersion"] == SCHEMA_VERSION
+    assert set(model["musicalEvents"][0]) >= {"type", "beat", "confidence"}
+    reparsed = json.loads(json.dumps(model, sort_keys=True))
+    assert reparsed == json.loads(json.dumps(model))
+    assert reparsed["analysisCoverage2"]["level"] == model["readinessLevel"]
