@@ -154,8 +154,19 @@ describe("serato protocol fixtures and replay (T-SER-05)", () => {
 
     for (const [index, state] of at1x.entries()) {
       const offset = state.receivedAtNs - epoch;
-      expect(at2x[index]?.receivedAtNs).toBe(epoch + offset / 2n);
-      expect(at10x[index]?.receivedAtNs).toBe(epoch + offset / 10n);
+      // The provider rewrites same-tick stamps to lastStateAtNs + 1n so
+      // receivedAtNs is strictly increasing provider-wide; that bump is
+      // bounded by the four remote decks. The scaled clock must still be the
+      // floor baseline of the 1x offset.
+      const scaled2 = epoch + offset / 2n;
+      const scaled10 = epoch + offset / 10n;
+      const got2 = at2x[index]?.receivedAtNs ?? 0n;
+      const got10 = at10x[index]?.receivedAtNs ?? 0n;
+
+      expect(got2 - scaled2).toBeGreaterThanOrEqual(0n);
+      expect(got2 - scaled2).toBeLessThanOrEqual(4n);
+      expect(got10 - scaled10).toBeGreaterThanOrEqual(0n);
+      expect(got10 - scaled10).toBeLessThanOrEqual(4n);
     }
 
     const stepped = [...replaySeratoFixtureStep(fixture)].flat();

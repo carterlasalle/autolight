@@ -292,6 +292,13 @@ export function readSeratoCrates(root: string): SeratoCrate[] {
     const path = join(dir, name);
 
     try {
+      // serato-connect's parser is lenient about the container magic; a
+      // corrupt crate must fail loudly here (the same "vrsn" rule our
+      // parseCrate enforces), so the listing skips it instead of surfacing
+      // an empty crate.
+      const raw = readFileSync(path);
+
+      if (String.fromCharCode(...raw.subarray(0, 4)) !== "vrsn") throw new Error(`bad crate magic in ${name}`);
       const crate = parseCrateSync(path);
 
       return [{ name, path, trackPaths: crate.trackPaths }];

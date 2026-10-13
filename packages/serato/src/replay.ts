@@ -126,7 +126,9 @@ function replayOnVirtualClock(frames: readonly SeratoFrameBytes[], factor: numbe
 
   for (const burst of seratoBursts(frames)) {
     const atMs = burst.at(-1)?.atMs ?? 0;
-    nowNs = VIRTUAL_EPOCH_NS + BigInt(Math.round((atMs * 1_000_000) / factor));
+    // Integer nanosecond scaling: offset/factor floors exactly, matching the
+    // replay contract (float rounding drifted the 2x/10x clocks by ±1ns).
+    nowNs = VIRTUAL_EPOCH_NS + BigInt(Math.round(atMs * 1_000_000)) / BigInt(factor);
     const stream = Buffer.concat(burst.map((frame) => frame.bytes));
     emitted.push(provider.ingestFrame(stream, nowNs).map((state) => ({ ...state })));
   }

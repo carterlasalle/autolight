@@ -25,6 +25,7 @@ import { getLiveShowBridge, resetLiveShowBridgeForTest } from "../../electron/se
 import { GoveeLanManager, resetGoveeManager } from "../../electron/govee-lan.js";
 import { getShowService } from "../../electron/show-service.js";
 import * as showService from "../../electron/show-service.js";
+import type { ShowServiceState } from "../../electron/show-service.js";
 import { GoveeLanSim } from "../../../../packages/simulator/src/govee-lan.js";
 import { closeStorageService, getStorageService, openStorageService } from "../../electron/services/storage-service.js";
 
@@ -197,13 +198,15 @@ describe("identity-service", () => {
 
     if (!pathOnly.ok) throw new Error("path should resolve");
     expect(pathOnly.identity.id).toBe("path:/a/b");
-    // Same path plus a file hash must re-resolve to the hash identity,
-    // not serve the stale path-only entry.
+    // Same path plus a file hash must re-resolve (never serve the stale
+    // path-only entry); the canonical id keeps the §12 priority where the
+    // path outranks the content hash.
     const hashed = svc.resolve({ canonicalPath: "/a/b", fileHash: "H" });
     expect(hashed.ok).toBe(true);
 
     if (!hashed.ok) throw new Error("hash should resolve");
-    expect(hashed.identity.id).toBe("hash:H");
+    expect(hashed.identity.id).toBe("path:/a/b");
+    expect(hashed.identity.sourceIds).toEqual({});
     expect(hashed.cached).toBe(false);
     // A blank native id fails over to the valid path instead of erroring.
     const blank = svc.resolve({ rekordboxId: "  ", canonicalPath: "/a/b" });
@@ -454,7 +457,10 @@ describe("matter-bridge", () => {
         for (const exit of exits.splice(0)) exit(0);
       },
     };
-    const svc = new MatterBridge({ spawn: () => { spawned += 1; return port; } });
+
+    const svc = new MatterBridge({ spawn: () => { spawned += 1;
+
+ return port; } });
     const seen: unknown[] = [];
 
     svc.onMessage(() => seen.push("ok"));
@@ -466,6 +472,7 @@ describe("matter-bridge", () => {
     expect(svc.send({ op: "ping" })).toBe(false);
     expect(svc.stop().state).toBe("stopped");
     expect(spawned).toBe(1);
+
     // Stale exit after stop: no respawn, no orphan.
     for (const exit of exits.splice(0)) exit(1);
     expect(spawned).toBe(1);
@@ -596,7 +603,9 @@ describe("ipc-router", () => {
     expect(denied).toMatchObject({ ok: false, error: { code: "E_SENDER" } });
 
     const invalid = await listener("master/freeze")(app, { version: 999, frozen: "yes" });
-    expect(invalid).toMatchObject({ ok: false, error: { code: "E_HANDLER" } });
+    // Request validation runs before any handler: an invalid payload is a
+    // rejected REQUEST (E_REQUEST), never a handler failure.
+    expect(invalid).toMatchObject({ ok: false, error: { code: "E_REQUEST" } });
 
     // Config channels land on config-service, the single config owner.
     const schema = await listener("config/schema")(app, { version: 1 });
@@ -612,6 +621,111 @@ describe("ipc-router", () => {
   });
 });
 
+// T-TRU-03 harness: every channel-group test gets a fresh router +
+// file-backed config + stubbed providers, so a failure in one group cannot
+// skip coverage in another (the old single-it() shape aborted everything
+// after the first red row, silently dropping the recorder guard).
+interface Tru03 {
+  call: (name: string, payload: RawIpcValue) => Promise<Record<string, unknown>>;
+  svc: ShowServiceState;
+}
+
+async function setupTru03(): Promise<Tru03 & { cleanup: () => void }> {
+  const dir = tempDir("autolight-tru03-");
+  resetConfigServiceForTest();
+  resetProviderManagerForTest();
+  await getConfigService({ filePath: join(dir, "config.json") });
+  // follow/ax reads the provider manager with stubbed readers: deck 1
+  // readable, deck 2 denied. Production wires osascript plus :50001 here.
+  getProviderManager({
+    readDecks: async () => [
+      { deckId: 1, elapsedSeconds: 12.5, playing: true, readable: true },
+      { deckId: 2, elapsedSeconds: null, playing: null, readable: false },
+    ],
+    watchProlink: () => () => undefined,
+  });
+  const registered = new Map<string, IpcPortListener>();
+
+  const port: IpcMainPort = {
+    handle: (channel, listener) => { registered.set(channel, listener); },
+    removeHandler: (channel) => { registered.delete(channel); },
+  };
+
+  const router = new IpcRouter(port);
+  router.start();
+  // Every typed channel is exercised: the count guards against a new
+  // channel landing without a side-effect row below.
+  expect(registered.size).toBe(Object.keys(channels).length);
+  const app = { senderFrame: { url: "file:///index.html" } };
+
+  const call = async (name: string, payload: RawIpcValue): Promise<Record<string, unknown>> => {
+    const found = registered.get(name);
+
+    if (!found) throw new Error(`channel ${name} not registered`);
+    // SAFETY: the router's reply shapes vary per channel; the row below
+    // asserts `ok: true`, so the cast cannot mask an error reply.
+    const res = (await found(app, payload)) as Record<string, unknown>;
+    expect(res).toMatchObject({ ok: true });
+
+    return res;
+  };
+
+  return {
+    call,
+    svc: getShowService(),
+    cleanup: () => {
+      showService.resetHostIntentForwarderForTest();
+      resetLiveShowBridgeForTest();
+      resetConfigServiceForTest();
+      resetProviderManagerForTest();
+      router.stop();
+    },
+  };
+}
+
+// AL-FLOW-001 fixture share + committed TrackModel (mirrors
+// live-show-bridge.test.ts): no machine paths, so CI and any dev machine
+// run the same proof.
+async function withLiveBridge(): Promise<void> {
+  resetLiveShowBridgeForTest();
+  const fixtureShare = mkdtempSync(join(tmpdir(), "tru03-share-"));
+  const bucket = join(fixtureShare, "135");
+  const trackDir = join(bucket, "fb47d-24bc-49c5-b5e7-ce275ed46465");
+  mkdirSync(trackDir, { recursive: true });
+  writeFileSync(join(trackDir, "ANLZ0000.DAT"), "", "utf16le");
+  const artifactDir = mkdtempSync(join(tmpdir(), "tru03-artifact-"));
+  const artifactPath = join(artifactDir, "live-deck1.trackmodel.json");
+  copyFileSync(FIXTURE_TRACK_MODEL, artifactPath);
+  getLiveShowBridge({ shareDir: fixtureShare, analyze: async () => artifactPath });
+}
+
+// show-service's govee() entry rebuilds the singleton from optionsFromConfig:
+// reset first, then rebuild through that entry so venue/* handlers and the
+// test share one manager. The sim's ports are construction-time, so they
+// ride in through the app config the entry already reads.
+async function withSimGovee(svc: ShowServiceState, simPort: number): Promise<void> {
+  const cfg = await getConfigService();
+  cfg.set("app", "govee.lan.ports.scan", simPort);
+  cfg.set("app", "govee.lan.ports.reply", 0);
+  cfg.set("app", "govee.lan.ports.control", simPort);
+  cfg.set("app", "govee.lan.discovery.multicast", false);
+  cfg.set("app", "govee.lan.discovery.perInterfaceBroadcast", false);
+  cfg.set("app", "govee.lan.discovery.globalBroadcast", false);
+  // show-service owns a SEPARATE PersistentConfigStore (T-CFG-02), not
+  // the ConfigService: mirror the sim ports there so govee() builds the
+  // same manager the probe below verified. scanList rides in through
+  // the same store because optionsFromConfig reads strings() there
+  // (applyLiveTunables only re-seeds an already-set list).
+  svc.config.set("app", "govee.lan.ports.scan", simPort);
+  svc.config.set("app", "govee.lan.ports.reply", 0);
+  svc.config.set("app", "govee.lan.ports.control", simPort);
+  svc.config.set("app", "govee.lan.discovery.multicast", false);
+  svc.config.set("app", "govee.lan.discovery.perInterfaceBroadcast", false);
+  svc.config.set("app", "govee.lan.discovery.globalBroadcast", false);
+  svc.config.set("app", "govee.lan.discovery.scanList", ["127.0.0.1"]);
+  showService.govee();
+}
+
 // T-TRU-03: no channel echoes its payload. Every channel runs through the
 // same dispatch path as production (router with a recording port) and each
 // row asserts a channel-specific observable effect or an authoritative read
@@ -619,46 +733,8 @@ describe("ipc-router", () => {
 // An echo regression (returning the request payload without touching state)
 // turns its row red because the state read would not have moved.
 describe("ipc handlers have real effects (T-TRU-03)", () => {
-  it("covers every channel with an observable effect or authoritative read", async () => {
-    const dir = tempDir("autolight-tru03-");
-    resetConfigServiceForTest();
-    resetProviderManagerForTest();
-    await getConfigService({ filePath: join(dir, "config.json") });
-    // follow/ax reads the provider manager with stubbed readers: deck 1
-    // readable, deck 2 denied. Production wires osascript plus :50001 here.
-    getProviderManager({
-      readDecks: async () => [
-        { deckId: 1, elapsedSeconds: 12.5, playing: true, readable: true },
-        { deckId: 2, elapsedSeconds: null, playing: null, readable: false },
-      ],
-      watchProlink: () => () => undefined,
-    });
-    const registered = new Map<string, IpcPortListener>();
-
-    const port: IpcMainPort = {
-      handle: (channel, listener) => { registered.set(channel, listener); },
-      removeHandler: (channel) => { registered.delete(channel); },
-    };
-
-    const router = new IpcRouter(port);
-    router.start();
-    // Every typed channel is exercised: the count guards against a new
-    // channel landing without a side-effect row below.
-    expect(registered.size).toBe(Object.keys(channels).length);
-    const app = { senderFrame: { url: "file:///index.html" } };
-
-    const call = async (name: string, payload: RawIpcValue): Promise<Record<string, unknown>> => {
-      const found = registered.get(name);
-
-      if (!found) throw new Error(`channel ${name} not registered`);
-      const res = (await found(app, payload)) as Record<string, unknown>;
-      expect(res).toMatchObject({ ok: true });
-
-      return res;
-    };
-
-    const svc = getShowService();
-    const seenEvents = svc.recorder.count();
+  it("master channels mutate overrides and forward one intent each", async () => {
+    const { call, svc, cleanup } = await setupTru03();
 
     try {
       // Master override channels mutate the override state (T-RUN-07) and
@@ -684,8 +760,16 @@ describe("ipc handlers have real effects (T-TRU-03)", () => {
         "master/blackout", "master/full", "master/freeze", "master/freeze",
         "master/intensity", "master/resume",
       ]);
-      showService.resetHostIntentForwarderForTest();
-      // Show channels mutate director state and record the trigger.
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("show channels mutate director state and record the trigger", async () => {
+    const { call, svc, cleanup } = await setupTru03();
+
+    try {
+      const seenEvents = svc.recorder.count();
       await call("show/style", { version: 1, style: "Techno", palette: "Cold" });
       expect(svc.showStyle).toEqual({ style: "Techno", palette: "Cold" });
       await call("show/energy", { version: 1, tier: "HIGH" });
@@ -694,69 +778,88 @@ describe("ipc handlers have real effects (T-TRU-03)", () => {
       await call("show/trigger-drop", { version: 1 });
       const state = await call("show/state", { version: 1, deck: 2 });
       expect(state).toMatchObject({ ok: true, deck: 2 });
-      // AL-FLOW-001: show/live serves the stubbed readable deck end to end
-      // (poll -> bridge resolve -> populated deck), never constant empty.
-      // Self-contained fixture share + committed TrackModel: no machine
-      // paths, so CI and any dev machine run the same proof (mirrors
-      // live-show-bridge.test.ts).
-      resetLiveShowBridgeForTest();
-      const fixtureShare = mkdtempSync(join(tmpdir(), "tru03-share-"));
-      const bucket = join(fixtureShare, "135");
-      const trackDir = join(bucket, "fb47d-24bc-49c5-b5e7-ce275ed46465");
-      mkdirSync(trackDir, { recursive: true });
-      writeFileSync(join(trackDir, "ANLZ0000.DAT"), "", "utf16le");
-      const artifactDir = mkdtempSync(join(tmpdir(), "tru03-artifact-"));
-      const artifactPath = join(artifactDir, "live-deck1.trackmodel.json");
-      copyFileSync(FIXTURE_TRACK_MODEL, artifactPath);
-      getLiveShowBridge({ shareDir: fixtureShare, analyze: async () => artifactPath });
+      expect(svc.recorder.count()).toBeGreaterThan(seenEvents);
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("show/live serves the stubbed readable deck end to end (AL-FLOW-001)", async () => {
+    const { call, cleanup } = await setupTru03();
+
+    try {
+      // AL-FLOW-001: poll -> bridge resolve -> populated deck, never constant
+      // empty.
+      await withLiveBridge();
       const live = await call("show/live", { version: 1 });
+      // SAFETY: show/live's reply contract carries a decks array; the length
+      // and beat-grid assertions below fail loudly if the shape ever changes.
       const decks = live["decks"] as { state: { playheadSeconds: number }; track: { beatGrid: { beats: unknown[] } } | null; plan: unknown }[];
-      expect(decks.length).toBe(1);
       expect(decks[0]?.track?.beatGrid.beats.length).toBeGreaterThan(100);
       expect(decks[0]?.plan).not.toBeNull();
       expect(decks[0]?.state.playheadSeconds).toBe(12.5);
-      resetLiveShowBridgeForTest();
-      // Follow, venue color, simulator mode mutate service state.
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("follow, venue color and simulator mode mutate service state", async () => {
+    const { call, svc, cleanup } = await setupTru03();
+
+    try {
       await call("follow/mode", { version: 1, mode: "ax" });
       expect(svc.followMode).toBe("ax");
       // follow/ax returns the stubbed provider readings (deck 1 readable).
       const ax = await call("follow/ax", { version: 1 });
+      // SAFETY: follow/ax's reply contract carries a readings array; the
+      // per-deck assertions below fail loudly if the shape ever changes.
       const readings = ax["readings"] as { deckId: number; readable: boolean }[];
       expect(readings.find((r) => r.deckId === 1)?.readable).toBe(true);
       expect(readings.find((r) => r.deckId === 2)?.readable).toBe(false);
       await call("venue/set-color", { version: 1, rgb: [10, 20, 30] });
       expect(svc.venueColor).toEqual([10, 20, 30]);
       // device-action dispatches through the Govee manager to the scanned sim
-      // below; the row lives after the scan so the device is known (an
-      // unknown MAC throws, which the unknown-device probe asserts).
+      // in the venue test below; the registry starts empty here.
       expect(svc.deviceIps.size).toBe(0);
       await call("simulator/mode", { version: 1, enabled: true });
       expect(svc.simulatorMode).toBe(true);
       await call("simulator/mode", { version: 1, enabled: false });
       expect(svc.simulatorMode).toBe(false);
-      // Scan-list-only discovery against a loopback sim: no LAN touched, the
-      // discovered MAC is the observable effect (T-GOV-05 scan ladder).
-      // venue/list is asserted after the scan, against the non-empty registry.
-      // Static imports: the sim source is a workspace file, always present.
-      const sim = new GoveeLanSim({ device: "AA:BB:CC:DD:EE:01", sku: "H6076", zones: 14 });
-      const simPort = await sim.start(0);
+    } finally {
+      cleanup();
+    }
+  });
 
-      const lan = new GoveeLanManager({
-        replyPort: 0,
-        scanPort: simPort,
-        controlPort: simPort,
-        multicast: false,
-        perInterfaceBroadcast: false,
-        globalBroadcast: false,
-        scanList: ["127.0.0.1"],
-        backgroundRescanMs: 60000,
-        statusDeadlineMs: 300,
-        statusRetryMs: 50,
-      });
+  it("venue channels discover and drive a loopback sim (T-GOV-05 ladder)", async () => {
+    const { call, svc, cleanup } = await setupTru03();
 
+    // Scan-list-only discovery against a loopback sim: no LAN touched, the
+    // discovered MAC is the observable effect (T-GOV-05 scan ladder).
+    // venue/list is asserted after the scan, against the non-empty registry.
+    // Static imports: the sim source is a workspace file, always present.
+    const sim = new GoveeLanSim({ device: "AA:BB:CC:DD:EE:01", sku: "H6076", zones: 14 });
+    const simPort = await sim.start(0);
+
+    const lan = new GoveeLanManager({
+      replyPort: 0,
+      scanPort: simPort,
+      controlPort: simPort,
+      multicast: false,
+      perInterfaceBroadcast: false,
+      globalBroadcast: false,
+      scanList: ["127.0.0.1"],
+      backgroundRescanMs: 60000,
+      statusDeadlineMs: 300,
+      statusRetryMs: 50,
+    });
+
+    try {
+      const found = await lan.scanOnce(400);
+      expect(found.map((d) => d.mac)).toContain("AA:BB:CC:DD:EE:01");
+
+      // The probe manager owns a bound reply socket: always release it in a
+      // dedicated finally, even if the singleton rebuild below throws.
       try {
-        const found = await lan.scanOnce(400);
-        expect(found.map((d) => d.mac)).toContain("AA:BB:CC:DD:EE:01");
         // venue/scan, identify, test-chase and device-action run against the
         // app's own manager rebuilt with the sim's ports: scan-list-only
         // discovery, no LAN touched (T-GOV-05 ladder over the wire, T-GOV-12
@@ -764,39 +867,17 @@ describe("ipc handlers have real effects (T-TRU-03)", () => {
         // socket is already bound), so the app singleton is reset and rebuilt
         // through show-service's own govee() entry point. Earlier rows already
         // built the app singleton (venue/list binds the default reply port):
-        // stop and reset it BEFORE stopping the probe lan, otherwise the
+        // stop and reset it BEFORE releasing the probe lan, otherwise the
         // probe's stop closes nothing and the stale singleton keeps the port.
         showService.govee().stop();
         resetGoveeManager();
-        lan.stop();
-        // show-service's govee() entry rebuilds the singleton from
-        // optionsFromConfig: reset first, then rebuild through that entry so
-        // venue/* handlers and this test share one manager. The scan-list is
-        // seedable (live tunable); the sim's ports are construction-time, so
-        // they ride in through the app config the entry already reads.
-        const cfg = await getConfigService();
-        cfg.set("app", "govee.lan.ports.scan", simPort);
-        cfg.set("app", "govee.lan.ports.reply", 0);
-        cfg.set("app", "govee.lan.ports.control", simPort);
-        cfg.set("app", "govee.lan.discovery.multicast", false);
-        cfg.set("app", "govee.lan.discovery.perInterfaceBroadcast", false);
-        cfg.set("app", "govee.lan.discovery.globalBroadcast", false);
-        // show-service owns a SEPARATE PersistentConfigStore (T-CFG-02), not
-        // the ConfigService: mirror the sim ports there so govee() builds the
-        // same manager the probe above verified. scanList rides in through
-        // the same store because optionsFromConfig reads strings() there
-        // (applyLiveTunables only re-seeds an already-set list).
-        svc.config.set("app", "govee.lan.ports.scan", simPort);
-        svc.config.set("app", "govee.lan.ports.reply", 0);
-        svc.config.set("app", "govee.lan.ports.control", simPort);
-        svc.config.set("app", "govee.lan.discovery.multicast", false);
-        svc.config.set("app", "govee.lan.discovery.perInterfaceBroadcast", false);
-        svc.config.set("app", "govee.lan.discovery.globalBroadcast", false);
-        svc.config.set("app", "govee.lan.discovery.scanList", ["127.0.0.1"]);
+        await withSimGovee(svc, simPort);
         const appMgr = showService.govee();
 
         try {
           const scanned = await call("venue/scan", { version: 1 });
+          // SAFETY: venue/scan and venue/list reply with devices/fixtures
+          // arrays; the length assertions below fail loudly on shape change.
           expect((scanned["devices"] as unknown[]).length).toBeGreaterThan(0);
           // venue/list reads the same registry snapshot (non-empty now).
           const venue = await call("venue/list", { version: 1 });
@@ -811,9 +892,18 @@ describe("ipc handlers have real effects (T-TRU-03)", () => {
           resetGoveeManager();
         }
       } finally {
-        await sim.stop();
+        lan.stop();
       }
+    } finally {
+      await sim.stop();
+      cleanup();
+    }
+  });
 
+  it("audio and diagnostics channels read the renderer tables", async () => {
+    const { call, cleanup } = await setupTru03();
+
+    try {
       // Audio surface: renderer owns enumeration, main reports none.
       const devices = await call("audio/devices", { version: 1 });
       expect(devices).toEqual({ ok: true, devices: [] });
@@ -824,8 +914,20 @@ describe("ipc handlers have real effects (T-TRU-03)", () => {
       expect(diag).toMatchObject({ ok: true, tab: "Transport" });
       const all = await call("diagnostics/all", { version: 1 });
       expect(typeof all["diagnostics"]).toBe("object");
-      // Config channels round-trip through the file-owning service.
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("config channels round-trip through the file-owning service", async () => {
+    const { call, svc, cleanup } = await setupTru03();
+
+    try {
+      const seenEvents = svc.recorder.count();
+      await call("show/trigger-build", { version: 1 });
       const schema = await call("config/schema", { version: 1 });
+      // SAFETY: config/schema's reply contract carries a keys array; the
+      // assertion below fails loudly if the shape ever changes.
       expect(Array.isArray((schema as { keys: unknown[] }).keys)).toBe(true);
       const tickHz = await call("config/get", { version: 1, key: "runtime.clock.tickHz" });
       expect(tickHz).toMatchObject({ ok: true, key: "runtime.clock.tickHz", liveSafe: false });
@@ -842,9 +944,7 @@ describe("ipc handlers have real effects (T-TRU-03)", () => {
       // Every mutating channel above recorded into the session recorder.
       expect(svc.recorder.count()).toBeGreaterThan(seenEvents);
     } finally {
-      resetConfigServiceForTest();
-      resetProviderManagerForTest();
-      router.stop();
+      cleanup();
     }
   });
 });
