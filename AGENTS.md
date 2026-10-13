@@ -2998,6 +2998,7 @@ S26 unbounded live queues (soak counter reset per iteration): bounded latest-win
 S27 hidden failover (silent transport switches reporting success): every switch logged, shown, reversible.
 S28 env-gated demo paths in release builds: Simulator mode is the only demo path, badged.
 S29 dynamic import hiding a static edge (`await import(provider-manager)` in show-service): GitNexus callgraph, depcruise, and Knip cannot resolve it; the unwired-service check and impact analysis go blind. No cycle existed (provider-manager never imports show-service). Prefer the static import; dynamic only across a proven cycle.
+S30 `git stash` (or `reset`/`checkout`) in the shared checkout during multi-agent work: one agent's stash-for-clean-verify cycle wiped 28 files of siblings' uncommitted deliveries (batch reworks vanished mid-flight; the stash ref was then consumed by a racing pop, leaving reflog archaeology as the only trace). Clean-tree comparisons MUST run in a separate `git worktree add` checkout; in the shared tree, work only in files you own and commit as soon as a slice verifies — nothing may sit uncommitted as a recoverable artifact for others.
 
 ---
 
