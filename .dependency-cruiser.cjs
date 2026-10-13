@@ -119,5 +119,18 @@ module.exports = {
       to: { path: "packages/(show-planner|show-runtime|show-mixer|renderer|venue|rekordbox-live|rekordbox-library|serato|analysis-client|track-model|storage)", pathNot: "\\.test\\.ts$" },
     },
   ],
-  options: { doNotFollow: { path: "node_modules" }, exclude: "(^|/)dist(/|$)", tsPreCompilationDeps: true },
+  options: {
+    // RE-VERIFIED 2026-10-13 (depcruise 18.5.0): bare @autolight/* imports
+    // record ZERO edges — a minimal probe file with one such import yields an
+    // empty dependency list regardless of config (doNotFollow exemption,
+    // tsConfig filename/include variants all tried; the TS resolver program
+    // errors out under NodeNext + no-include configs, and grazing mode still
+    // misses bare specifiers). Ownership enforcement for barrels stays with
+    // the ast-grep no-renderer-provider-barrel rules (red-run proven) and
+    // knip's dependency report; these rules still fire for resolved relative
+    // paths.
+    doNotFollow: { path: "node_modules" },
+    exclude: "(^|/)dist(/|$)",
+    tsPreCompilationDeps: true,
+  },
 };
