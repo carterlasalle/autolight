@@ -44,7 +44,7 @@ import {
   arm, paint, blackoutPayload, whiteHitPayload, PacingStream, WALL_SCHEDULER,
 } from "@autolight/govee";
 import type {
-  LanDeviceStatus, StreamTransport, StreamOptions,
+  LanDeviceStatus, LanInbound, StreamTransport, StreamOptions,
 } from "@autolight/govee";
 
 const GLOBAL_BROADCAST = "255.255.255.255";
@@ -835,7 +835,7 @@ export class GoveeLanManager implements StreamTransport {
         let parsed: LanDeviceStatus | null = null;
 
         try {
-          parsed = parseDevStatus(JSON.parse(text) as unknown);
+          parsed = parseDevStatus(JSON.parse(text));
         } catch {
           parsed = null;
         }
@@ -1789,10 +1789,10 @@ export class GoveeLanManager implements StreamTransport {
     const text = msg.toString("utf8");
     const atMs = this.clock();
     this.deliverToWaiters(rinfo.address, text);
-    let raw: unknown = null;
+    let raw: LanInbound = null;
 
     try {
-      raw = JSON.parse(text) as unknown;
+      raw = JSON.parse(text);
     } catch {
       return;
     }

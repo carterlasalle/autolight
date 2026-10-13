@@ -13,7 +13,7 @@ export {
 } from "./razer.js";
 
 export type {
-  ScanReply, LanDeviceStatus, StreamTransport, Scheduler, TimerHandle,
+  ScanReply, LanDeviceStatus, LanInbound, StreamTransport, Scheduler, TimerHandle,
   StreamOptions, EngineMetrics, EngineHealth, EngineStatus, EngineReport,
   LanStreamEngine, SegmentStreamLike,
 } from "./razer.js";
@@ -77,9 +77,11 @@ export function needsRequalification(savedFirmware: string, currentFirmware: str
   return savedFirmware !== currentFirmware;
 }
 
-// Blackout = RGB 0,0,0, never power-off (§47).
+// Blackout = RGB 0,0,0, never power-off (§47). Segment counts arrive as raw
+// numbers, so clamp once to an integer: allocation and iteration must agree,
+// and a fractional length would throw in the typed-array constructor.
 export function blackoutPayload(segmentCount: number): Uint8Array {
-  return new Uint8Array(Math.max(0, segmentCount) * 3);
+  return new Uint8Array(Math.max(0, Math.floor(segmentCount)) * 3);
 }
 
 // Linear-light channel scale (§49). Shared with renderer math.
@@ -91,10 +93,11 @@ export function scaleChannel(v: number, intensity: number, gamma = 2.2): number 
 
 // White hits = RGB(255,255,255) scaled, never CCT mode (§48).
 export function whiteHitPayload(segmentCount: number, intensity: number): Uint8Array {
-  const out = new Uint8Array(Math.max(0, segmentCount) * 3);
+  const count = Math.max(0, Math.floor(segmentCount));
+  const out = new Uint8Array(count * 3);
   const w = scaleChannel(255, intensity);
 
-  for (let i = 0; i < segmentCount; i++) { out[i * 3] = w; out[i * 3 + 1] = w; out[i * 3 + 2] = w; }
+  for (let i = 0; i < count; i++) { out[i * 3] = w; out[i * 3 + 1] = w; out[i * 3 + 2] = w; }
 
   return out;
 }
@@ -145,8 +148,9 @@ export interface ToolkitStreamFactory {
   openStream(deviceIp: string, zones: number): Promise<SegmentStream>;
 }
 
-// Single-zone fallback is owned by T-GOV-10: per-unit probe decides LAN
-// colorwc versus segmented paint. No default claim until qualified.
+// Single-zone fallback for the BLE/cloud last-resort path (T-GOV-10): samples
+// the middle segment so a symmetric multi-zone frame collapses to its visual
+// center. Per-unit probe decides LAN colorwc versus segmented paint.
 export function collapseToSingleColor(frame: Uint8Array): [number, number, number] {
   const n = Math.floor(frame.length / 3);
 
@@ -176,6 +180,7 @@ export class DeviceManager {
     if (existing) {
       existing.identity = identity;
       existing.health = "online";
+      existing.fps = fps;
 
       return existing;
     }
