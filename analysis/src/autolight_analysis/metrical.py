@@ -19,11 +19,14 @@ from __future__ import annotations
 
 import subprocess
 import tempfile
+import threading
 from pathlib import Path
 
 import numpy as np
 
 _beat_this_session = None
+_beat_this_session_device: str | None = None
+_beat_this_session_lock = threading.Lock()
 
 
 def beat_this_available() -> bool:
@@ -59,11 +62,14 @@ def beat_this_beats(audio_path: str, device: str = "cpu") -> dict | None:
     """
     if not beat_this_available():
         return None
-    global _beat_this_session
+    global _beat_this_session, _beat_this_session_device
     from beat_this import inference
 
-    if _beat_this_session is None:
-        _beat_this_session = inference.File2Beats(device=device)
+    if _beat_this_session is None or _beat_this_session_device != device:
+        with _beat_this_session_lock:
+            if _beat_this_session is None or _beat_this_session_device != device:
+                _beat_this_session = inference.File2Beats(device=device)
+                _beat_this_session_device = device
     beats, downbeats = _beat_this_session(audio_path)
     beats = [float(b) for b in np.atleast_1d(beats)]
     downbeats = {float(d) for d in np.atleast_1d(downbeats)}
@@ -92,17 +98,25 @@ def beat_this_cli(audio_path: str, device: str = "cpu") -> dict | None:
         subprocess.run(  # noqa: S603 - local beat_this binary from PATH lookup, fixed flags
             cmd, check=True, capture_output=True
         )
-        beats = []
+        beats: list[float] = []
+        numbers: list[int] = []
         for line in Path(out).read_text().splitlines():
             parts = line.split()
+            # .beats TSV: "<time>\t<beat-number>", 1 = downbeat.
             if len(parts) >= 1:
                 try:
-                    beats.append(float(parts[0]))
+                    t = float(parts[0])
                 except ValueError:
                     continue
+                beats.append(t)
+                try:
+                    numbers.append(int(parts[1]) if len(parts) >= 2 else 0)
+                except ValueError:
+                    numbers.append(0)
         if not beats:
             return None
-        return {"beats": beats, "downbeats": [], "beatInBar": [0] * len(beats)}
+        downbeats = [t for t, num in zip(beats, numbers) if num == 1]
+        return {"beats": beats, "downbeats": downbeats, "beatInBar": numbers}
 
 
 def ml_beats(audio_path: str, invoke: str = "api", device: str = "cpu") -> dict | None:
@@ -127,16 +141,31 @@ def grid_warning(native: list[float], ml: list[float], tol: float = 0.05) -> boo
     return abs(native[0] - ml[0]) > tol
 
 
+def _downbeat_agreement(
+    native: list[float] | None, ml: list[float] | None, tolerance_ms: float
+) -> float | None:
+    """Fraction of native downbeats matched within tolerance; None if unknown."""
+    if not native or not ml:
+        return None
+    tol = tolerance_ms / 1000.0
+    hits = sum(1 for d in native if any(abs(d - m) <= tol for m in ml))
+    return round(hits / len(native), 3)
+
+
 def compare_grids(
     native_times: list[float],
     ml_times: list[float],
     tolerance_ms: float | None = None,
     min_anchors: int | None = None,
+    native_downbeats: list[float] | None = None,
+    ml_downbeats: list[float] | None = None,
 ) -> dict:
     """Full GRID_WARNING comparison over all anchors (T-ANA-08).
 
     Returns ``{warn, medianOffsetMs, p95OffsetMs, driftMs, downbeatAgreement,
     segments}``. Segments name ranges such as a half-beat shift after bar 64.
+    ``downbeatAgreement`` is the fraction of native downbeats matched by an
+    ML downbeat within tolerance, or None when either side has no downbeats.
     """
     from autolight_analysis import config as cfg
 
@@ -152,7 +181,9 @@ def compare_grids(
             "medianOffsetMs": 0.0,
             "p95OffsetMs": 0.0,
             "driftMs": 0.0,
-            "downbeatAgreement": 1.0,
+            "downbeatAgreement": _downbeat_agreement(
+                native_downbeats, ml_downbeats, tolerance_ms
+            ),
             "segments": [],
         }
     offsets = np.array([m - v for v, m in zip(native_times[:n], ml_times[:n])])
@@ -184,7 +215,7 @@ def compare_grids(
                 run_start = None
     warn = bool(
         (median > tolerance_ms or p95 > tolerance_ms * 2)
-        and (ms > tolerance_ms).sum() >= min(0, min_anchors)
+        and (ms > tolerance_ms).sum() >= min_anchors
         and (ms > tolerance_ms).mean() >= 0.25
     )
     return {
@@ -192,7 +223,9 @@ def compare_grids(
         "medianOffsetMs": round(median, 2),
         "p95OffsetMs": round(p95, 2),
         "driftMs": round(drift, 2),
-        "downbeatAgreement": 1.0,
+        "downbeatAgreement": _downbeat_agreement(
+            native_downbeats, ml_downbeats, tolerance_ms
+        ),
         "segments": segments,
     }
 
@@ -204,6 +237,7 @@ def metrical_vote(
     mode: str = "both",
     tolerance_ms: float | None = None,
     min_anchors: int | None = None,
+    native_downbeats: list[float] | None = None,
 ) -> dict:
     """DS-12 agreement vote across the configured metrical sources (T-ANA-07).
 
@@ -217,14 +251,24 @@ def metrical_vote(
     anchors_default = cfg.get("analysis.gridWarning.minAnchors", 32)
     tolerance_ms = float(tolerance_ms if tolerance_ms is not None else tol_default)
     min_anchors = int(min_anchors if min_anchors is not None else anchors_default)
-    sources = {}
+    sources: dict[str, list[float]] = {}
+    downbeats: dict[str, list[float]] = {}
     if mode in ("beat-this", "both") and beat_this:
         sources["beat-this"] = beat_this.get("beats", [])
+        downbeats["beat-this"] = beat_this.get("downbeats", [])
     if mode in ("allinone-beats", "both") and allinone:
         sources["allinone-beats"] = allinone.get("beats", [])
+        downbeats["allinone-beats"] = allinone.get("downbeats", [])
     warnings = []
     for name, times in sources.items():
-        cmp = compare_grids(native_times, list(times), tolerance_ms, min_anchors)
+        cmp = compare_grids(
+            native_times,
+            list(times),
+            tolerance_ms,
+            min_anchors,
+            native_downbeats=native_downbeats,
+            ml_downbeats=downbeats.get(name),
+        )
         if cmp["warn"]:
             base = [
                 f"{name}:offset-median-{cmp['medianOffsetMs']}ms",

@@ -14,10 +14,15 @@ import {
 describe("ble scan and binding (T-BLE-02)", () => {
   it("parses every name family", () => {
     expect(nameFamilyOf("GBK_H6076_AB12")).toBe("gbk");
+    expect(nameFamilyOf("gbk_h6076_ab12")).toBe("gbk");
     expect(nameFamilyOf("GVH607612AB")).toBe("gv");
+    expect(nameFamilyOf("gvh607612ab")).toBe("gv");
     expect(nameFamilyOf("ihoment_ABC")).toBe("ihoment");
+    expect(nameFamilyOf("Ihoment_ABC")).toBe("ihoment");
     expect(nameFamilyOf("Govee_ABC")).toBe("govee");
+    expect(nameFamilyOf("govee_abc")).toBe("govee");
     expect(nameFamilyOf("Minger_ABC")).toBe("minger");
+    expect(nameFamilyOf("minger_abc")).toBe("minger");
     expect(nameFamilyOf(null)).toBe("unknown");
     expect(nameFamilyOf("Other_light")).toBe("unknown");
   });
@@ -43,9 +48,10 @@ describe("ble scan and binding (T-BLE-02)", () => {
 
   it("a missing expected device shows the close-the-app guidance", () => {
     const seen = parseBleAdvertisement({ address: "A1", name: "GBK_H6076_01", manufacturer: new Uint8Array([0]) });
-    const missing = parseBleAdvertisement({ address: "A2", name: "GBK_H6076_02", manufacturer: new Uint8Array([0]) });
-    const entry = toScanEntry(seen, missing);
+    const entry = toScanEntry(seen, true);
+    expect(entry.advertisement.address).toBe("A1");
     expect(entry.guidance).toBe(BLE_NOT_ADVERTISING_GUIDANCE);
+    expect(toScanEntry(seen).guidance).toBeNull();
   });
 
   it("binds on an aa 14 Wi-Fi MAC match across formats", () => {
@@ -59,8 +65,18 @@ describe("ble scan and binding (T-BLE-02)", () => {
 
     expect(binding.basis).toBe("wifi-mac-match");
     expect(binding.lanDeviceId).toBe("lan-1");
+    expect(binding.wifiMac).toBe("aa:bb:cc:dd:ee:ff");
   });
 
+  it("rejects noisy MACs instead of collapsing them into a false match", () => {
+    expect(() => bindBleToLan({
+      bleAddress: "AA:BB:CC:DD:EE:09",
+      lanDeviceId: "lan-9",
+      bleWifiMac: "aa:bb:cc:dd:ee:ffg",
+      lanWifiMac: "aa:bb:cc:dd:ee:ff",
+      identifyConfirmed: false,
+    })).toThrow(/refusing to bind/);
+  });
   it("binds on explicit user confirmation after the BLE identify flash", () => {
     const binding = bindBleToLan({
       bleAddress: "AA:BB:CC:DD:EE:02",
