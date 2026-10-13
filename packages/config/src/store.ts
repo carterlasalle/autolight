@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { z } from "zod";
 import { KEYS, defineKey } from "./registry.js";
 import { isSecretId } from "./secrets.js";
@@ -28,15 +28,13 @@ export type ConfigChangeListener = (change: ConfigChange) => void;
 
 const PERSISTED: Scope[] = ["app", "venue", "device", "style"];
 
+const ALL_SCOPES: Scope[] = ["app", "venue", "device", "style", "session"];
+
 const layerMapSchema = z.record(z.string(), z.unknown());
 
 const storedFileSchema = z.object({
   version: z.number(),
   layers: z.record(z.string(), layerMapSchema),
-}).passthrough();
-
-const importPayloadSchema = z.object({
-  values: layerMapSchema.optional(),
 }).passthrough();
 
 function safeGet(store: ConfigStore, key: string): unknown {
@@ -152,6 +150,12 @@ export class PersistentConfigStore extends ConfigStore {
     style: new Map(),
     session: new Map(),
   };
+  // Keys this instance explicitly removed from a layer (reset, or dropped by
+  // an import): the save() sibling merge must not re-adopt them from disk, or
+  // a reset would resurrect the value it just removed.
+  private readonly removed: Record<Scope, Set<string>> = {
+    app: new Set(), venue: new Set(), device: new Set(), style: new Set(), session: new Set(),
+  };
   private listeners = new Set<ConfigChangeListener>();
 
   constructor(filePath?: string) {
@@ -171,56 +175,91 @@ export class PersistentConfigStore extends ConfigStore {
     };
   }
 
+  // A listener must never drop the save or starve later listeners: one bad
+  // subscriber cannot take the store down with it.
   private emit(change: ConfigChange): void {
-    for (const fn of Array.from(this.listeners)) fn(change);
+    for (const fn of Array.from(this.listeners)) {
+      try {
+        fn(change);
+      } catch {
+        // Listener errors are deliberately swallowed here; persistence already
+        // happened above, and the remaining listeners still get the change.
+      }
+    }
   }
 
   override set(scope: Scope, key: string, value: unknown): void {
     const before = safeGet(this, key);
     super.set(scope, key, value);
     this.mirror[scope].set(key, value);
-    this.emit({ key, scope, layer: this.layerOf(key), before, after: safeGet(this, key), liveSafe: safeLiveSafe(key) });
+    this.removed[scope].delete(key);
+    // Persist before emitting: a listener that throws used to skip the save
+    // entirely, leaving memory changed and the file stale.
     this.save();
+    this.emit({ key, scope, layer: this.layerOf(key), before, after: safeGet(this, key), liveSafe: safeLiveSafe(key) });
   }
 
   override reset(scope: Scope, key: string): void {
     const before = safeGet(this, key);
     super.reset(scope, key);
     this.mirror[scope].delete(key);
-    this.emit({ key, scope, layer: this.layerOf(key), before, after: safeGet(this, key), liveSafe: safeLiveSafe(key) });
+    this.removed[scope].add(key);
     this.save();
+    this.emit({ key, scope, layer: this.layerOf(key), before, after: safeGet(this, key), liveSafe: safeLiveSafe(key) });
   }
 
   override importJson(raw: string): { ok: true } | { ok: false; badKeys: string[] } {
-    let parsed: unknown;
+    const before = new Map<string, { value: unknown; scope: Scope }>();
 
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      return { ok: false, badKeys: ["<unparseable JSON>"] };
+    for (const scope of ALL_SCOPES) {
+      for (const k of this.mirror[scope].keys()) {
+        if (!before.has(k)) before.set(k, { value: safeGet(this, k), scope });
+      }
     }
 
-    const check = importPayloadSchema.safeParse(parsed);
-    const values = check.success ? (check.data.values ?? {}) : {};
-    const bad = validateImportValues(values);
+    // The base owns document validation and layer application (flattened
+    // values plus optional per-layer origins); the store mirrors the result,
+    // tombstones what the document dropped, persists once and emits diffs.
+    const res = super.importJson(raw);
 
-    if (bad.length > 0) return { ok: false, badKeys: bad };
-    const before: Record<string, unknown> = {};
+    if (!res.ok) return res;
 
-    for (const k of Object.keys(values)) before[k] = safeGet(this, k);
+    for (const scope of ALL_SCOPES) {
+      const next = new Map<string, unknown>();
 
-    for (const [k, v] of Object.entries(values)) {
-      super.set("app", k, v);
-      this.mirror.app.set(k, v);
-    }
+      for (const k of KEYS) {
+        if (this.layerOf(k.key) === scope) next.set(k.key, this.get(k.key));
+      }
 
-    for (const k of Object.keys(values)) {
-      this.emit({ key: k, scope: "app", layer: this.layerOf(k), before: before[k], after: safeGet(this, k), liveSafe: safeLiveSafe(k) });
+      for (const k of this.mirror[scope].keys()) {
+        if (!next.has(k)) this.removed[scope].add(k);
+      }
+
+      for (const k of next.keys()) this.removed[scope].delete(k);
+      this.mirror[scope] = next;
     }
 
     this.save();
 
-    return { ok: true };
+    for (const k of KEYS) {
+      const old = before.get(k.key);
+      const after = safeGet(this, k.key);
+
+      if (!Object.is(old?.value, after)) {
+        const layer = this.layerOf(k.key);
+
+        this.emit({
+          key: k.key,
+          scope: layer === "default" ? (old?.scope ?? "app") : layer,
+          layer,
+          before: old?.value,
+          after,
+          liveSafe: safeLiveSafe(k.key),
+        });
+      }
+    }
+
+    return res;
   }
 
   load(): void {
@@ -229,29 +268,62 @@ export class PersistentConfigStore extends ConfigStore {
 
     if (!found) return;
 
+    // The file is authoritative after a load: removal intents from before it
+    // must not suppress its merge.
+    for (const scope of ALL_SCOPES) this.removed[scope].clear();
+
     for (const scope of PERSISTED) {
       for (const k of Array.from(this.mirror[scope].keys())) {
+        const before = safeGet(this, k);
         super.reset(scope, k);
         this.mirror[scope].delete(k);
+        this.emit({ key: k, scope, layer: this.layerOf(k), before, after: safeGet(this, k), liveSafe: safeLiveSafe(k) });
       }
     }
 
     for (const scope of PERSISTED) {
       for (const [k, v] of Object.entries(found[scope])) {
+        let liveSafe = false;
+
         try {
-          defineKey(k);
+          liveSafe = defineKey(k).liveSafe;
         } catch {
-          continue;
+          throw new Error(`unknown-config-key in ${this.filePath}: ${k}`);
         }
 
+        const before = safeGet(this, k);
         super.set(scope, k, v);
         this.mirror[scope].set(k, v);
+        this.emit({ key: k, scope, layer: this.layerOf(k), before, after: safeGet(this, k), liveSafe });
       }
     }
   }
 
   save(): void {
     if (!this.filePath) return;
+
+    // Re-read before writing so a sibling store that persisted since our last
+    // load does not get clobbered by this instance's stale mirror: keys this
+    // store never touched keep the other store's values (last writer still
+    // wins per key it touched, but untouched keys survive).
+    const onDisk = readLayersFile(this.filePath);
+
+    if (onDisk !== null) {
+      for (const scope of PERSISTED) {
+        for (const [k, v] of Object.entries(onDisk[scope])) {
+          if (!this.mirror[scope].has(k) && !this.removed[scope].has(k)) {
+            try {
+              defineKey(k);
+            } catch {
+              continue;
+            }
+
+            super.set(scope, k, v);
+            this.mirror[scope].set(k, v);
+          }
+        }
+      }
+    }
 
     const payload: StoredLayers = {
       version: 1,
@@ -264,6 +336,12 @@ export class PersistentConfigStore extends ConfigStore {
       },
     };
 
-    writeFileSync(this.filePath, JSON.stringify(payload, null, 2), "utf8");
+    // Atomic write: a crash, ENOSPC or a second writer mid-write must never
+    // leave a truncated config behind (rename is atomic on one filesystem).
+    // On corruption the reader above returns null and the store keeps its
+    // in-memory values instead of discarding everything silently.
+    const tmp = `${this.filePath}.tmp`;
+    writeFileSync(tmp, JSON.stringify(payload, null, 2), "utf8");
+    renameSync(tmp, this.filePath);
   }
 }
