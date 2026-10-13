@@ -97,7 +97,10 @@ describe("runtime invariants (T-TRU-12)", () => {
     const nullOut = checkInvariants(null);
     expect(nullOut).toHaveLength(1);
     expect(nullOut[0]?.code).toBe("invariant-error");
-    const broken = checkInvariants({ ...clean(), pendingPerDevice: undefined as never });
+    // Isolation within one run: a broken pending map reports invariant-error
+    // but must not suppress later checks — the mismatched zones below still
+    // report alongside it.
+    const broken = checkInvariants({ ...clean(), pendingPerDevice: undefined as never, frameZones: { lamp1: 1 } });
     expect(broken.some((v) => v.code === "pending-frames")).toBe(false);
     expect(broken.some((v) => v.code === "invariant-error")).toBe(true);
     expect(broken.some((v) => v.code === "segment-zones")).toBe(true);
