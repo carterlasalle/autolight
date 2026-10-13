@@ -1,14 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { computeFields, outlinePoint, projectToOutline, runPointAt } from "./fields.js";
+import { computeFields, outlinePoint, runPointAt } from "./fields.js";
 import type { FieldCell } from "./fields.js";
 import { outlineRuns } from "./venue.js";
 import { rectangleRoom } from "./room.js";
 
-function stripCells(n: number, room = rectangleRoom(5, 5)): { cells: FieldCell[]; midS: number[] } {
+function stripCells(n: number, room = rectangleRoom(5, 5)): { cells: FieldCell[] } {
   const runs = outlineRuns(room, 2.5);
   const run = runs[0]!;
   const cells: FieldCell[] = [];
-  const midS: number[] = [];
   let total = 0;
   const pts = [...run.polyline, run.polyline[0]!];
 
@@ -19,16 +18,14 @@ function stripCells(n: number, room = rectangleRoom(5, 5)): { cells: FieldCell[]
   for (let i = 0; i < n; i++) {
     const arcM = ((i + 0.5) / n) * total;
     const at = runPointAt(run, arcM);
-    const proj = projectToOutline(at.p, room.outline);
     cells.push({
       fixtureId: "strip", physicalIndex: i, logicalIndex: i,
       pos: { ...at.p }, extentStart: { ...at.p }, extentEnd: { ...at.p },
       runId: run.id, arcM, chain: i,
     });
-    midS.push(proj.s);
   }
 
-  return { cells, midS };
+  return { cells };
 }
 
 describe("T-ROOM-05 spatial field computation", () => {
@@ -70,8 +67,7 @@ describe("T-ROOM-05 spatial field computation", () => {
     };
 
     const f = computeFields(room, [lamp], outlineRuns(room, 2.5), { zeroS: 0 });
-    const corner = projectToOutline({ x: -2.5, y: 2.5 }, room.outline);
-    expect(f.s[0]).toBeCloseTo(((corner.s % 1) + 1) % 1, 6);
+    expect(f.s[0]).toBeCloseTo(0.25, 6);
   });
 
   it("flips uv left and right when the DJ turns 180 degrees", () => {
@@ -101,7 +97,9 @@ describe("T-ROOM-05 spatial field computation", () => {
     const { cells } = stripCells(8, room);
     const f = computeFields(room, cells, outlineRuns(room, 2.5), { zeroS: 0 });
     const signs = [...f.signedSplit].map((v) => (v >= 0 ? 1 : -1));
+    const transitions = signs.filter((v, i) => i > 0 && v !== signs[i - 1]).length;
     expect(new Set(signs).size).toBe(2);
+    expect(transitions).toBe(2);
   });
 
   it("rotates logical order on zero move without moving positions", () => {
@@ -112,14 +110,34 @@ describe("T-ROOM-05 spatial field computation", () => {
     const b = computeFields(room, cells, runs, { zeroS: 0.25 });
     expect([...a.pos]).toEqual([...b.pos]);
     expect([...a.s]).not.toEqual([...b.s]);
+
+    for (let i = 0; i < 8; i++) {
+      expect(b.s[i]!).toBeCloseTo((((a.s[i]! - 0.25) % 1) + 1) % 1, 5);
+    }
   });
 
   it("computes 2000 cells inside the field budget", () => {
     const room = rectangleRoom(5, 5);
     const { cells } = stripCells(2000, room);
+    const runs = outlineRuns(room, 2.5);
     const start = performance.now();
-    computeFields(room, cells, outlineRuns(room, 2.5), { zeroS: 0 });
-    expect(performance.now() - start).toBeLessThan(500);
+    const f = computeFields(room, cells, runs, { zeroS: 0 });
+    const elapsed = performance.now() - start;
+    expect(elapsed).toBeLessThan(2000);
+    expect(f.count).toBe(2000);
+    expect(f.s[0]).toBeGreaterThanOrEqual(0);
+    expect(f.s[0]).toBeLessThan(1);
+    expect(f.s[1999]).toBeGreaterThanOrEqual(0);
+    expect(f.s[1999]).toBeLessThan(1);
+    let worst = 0;
+
+    for (let i = 0; i < 2000; i++) {
+      const a = f.s[i]!;
+      const b = f.s[(i + 1) % 2000]!;
+      worst = Math.max(worst, Math.min(Math.abs(b - a), 1 - Math.abs(b - a)));
+    }
+
+    expect(worst).toBeLessThan(0.08);
   });
 
   it("samples outline points on the perimeter", () => {

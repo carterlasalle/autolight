@@ -60,9 +60,7 @@ function ContextMenuRadioGroup({
 function ContextMenuContent({
   className,
   ...props
-}: React.ComponentProps<typeof ContextMenuPrimitive.Content> & {
-  side?: "top" | "right" | "bottom" | "left"
-}) {
+}: React.ComponentProps<typeof ContextMenuPrimitive.Content>) {
   return (
     <ContextMenuPrimitive.Portal>
       <ContextMenuPrimitive.Content
@@ -101,22 +99,24 @@ function ContextMenuSubTrigger({
   className,
   inset,
   children,
+  hideChevron,
   ...props
 }: React.ComponentProps<typeof ContextMenuPrimitive.SubTrigger> & {
   inset?: boolean
+  hideChevron?: boolean
 }) {
   return (
     <ContextMenuPrimitive.SubTrigger
       data-slot="context-menu-sub-trigger"
       data-inset={inset}
       className={cn(
-        "flex cursor-default items-center gap-1.5 rounded-md px-1.5 py-1 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground data-inset:pl-7 data-open:bg-accent data-open:text-accent-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "group/context-menu-item flex cursor-default items-center gap-1.5 rounded-md px-1.5 py-1 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground data-inset:pl-7 data-open:bg-accent data-open:text-accent-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className
       )}
       {...props}
     >
       {children}
-      <ChevronRightIcon className="ml-auto" />
+      {hideChevron !== true && <ChevronRightIcon className="ml-auto" />}
     </ContextMenuPrimitive.SubTrigger>
   )
 }
@@ -134,6 +134,20 @@ function ContextMenuSubContent({
   )
 }
 
+const CHECK_ITEM_CLASS =
+  "group/context-menu-item relative flex cursor-default items-center gap-1.5 rounded-md py-1 pr-8 pl-1.5 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground data-inset:pl-7 data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4";
+
+function CheckItemIndicator() {
+  return (
+    <span className="pointer-events-none absolute right-2">
+      <ContextMenuPrimitive.ItemIndicator>
+        <CheckIcon
+        />
+      </ContextMenuPrimitive.ItemIndicator>
+    </span>
+  )
+}
+
 function ContextMenuCheckboxItem({
   className,
   children,
@@ -148,18 +162,13 @@ function ContextMenuCheckboxItem({
       data-slot="context-menu-checkbox-item"
       data-inset={inset}
       className={cn(
-        "relative flex cursor-default items-center gap-1.5 rounded-md py-1 pr-8 pl-1.5 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground data-inset:pl-7 data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        CHECK_ITEM_CLASS,
         className
       )}
-      checked={checked ?? false}
+      checked={checked}
       {...props}
     >
-      <span className="pointer-events-none absolute right-2">
-        <ContextMenuPrimitive.ItemIndicator>
-          <CheckIcon
-          />
-        </ContextMenuPrimitive.ItemIndicator>
-      </span>
+      <CheckItemIndicator />
       {children}
     </ContextMenuPrimitive.CheckboxItem>
   )
@@ -178,17 +187,12 @@ function ContextMenuRadioItem({
       data-slot="context-menu-radio-item"
       data-inset={inset}
       className={cn(
-        "relative flex cursor-default items-center gap-1.5 rounded-md py-1 pr-8 pl-1.5 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground data-inset:pl-7 data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        CHECK_ITEM_CLASS,
         className
       )}
       {...props}
     >
-      <span className="pointer-events-none absolute right-2">
-        <ContextMenuPrimitive.ItemIndicator>
-          <CheckIcon
-          />
-        </ContextMenuPrimitive.ItemIndicator>
-      </span>
+      <CheckItemIndicator />
       {children}
     </ContextMenuPrimitive.RadioItem>
   )

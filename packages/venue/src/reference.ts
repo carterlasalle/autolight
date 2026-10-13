@@ -1,5 +1,6 @@
 import { pointCells, runPointAt } from "./fields.js";
 import type { FieldCell } from "./fields.js";
+import { runLength } from "./placement.js";
 import type { Run } from "./placement.js";
 import { rectangleRoom } from "./room.js";
 import type { Room } from "./room.js";
@@ -52,8 +53,9 @@ export function squareRoom(): ReferenceRoom {
 export function squareMirrored(): ReferenceRoom {
   const base = squareRoom();
   const runs = loopRun(base.room, 2.5, { closed: false });
-  const a = { ...runs[0]!, id: "run-a", mirroredOf: null };
-  const b = { ...runs[0]!, id: "run-b", mirroredOf: "run-a" };
+  const poly = runs[0]!.polyline.map((p) => ({ ...p }));
+  const a = { ...runs[0]!, id: "run-a", mirroredOf: null, polyline: poly.map((p) => ({ ...p })) };
+  const b = { ...runs[0]!, id: "run-b", mirroredOf: "run-a", polyline: poly.map((p) => ({ ...p })) };
 
   return {
     ...base,
@@ -68,7 +70,7 @@ export function squareChunks(): ReferenceRoom {
   const room = rectangleRoom(5, 5, "Chunked square");
   const runs = outlineRuns(room, 2.5);
   const run = runs[0]!;
-  const total = 20;
+  const total = runLengthOf(run);
   run.gaps = [
     { fromM: total * 0.2, toM: total * 0.25 },
     { fromM: total * 0.6, toM: total * 0.68 },
@@ -173,27 +175,37 @@ export function referenceById(id: string): ReferenceRoom {
 }
 
 export function fieldCellsForReference(ref: ReferenceRoom): { cells: FieldCell[]; midS: number[] } {
-  const run = ref.runs[0]!;
-  const total = runLengthOf(run);
   const cells: FieldCell[] = [];
   const midS: number[] = [];
+  const litLens = ref.runs.map((r) => litLenOf(r));
+  const litTotal = litLens.reduce((acc, v) => acc + v, 0);
+  let index = 0;
 
-  for (let i = 0; i < ref.stripCells; i++) {
-    const arcM = ((i + 0.5) / ref.stripCells) * total;
-    const at = runPointAt(run, arcM);
-    const s = arcFraction(run, arcM);
-    cells.push({
-      fixtureId: "strip",
-      physicalIndex: i,
-      logicalIndex: i,
-      pos: { ...at.p },
-      extentStart: runPointAt(run, (i / ref.stripCells) * total).p,
-      extentEnd: runPointAt(run, ((i + 1) / ref.stripCells) * total).p,
-      runId: run.id,
-      arcM,
-      chain: i,
-    });
-    midS.push(s);
+  for (let r = 0; r < ref.runs.length; r++) {
+    const run = ref.runs[r]!;
+    const lit = litSpans(runLengthOf(run), run.gaps ?? []);
+
+    const share = r === ref.runs.length - 1
+      ? ref.stripCells - index
+      : Math.round((ref.stripCells * (litLens[r] ?? 0)) / Math.max(1e-9, litTotal));
+
+    for (let i = 0; i < share; i++) {
+      const arcM = usableToArc(lit, ((i + 0.5) / Math.max(1, share)) * (litLens[r] ?? 0));
+      const at = runPointAt(run, arcM);
+      cells.push({
+        fixtureId: "strip",
+        physicalIndex: index,
+        logicalIndex: index,
+        pos: { ...at.p },
+        extentStart: runPointAt(run, usableToArc(lit, (i / Math.max(1, share)) * (litLens[r] ?? 0))).p,
+        extentEnd: runPointAt(run, usableToArc(lit, ((i + 1) / Math.max(1, share)) * (litLens[r] ?? 0))).p,
+        runId: run.id,
+        arcM,
+        chain: index,
+      });
+      midS.push(arcFraction(run, arcM));
+      index += 1;
+    }
   }
 
   for (let l = 0; l < ref.lampPositions.length; l++) {
@@ -201,7 +213,7 @@ export function fieldCellsForReference(ref: ReferenceRoom): { cells: FieldCell[]
     cells.push({
       fixtureId: `lamp${l}`,
       physicalIndex: 0,
-      logicalIndex: ref.stripCells + l,
+      logicalIndex: index + l,
       pos: { x: p.x, y: p.y, z: 1.2 },
       extentStart: { x: p.x, y: p.y, z: 0 },
       extentEnd: { x: p.x, y: p.y, z: 2.4 },
@@ -215,17 +227,38 @@ export function fieldCellsForReference(ref: ReferenceRoom): { cells: FieldCell[]
   return { cells, midS };
 }
 
-function runLengthOf(run: Run): number {
-  const pts = run.closed ? [...run.polyline, run.polyline[0]!] : run.polyline;
-  let len = 0;
+function litSpans(total: number, gaps: { fromM: number; toM: number }[]): { start: number; end: number }[] {
+  const sorted = [...gaps].sort((a, b) => a.fromM - b.fromM);
+  const out: { start: number; end: number }[] = [];
+  let cursor = 0;
 
-  for (let i = 0; i + 1 < pts.length; i++) {
-    const a = pts[i]!;
-    const b = pts[i + 1]!;
-    len += Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z);
+  for (const g of sorted) {
+    if (g.fromM > cursor) out.push({ start: cursor, end: Math.min(g.fromM, total) });
+    cursor = Math.max(cursor, g.toM);
   }
 
-  return Math.max(1e-9, len);
+  if (cursor < total) out.push({ start: cursor, end: total });
+
+  return out.filter((s) => s.end > s.start);
+}
+
+function litLenOf(run: Run): number {
+  return litSpans(runLengthOf(run), run.gaps ?? []).reduce((acc, s) => acc + (s.end - s.start), 0);
+}
+
+function usableToArc(lit: { start: number; end: number }[], u: number): number {
+  for (const s of lit) {
+    const w = s.end - s.start;
+
+    if (u <= w) return s.start + u;
+    u -= w;
+  }
+
+  return lit[lit.length - 1]?.end ?? 0;
+}
+
+function runLengthOf(run: Run): number {
+  return Math.max(1e-9, runLength(run));
 }
 
 function arcFraction(run: Run, arcM: number): number {

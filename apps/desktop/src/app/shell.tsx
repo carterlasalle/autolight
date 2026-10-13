@@ -4,6 +4,7 @@ import { CommandPalette } from "../components/command-palette.js";
 import { Toaster } from "../components/ui/sonner.js";
 import { Routes } from "../routes/index.js";
 import { useShell, invoke } from "./store.js";
+import type { FollowMode } from "./store.js";
 import { useLiveCursor } from "./resolve-live.js";
 import { shortcutFor } from "./shortcuts.js";
 
@@ -23,13 +24,17 @@ export function Shell(): JSX.Element {
   useEffect(() => {
     if (route !== "setup") return;
     let cancelled = false;
+    const seen = useShell.getState().followMode;
     void invoke("config/get", { version: 1, key: "live.follow.mode" }).then((raw: unknown) => {
       if (cancelled) return;
       const envelope = raw as { ok?: boolean; value?: unknown } | null;
       const saved = envelope && envelope.ok !== false && typeof envelope.value === "string" ? envelope.value : null;
+      const modes: FollowMode[] = ["preview", "ax-beat", "prolink", "soundswitch"];
 
-      if (saved === "preview" || saved === "ax-beat" || saved === "prolink" || saved === "soundswitch") {
-        if (useShell.getState().followMode !== saved) useShell.getState().set({ followMode: saved });
+      if (saved !== null && (modes as string[]).includes(saved)) {
+        const mode = saved as FollowMode;
+
+        if (useShell.getState().followMode === seen && seen !== mode) useShell.getState().set({ followMode: mode });
       }
     });
 
@@ -39,7 +44,7 @@ export function Shell(): JSX.Element {
     const onKeyDown = (event: KeyboardEvent): void => {
       const el = event.target as HTMLElement | null;
 
-      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA")) return;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable)) return;
 
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
@@ -48,6 +53,7 @@ export function Shell(): JSX.Element {
         return;
       }
 
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
       const ch = shortcutFor(event.key);
 
       if (ch === "master/freeze") void invoke(ch, { version: 1, frozen: true });

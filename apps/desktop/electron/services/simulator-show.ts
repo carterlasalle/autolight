@@ -81,7 +81,9 @@ const TICK_MS = 40;
 
 // Deck playhead advances in beats per tick. 128 BPM ≈ 2.13 beats/s, so one
 // 40 ms tick ≈ 0.085 beats: the rendered plan evolves every frame.
-const BEATS_PER_TICK = (128 / 60) * (TICK_MS / 1000);
+const SIM_BPM = 128;
+
+const BEATS_PER_TICK = (SIM_BPM / 60) * (TICK_MS / 1000);
 
 // Seed provenance: exact bytes of test-fixtures/analysis/live-deck1.trackmodel.json
 // plus reference-style.json at commit ac01416, copied into
@@ -90,7 +92,7 @@ const BEATS_PER_TICK = (128 / 60) * (TICK_MS / 1000);
 // through the Zod schemas at load. Regenerate by re-copying those two files.
 export class SimulatorShow {
   private sim: GoveeLanSim | null = null;
-  private simPort = 0;
+  private starting = false;
   private sender: Socket | null = null;
   private recording: RecordingTransport | null = null;
   private armedOnce = false;
@@ -102,8 +104,8 @@ export class SimulatorShow {
   private plan: ShowPlan | null = null;
   private installMs = 0;
   private lastFrame: TestFrame | null = null;
-  private frameSeq = 0;
-
+  private frameCount = 0;
+  private lastError: string | null = null;
   constructor() {}
 
   trackId(): string {
@@ -191,9 +193,9 @@ export class SimulatorShow {
         }
         : null,
       playing: this.timer !== null,
-      playheadSeconds: this.beat,
+      playheadSeconds: this.beat * (60 / SIM_BPM),
       playRate: 1,
-      effectiveBpm: 128,
+      effectiveBpm: SIM_BPM,
       loop: { active: false, startSeconds: null, endSeconds: null, beatLength: null },
       channelFader: 1,
       crossfader: 1,
@@ -204,24 +206,40 @@ export class SimulatorShow {
 
   /** Start the sim, arm the stream once, and begin the render tick. */
   async start(): Promise<void> {
-    if (this.timer) return;
-    this.loadTrack();
-    this.sim = new GoveeLanSim(SIM_PROFILE, { armSettle: false, rateCeiling: false });
-    this.simPort = await this.sim.start(0);
-    this.sender = createSocket("udp4");
-    this.recording = new RecordingTransport((text: string) => {
-      this.sender?.send(text, this.simPort, "127.0.0.1", () => undefined);
-    });
-    // One arm for the session: arm(true) then paints only, never turn, never
-    // kelvin colorwc, so the stream stays armed (step 7 asserts zero turns).
-    this.send(envelope(arm(true)));
-    this.armedOnce = true;
-    this.beat = 1.6;
-    this.timer = setInterval(() => {
-      void this.tick().catch(() => undefined);
-    }, TICK_MS);
-    // First frame synchronously so a fast step 7 never sees an empty log.
-    await this.tick();
+    if (this.timer || this.starting) return;
+    this.starting = true;
+
+    try {
+      this.loadTrack();
+      const sim = new GoveeLanSim(SIM_PROFILE, { armSettle: false, rateCeiling: false });
+      const simPort = await sim.start(0);
+      this.sim = sim;
+      this.sender = createSocket("udp4");
+      const sender = this.sender;
+      this.recording = new RecordingTransport((text: string) => {
+        sender.send(text, simPort, "127.0.0.1", () => undefined);
+      });
+      // One arm for the session: arm(true) then paints only, never turn, never
+      // kelvin colorwc, so the stream stays armed (step 7 asserts zero turns).
+      this.send(envelope(arm(true)));
+      this.armedOnce = true;
+      this.beat = 1.6;
+      this.timer = setInterval(() => {
+        void this.tick().catch((err: unknown) => {
+          this.lastError = err instanceof Error ? err.message : String(err);
+        });
+      }, TICK_MS);
+      // First frame synchronously so a fast step 7 never sees an empty log.
+      await this.tick();
+    } catch (err) {
+      this.sim = null;
+      this.sender?.close();
+      this.sender = null;
+      this.recording = null;
+      throw err;
+    } finally {
+      this.starting = false;
+    }
   }
 
   private send(text: string): void {
@@ -254,7 +272,7 @@ export class SimulatorShow {
     // Blackout travels as an all-zero paint on the armed stream, never a
     // power command: the sim (and hardware) keeps the channel armed.
     this.send(envelope(paint(rgb, 0)));
-    this.frameSeq += 1;
+    this.frameCount += 1;
     this.lastFrame = { fixture: `sim-${H6076_MAC}`, cells, sentAtMs: Date.now() };
   }
 
@@ -331,36 +349,46 @@ export class SimulatorShow {
 
   /** Step 9: keypress path. B blacks out on the next tick; A resumes. */
   key(key: string): { resumedAt: string | null } {
+    const fail = (err: unknown): void => {
+      this.lastError = err instanceof Error ? err.message : String(err);
+    };
+
     if (key === "b") {
       this.blackout = true;
       this.resumedAt = null;
       // Tick immediately: the zero frame must land within 100 ms of the
       // keypress even if the interval just fired.
-      void this.tick().catch(() => undefined);
+      void this.tick().catch(fail);
     } else if (key === "a") {
       this.blackout = false;
       this.resumedAt = "bar";
-      void this.tick().catch(() => undefined);
+      void this.tick().catch(fail);
     }
 
     return { resumedAt: this.resumedAt };
+  }
+
+  tickError(): string | null {
+    return this.lastError;
+  }
+
+  frameCountTotal(): number {
+    return this.frameCount;
   }
 
   resumeStatus(): { resumedAt: string } {
     return { resumedAt: this.resumedAt ?? "none" };
   }
 
-  async freezeRenderer(ms: number): Promise<{ frozenMs: number }> {
-    // P-56: the show loop lives in main, so freezing the renderer never
-    // stops frames. Sleep here to simulate the frozen window, then confirm
-    // the tick kept appending while we slept.
+  async freezeRenderer(ms: number): Promise<{ frozenMs: number; advanced: boolean }> {
+    // P-56: the show loop lives in main, so freezing the renderer must not
+    // stop frames. Report whether the interval advanced on its own; a dead
+    // loop is a failure, not something a forced tick may mask.
     const before = this.frames().length;
     await new Promise((r) => setTimeout(r, ms));
     const after = this.frames().length;
 
-    if (after <= before) await this.tick();
-
-    return { frozenMs: ms };
+    return { frozenMs: ms, advanced: after > before };
   }
 
   async shutdown(): Promise<{ endingLookSent: boolean; streamsDisarmed: boolean; dbFlushed: boolean }> {
@@ -371,6 +399,8 @@ export class SimulatorShow {
 
     // Ending look: one zero paint, then disarm, then close the sockets.
     // The zero paint is recorded so the journey can observe it.
+    const endingLookSent = this.recording !== null;
+
     if (this.recording) {
       this.send(envelope(paint(new Uint8Array(H6076_ZONES * 3), 0)));
       this.send(envelope(arm(false)));
@@ -385,7 +415,7 @@ export class SimulatorShow {
       this.sim = null;
     }
 
-    return { endingLookSent: true, streamsDisarmed: true, dbFlushed: true };
+    return { endingLookSent, streamsDisarmed: endingLookSent, dbFlushed: false };
   }
 
   armed(): boolean {

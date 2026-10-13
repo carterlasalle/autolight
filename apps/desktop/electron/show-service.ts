@@ -123,9 +123,12 @@ export function startProlink(): void {
 // proceeds to AX/prolink unchanged; plug-in activates via hotplug poll.
 let compositeStarted = false;
 
+let compositeEpoch = 0;
+
 export function startCompositeFlx4(): void {
   if (compositeStarted) return;
   compositeStarted = true;
+  const epoch = (compositeEpoch += 1);
   void import("@autolight/rekordbox-live").then(
     (live) =>
       live
@@ -133,15 +136,16 @@ export function startCompositeFlx4(): void {
           log: (message: string) => console.info(`[composite-flx4] ${message}`),
         })
         .catch(() => {
-          compositeStarted = false;
+          if (epoch === compositeEpoch) compositeStarted = false;
         }),
     () => {
-      compositeStarted = false;
+      if (epoch === compositeEpoch) compositeStarted = false;
     },
   );
 }
 
 export function stopCompositeFlx4(): void {
+  compositeEpoch += 1;
   compositeStarted = false;
   void import("@autolight/rekordbox-live").then(
     (live) => live.stopCompositeFlx4Boot().catch(() => undefined),
@@ -245,7 +249,12 @@ export function pushFrame(id: string, frame: Uint8Array, intensity = 1): void {
       // quiet so a beat never becomes a brightness command (T-GOV-09).
       await manager.pushFrame(id, scaleFrame(frame, intensity));
     }
-  })();
+  })().catch((err: unknown) => {
+    getShowService().recorder.record("frame/push-failed", {
+      id,
+      message: err instanceof Error ? err.message : String(err),
+    });
+  });
 }
 
 // T-ARC-03 crash policy + §133 steps 2 and 7. applyCrashPolicy holds the
@@ -276,21 +285,33 @@ export function applyCrashPolicy(opts: CrashPolicyOptions): void {
     for (const mac of [...svc.deviceIps.keys()]) {
       await manager.setBrightness(mac, 100);
     }
-  })();
+  })().catch((err: unknown) => {
+    svc.recorder.record("crash/hold-failed", {
+      message: err instanceof Error ? err.message : String(err),
+    });
+  });
 
   if (opts.holdMs > 0) {
     const timer = setTimeout(() => {
       clearTimeout(timer);
       void (async () => {
-        await getGoveeManager().blackoutAll();
-      })();
+        await govee().blackoutAll();
+      })().catch((err: unknown) => {
+        getShowService().recorder.record("crash/dim-failed", {
+          message: err instanceof Error ? err.message : String(err),
+        });
+      });
 
       getShowService().recorder.record("crash/dimmed", {});
     }, opts.holdMs);
   } else {
     void (async () => {
-      await getGoveeManager().blackoutAll();
-    })();
+      await govee().blackoutAll();
+    })().catch((err: unknown) => {
+      svc.recorder.record("crash/dim-failed", {
+        message: err instanceof Error ? err.message : String(err),
+      });
+    });
 
     svc.recorder.record("crash/dimmed", {});
   }
@@ -307,7 +328,7 @@ export function restartShowHost(): void {
 export function applyEndingLook(kind: "blackout" | "hold" | "dim"): Promise<void> {
   const svc = getShowService();
   svc.recorder.record("shutdown/ending-look", { kind });
-  const manager = getGoveeManager();
+  const manager = govee();
 
   if (kind === "blackout") return manager.blackoutAll();
 
@@ -332,9 +353,9 @@ export function runShutdown(opts: ShutdownOptions): Promise<void> {
     { name: "ending-look", run: () => applyEndingLook("blackout") },
     { name: "disarm", run: () => disarmStreams() },
     { name: "dj-adapters", run: () => { stopProlink(); stopCompositeFlx4(); } },
-    { name: "analysis", run: () => svc.recorder.record("shutdown/analysis-stopped", {}) },
+    { name: "analysis", run: () => { getAnalysisSupervisor().stop(); svc.recorder.record("shutdown/analysis-stopped", {}); } },
     { name: "flush-db", run: () => flushConfig() },
-    { name: "workers", run: () => { stopProlink(); } },
+    { name: "workers", run: () => { getProviderManager().stop(); } },
     { name: "exit", run: () => undefined },
   ];
 
@@ -343,12 +364,13 @@ export function runShutdown(opts: ShutdownOptions): Promise<void> {
       const started = Date.now();
 
       try {
+        let timer: NodeJS.Timeout | undefined;
         await Promise.race([
           Promise.resolve().then(() => step.run()),
           new Promise<never>((_, reject) => {
-            setTimeout(() => reject(new Error(`shutdown step timeout: ${step.name}`)), opts.timeoutMs);
+            timer = setTimeout(() => reject(new Error(`shutdown step timeout: ${step.name}`)), opts.timeoutMs);
           }),
-        ]);
+        ]).finally(() => clearTimeout(timer));
         opts.onStep?.(step.name, Date.now() - started);
         audit("shutdown.step", { step: step.name, ms: Date.now() - started });
       } catch (err) {
@@ -363,14 +385,14 @@ export function runShutdown(opts: ShutdownOptions): Promise<void> {
 }
 
 function disarmStreams(): void {
-  getGoveeManager().disarmAll();
+  govee().disarmAll();
   getShowService().recorder.record("shutdown/streams-disarmed", {});
 }
 
 function flushConfig(): void {
   try {
     getShowService().config.save();
-    getGoveeManager().saveRegistryNow();
+    govee().saveRegistryNow();
   } catch (err) {
     getShowService().recorder.record("shutdown/flush-failed", {
       message: err instanceof Error ? err.message : String(err),
