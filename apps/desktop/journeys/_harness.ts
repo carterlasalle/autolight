@@ -6,10 +6,11 @@
 // channel `qa/recording-frames` (see note below). Linux CI runs under
 // `xvfb-run` (F-X-16); macOS and Windows run natively.
 //
-// TEST-BUILD ONLY: `qa/recording-frames` is registered by main only when the
-// test-build flag is set (AUTOLIGHT_TEST_BUILD=1). The release bundle scan in
-// `yarn truth` greps dist bundles for `qa/recording-frames` and rejects any
-// hit, so this channel can never ship in a release build.
+// TEST-BUILD ONLY: the harness API is compiled in only for test builds
+// (`test:e2e` runs `scripts/build-main.mjs --test`; the flag is a build-time
+// define, so release bundles dead-code-eliminate the whole surface). The
+// release bundle scan (`yarn truth` -> tools/bundle-scan.mjs) rejects test
+// markers in dist, so this surface can never ship in a release build.
 import { _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
 import { mkdtempSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";

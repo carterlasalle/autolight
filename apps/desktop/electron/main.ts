@@ -19,6 +19,10 @@ import { closeStorageService, openStorageService } from "./services/storage-serv
 import { getConfigService } from "./services/config-service.js";
 import { audit, initAuditLog } from "./services/audit-log.js";
 
+// Build-time constant injected by scripts/build-main.mjs (true only for
+// `--test` builds); release bundles dead-code-eliminate the test surface.
+declare const __AUTOLIGHT_TEST_BUILD__: boolean;
+
 // Startup sequence (§132): DB → show worker → Govee → DJ adapter →
 // library watcher → analysis worker → venue → tracks → plans → arm → READY.
 export type StartupStage =
@@ -35,9 +39,10 @@ export const STARTUP_ORDER: StartupStage[] = [
 // timings; the simulator show loop below backs every other method with the
 // real production path (fixture TrackModel → real planner → real renderer →
 // razer frames over loopback UDP into a GoveeLanSim). No mocks, no echoes:
-// each method reads the show loop's authoritative state. Registered only
-// when AUTOLIGHT_TEST_BUILD=1; the release bundle scan greps for
-// `qa/recording-frames` and `__autolightTestApi` and rejects any hit.
+// each method reads the show loop's authoritative state. Registered only in
+// `--test` builds (the build-time define from scripts/build-main.mjs);
+// tools/bundle-scan.mjs fails `yarn truth` whenever a test marker survives
+// into dist.
 const __testStageAt = new Map<string, number>();
 
 function __testMarkStage(name: string): void {
@@ -244,7 +249,12 @@ function applySessionHardening(): void {
     }
 
     if (permission === "midi" || permission === "midiSysex") {
-      return true;
+      // Full hardware access: the app's own main window (FLX4 WebMIDI
+      // fallback) or the registered hidden DSP window — never any page that
+      // merely happens to load from a local URL.
+      const originAllowed = settings.permissions.midiOrigins.some((prefix) => url.startsWith(prefix));
+
+      return originAllowed && (webContents === mainWindowContents || isAudioWindow(url));
     }
 
     return false;
@@ -265,6 +275,11 @@ function applySessionHardening(): void {
 // here (file:// or the dev server origin), never a remote origin.
 const audioWindowUrls = new Set<string>();
 
+// The main window's webContents, captured at creation. MIDI permission is
+// granted by identity against this live handle — a local URL check alone
+// would hand full hardware access to any future local page.
+let mainWindowContents: WebContents | null = null;
+
 export function registerAudioWindow(url: string): void {
   audioWindowUrls.add(url);
 }
@@ -279,8 +294,11 @@ export async function boot(): Promise<void> {
   // first requests never race registration.
   createIpc();
 
-  // TEST-BUILD ONLY: registered only when AUTOLIGHT_TEST_BUILD=1.
-  if (process.env["AUTOLIGHT_TEST_BUILD"] === "1") {
+  // TEST-BUILD ONLY: the flag is the build-time define from
+  // scripts/build-main.mjs (`--test`); release bundles dead-code-eliminate
+  // the whole test surface, and tools/bundle-scan.mjs fails `yarn truth` if
+  // any test marker survives into dist.
+  if (__AUTOLIGHT_TEST_BUILD__) {
     registerTestApi();
   }
 
@@ -324,6 +342,9 @@ export async function boot(): Promise<void> {
       nav.preventDefault();
     }
   });
+  // Permission identity: decidePermission grants MIDI to exactly this
+  // webContents (plus the registered audio window), so record the handle.
+  mainWindowContents = win.webContents;
 
   // Dev: Vite server; prod: Vite build output (scripts/build-main.mjs builds
   // main/preload only — renderer is Vite's dist/renderer).
@@ -362,9 +383,29 @@ export async function boot(): Promise<void> {
     });
   };
 
-  app.on("before-quit", () => {
+  // One shutdown run per process: every exit path (window close, Cmd+Q,
+  // crash escalation) shares this promise. The quit is only let through once
+  // it settles, so will-quit's storage close can never race the flush steps
+  // and a re-entrant before-quit can never start a second full run.
+  let shutdownRun: Promise<void> | null = null;
+  let shutdownSettled = false;
+  const beginGracefulShutdown = (): Promise<void> => {
+    if (!shutdownRun) {
+      shutdownRun = runGracefulShutdown().finally(() => {
+        shutdownSettled = true;
+      });
+    }
+
+    return shutdownRun;
+  };
+
+  app.on("before-quit", (event) => {
     audit("lifecycle", { event: "before-quit" });
-    void runGracefulShutdown();
+
+    if (shutdownSettled) return;
+
+    event.preventDefault();
+    void beginGracefulShutdown().finally(() => quitApp());
   });
   // The database closes after the shutdown steps so a checkpoint lands before
   // the process exits.
@@ -379,7 +420,7 @@ export async function boot(): Promise<void> {
     if (shuttingDown()) return;
     audit("lifecycle", { event: "window-close" });
     event.preventDefault();
-    void runGracefulShutdown().finally(() => quitApp());
+    void beginGracefulShutdown().finally(() => quitApp());
   });
   // Sub-process deaths bypass every JS exit path above (the audit proved
   // it: silent exit, no lifecycle line). Name the killer on disk.
@@ -389,23 +430,12 @@ export async function boot(): Promise<void> {
   app.on("child-process-gone", (_event, details) => {
     audit("lifecycle", { event: "child-process-gone", type: details?.type ?? "unknown", reason: details?.reason ?? "unknown", exitCode: details?.exitCode ?? -1 });
   });
-  // sends the safe look, and restarts the show host.
-  process.on("uncaughtException", (err) => {
-    const record = crashRecordPath();
-
-    try {
-      writeFileSync(record, JSON.stringify({
-        at: new Date().toISOString(),
-        pid: process.pid,
-        versions: { electron: process.versions.electron, node: process.versions.node },
-        error: String(err?.stack ?? err),
-      }));
-    } catch { /* crash path must never throw */ }
-
-    audit("lifecycle", { event: "uncaught-exception", error: String(err?.stack ?? err).slice(0, 500) });
-    applyCrashPolicy({ holdMs: 2000 });
-    restartShowHost();
-  });
+  // T-ARC-03 crash policy: record + safe look + host restart on the first
+  // uncaught exception; a repeat converges to the graceful exit (the
+  // recovery already failed once). Unhandled rejections — previously
+  // invisible — are recorded on the same trail but never touch the lights.
+  process.on("uncaughtException", (err) => handleProcessCrash("uncaught-exception", err));
+  process.on("unhandledRejection", (reason) => handleProcessCrash("unhandled-rejection", reason));
 }
 
 let shuttingDownNow = false;
@@ -425,6 +455,54 @@ export function markShuttingDown(): void {
   setShowAcceptingUi(false);
 }
 
+// T-ARC-03 crash policy (docs/finish/evidence/T-ARC-03/README.md). One
+// in-process recovery is the spec: safe look + show host restart. A second
+// crash means the recovery did not stick, so converge to the graceful exit
+// instead of running on with corrupted main-process state.
+let processCrashCount = 0;
+
+function writeCrashRecord(kind: string, err: unknown): void {
+  const detail = err instanceof Error ? (err.stack ?? err.message) : String(err);
+
+  try {
+    writeFileSync(crashRecordPath(), JSON.stringify({
+      at: new Date().toISOString(),
+      pid: process.pid,
+      versions: { electron: process.versions.electron, node: process.versions.node },
+      kind,
+      error: detail,
+    }));
+  } catch { /* crash path must never throw */ }
+}
+
+function handleProcessCrash(kind: "uncaught-exception" | "unhandled-rejection", err: unknown): void {
+  const detail = err instanceof Error ? (err.stack ?? err.message) : String(err);
+
+  writeCrashRecord(kind, err);
+  audit("lifecycle", { event: kind, error: detail.slice(0, 500) });
+
+  if (kind === "unhandled-rejection") return;
+
+  processCrashCount += 1;
+
+  if (processCrashCount > 1) {
+    quitApp();
+
+    return;
+  }
+
+  applyCrashPolicy({ holdMs: 2000 });
+  restartShowHost();
+}
+
 // Only boot inside the Electron main process: importing this module from the
 // checklist tests (src/app/security.test.ts) must not reject on app.whenReady.
-if (process.versions["electron"] !== undefined) void boot();
+// A boot rejection would otherwise vanish into an unhandledRejection before
+// the crash handlers above are registered; record it and exit deterministically.
+if (process.versions["electron"] !== undefined) {
+  boot().catch((err: unknown) => {
+    writeCrashRecord("boot-failed", err);
+    audit("lifecycle", { event: "boot-failed", error: (err instanceof Error ? (err.stack ?? err.message) : String(err)).slice(0, 500) });
+    quitApp();
+  });
+}

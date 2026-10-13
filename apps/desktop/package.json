@@ -11,7 +11,7 @@
     "build:preload": "node scripts/build-preload.mjs",
     "dev": "vite",
     "test": "vitest run",
-    "test:e2e": "playwright test",
+    "test:e2e": "node scripts/build-main.mjs --test && playwright test",
     "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
     "fetch-vendor": "node scripts/fetch-vendor.mjs",
     "dist:package": "yarn build && node scripts/fetch-vendor.mjs && electron-builder --config electron-builder.cjs",

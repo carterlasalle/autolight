@@ -16,7 +16,7 @@
     "gates": "node tools/gates/gates.mjs",
     "test:count": "vitest run --reporter=json 2>/dev/null | tail -1",
     "dev": "yarn workspace @autolight/desktop dev",
-    "truth": "node docs/finish/tools/check-coverage.mjs && node tools/capabilities-check.mjs && node tools/claim-check.mjs && node tools/forbidden-words.mjs && node tools/trackmodel-drift.mjs && yarn sg scan --config tools/ast-grep/sgconfig.yml",
+    "truth": "node docs/finish/tools/check-coverage.mjs && node tools/capabilities-check.mjs && node tools/claim-check.mjs && node tools/forbidden-words.mjs && node tools/bundle-scan.mjs && node tools/trackmodel-drift.mjs && yarn sg scan --config tools/ast-grep/sgconfig.yml",
     "audit:truth": "yarn truth",
     "analyze": "node_modules/.bin/oxlint; OXLINT_EXIT=$?; yarn knip && yarn depcruise --config .dependency-cruiser.cjs packages apps/desktop/src apps/desktop/electron && node tools/unwired-service.mjs && yarn tsc --noEmit -p apps/desktop/tsconfig.typecheck.json --noUnusedLocals --noUnusedParameters --noImplicitReturns --noFallthroughCasesInSwitch && yarn madge --circular packages/*/src apps/desktop/src apps/desktop/electron && uv run --project analysis ruff check analysis/src analysis/tests && uv run --project analysis pyright analysis/src/autolight_analysis && uv run --project analysis --with vulture vulture analysis/src --min-confidence 80; GATE_EXIT=$?; if [ $OXLINT_EXIT -ne 0 ]; then echo \"analyze: oxlint found findings (see above)\"; exit $OXLINT_EXIT; fi; exit $GATE_EXIT",
     "verify:all": "yarn build && yarn typecheck && yarn vitest run && uv run --project analysis pytest -q && yarn workspace @autolight/desktop test:e2e"
