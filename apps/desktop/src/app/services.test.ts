@@ -9,7 +9,7 @@ import { AnalysisSupervisor, type AnalysisWorkerPort } from "../../electron/serv
 import { CloudService } from "../../electron/services/cloud-service.js";
 import { ConfigService, getConfigService, resetConfigServiceForTest } from "../../electron/services/config-service.js";
 import { IdentityService } from "../../electron/services/identity-service.js";
-import { IpcRouter, type IpcEventLike, type IpcMainPort } from "../../electron/services/ipc-router.js";
+import { IpcRouter, type IpcMainPort, type IpcPortListener, type RawIpcValue } from "../../electron/services/ipc-router.js";
 import { LibraryService, type LibraryChange } from "../../electron/services/library-service.js";
 import {
   LifecycleService,
@@ -496,14 +496,14 @@ describe("lifecycle", () => {
 
 describe("ipc-router", () => {
   it("registers every typed channel, validates both directions and checks the sender", async () => {
-    const registered = new Map<string, (event: IpcEventLike, payload: unknown) => Promise<unknown>>();
+    const registered = new Map<string, IpcPortListener>();
 
     const port: IpcMainPort = {
       handle: (channel, listener) => { registered.set(channel, listener); },
       removeHandler: (channel) => { registered.delete(channel); },
     };
 
-    const listener = (name: string): ((event: IpcEventLike, payload: unknown) => Promise<unknown>) => {
+    const listener = (name: string): IpcPortListener => {
       const found = registered.get(name);
 
       if (!found) throw new Error(`channel ${name} not registered`);
@@ -560,7 +560,7 @@ describe("ipc handlers have real effects (T-TRU-03)", () => {
       ],
       watchProlink: () => () => undefined,
     });
-    const registered = new Map<string, (event: IpcEventLike, payload: unknown) => Promise<unknown>>();
+    const registered = new Map<string, IpcPortListener>();
 
     const port: IpcMainPort = {
       handle: (channel, listener) => { registered.set(channel, listener); },
@@ -574,7 +574,7 @@ describe("ipc handlers have real effects (T-TRU-03)", () => {
     expect(registered.size).toBe(Object.keys(channels).length);
     const app = { senderFrame: { url: "file:///index.html" } };
 
-    const call = async (name: string, payload: unknown): Promise<Record<string, unknown>> => {
+    const call = async (name: string, payload: RawIpcValue): Promise<Record<string, unknown>> => {
       const found = registered.get(name);
 
       if (!found) throw new Error(`channel ${name} not registered`);

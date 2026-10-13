@@ -22,16 +22,43 @@ export interface IpcEventLike {
 
 // The router talks to this port instead of ipcMain so the whole channel table
 // is testable without an Electron process.
+
+/**
+ * Structured-clone value exactly as Electron delivers it. The router parses
+ * it against the channel's request schema before any handler runs — this is
+ * the raw side of the I/O boundary.
+ */
+export type RawIpcValue = string | number | boolean | null | undefined | RawIpcValue[] | { [key: string]: RawIpcValue };
+
+/** Everything the router can reply: a channel's validated response or the
+ * typed error envelope. */
+export type IpcReply =
+  | { [C in Channel]: ChannelResponse<C> }[Channel]
+  | { ok: false; error: { code: string; message: string } };
+
+/** Listener shape the port stores per channel; exported so test mocks bind
+ * the same contract instead of re-declaring unknown-typed variants. */
+export type IpcPortListener = (event: IpcEventLike, payload: RawIpcValue) => Promise<IpcReply>;
+
 export interface IpcMainPort {
-  handle(channel: string, listener: (event: IpcEventLike, payload: unknown) => Promise<unknown>): void;
+  handle(channel: string, listener: IpcPortListener): void;
   removeHandler(channel: string): void;
 }
+
+// SAFETY: channels is the exhaustive Channel-keyed table, so its own keys
+// are exactly the Channel union.
+const channelNames = Object.keys(channels) as Channel[];
 
 export type ChannelHandler<C extends Channel> = (
   request: ChannelRequest<C>,
 ) => Promise<ChannelResponse<C>> | ChannelResponse<C>;
 
-const handlers: { [C in Channel]: ChannelHandler<C> } = {
+/** The full channel table: one handler per channel, correlated via the
+ * mapped type so every handler's request/response types come from its own
+ * channel entry. */
+type ChannelHandlerTable = { [C in Channel]: ChannelHandler<C> };
+
+const handlers: ChannelHandlerTable = {
   "master/blackout": () => setMasterBlackout(),
   "master/full": () => setMasterFull(),
   "master/freeze": (req) => setMasterFreeze(req.frozen),
@@ -85,7 +112,7 @@ export class IpcRouter implements Service {
 
   start(): ServiceStatus {
     if (!this.registered) {
-      for (const name of Object.keys(channels) as Channel[]) {
+      for (const name of channelNames) {
         this.port.handle(name, (event, payload) => this.dispatch(name, event, payload));
       }
 
@@ -102,7 +129,7 @@ export class IpcRouter implements Service {
 
   stop(): ServiceStatus {
     if (this.registered) {
-      for (const name of Object.keys(channels) as Channel[]) this.port.removeHandler(name);
+      for (const name of channelNames) this.port.removeHandler(name);
       this.registered = false;
     }
 
@@ -135,7 +162,7 @@ export class IpcRouter implements Service {
   // so channel + payload + ok/error lands here.
   private static readonly HOT: ReadonlySet<string> = new Set(["follow/ax", "show/live", "show/state"]);
 
-  private async dispatch(name: Channel, event: IpcEventLike, payload: unknown): Promise<unknown> {
+  private async dispatch(name: Channel, event: IpcEventLike, raw: RawIpcValue): Promise<IpcReply> {
     const t0 = Date.now();
 
     if (!this.senderAllowed(event)) {
@@ -146,16 +173,20 @@ export class IpcRouter implements Service {
     }
 
     try {
-      const req = channels[name].request.parse(payload);
-      // The handler table is invariant in its channel parameter; the request
-      // above was validated against channels[name].request for this channel.
-      const runHandler = handlers[name] as (r: unknown) => Promise<unknown> | unknown;
+      const req = channels[name].request.parse(raw);
+      // SAFETY: the handler table is invariant in its channel parameter; the
+      // request was just validated against channels[name].request for this
+      // same channel, so the runtime pairing is exact even though TS cannot
+      // call a mapped-type member through this index.
+      const runHandler = handlers[name] as ChannelHandler<Channel>;
       const res = await runHandler(req);
-      const responseSchema: { parse: (value: unknown) => unknown } = channels[name].response;
-      const out = responseSchema.parse(res);
+      // SAFETY: channels[name].response is this channel's response schema;
+      // TS cannot invoke .parse across the union of channel schemas.
+      const parseResponse = channels[name].response.parse as (value: ChannelResponse<Channel>) => IpcReply;
+      const out = parseResponse(res);
       this.tracker.count("handled");
       const ms = Date.now() - t0;
-      const ok = (out as { ok?: boolean }).ok !== false;
+      const ok = out.ok !== false;
 
       if (IpcRouter.HOT.has(name)) {
         if (!ok) audit("ipc.error", { channel: name, ms, error: JSON.stringify(out).slice(0, 500) });
@@ -183,9 +214,11 @@ let instance: IpcRouter | null = null;
 export function getIpcRouter(): IpcRouter {
   instance ??= new IpcRouter({
     handle: (channel, listener) => {
-      // Electron types the handler as (IpcMainInvokeEvent, ...args); the port
-      // narrows the event to the sender frame fields the router reads.
-      const electronListener = listener as (event: IpcMainInvokeEvent, payload: unknown) => Promise<unknown>;
+      // SAFETY: Electron invokes the handler with (IpcMainInvokeEvent, ...args);
+      // the port's contract narrows the event to the sender-frame fields the
+      // router reads, and the payload/reply cross the same structured-clone
+      // boundary the port types model. The adapter only rebrands the listener.
+      const electronListener = listener as (event: IpcMainInvokeEvent, payload: RawIpcValue) => Promise<IpcReply>;
       ipcMain.handle(channel, electronListener);
     },
     removeHandler: (channel) => {
