@@ -64,6 +64,7 @@ export interface ProlinkStatusFrame {
   readonly sync: boolean;
   readonly beatInBar: number | null;
   readonly pitch: number;
+  readonly bpm: number | null;
 }
 
 export interface ProlinkKeepalive {
@@ -160,6 +161,7 @@ export function decodeProlinkPacket(data: Uint8Array): ProlinkDecoded {
       sync: (flags & 0x10) !== 0,
       beatInBar: (data[0x94] ?? 0) === 0 ? null : data[0x94]!,
       pitch: dv.getUint32(0x8c, true),
+      bpm: bpmRaw === 0xffff || bpmRaw === 0 ? null : bpmRaw / 100,
     };
   }
 
