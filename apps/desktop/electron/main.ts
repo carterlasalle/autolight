@@ -329,6 +329,9 @@ export async function boot(): Promise<void> {
     audit("lifecycle", { event: "will-quit" });
     closeStorageService();
   });
+  app.on("window-all-closed", () => {
+    audit("lifecycle", { event: "window-all-closed", platform: process.platform });
+  });
   win.on("close", (event) => {
     if (shuttingDown()) return;
     audit("lifecycle", { event: "window-close" });

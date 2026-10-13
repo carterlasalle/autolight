@@ -153,6 +153,7 @@ export function isShowAcceptingUi(): boolean {
 
 
 export function quitApp(): void {
+  audit("lifecycle", { event: "quitApp-called" });
   try {
     stopProlink();
     stopCompositeFlx4();
