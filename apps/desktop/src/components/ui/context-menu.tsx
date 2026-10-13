@@ -151,7 +151,6 @@ function CheckItemIndicator() {
 function ContextMenuCheckboxItem({
   className,
   children,
-  checked,
   inset,
   ...props
 }: React.ComponentProps<typeof ContextMenuPrimitive.CheckboxItem> & {
@@ -165,7 +164,6 @@ function ContextMenuCheckboxItem({
         CHECK_ITEM_CLASS,
         className
       )}
-      checked={checked}
       {...props}
     >
       <CheckItemIndicator />
