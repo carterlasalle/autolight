@@ -335,7 +335,14 @@ export async function boot(): Promise<void> {
     event.preventDefault();
     void runGracefulShutdown().finally(() => quitApp());
   });
-  // Crash policy: an uncaught exception in main writes a crash record,
+  // Sub-process deaths bypass every JS exit path above (the audit proved
+  // it: silent exit, no lifecycle line). Name the killer on disk.
+  app.on("render-process-gone", (_event, _contents, details) => {
+    audit("lifecycle", { event: "render-process-gone", reason: details?.reason ?? "unknown", exitCode: details?.exitCode ?? -1 });
+  });
+  app.on("child-process-gone", (_event, details) => {
+    audit("lifecycle", { event: "child-process-gone", type: details?.type ?? "unknown", reason: details?.reason ?? "unknown", exitCode: details?.exitCode ?? -1 });
+  });
   // sends the safe look, and restarts the show host.
   process.on("uncaughtException", (err) => {
     const record = crashRecordPath();
