@@ -23,6 +23,16 @@ describe("library rows and queue (T-UI-05, spec 95/139)", () => {
     expect(failed.status).toBe("FAILED");
     expect(failed.failReason).toBe("decode error");
   });
+  it("reports ANALYZING for a re-analysis even when the stored model is ready", () => {
+    // The stored model is READY, but a re-analysis is in flight: the row
+    // must surface ANALYZING rather than masking it behind READY.
+    expect(libraryTrackRow({ track, gridWarned: false, sourceMissing: false, analyzing: true, failed: null, ...base }).status).toBe("ANALYZING");
+  });
+  it("populates the key column from the track's musical key", () => {
+    const keyed = { ...track, musicalKey: { key: "8A", mode: "minor", confidence: 0.8 } } as unknown as TrackModel;
+    expect(libraryTrackRow({ track: keyed, gridWarned: false, sourceMissing: false, analyzing: false, failed: null, ...base }).key).toBe("8A");
+    expect(libraryTrackRow({ track, gridWarned: false, sourceMissing: false, analyzing: false, failed: null, ...base }).key).toBeNull();
+  });
   it("runs the preanalysis queue through its states", () => {
     let q = [queueEntry("a"), queueEntry("b")];
     q = advanceQueue(q, "a", "Analyzing", 0.5);

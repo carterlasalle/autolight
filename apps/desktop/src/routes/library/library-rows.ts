@@ -41,12 +41,14 @@ export function libraryTrackRow(opts: {
 
   if (!track) return emptyRow(null, opts, opts.analyzing ? "ANALYZING" : "NEEDS ANALYSIS", null);
 
+  if (opts.analyzing) return emptyRow(track, opts, "ANALYZING", null);
+
   if (opts.sourceMissing) return emptyRow(track, opts, "SOURCE MISSING", null);
 
   if (opts.gridWarned) return emptyRow(track, opts, "GRID WARNING", null);
   const ready = coverageOf(track) !== "adaptive";
 
-  return emptyRow(track, opts, ready ? "READY" : opts.analyzing ? "ANALYZING" : "NEEDS ANALYSIS", null);
+  return emptyRow(track, opts, ready ? "READY" : "NEEDS ANALYSIS", null);
 }
 
 function emptyRow(
@@ -60,7 +62,7 @@ function emptyRow(
     title: track?.identity.title ?? "",
     artist: track?.identity.artist ?? "",
     bpm: track?.beatGrid.beats[0]?.bpm ?? null,
-    key: null,
+    key: track?.musicalKey?.key ?? null,
     durationSeconds: track?.durationSeconds ?? 0,
     nativeGrid: track && track.beatGrid.beats.length > 0 ? "present" : "missing",
     nativeStructure: track && track.sections.length > 0 ? "present" : "missing",
@@ -74,21 +76,40 @@ function emptyRow(
 
 export interface LiveDeckRow { id: string; title: string; artist: string; readiness: "READY" | "NEEDS ANALYSIS"; bpm: number | null }
 
-export interface LiveDeckSnapshot { title: string; artist: string; readiness: "READY" | "NEEDS ANALYSIS"; bpm: number | null }
+export interface LiveDeckSnapshot {
+  title: string;
+  artist: string;
+  readiness: "READY" | "NEEDS ANALYSIS";
+  bpm: number | null;
+  /** Explicit empty-deck signal; callers that know set `present: false`
+  instead of relying on the title text. */
+  present?: boolean;
+}
+
+/** Empty-deck title shown when no track is loaded (spec 95). */
+export const EMPTY_DECK_TITLE = "—";
+
+function isDeckPresent(deck: LiveDeckSnapshot | undefined): deck is LiveDeckSnapshot {
+  if (!deck) return false;
+  if (deck.present !== undefined) return deck.present;
+
+  return deck.title !== EMPTY_DECK_TITLE;
+}
 
 // Rows for the decks actually loaded right now (spec 95): title, artist,
 // readiness, and BPM come from each deck's own resolved snapshot, never
-// parsed out of display text and never copied across decks. Query matches
-// title or artist.
+// parsed out of display text and never copied across decks. Only deck A
+// receives the live fallback tempo; deck B keeps its own measurement (null
+// reads unmeasured). Query matches title or artist.
 export function liveDeckRows(
   decks: LiveDeckSnapshot[],
   fallbackBpm: number | null,
   query: string,
 ): LiveDeckRow[] {
   const list: LiveDeckRow[] = [
-    { id: "deck-a", title: decks[0]?.title ?? "—", artist: decks[0]?.artist ?? "", readiness: decks[0]?.readiness ?? "NEEDS ANALYSIS", bpm: decks[0]?.bpm ?? fallbackBpm },
-    ...(decks[1] && decks[1].title !== "—"
-      ? [{ id: "deck-b", title: decks[1].title, artist: decks[1].artist, readiness: decks[1].readiness, bpm: decks[1].bpm ?? fallbackBpm }]
+    { id: "deck-a", title: decks[0]?.title ?? EMPTY_DECK_TITLE, artist: decks[0]?.artist ?? "", readiness: decks[0]?.readiness ?? "NEEDS ANALYSIS", bpm: decks[0]?.bpm ?? fallbackBpm },
+    ...(isDeckPresent(decks[1])
+      ? [{ id: "deck-b", title: decks[1].title, artist: decks[1].artist, readiness: decks[1].readiness, bpm: decks[1].bpm }]
       : []),
   ];
 
@@ -100,7 +121,7 @@ export function liveDeckRows(
 }
 
 // Preanalysis queue (spec 139): one entry per queued track. Queue order is
-// the selection order; priority moves entries ahead of same-state entries.
+// the selection order; priority moves the target to the absolute front.
 export interface QueueEntry {
   trackId: string;
   state: QueueState;
@@ -121,8 +142,7 @@ export function prioritiseQueue(entries: QueueEntry[], trackId: string): QueueEn
   const target = entries.find((e) => e.trackId === trackId);
 
   if (!target) return entries;
-  const marked = entries.map((e) => (e.trackId === trackId ? { ...e, priority: true } : e));
-  const rest = marked.filter((e) => e.trackId !== trackId);
+  const rest = entries.filter((e) => e.trackId !== trackId);
 
   return [{ ...target, priority: true }, ...rest];
 }
