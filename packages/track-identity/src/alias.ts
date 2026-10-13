@@ -22,6 +22,9 @@ export interface AliasRecord {
 /** Minimal SQL surface the graph needs; implemented by the app over Store. */
 export interface TrackAliasStore {
   insert(record: AliasRecord): void;
+  /** All-or-nothing batch insert: validates alias ownership before mutating,
+   * so a mid-loop failure can never leave a partial alias set behind. */
+  insertMany(records: AliasRecord[]): void;
   aliasesOf(trackId: string): AliasRecord[];
   trackIdForAlias(aliasId: string): string | null;
   all(): AliasRecord[];
@@ -33,15 +36,26 @@ export class MemoryAliasStore implements TrackAliasStore {
   private readonly byAlias = new Map<string, string>();
 
   insert(record: AliasRecord): void {
+    const owner = this.byAlias.get(record.aliasId);
+
+    if (owner !== undefined && owner !== record.trackId) return;
     const existing = this.byTrack.get(record.trackId) ?? [];
 
-    if (!existing.some((r) => r.aliasId === record.aliasId)) {
-      existing.push(record);
-      this.byTrack.set(record.trackId, existing);
+    if (existing.some((r) => r.aliasId === record.aliasId)) return;
+    existing.push(record);
+    this.byTrack.set(record.trackId, existing);
+    this.byAlias.set(record.aliasId, record.trackId);
+  }
+
+  /** All-or-nothing batch insert: validates ownership before mutating. */
+  insertMany(records: AliasRecord[]): void {
+    for (const record of records) {
       const owner = this.byAlias.get(record.aliasId);
 
-      if (owner === undefined || owner === record.trackId) this.byAlias.set(record.aliasId, record.trackId);
+      if (owner !== undefined && owner !== record.trackId) return;
     }
+
+    for (const record of records) this.insert(record);
   }
 
   aliasesOf(trackId: string): AliasRecord[] {
@@ -67,9 +81,14 @@ export interface IdentityParts {
   artist?: string;
 }
 
-/** Normalize one path for alias comparison (case and separator folds). */
+/** Normalize one path for alias comparison (separator/whitespace folds).
+ * Case is preserved: `/Music/A.mp3` and `/Music/a.mp3` are different files
+ * on case-sensitive filesystems. Callers that need cross-platform matching
+ * add the lowercased form as a second alias (see aliasesFor). */
 export function normalizePath(path: string): string {
-  return path.replace(/\\/g, "/").toLowerCase();
+  const slashed = path.trim().replace(/\\/g, "/").replace(/\/{2,}/g, "/");
+
+  return slashed.length > 1 ? slashed.replace(/\/$/, "") : slashed;
 }
 
 /** Every alias string this identity answers to. */
@@ -77,14 +96,20 @@ export function aliasesFor(parts: IdentityParts): { aliasId: string; source: Ali
   const out: { aliasId: string; source: AliasSource }[] = [];
 
   if (parts.rekordboxId !== undefined && parts.rekordboxId !== "") out.push({ aliasId: `rb:${parts.rekordboxId}`, source: "rekordbox-id" });
+  const pushPath = (raw: string | undefined, source: AliasSource): void => {
+    if (raw === undefined || raw === "") return;
+    const folded = normalizePath(raw);
+    out.push({ aliasId: `path:${folded}`, source });
+    const lowered = folded.toLowerCase();
 
-  if (parts.seratoPath !== undefined && parts.seratoPath !== "") out.push({ aliasId: `path:${normalizePath(parts.seratoPath)}`, source: "serato-path" });
-
-  if (parts.canonicalPath !== undefined && parts.canonicalPath !== "") out.push({ aliasId: `path:${normalizePath(parts.canonicalPath)}`, source: "canonical-path" });
-
-  if (parts.fileHash !== undefined && parts.fileHash !== "") out.push({ aliasId: `hash:${parts.fileHash}`, source: "file-hash" });
+    if (lowered !== folded) out.push({ aliasId: `path:${lowered}`, source });
+  };
+  pushPath(parts.seratoPath, "serato-path");
+  pushPath(parts.canonicalPath, "canonical-path");
 
   if (parts.pcmFingerprint !== undefined && parts.pcmFingerprint !== "") out.push({ aliasId: `pcm:${parts.pcmFingerprint}`, source: "pcm-hash" });
+
+  if (parts.fileHash !== undefined && parts.fileHash !== "") out.push({ aliasId: `hash:${parts.fileHash}`, source: "file-hash" });
 
   return out;
 }
@@ -94,31 +119,41 @@ export function aliasesFor(parts: IdentityParts): { aliasId: string; source: Ali
  * wins over a native ID that moved: a new path whose hash matches an existing
  * TrackId attaches to it (rename/move migration). Title/artist alone never
  * resolve: they produce no alias, so they cannot claim a TrackId.
+ * When strong aliases disagree (pcm-hash owned by A, file-hash owned by B)
+ * the first strong owner wins and every unclaimed alias attaches to it, so
+ * the conflict reconciles to one TrackId instead of a silent arbitrary pick.
  */
 export function resolveTrackId(store: TrackAliasStore, parts: IdentityParts, makeId: () => string): { trackId: string; attached: boolean } {
   const aliases = aliasesFor(parts);
-  const strong = aliases.filter((a) => a.source === "pcm-hash" || a.source === "file-hash");
+  // pcm-hash first: content identity outranks file-hash, deterministically.
+  const strong = [...aliases.filter((a) => a.source === "pcm-hash"), ...aliases.filter((a) => a.source === "file-hash")];
+  const strongOwners = new Map<string, string>();
+
+  for (const alias of strong) {
+    const owner = store.trackIdForAlias(alias.aliasId);
+
+    if (owner !== null && !strongOwners.has(alias.aliasId)) strongOwners.set(alias.aliasId, owner);
+  }
+  // First strong alias in pcm-then-file order wins.
+  const winner = strong.map((a) => strongOwners.get(a.aliasId)).find((o): o is string => o !== undefined) ?? null;
 
   for (const alias of [...strong, ...aliases]) {
     const owner = store.trackIdForAlias(alias.aliasId);
 
     if (owner !== null) {
+      const target = winner ?? owner;
+      const before = store.aliasesOf(target).length;
       const now = new Date().toISOString();
+      const fresh = aliases.filter((a) => store.trackIdForAlias(a.aliasId) === null);
+      store.insertMany(fresh.map((a) => ({ trackId: target, aliasId: a.aliasId, source: a.source, createdAt: now })));
 
-      for (const missing of aliases) {
-        if (store.trackIdForAlias(missing.aliasId) === null) {
-          store.insert({ trackId: owner, aliasId: missing.aliasId, source: missing.source, createdAt: now });
-        }
-      }
-
-      return { trackId: owner, attached: aliases.some((a) => store.trackIdForAlias(a.aliasId) === owner && a.aliasId !== alias.aliasId) || store.aliasesOf(owner).length > 1 };
+      return { trackId: target, attached: store.aliasesOf(target).length > before };
     }
   }
 
   const trackId = makeId();
   const now = new Date().toISOString();
-
-  for (const alias of aliases) store.insert({ trackId, aliasId: alias.aliasId, source: alias.source, createdAt: now });
+  store.insertMany(aliases.map((alias) => ({ trackId, aliasId: alias.aliasId, source: alias.source, createdAt: now })));
 
   return { trackId, attached: false };
 }
