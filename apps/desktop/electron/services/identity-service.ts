@@ -1,6 +1,6 @@
 import type { TrackIdentity } from "@autolight/contracts";
 import { resolveIdentity } from "@autolight/track-model";
-import { ServiceTracker, type Service, type ServiceStatus } from "./base.js";
+import { messageOf, ServiceTracker, type Service, type ServiceStatus } from "./base.js";
 
 // identity-service (04-target-architecture section 1): the TrackId resolver
 // chain (DS-22). Native ID, then path, then file hash, then PCM fingerprint;
@@ -33,6 +33,7 @@ export class IdentityService implements Service {
   readonly name = "identity-service";
   private readonly tracker = new ServiceTracker("identity-service");
   private readonly cache = new Map<string, TrackIdentity>();
+  private static readonly MAX_CACHE = 500;
 
   start(): ServiceStatus {
     this.tracker.set("running", "resolver chain rb id, path, file hash, PCM fingerprint");
@@ -53,9 +54,14 @@ export class IdentityService implements Service {
   }
 
   resolve(parts: IdentityParts): IdentityResolution | IdentityFailure {
-    const key = parts.rekordboxId ?? parts.seratoPath ?? parts.canonicalPath ?? parts.fileHash ?? parts.pcmFingerprint;
+    // Key on every present identifier so a stronger input set re-resolves
+    // instead of returning a stale/weaker cached identity.
+    const present = [parts.rekordboxId, parts.seratoPath, parts.canonicalPath, parts.fileHash, parts.pcmFingerprint]
+      .map((v) => (typeof v === "string" ? v.trim() : ""))
+      .filter((v) => v !== "");
+    const key = present.join("|");
 
-    if (key === undefined) {
+    if (key === "") {
       return {
         ok: false,
         error: {
@@ -70,24 +76,36 @@ export class IdentityService implements Service {
     if (cached !== undefined) {
       this.tracker.count("hits");
 
-      return { ok: true, identity: cached, cached: true };
+      return { ok: true, identity: { ...cached, sourceIds: { ...cached.sourceIds } }, cached: true };
     }
 
     let identity: TrackIdentity;
 
     try {
-      identity = resolveIdentity(parts);
+      // Blank strings are not identifiers: strip them so a blank native id
+      // still fails over to the valid path/hash/fingerprint (DS-22).
+      const clean = Object.fromEntries(
+        Object.entries(parts).filter(([, v]) => typeof v !== "string" || (v as string).trim() !== ""),
+      ) as IdentityParts;
+      identity = resolveIdentity(clean);
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = messageOf(err);
       this.tracker.count("failures");
 
       return { ok: false, error: { code: "E_IDENTITY_RESOLVE", message } };
     }
 
-    this.cache.set(key, identity);
+    const stored: TrackIdentity = { ...identity, sourceIds: { ...identity.sourceIds } };
+
+    if (this.cache.size >= IdentityService.MAX_CACHE) {
+      const oldest = this.cache.keys().next();
+
+      if (!oldest.done) this.cache.delete(oldest.value);
+    }
+    this.cache.set(key, stored);
     this.tracker.count("misses");
 
-    return { ok: true, identity, cached: false };
+    return { ok: true, identity: { ...stored, sourceIds: { ...stored.sourceIds } }, cached: false };
   }
 
   cachedIdentities(): TrackIdentity[] {

@@ -37,6 +37,41 @@ describe("TrackId keying (T-ID-03, F-ID-03)", () => {
     const labels = uniqueTrackLabels([{ trackId: "t1", title: "Only One" }]);
     expect(labels.get("t1")).toBe("Only One");
   });
+  it("extends the id prefix when 8 chars collide", () => {
+    const labels = uniqueTrackLabels([
+      { trackId: "abcdefgh1111", title: "Same", artist: "A" },
+      { trackId: "abcdefgh2222", title: "Same", artist: "B" },
+    ]);
+    const [a, b] = [labels.get("abcdefgh1111"), labels.get("abcdefgh2222")];
+    expect(a).toContain("A");
+    expect(b).toContain("B");
+    expect(a).not.toBe(b);
+    expect(a).toContain("abcdefgh1");
+    expect(b).toContain("abcdefgh2");
+  });
+  it("keeps the first row when a trackId repeats", () => {
+    const labels = uniqueTrackLabels([
+      { trackId: "t1", title: "One" },
+      { trackId: "t1", title: "Other" },
+    ]);
+    expect(labels.get("t1")).toBe("One");
+  });
+  it("keeps a stored undefined value without recreating it", () => {
+    const state = new TrackStateMap<undefined>();
+    let calls = 0;
+    state.set("t1", undefined);
+    const got = state.getOrCreate("t1", () => { calls += 1; return undefined; });
+    expect(got).toBeUndefined();
+    expect(calls).toBe(0);
+  });
+  it("prunes stale tracks even with a malformed library id", () => {
+    const state = new TrackStateMap<number>();
+    state.set("t1", 1);
+    state.set("t2", 2);
+    state.retain(["t1", "   "]);
+    expect(state.has("t1")).toBe(true);
+    expect(state.has("t2")).toBe(false);
+  });
 
   it("serves each same-title track its own cached plan (cache keyed by TrackId)", () => {
     const store = new Store();

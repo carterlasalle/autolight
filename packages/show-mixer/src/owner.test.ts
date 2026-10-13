@@ -38,6 +38,16 @@ function score(over: { channelFader?: number; master?: boolean; strength?: numbe
 }
 
 describe("exclusive impact ownership (P-65)", () => {
+  it("honors custom factors instead of the defaults", () => {
+    // Default factors: deck a wins on weight (2.5 vs 2.3). Zeroing the
+    // weight factor removes a's only edge, so b wins (1.5 vs 1.8). An impl
+    // that ignored opts.factors could not produce both outcomes.
+    const a = { state: makeDeck({ deckId: 1, channelFader: 1, crossfader: 1, master: false, track: trackA }), strength: 1 };
+    const b = { state: makeDeck({ deckId: 2, channelFader: 0.5, crossfader: 1, master: true, track: trackB }), strength: 1 };
+    expect(impactOwner(a, b)).toBe("a");
+    expect(impactOwner(a, b, { factors: { ...factors, weight: 0 } })).toBe("b");
+  });
+
   it("weighs every spec 65 factor", () => {
     expect(score({ channelFader: 1 })).toBeGreaterThan(score({ channelFader: 0.5 }));
     expect(score({ master: true })).toBeGreaterThan(score({ master: false }));
@@ -52,9 +62,10 @@ describe("exclusive impact ownership (P-65)", () => {
   it("hands the exclusive to the better deck and holds it through hysteresis", () => {
     const a = { state: makeDeck({ deckId: 1, channelFader: 1, crossfader: 1, master: false, track: trackA }), strength: 1 };
     const b = { state: makeDeck({ deckId: 2, channelFader: 0.9, crossfader: 1, master: true, track: trackB }), strength: 0.9 };
-    // The master bonus and confidence are part of the score, not just weight.
+    // Deck b wins deterministically: weight 0.9 + master 0.3 + confidence
+    // 1*0.5 + strength 0.9 + significance 0.5 = 2.6 vs a's 2.5.
     const first = impactOwner(a, b, { factors, hysteresis: 0 });
-    expect(["a", "b"]).toContain(first);
+    expect(first).toBe("b");
     expect(impactOwner(a, b, { factors, hysteresis: 0.5, current: first })).toBe(first);
     // A decisive challenger takes over even against hysteresis.
     const strong = { state: makeDeck({ deckId: 2, channelFader: 1, crossfader: 1, master: true, track: trackB }), strength: 1, confidence: 1 };
@@ -63,7 +74,7 @@ describe("exclusive impact ownership (P-65)", () => {
 
   it("feeds ownership from the mix-down with the deck's real cues", () => {
     const a: DeckMix = {
-      state: makeDeck({ deckId: 1, channelFader: 0.3, crossfader: 1, master: false, track: trackA }),
+      state: makeDeck({ deckId: 1, channelFader: 1, crossfader: 1, master: false, track: trackA }),
       beat: 64,
       impactStrength: 0.5,
       cues: [cue({ type: "impact" })],
@@ -79,8 +90,14 @@ describe("exclusive impact ownership (P-65)", () => {
 
     const mixed = mixDown(a, b, { factors });
     expect(mixed.owner).toBe("b");
-    expect(mixed.cues.some((c) => c.type === "white-hit")).toBe(true);
+    // The surviving white-hit is the winner's cue, properties preserved
+    // (intensity scaled by the winner's weight of 1, so unchanged).
+    expect(mixed.cues).toContainEqual(
+      expect.objectContaining({ type: "white-hit", target: "ALL", durationBeats: 0.25, intensity: 0.8, priority: 100 }),
+    );
+    // The loser's impact is dropped by the ownership branch, not the intro.
     expect(mixed.dropped.map((d) => d.cue.type)).toEqual(["impact"]);
+    expect(mixed.dropped[0]?.reason).toMatch(/exclusive ownership/);
   });
 
   it("changes no pixel for the non-owner's white hit (P-65-no-leak)", () => {

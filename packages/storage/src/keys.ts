@@ -30,9 +30,8 @@ export class TrackStateMap<V> {
 
   getOrCreate(trackId: string, create: () => V): V {
     const key = normalizeTrackId(trackId);
-    const existing = this.entries.get(key);
 
-    if (existing !== undefined) return existing;
+    if (this.entries.has(key)) return this.entries.get(key) as V;
     const value = create();
     this.entries.set(key, value);
 
@@ -51,7 +50,10 @@ export class TrackStateMap<V> {
   retain(trackIds: Iterable<string>): void {
     const keep = new Set<string>();
 
-    for (const id of trackIds) keep.add(normalizeTrackId(id));
+    for (const id of trackIds) {
+      if (!id.trim()) continue;
+      keep.add(normalizeTrackId(id));
+    }
 
     for (const key of this.entries.keys()) {
       if (!keep.has(key)) this.entries.delete(key);
@@ -69,12 +71,15 @@ export interface TitledRow {
   artist?: string | undefined;
 }
 
-// Display labels for rows that may share a title (T-ID-03 DoD): keys stay
-// the TrackIds, labels disambiguate with artist, then an id suffix.
 export function uniqueTrackLabels(rows: readonly TitledRow[]): Map<string, string> {
   const byTitle = new Map<string, TitledRow[]>();
+  const seen = new Set<string>();
 
   for (const row of rows) {
+    const id = normalizeTrackId(row.trackId);
+
+    if (seen.has(id)) continue;
+    seen.add(id);
     const list = byTitle.get(row.title);
 
     if (list) list.push(row);
@@ -82,18 +87,34 @@ export function uniqueTrackLabels(rows: readonly TitledRow[]): Map<string, strin
   }
 
   const labels = new Map<string, string>();
+  const used = new Set<string>();
+  const claim = (id: string, label: string): void => {
+    // A bare title can string-collide with a disambiguated label from
+    // another group: fall back to the full id so every label stays unique.
+    const out = used.has(label) ? `${label} (${id})` : label;
+    used.add(out);
+    labels.set(id, out);
+  };
 
   for (const list of byTitle.values()) {
     if (list.length === 1) {
       const only = list[0];
 
-      if (only) labels.set(normalizeTrackId(only.trackId), only.title);
+      if (only) claim(normalizeTrackId(only.trackId), only.title);
       continue;
     }
 
+    const ids = list.map((row) => normalizeTrackId(row.trackId));
     for (const row of list) {
+      const id = normalizeTrackId(row.trackId);
       const base = row.artist ? `${row.title} - ${row.artist}` : row.title;
-      labels.set(normalizeTrackId(row.trackId), `${base} (${normalizeTrackId(row.trackId).slice(0, 8)})`);
+      // Extend the id prefix until it is unique within the title group;
+      // an 8-char prefix is not guaranteed unique across TrackIds.
+      let len = Math.min(8, id.length);
+
+      while (len < id.length && ids.some((other) => other !== id && other.slice(0, len) === id.slice(0, len))) len += 1;
+
+      claim(id, `${base} (${id.slice(0, len)})`);
     }
   }
 

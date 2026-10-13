@@ -14,6 +14,7 @@ import hashlib
 import json
 import subprocess
 from pathlib import Path
+from typing import NoReturn
 
 
 def analyze_job(
@@ -59,22 +60,13 @@ def analyze_job(
             try:
                 anlz = native.extract_anlz(native_dir) if native_dir else None
             except (FileNotFoundError, NotADirectoryError, ValueError) as e:
-                return _failed(
-                    track_id, f"native-unreadable: {e}", inputs, analyzer_v, out, chash
-                )
+                _failed(f"native-unreadable: {e}")
             if anlz is None and native_dir:
                 _mark(inputs, "native.rekordbox.grid", "absent", "no ANLZ found")
         if anlz is None:
             if audio_path and Path(audio_path).is_file():
                 return _audio_only(track_id, audio_path, out, inputs, analyzer_v, chash)
-            return _failed(
-                track_id,
-                "audio-missing: no ANLZ and no readable audio",
-                inputs,
-                analyzer_v,
-                out,
-                chash,
-            )
+            _failed("audio-missing: no ANLZ and no readable audio")
 
         grid = anlz["beatGrid"]
         n = len(grid)
@@ -117,7 +109,6 @@ def analyze_job(
                 [],
                 inputs,
                 duration=beat_times[-1] if beat_times else 0.0,
-                coverage_hint="structured",
             )
             return _store(track_id, model, out, None, chash, analyzer_v)
         from autolight_analysis.decode import canonical_pcm, mono_from_canonical
@@ -135,7 +126,6 @@ def analyze_job(
                 [],
                 inputs,
                 duration=beat_times[-1] if beat_times else 0.0,
-                coverage_hint="structured",
             )
             return _store(track_id, model, out, None, chash, analyzer_v)
         _mark(inputs, "source.audio", "present", version=meta.get("ffmpegVersion", ""))
@@ -422,7 +412,6 @@ def _model(
     events: list,
     inputs: dict,
     duration: float,
-    coverage_hint: str = "",
     grid_warnings: list | None = None,
     beat_features: list | None = None,
     frame_features_ref: dict | None = None,
@@ -433,9 +422,7 @@ def _model(
     from autolight_analysis.readiness import compute_readiness
 
     level = compute_readiness(inputs)
-    coverage = coverage_hint or level
-    if coverage != level:
-        coverage = level  # readiness is computed, never set by hand
+    coverage = level  # readiness is computed, never set by hand
     model = build_track_model(
         track_id=track_id,
         analyzer_version=analyzer_v,
@@ -485,14 +472,7 @@ def _store(
     return {"trackId": track_id, "artifactPath": str(path)}
 
 
-def _failed(
-    _track_id: str,
-    reason: str,
-    _inputs: dict,
-    _analyzer_v: str,
-    _out: Path,
-    _chash: str,
-) -> dict:
+def _failed(reason: str) -> NoReturn:
     raise ValueError(reason)
 
 
@@ -502,7 +482,7 @@ def _audio_only(
     """Readable audio with no ANLZ: full pipeline, ML grid labelled non-DJ."""
     from autolight_analysis import config as cfg
     from autolight_analysis.allinone import analyze_full, select_device
-    from autolight_analysis.decode import canonical_pcm
+    from autolight_analysis.decode import canonical_pcm, canonical_wav
 
     _mark(inputs, "native.rekordbox.grid", "absent", "no ANLZ")
     resampler = str(cfg.get("analysis.decode.resampler", "soxr"))
@@ -514,7 +494,10 @@ def _audio_only(
         version=str(meta.get("ffmpegVersion", "")),
     )
     device = select_device(str(cfg.get("analysis.device", "auto")))
-    ml = analyze_full(audio_path, device=device)
+    try:
+        ml = analyze_full(str(canonical_wav(audio_path, out)), device=device)
+    except (ImportError, OSError, ValueError, RuntimeError):
+        ml = None
     beats = (ml.get("beats") or []) if ml else []
     if not beats:
         # No grid source at all: honest ADAPTIVE with an empty grid.
@@ -526,7 +509,6 @@ def _audio_only(
             [],
             inputs,
             duration=meta["durationSeconds"],
-            coverage_hint="adaptive",
         )
         return _store(track_id, model, out, audio_path, chash, analyzer_v)
     if ml is None:  # unreachable: non-empty beats implies an ml result
@@ -636,8 +618,8 @@ def handle(msg: dict, out_dir: str | Path = "/tmp/autolight-analysis") -> dict: 
                     "reason": "audio-missing",
                 }
             job = analyze_job(
-                msg["trackId"],
-                msg["audioPath"],
+                msg.get("trackId", msg.get("id", "unknown")),
+                msg.get("audioPath", ""),
                 msg.get("nativeMetadataPath"),
                 out_dir,
                 msg.get("config"),
@@ -678,66 +660,67 @@ def main() -> None:
     log_event("worker-start", v=1)
     cancelled: set[str] = set()
     try:
-        with open("/dev/stdin") as stdin:
-            for line in stdin:
+        import sys
+
+        for line in sys.stdin:
+            try:
+                msg = parse_frame(line)
+            except Exception as e:  # noqa: BLE001 - malformed frame guard: typed error, worker keeps running (T-ANA-01)
+                writer.write(error_frame(None, "malformed-frame", str(e)))
+                continue
+            ident = frame_id(msg)
+            mtype = msg.get("type")
+            if mtype == "cancel":
+                if ident:
+                    cancelled.add(ident)
+                writer.write({"v": 1, "id": ident, "type": "cancelled"})
+                continue
+            if ident in cancelled:
+                continue
+            if mtype == "ping":
+                writer.write({"v": 1, "id": ident, "type": "pong"})
+                continue
+            if mtype == "progress":
+                continue
+            if mtype == "analyze":
+                writer.write(
+                    {"v": 1, "id": ident, "type": "progress", "stage": "start"}
+                )
                 try:
-                    msg = parse_frame(line)
-                except Exception as e:  # noqa: BLE001 - malformed frame guard: typed error, worker keeps running (T-ANA-01)
-                    writer.write(error_frame(None, "malformed-frame", str(e)))
-                    continue
-                ident = frame_id(msg)
-                mtype = msg.get("type")
-                if mtype == "cancel":
-                    if ident:
-                        cancelled.add(ident)
-                    writer.write({"v": 1, "id": ident, "type": "cancelled"})
-                    continue
-                if ident in cancelled:
-                    continue
-                if mtype == "ping":
-                    writer.write({"v": 1, "id": ident, "type": "pong"})
-                    continue
-                if mtype == "progress":
-                    continue
-                if mtype == "analyze":
-                    writer.write(
-                        {"v": 1, "id": ident, "type": "progress", "stage": "start"}
-                    )
-                    try:
-                        no_audio = not msg.get("audioPath")
-                        no_native = not msg.get("nativeMetadataPath")
-                        if no_audio and no_native:
-                            writer.write(
-                                {
-                                    "v": 1,
-                                    "id": ident,
-                                    "type": "failed",
-                                    "reason": "audio-missing",
-                                }
-                            )
-                            continue
-                        default_out = "/tmp/autolight-analysis"  # noqa: S108 - documented local fallback
-                        job = analyze_job(
-                            msg.get("trackId", msg.get("id", "unknown")),
-                            msg.get("audioPath", ""),
-                            msg.get("nativeMetadataPath"),
-                            msg.get("outDir", default_out),
-                            msg.get("config"),
-                        )
-                        writer.write({"v": 1, "id": ident, "type": "complete", **job})
-                    except Exception as e:  # noqa: BLE001 - per-job guard: typed failed frame, loop survives (T-ANA-01, T-ANA-11)
+                    no_audio = not msg.get("audioPath")
+                    no_native = not msg.get("nativeMetadataPath")
+                    if no_audio and no_native:
                         writer.write(
                             {
                                 "v": 1,
                                 "id": ident,
                                 "type": "failed",
-                                "reason": str(e)[:300],
+                                "reason": "audio-missing",
                             }
                         )
-                    continue
-                writer.write(
-                    error_frame(ident, "unknown-type", f"unknown type {mtype!r}")
-                )
+                        continue
+                    default_out = "/tmp/autolight-analysis"  # noqa: S108 - documented local fallback
+                    job = analyze_job(
+                        msg.get("trackId", msg.get("id", "unknown")),
+                        msg.get("audioPath", ""),
+                        msg.get("nativeMetadataPath"),
+                        msg.get("outDir", default_out),
+                        msg.get("config"),
+                    )
+                    writer.write({"v": 1, "id": ident, "type": "complete", **job})
+                except Exception as e:  # noqa: BLE001 - per-job guard: typed failed frame, loop survives (T-ANA-01, T-ANA-11)
+                    writer.write(
+                        {
+                            "v": 1,
+                            "id": ident,
+                            "type": "failed",
+                            "reason": str(e)[:300],
+                        }
+                    )
+                continue
+            writer.write(
+                error_frame(ident, "unknown-type", f"unknown type {mtype!r}")
+            )
     finally:
         beat.stop()
         log_event("worker-stop")
