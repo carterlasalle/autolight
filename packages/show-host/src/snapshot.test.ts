@@ -487,9 +487,17 @@ describe("T-ARC-04 snapshots and reload survival", () => {
     host.attach(ports.host);
     host.installFixtures(1, fixtures);
     host.ingestDeck(1, deckState(0));
-    setNow(TICK_NS);
-    host.tick(TICK_NS);
-    await Promise.resolve();
+    // Tick past one publish interval: a single 16ms tick never reaches the
+    // 33ms snapshot cadence, so loop until the host publishes.
+    let now = 0n;
+
+    for (let tick = 0; tick < 4 && snapshotsOf(seen).length === 0; tick += 1) {
+      now += TICK_NS;
+      setNow(now);
+      host.tick(now);
+      await Promise.resolve();
+    }
+
     const snapshots = snapshotsOf(seen);
     expect(snapshots.length).toBeGreaterThan(0);
     const last = snapshots[snapshots.length - 1]!;
@@ -510,10 +518,17 @@ describe("T-ARC-04 snapshots and reload survival", () => {
     host.attach(ports.host);
     host.installFixtures(1, fixtures);
     host.ingestDeck(1, deckState(4));
-    setNow(TICK_NS);
-    host.tick(TICK_NS);
-    await Promise.resolve();
+    let now = 0n;
+
+    for (let tick = 0; tick < 4 && snapshotsOf(seen).length === 0; tick += 1) {
+      now += TICK_NS;
+      setNow(now);
+      host.tick(now);
+      await Promise.resolve();
+    }
+
     const snapshots = snapshotsOf(seen);
+    expect(snapshots.length).toBeGreaterThan(0);
     const last = snapshots[snapshots.length - 1]!;
     const held = buildUiSnapshot(last, { scratchHoldByDeck: new Map([[1, true]]) });
     expect(held.decks[0]?.cursor.scratchHold).toBe(true);
@@ -532,9 +547,15 @@ describe("T-ARC-04 snapshots and reload survival", () => {
     host.attach(ports.host);
     host.installFixtures(1, fixtures);
     host.ingestDeck(1, deckState(0));
-    setNow(TICK_NS);
-    host.tick(TICK_NS);
-    await Promise.resolve();
+    let now = 0n;
+
+    for (let tick = 0; tick < 4 && snapshotsOf(seen).length === 0; tick += 1) {
+      now += TICK_NS;
+      setNow(now);
+      host.tick(now);
+      await Promise.resolve();
+    }
+
     const snapshots = snapshotsOf(seen);
     expect(snapshots.length).toBeGreaterThan(0);
     const last = snapshots[snapshots.length - 1]!;

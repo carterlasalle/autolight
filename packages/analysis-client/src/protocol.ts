@@ -1,8 +1,9 @@
+import { randomUUID } from "node:crypto";
+
 // Framed stdio bridge to the Python worker (T-ANA-01, T-ANA-02, spec 14).
 // AnalysisSupervisor (apps/desktop) owns lifecycle; this package owns the
 // framed protocol, typed statuses, and the persistent-queue record shape.
 // Playback never blocks: analyze() queues; crashes requeue (spec 109);
-// large artifacts travel by path.
 export interface AnalyzeRequest {
   trackId: string;
   audioPath: string;

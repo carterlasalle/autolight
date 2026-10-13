@@ -172,8 +172,19 @@ export class IpcRouter implements Service {
       return { ok: false, error: { code: "E_SENDER", message: `sender not allowed for ${name}` } };
     }
 
+    let req: ChannelRequest<Channel>;
+
     try {
-      const req = channels[name].request.parse(raw);
+      req = channels[name].request.parse(raw);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.tracker.count("errors");
+      audit("ipc.error", { channel: name, ms: Date.now() - t0, error: message.slice(0, 500) });
+
+      return { ok: false, error: { code: "E_REQUEST", message: `${name}: ${message}` } };
+    }
+
+    try {
       // SAFETY: the handler table is invariant in its channel parameter; the
       // request was just validated against channels[name].request for this
       // same channel, so the runtime pairing is exact even though TS cannot

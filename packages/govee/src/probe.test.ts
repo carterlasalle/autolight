@@ -94,7 +94,7 @@ describe("govee segmented capability probe", () => {
     ]);
     // Power on before arming, and the B2 read-back after arming. Never a turn
     // while the channel is armed, never a white colorwc.
-    expect(probe.commandsSent).toEqual([STATUS_COMMAND, TURN_ON_COMMAND, STATUS_COMMAND]);
+    expect(probe.commandsSent).toEqual([STATUS_COMMAND, DEV_STATUS_COMMAND, TURN_ON_COMMAND, STATUS_COMMAND]);
 
     // The user's eyes match the unit: two colours, red half then blue half.
     expect(lamp.painted).toEqual([
