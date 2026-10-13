@@ -22,7 +22,7 @@ import {
 import { planIdentity } from "./identity.js";
 import { planRecurrence, summarizeSections } from "./recurrence.js";
 import { freshRestraint, notePaletteChange, observeSection, restrain } from "./restraint.js";
-import { hashValue, isPlanLayer, mulberry32, trackFingerprint, type CompiledShowPlan, type CompileInput, type CompileResult, type Oklch, type PlanCue, type PlannerConfigSnapshot, type PlannerStyle, type PlanLayer, type RejectedCandidate, type SectionPlan } from "./types.js";
+import { hashValue, isPlanLayer, trackFingerprint, type CompiledShowPlan, type CompileInput, type CompileResult, type Oklch, type PlanCue, type PlannerConfigSnapshot, type PlannerStyle, type PlanLayer, type RejectedCandidate, type SectionPlan } from "./types.js";
 import { diagnosticsOutOfBounds, evaluateCompiledPlan, validateCompiledPlan } from "./validate.js";
 import { pickCandidate, type SectionCandidate } from "./scoring.js";
 import { layerForCueName } from "./layers-fallback.js";
@@ -103,7 +103,6 @@ export function compileShow(input: CompileInput): CompileResult {
   const vHash = venueHash(venue);
   const cHash = configHash(config);
   const seed = input.seedOverride ?? hashValue([fp.value, PLANNER_VERSION, sHash, vHash, cHash]);
-  const rand = mulberry32(seed);
   const rejected: RejectedCandidate[] = [];
   const cues: PlanCue[] = [];
   const ordinal = { n: 0 };
@@ -169,7 +168,7 @@ export function compileShow(input: CompileInput): CompileResult {
   input.track.sections.forEach((section, idx) => {
     const sec = sections[idx]!;
     const motifId = recurrence.motifOf[idx] ?? null;
-    const occ = motifId ? recurrence.map.motifs.find((m) => m.id === motifId)!.sections.indexOf(idx) : 0;
+    const occ = motifId ? (recurrence.map.motifs.find((m) => m.id === motifId)?.sections.indexOf(idx) ?? -1) : 0;
     observeSection(restraint, section.startBeat);
     notePaletteChange(restraint, section.startBeat);
     const arc = trackArcPosition(section.startBeat, firstBeat, lastBeat);
@@ -192,11 +191,12 @@ export function compileShow(input: CompileInput): CompileResult {
 
     const { winner, vetoed } = pickCandidate(variants, input.mode ?? "rules-with-veto");
 
-    for (const v of vetoed) rejected.push({ candidate: candidateNo + v, reasons: ["pathological section candidate"] });
-    const chosen = variants[winner] ?? variants[0]!;
+    const rejectBase = candidateNo;
     candidateNo += perSection;
-    void chosen;
 
+    for (const v of vetoed) rejected.push({ candidate: rejectBase + v, reasons: ["pathological section candidate"] });
+    const chosen = variants[winner] ?? variants[0]!;
+    sections[idx] = { ...sec, darkness: chosen.darkness, density: chosen.density };
     const secStyle = { ...style, ...edits?.sectionStyles[idx] };
     const drop = dropByBeat.get(section.startBeat) ?? null;
     void drop;
