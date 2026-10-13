@@ -275,6 +275,7 @@ __metadata:
     rekordbox-connect: "npm:^1.2.17"
     typescript: "npm:^5.6.3"
     vitest: "npm:^4.1.11"
+    zod: "npm:^3.23.8"
   dependenciesMeta:
     "@parcel/watcher":
       optional: true
