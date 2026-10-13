@@ -547,7 +547,7 @@ export function setMasterIntensity(value: number): { ok: true; value: number } {
   return { ok: true, value: svc.overrides.intensity };
 }
 
-export function resumeMaster(at: "beat" | "bar" | "phrase" | "immediate"): { ok: true; at: string } {
+export function resumeMaster(at: "beat" | "bar" | "phrase" | "immediate"): { ok: true; at: "beat" | "bar" | "phrase" | "immediate" } {
   const svc = getShowService();
   svc.overrides.blackout = false;
   svc.overrides.full = false;

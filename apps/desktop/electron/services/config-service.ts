@@ -23,36 +23,36 @@ export interface ConfigServiceOptions {
   store?: PersistentConfigStore;
 }
 
-export interface ConfigValueReply {
+export type ConfigValueReply = {
   ok: true;
   key: string;
   value: unknown;
   layer: string;
   liveSafe: boolean;
-}
+};
 
-export interface ConfigSetReply {
+export type ConfigSetReply = {
   ok: true;
   key: string;
-  scope: string;
+  scope: Scope;
   value: unknown;
   layer: string;
-}
+};
 
-export interface ConfigImportReply {
+export type ConfigImportReply = {
   ok: true;
   applied: number;
-}
+};
 
-export interface ConfigSchemaReply {
+export type ConfigSchemaReply = {
   ok: true;
   keys: { key: string; type: string; scope: string; unit: string; range: string; liveSafe: boolean }[];
-}
+};
 
-export interface ConfigErrorReply {
+export type ConfigErrorReply = {
   ok: false;
   error: { code: string; message: string };
-}
+};
 
 export class ConfigService implements Service {
   readonly name = "config-service";
@@ -235,7 +235,7 @@ export class ConfigService implements Service {
     return { ok: true, key, scope, value, layer: store.layerOf(key) };
   }
 
-  reset(scope: Scope, key: string): { ok: true; key: string; scope: string } | ConfigErrorReply {
+  reset(scope: Scope, key: string): { ok: true; key: string; scope: Scope } | ConfigErrorReply {
     try {
       defineKey(key);
     } catch {
