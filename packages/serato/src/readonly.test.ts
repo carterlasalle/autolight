@@ -47,7 +47,8 @@ afterEach(() => {
 
 describe("T-SEC-04 serato read-only", () => {
   it("parses the crate identically before and after the full run, checksum stable", () => {
-    const { path } = crateFixture();
+    const { path, bytes } = crateFixture();
+    expect(new Uint8Array(readFileSync(path))).toEqual(bytes);
     const before = sha256File(path);
     const first = serato.parseCrate(new Uint8Array(readFileSync(path)));
     expect(first.map((entry) => entry.path)).toEqual(["/music/a.mp3", "/music/b.mp3"]);
@@ -57,9 +58,9 @@ describe("T-SEC-04 serato read-only", () => {
   });
 
   it("rejects corrupt crates instead of writing or repairing them", () => {
-    expect(() => serato.parseCrate(new Uint8Array([1, 2, 3, 4, 0, 0, 0, 0]))).toThrow();
-    expect(() => serato.parseBeatGrid(new Uint8Array([2, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0]))).toThrow();
-    expect(() => serato.parseBeatGrid(new Uint8Array([1, 0]))).toThrow();
+    expect(() => serato.parseCrate(new Uint8Array([1, 2, 3, 4, 0, 0, 0, 0]))).toThrow(/bad crate magic/);
+    expect(() => serato.parseBeatGrid(new Uint8Array([2, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0]))).toThrow(/beatgrid version=2/);
+    expect(() => serato.parseBeatGrid(new Uint8Array([1, 0]))).toThrow(/beatgrid too short/);
   });
 
   it("keeps Remote mapping pure: same snapshot in gives the same DeckState out", () => {
@@ -80,17 +81,22 @@ describe("T-SEC-04 serato read-only", () => {
       raw: { deck: 1 },
     };
 
+    const snapshot = structuredClone(msg);
     const a = serato.remoteToDeckState(msg, 5n);
     const b = serato.remoteToDeckState({ ...msg, raw: { deck: 1 } }, 5n);
     expect(b).toEqual(a);
-    expect(msg.filepath).toBe("/m/track.mp3");
+    expect(msg).toEqual(snapshot);
   });
 
   it("exposes no write-shaped export", () => {
+    // Prefix match: an anchored bare-verb pattern misses writeCrate/saveTrack
+    // style names. createSeratoWatcher is the reviewed exception: it only
+    // builds a read-only watcher, never writes.
     for (const name of Object.keys(serato)) {
-      expect(name).not.toMatch(/^(insert|update|delete|upsert|write|save|remove|create|drop|exec|run|checkpoint)$/i);
+      expect(name).not.toMatch(/\b(insert|update|delete|upsert|write|save|remove|drop|exec|checkpoint)\w*/i);
     }
 
+    expect("createSeratoWatcher" in serato).toBe(true);
     expect("writeCrate" in serato).toBe(false);
     expect("saveCrate" in serato).toBe(false);
     expect("updateBeatGrid" in serato).toBe(false);

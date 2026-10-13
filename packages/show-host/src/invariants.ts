@@ -10,6 +10,7 @@ export const INVARIANT_CODES = [
   "deck-age",
   "brightness-rate",
   "no-cloud-frames",
+  "invariant-error",
 ] as const;
 
 export type InvariantCode = (typeof INVARIANT_CODES)[number];
@@ -75,14 +76,9 @@ export function checkInvariants(
   ctx: InvariantContext | null,
   telemetry?: InvariantTelemetry,
 ): InvariantViolation[] {
-  let out: InvariantViolation[];
-
-  try {
-    if (ctx === null) throw new Error("null context");
-    out = runChecks(ctx);
-  } catch {
-    out = [violation("finite-beats", "invariant check failed internally")];
-  }
+  const out = ctx === null
+    ? [violation("invariant-error", "invariant check failed internally: null context")]
+    : runChecks(ctx);
 
   if (telemetry !== undefined) {
     try {
@@ -103,14 +99,15 @@ export function checkInvariants(
 
 function runChecks(ctx: InvariantContext): InvariantViolation[] {
   const out: InvariantViolation[] = [];
-  checkPending(ctx, out);
-  checkArmed(ctx, out);
-  checkZones(ctx, out);
-  checkThread(ctx, out);
-  checkBeats(ctx, out);
-  checkDeckAge(ctx, out);
-  checkBrightness(ctx, out);
-  checkCloud(ctx, out);
+  // Each check is isolated: an internal failure in one reports
+  // `invariant-error` without skipping the remaining diagnostics.
+  for (const check of [checkPending, checkArmed, checkZones, checkThread, checkBeats, checkDeckAge, checkBrightness, checkCloud]) {
+    try {
+      check(ctx, out);
+    } catch (err) {
+      out.push(violation("invariant-error", `invariant check failed internally: ${err instanceof Error ? err.message : String(err)}`));
+    }
+  }
 
   return out;
 }
@@ -139,13 +136,23 @@ function checkArmed(ctx: InvariantContext, out: InvariantViolation[]): void {
 
 function checkZones(ctx: InvariantContext, out: InvariantViolation[]): void {
   for (const [deviceId, expected] of Object.entries(ctx.expectedZones)) {
-    const actual = ctx.frameZones[deviceId];
+    if (!(deviceId in ctx.frameZones)) {
+      out.push(
+        violation(
+          "segment-zones",
+          `segmented fixture expects ${expected} zones, no frame entry for device`,
+          deviceId,
+        ),
+      );
+      continue;
+    }
+    const actual = ctx.frameZones[deviceId] as number;
 
     if (actual !== expected) {
       out.push(
         violation(
           "segment-zones",
-          `segmented fixture expects ${expected} zones, frame carries ${actual ?? 0}`,
+          `segmented fixture expects ${expected} zones, frame carries ${actual}`,
           deviceId,
         ),
       );
@@ -154,19 +161,19 @@ function checkZones(ctx: InvariantContext, out: InvariantViolation[]): void {
 }
 
 function checkThread(ctx: InvariantContext, out: InvariantViolation[]): void {
-  if (ctx.hostThreadId === ctx.rendererThreadId) {
+  // Thread ids cross the worker boundary as numbers or strings; normalize so
+  // `1` vs `"1"` still flags the same-thread violation.
+  if (String(ctx.hostThreadId) === String(ctx.rendererThreadId)) {
     out.push(violation("tick-thread", "show host tick runs on the renderer thread"));
   }
 }
 
 function checkBeats(ctx: InvariantContext, out: InvariantViolation[]): void {
-  for (const beat of ctx.beats) {
+  ctx.beats.forEach((beat, index) => {
     if (!Number.isFinite(beat)) {
-      out.push(violation("finite-beats", "non-finite beat value in frame context"));
-
-      return;
+      out.push(violation("finite-beats", `non-finite beat value ${String(beat)} at index ${index} in frame context`));
     }
-  }
+  });
 }
 
 function checkDeckAge(ctx: InvariantContext, out: InvariantViolation[]): void {

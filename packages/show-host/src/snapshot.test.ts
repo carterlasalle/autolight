@@ -467,12 +467,79 @@ describe("T-ARC-04 snapshots and reload survival", () => {
     const measured = measureSnapshot(ui, SNAPSHOT_MAX_BYTES);
     expect(measured.bytes).toBeLessThanOrEqual(SNAPSHOT_MAX_BYTES);
     expect(measured.withinBudget).toBe(true);
+    expect(measured.maxBytes).toBe(SNAPSHOT_MAX_BYTES);
     expect(ui.version).toBe(SNAPSHOT_VERSION);
     expect(selectUpcomingCues(plan, 0).length).toBeGreaterThan(0);
     const roundTrip = parseSnapshot(serializeSnapshot(ui).json);
     expect(roundTrip.tick).toBe(ui.tick);
     expect(roundTrip.cells).toEqual(ui.cells);
     expect(() => parseSnapshot(JSON.stringify({ ...ui, version: 999 }))).toThrow();
+    host.stop();
+  });
+
+  it("flags a snapshot that exceeds a tighter configured maxBytes", async () => {
+    const { host, setNow } = makeHost({ uiRateHz: 30 });
+    const ports = pumpPair();
+    const seen: unknown[] = [];
+    ports.main.onMessage((message) => {
+      seen.push(message);
+    });
+    host.attach(ports.host);
+    host.installFixtures(1, fixtures);
+    host.ingestDeck(1, deckState(0));
+    setNow(TICK_NS);
+    host.tick(TICK_NS);
+    await Promise.resolve();
+    const snapshots = snapshotsOf(seen);
+    expect(snapshots.length).toBeGreaterThan(0);
+    const last = snapshots[snapshots.length - 1]!;
+    const ui: UiSnapshot = buildUiSnapshot(last, { metrics: null });
+    const over = measureSnapshot(ui, 1);
+    expect(over.withinBudget).toBe(false);
+    expect(over.maxBytes).toBe(1);
+    host.stop();
+  });
+
+  it("carries scratch hold from the runtime into the cursor", async () => {
+    const { host, setNow } = makeHost({ uiRateHz: 30 });
+    const ports = pumpPair();
+    const seen: unknown[] = [];
+    ports.main.onMessage((message) => {
+      seen.push(message);
+    });
+    host.attach(ports.host);
+    host.installFixtures(1, fixtures);
+    host.ingestDeck(1, deckState(4));
+    setNow(TICK_NS);
+    host.tick(TICK_NS);
+    await Promise.resolve();
+    const snapshots = snapshotsOf(seen);
+    const last = snapshots[snapshots.length - 1]!;
+    const held = buildUiSnapshot(last, { scratchHoldByDeck: new Map([[1, true]]) });
+    expect(held.decks[0]?.cursor.scratchHold).toBe(true);
+    const released = buildUiSnapshot(last, {});
+    expect(released.decks[0]?.cursor.scratchHold).toBe(false);
+    host.stop();
+  });
+
+  it("latest wins on a same-tick re-publish", async () => {
+    const { host, setNow } = makeHost({ uiRateHz: 30 });
+    const ports = pumpPair();
+    const seen: unknown[] = [];
+    ports.main.onMessage((message) => {
+      seen.push(message);
+    });
+    host.attach(ports.host);
+    host.installFixtures(1, fixtures);
+    host.ingestDeck(1, deckState(0));
+    setNow(TICK_NS);
+    host.tick(TICK_NS);
+    await Promise.resolve();
+    const snapshots = snapshotsOf(seen);
+    expect(snapshots.length).toBeGreaterThan(0);
+    const last = snapshots[snapshots.length - 1]!;
+    const republished = { ...last, owner: "replay-owner" };
+    expect(latestPublishedSnapshot([last, republished])?.owner).toBe("replay-owner");
     host.stop();
   });
 });

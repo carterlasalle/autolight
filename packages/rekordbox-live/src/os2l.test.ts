@@ -21,25 +21,35 @@ describe("OS2L framing (T-LIVE-10, os2l.org reference)", () => {
   it("splits newline and consecutive JSON objects, keeping the tail", () => {
     const first = splitOs2lMessages('{"evt":"beat","pos":1,"bpm":120,"change":false}\n{"evt":"beat",');
     expect(first.texts).toHaveLength(1);
-    expect(first.tail.length).toBeGreaterThan(0);
+    expect(first.tail).toBe('{"evt":"beat",');
+    expect(first.garbage).toEqual([]);
     const second = splitOs2lMessages(first.tail + '"pos":2,"bpm":120,"change":false}\n');
     expect(second.texts).toHaveLength(1);
     const both = splitOs2lMessages('{"evt":"beat","pos":3,"bpm":120,"change":false}{"evt":"beat","pos":4,"bpm":120,"change":false}\n');
     expect(both.texts).toHaveLength(2);
   });
 
-  it("decodes beat, button, command and feedback per the spec grammar", () => {
+  it("decodes beat, button and command per the spec grammar", () => {
     const decoded = decodeOs2lText(
       '{"evt":"beat","pos":42,"bpm":120.0}\n' +
       '{"evt":"btn","name":"blackout","state":"on"}\n' +
-      '{"evt":"cmd","id":42,"param":100.0}\n' +
-      '{"evt":"feedback","name":"program1","state":"on"}\n',
+      '{"evt":"cmd","id":42,"param":100.0}\n',
     );
 
     expect(decoded.malformed).toEqual([]);
-    expect(decoded.messages).toHaveLength(4);
+    expect(decoded.messages).toHaveLength(3);
     expect(decoded.messages[0]).toMatchObject({ evt: "beat", pos: 42, bpm: 120 });
     expect(formatOs2lFeedback("program1", "on")).toBe('{"evt":"feedback","name":"program1","state":"on"}');
+  });
+
+  it("reports garbage and valid messages from one buffer together", () => {
+    const decoded = decodeOs2lText(
+      '{"evt":"beat","pos":42,"bpm":120.0}\nnot json\n{"evt":"cmd","id":7,"param":50.0}\n',
+    );
+    expect(decoded.messages).toHaveLength(2);
+    expect(decoded.malformed).toHaveLength(1);
+    expect(decoded.messages[0]).toMatchObject({ evt: "beat", pos: 42 });
+    expect(decoded.messages[1]).toMatchObject({ evt: "cmd", id: 7 });
   });
 
   it("rejects and counts garbage without throwing", () => {
@@ -61,6 +71,9 @@ describe("OS2L provider (T-LIVE-10)", () => {
     expect(decks[0]?.effectiveBpm).toBe(120);
     expect(decks[0]?.beat).toBe(42);
     expect(decks[0]?.beatInBar).toBe(3);
+    provider.ingestText('{"evt":"beat","pos":40,"bpm":120.0,"change":false}\n', now);
+    expect(provider.getDecks()[0]?.beat).toBe(40);
+    expect(provider.getDecks()[0]?.beatInBar).toBe(1);
     expect(decks[0]?.master).toBe(true);
     expect(decks[0]?.quality.playheadSeconds).toBe("estimated");
     expect(decks[0]?.quality.effectiveBpm).toBe("exact");
@@ -87,35 +100,38 @@ describe("OS2L provider (T-LIVE-10)", () => {
     const clock = virtualClock();
     const provider = new Os2lProvider({ now: () => clock.nowNs(), bind: "127.0.0.1:0" });
     await provider.start();
-    const port = provider.boundPort;
-    expect(port).not.toBeNull();
-    const seen = Promise.withResolvers<void>();
-    provider.onDeckState((state) => {
-      if (state.beat === 16) seen.resolve();
-    });
+    const sender = connect({ host: "127.0.0.1", port: provider.boundPort ?? 0 });
+    sender.on("error", () => {});
     const { promise: closed, resolve: onClosed } = Promise.withResolvers<void>();
-
-    const sender = connect({ host: "127.0.0.1", port: port ?? 0 }, () => {
-      sender.write('{"evt":"beat","pos":16,"bpm":128,"change":false}\n');
-    });
-
     sender.on("close", () => onClosed());
-    await seen.promise;
-    expect(provider.getDecks()[0]?.effectiveBpm).toBe(128);
-    expect(provider.getStatus().state).toBe("live");
-    const feedback: string[] = [];
-    const { promise, resolve } = Promise.withResolvers<void>();
-    sender.setEncoding("utf8");
-    sender.on("data", (chunk: string) => {
-      feedback.push(chunk);
-      resolve();
-    });
-    provider.sendFeedback("program1", "on");
-    await promise;
-    expect(feedback.join("")).toContain('"feedback"');
-    sender.destroy();
-    await closed;
-    await provider.stop();
+    try {
+      const port = provider.boundPort;
+      expect(port).not.toBeNull();
+      const seen = Promise.withResolvers<void>();
+      provider.onDeckState((state) => {
+        if (state.beat === 16) seen.resolve();
+      });
+      await new Promise<void>((resolve, reject) => {
+        sender.once("connect", () => resolve());
+        sender.once("error", reject);
+        sender.write('{"evt":"beat","pos":16,"bpm":128,"change":false}\n');
+      });
+      await seen.promise;
+      expect(provider.getDecks()[0]?.effectiveBpm).toBe(128);
+      expect(provider.getStatus().state).toBe("live");
+      sender.setEncoding("utf8");
+      const expectedFeedback = formatOs2lFeedback("program1", "on") + "\n";
+      const feedback = await new Promise<string>((resolve, reject) => {
+        sender.once("data", (chunk: string) => resolve(chunk));
+        sender.once("error", reject);
+        provider.sendFeedback("program1", "on");
+      });
+      expect(feedback).toBe(expectedFeedback);
+    } finally {
+      sender.destroy();
+      await closed;
+      await provider.stop();
+    }
   });
 
   // OS2L is single-master-deck with no track identity (T-LIVE-10): the
@@ -146,12 +162,16 @@ describe("OS2L provider (T-LIVE-10)", () => {
       cleanup: async () => {},
     });
 
-    const notApplicable: Record<string, true> = {
-      "generation did not increase on track change": true,
-      "no deck state emitted for the second deck": true,
-    };
+    // Single-deck provider by contract (T-LIVE-10): the filter keys on the
+    // suite's exact failure strings because the suite exposes no stable
+    // failure codes. If the suite renames a message, the `toContain` pins
+    // below fail loudly instead of silently changing coverage.
+    const notApplicable = new Set([
+      "generation did not increase on track change",
+      "no deck state emitted for the second deck",
+    ]);
 
-    const applicable = failures.filter((f) => !notApplicable[f]);
+    const applicable = failures.filter((f) => !notApplicable.has(f));
     expect(applicable).toEqual([]);
     expect(failures).toContain("generation did not increase on track change");
     expect(failures).toContain("no deck state emitted for the second deck");

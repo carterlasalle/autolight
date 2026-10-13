@@ -58,6 +58,14 @@ describe("runtime invariants (T-TRU-12)", () => {
     expect(out.some((v) => v.code === "segment-zones")).toBe(true);
   });
 
+  it("reports a missing frame entry instead of a zero zone count", () => {
+    const ctx = clean();
+    ctx.frameZones = {};
+    const out = checkInvariants(ctx);
+    const zone = out.find((v) => v.code === "segment-zones");
+    expect(zone?.message).toContain("no frame entry");
+  });
+
   it("flags host tick on the renderer thread", () => {
     const ctx = clean();
     ctx.rendererThreadId = ctx.hostThreadId;
@@ -65,11 +73,34 @@ describe("runtime invariants (T-TRU-12)", () => {
     expect(out.some((v) => v.code === "tick-thread")).toBe(true);
   });
 
+  it("flags the same thread across numeric and string ids", () => {
+    const ctx = clean();
+    ctx.hostThreadId = 1;
+    ctx.rendererThreadId = "1";
+    expect(checkInvariants(ctx).some((v) => v.code === "tick-thread")).toBe(true);
+  });
+
   it("flags non-finite beats", () => {
     const ctx = clean();
     ctx.beats = [4, Number.NaN];
     const out = checkInvariants(ctx);
     expect(out.some((v) => v.code === "finite-beats")).toBe(true);
+  });
+
+  it("reports every bad beat with its index, and isolates internal failures", () => {
+    const ctx = clean();
+    ctx.beats = [Number.NaN, 4, Number.POSITIVE_INFINITY];
+    const out = checkInvariants(ctx);
+    expect(out.filter((v) => v.code === "finite-beats")).toHaveLength(2);
+    expect(out.some((v) => v.message.includes("index 0"))).toBe(true);
+    expect(out.some((v) => v.message.includes("index 2"))).toBe(true);
+    const nullOut = checkInvariants(null);
+    expect(nullOut).toHaveLength(1);
+    expect(nullOut[0]?.code).toBe("invariant-error");
+    const broken = checkInvariants({ ...clean(), pendingPerDevice: undefined as never });
+    expect(broken.some((v) => v.code === "pending-frames")).toBe(false);
+    expect(broken.some((v) => v.code === "invariant-error")).toBe(true);
+    expect(broken.some((v) => v.code === "segment-zones")).toBe(true);
   });
 
   it("flags stale DeckState while health claims live", () => {

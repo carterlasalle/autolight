@@ -11,6 +11,7 @@ import { compareSequences, lintFixture, runReplay, type CaptureEvent, type Virtu
 import { SERATO_ACTIONS, framesForAction } from "./emulator.js";
 import { SeratoRemoteProvider } from "./remote-provider.js";
 import {
+  SERATO_BURST_GAP_MS,
   SERATO_REPLAY_SPEEDS,
   framesFromFixture,
   parseSeratoFixture,
@@ -64,7 +65,7 @@ function burstEvents(fixture: SeratoFixture): CaptureEvent[] {
   };
 
   for (const frame of frames) {
-    if (pending.length > 0 && frame.atMs - previousAt >= 50) flush(previousAt);
+    if (pending.length > 0 && frame.atMs - previousAt >= SERATO_BURST_GAP_MS) flush(previousAt);
     pending.push(frame.bytes);
     previousAt = frame.atMs;
   }
@@ -192,27 +193,26 @@ describe("serato protocol fixtures and replay (T-SER-05)", () => {
   it("goes red when the capture is mutated", () => {
     const fixture = FIXTURES.find((entry) => entry.action === "seek")?.fixture as SeratoFixture;
     const frames = framesFromFixture(fixture);
-    const corrupted = Buffer.from(frames[frames.length - 1]?.bytes as Buffer);
-    corrupted[3] = corrupted[3] === 0x2f ? 0x2e : 0x2f;
+    const last = frames[frames.length - 1];
+    expect(last).toBeDefined();
+    expect(frames.length).toBeGreaterThan(0);
+    // Byte 36 of the seek frame is the float32 playhead value (30.0 on the
+    // wire): flipping it changes decoded state, never frame framing.
+    const corrupted = Buffer.from(last?.bytes as Buffer);
+    expect(corrupted.length).toBeGreaterThan(40);
+    corrupted[36] = (corrupted[36] as number) ^ 0x40;
     const mutated = { ...fixture, capture: Buffer.concat([...frames.slice(0, -1).map((f) => f.bytes), corrupted]).toString("base64") };
-    let states: DeckState[] = [];
-
-    try {
-      states = replaySeratoFixture(mutated, "1x");
-    } catch {
-      states = [];
-    }
-
-    const problems = compareSequences(fixture.expectedEvents, states, { toleranceMs: TOLERANCE_MS });
-    expect(problems.length).toBeGreaterThan(0);
+    const states = replaySeratoFixture(mutated, "1x");
+    const problems = compareSequences(fixture.expectedEvents.map(froundNumbers), states, { toleranceMs: TOLERANCE_MS });
+    expect(problems.some((problem) => problem.path.endsWith("playheadSeconds"))).toBe(true);
   });
 
   it("goes red when expectations do not match the wire", () => {
     const fixture = FIXTURES.find((entry) => entry.action === "play")?.fixture as SeratoFixture;
     const wrong = { ...fixture, expectedEvents: fixture.expectedEvents.map((event, index) => index === 0 ? { ...event, playheadSeconds: 999 } : event) };
     const states = replaySeratoFixture(wrong, "1x");
-    const problems = compareSequences(wrong.expectedEvents, states, { toleranceMs: TOLERANCE_MS });
-    expect(problems.length).toBeGreaterThan(0);
+    const problems = compareSequences(wrong.expectedEvents.map(froundNumbers), states, { toleranceMs: TOLERANCE_MS });
+    expect(problems.some((problem) => problem.path.endsWith("playheadSeconds"))).toBe(true);
   });
 
   it("lints an empty capture and a decoder-authored expectation as problems", () => {

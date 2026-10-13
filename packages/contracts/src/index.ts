@@ -1,5 +1,13 @@
 import { z } from "zod";
 
+/**
+ * A JSON value exactly as it survives round-trip through a fixture file or
+ * the capture log: persisted payloads, LAN replies and stored settings all
+ * enter typed code by validating against this shape first. (The govee
+ * boundary names the same structure `LanInbound` for its datagrams.)
+ */
+export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+
 export const deckSourceSchema = z.enum(["rekordbox", "serato"]);
 
 export type DeckSource = z.infer<typeof deckSourceSchema>;

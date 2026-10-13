@@ -3,6 +3,7 @@
 // changes time rather than only rewriting timestamps, and normalized
 // DeckState sequences are compared with the human-written expectedEvents.
 // No physical DJ software is required.
+import type { JsonValue } from "@autolight/contracts";
 
 export class VirtualClock {
   private currentMs = 0;
@@ -56,7 +57,9 @@ export function speedFactor(speed: ReplaySpeed): number {
 export interface CaptureEvent {
   atMs: number;
   kind: string;
-  payload: unknown;
+  // The capture payload as persisted: a JSON value from the fixture/log,
+  // decoded per kind by the caller's Decoder.
+  payload: JsonValue;
 }
 
 export type Decoder<T> = (event: CaptureEvent, clock: VirtualClock) => T | null;

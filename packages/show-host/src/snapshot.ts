@@ -28,8 +28,6 @@ export const SNAPSHOT_VERSION = 1;
 
 export const SNAPSHOT_MAX_BYTES = 262144;
 
-export const SNAPSHOT_UI_RATE_HZ = 30;
-
 export const UPCOMING_CUE_LIMIT = 8;
 
 export const snapshotCursorSchema = z.object({
@@ -91,6 +89,10 @@ export interface UiSnapshotContext {
   readonly models?: ReadonlyMap<number, TrackModel | null>;
   readonly deviceHealth?: readonly DeviceHealth[];
   readonly metrics?: HostMetrics | null;
+  /** Per-deck scratch hold sourced from the track runtime (world cursors):
+   * the host deck snapshot carries no scratch flag, so callers pass the live
+   * hold state here instead of letting the cursor default to false. */
+  readonly scratchHoldByDeck?: ReadonlyMap<number, boolean>;
 }
 
 // Current section at a beat, or null when the model has no coverage there.
@@ -150,8 +152,11 @@ export function latestPublishedSnapshot(snapshots: readonly HostSnapshot[]): Hos
   if (snapshots.length === 0) return null;
   let latest = snapshots[0]!;
 
+  // Arrival order breaks ties: a same-tick re-publish or resubscribe replay
+  // appended later wins, per the latest-wins contract. A tick-counter reset
+  // (new session) still needs a fresh subscription, not a lower tick here.
   for (const snapshot of snapshots) {
-    if (snapshot.tick > latest.tick) latest = snapshot;
+    if (snapshot.tick >= latest.tick) latest = snapshot;
   }
 
   return latest;
@@ -164,7 +169,7 @@ export function buildUiSnapshot(host: HostSnapshot, ctx: UiSnapshotContext = {})
 
     return {
       ...deck,
-      cursor: { beat: deck.beat, loopPass: deck.loopPass, scratchHold: false },
+      cursor: { beat: deck.beat, loopPass: deck.loopPass, scratchHold: ctx.scratchHoldByDeck?.get(deck.deckId) ?? false },
       section: currentSection(model, deck.beat),
       upcomingCues: selectUpcomingCues(plan, deck.beat, {
         effectiveBpm: deck.effectiveBpm,
@@ -204,7 +209,9 @@ export interface SnapshotBudget {
   readonly withinBudget: boolean;
 }
 
-export function measureSnapshot(snapshot: UiSnapshot, maxBytes: number = SNAPSHOT_MAX_BYTES): SnapshotBudget {
+/** The budget is a required argument so callers pass the effective
+ * `runtime.snapshot.maxBytes`, never a stale copy of the default. */
+export function measureSnapshot(snapshot: UiSnapshot, maxBytes: number): SnapshotBudget {
   const serialized = serializeSnapshot(snapshot);
 
   return {

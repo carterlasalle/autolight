@@ -3,6 +3,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { decodeRaw, parseStatus } from "@autolight/govee";
+import type { JsonValue } from "@autolight/contracts";
 import {
   compareSequences,
   type CaptureEvent,
@@ -33,7 +34,7 @@ interface RazerFixture {
 
 interface StatusFixture {
   description: string;
-  json: unknown;
+  json: JsonValue;
 }
 
 function razerFixtures(): { name: string; fixture: RazerFixture }[] {

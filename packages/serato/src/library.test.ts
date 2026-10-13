@@ -96,22 +96,47 @@ describe("serato library (T-SER-04)", () => {
     expect(crates[1]?.trackPaths).toEqual(["/music/hiphop-c.mp3"]);
   });
 
-  it("evaluates the rule records it understands and keeps unknown ones raw", () => {
+  it("evaluates the rule records it understands and flags partially-decoded crates", () => {
     const root = fixtureLibrary();
     const { rows } = readSeratoDatabase(root);
     const crates = readSeratoSmartCrates(root);
     const known = crates.find((crate) => crate.name === "Smart House.scrate");
     expect(known?.rules).toEqual([{ tag: "rrul", field: "genre", operator: "is", value: "House", text: "genre is House" }]);
-    const matched = evaluateSmartCrate(known as NonNullable<typeof known>, rows);
+    const knownResult = evaluateSmartCrate(known as NonNullable<typeof known>, rows);
+    expect(knownResult.partial).toBe(true);
+    expect(knownResult.unsupportedRules).toBe(1);
+    expect(knownResult.matched).toHaveLength(0);
+
+    const fullyDecoded: SeratoSmartCrate = {
+      name: "Decoded House.scrate",
+      path: known?.path ?? "",
+      rules: known?.rules ?? [],
+      unsupported: [],
+    };
+    const matched = evaluateSmartCrate(fullyDecoded, rows);
+    expect(matched.partial).toBe(false);
     expect(matched.matched.map((row) => row.title)).toEqual(["House A", "House B"]);
-    expect(matched.unsupportedRules).toBe(1);
+    expect(matched.unsupportedRules).toBe(0);
 
     const unknown = crates.find((crate) => crate.name === "Unknown Layout.scrate");
     expect(unknown?.rules).toHaveLength(0);
     expect(unknown?.unsupported.map((record) => record.tag)).toContain("runk");
     const unknownResult = evaluateSmartCrate(unknown as NonNullable<typeof unknown>, rows);
     expect(unknownResult.matched).toHaveLength(0);
+    expect(unknownResult.partial).toBe(true);
     expect(unknownResult.unsupportedRules).toBeGreaterThan(0);
+  });
+
+  it("treats a mistyped smart-crate operator as undecodable, never equality", () => {
+    const root = fixtureLibrary();
+    const { rows } = readSeratoDatabase(root);
+    writeFileSync(join(root, "SmartCrates", "Mistyped.scrate"), writeScrate({ name: "Mistyped", trackPaths: [], textRule: "title > House" }));
+    const crate = readSeratoSmartCrates(root).find((entry) => entry.name === "Mistyped.scrate");
+    expect(crate?.rules).toHaveLength(0);
+    expect(crate?.unsupported.map((record) => record.tag)).toContain("rrul");
+    const result = evaluateSmartCrate(crate as NonNullable<typeof crate>, rows);
+    expect(result.partial).toBe(true);
+    expect(result.matched).toHaveLength(0);
   });
 
   it("evaluates numeric comparisons against library rows", () => {
@@ -119,8 +144,42 @@ describe("serato library (T-SER-04)", () => {
     const { rows } = readSeratoDatabase(root);
     writeFileSync(join(root, "SmartCrates", "Slow.scrate"), writeScrate({ name: "Slow", trackPaths: [], textRule: "bpm <= 124" }));
     const crate = readSeratoSmartCrates(root).find((entry) => entry.name === "Slow.scrate");
-    const result = evaluateSmartCrate(crate as NonNullable<typeof crate>, rows);
+    const result = evaluateSmartCrate(
+      { name: crate?.name ?? "", path: crate?.path ?? "", rules: crate?.rules ?? [], unsupported: [] },
+      rows,
+    );
+    expect(result.partial).toBe(false);
     expect(result.matched.map((row) => row.title)).toEqual(["House A", "Hip Hop C"]);
+  });
+
+  it("survives one corrupt crate file without dropping the rest", () => {
+    const root = fixtureLibrary();
+    writeFileSync(join(root, "Subcrates", "Corrupt.crate"), Buffer.from([0xde, 0xad, 0xbe, 0xef]));
+    writeFileSync(join(root, "SmartCrates", "Corrupt.scrate"), Buffer.from([0xde, 0xad, 0xbe, 0xef]));
+    const names = readSeratoCrates(root).map((crate) => crate.name);
+    expect(names).toEqual(["Evening.crate", "Morning.crate"]);
+    const smart = readSeratoSmartCrates(root).map((crate) => crate.name);
+    expect(smart).toContain("Smart House.scrate");
+    expect(smart).toContain("Unknown Layout.scrate");
+  });
+
+  it("flags a truncated smart crate partial instead of dropping its rules silently", () => {
+    const root = fixtureLibrary();
+    const full = writeScrate({ name: "Truncated", trackPaths: [], textRule: "genre is House" });
+    const header = full.subarray(0, full.length - 2);
+    writeFileSync(join(root, "SmartCrates", "Truncated.scrate"), header);
+    const crate = readSeratoSmartCrates(root).find((entry) => entry.name === "Truncated.scrate");
+    expect(crate?.unsupported.map((record) => record.tag)).toContain("truncated");
+    const result = evaluateSmartCrate(crate as NonNullable<typeof crate>, []);
+    expect(result.partial).toBe(true);
+    expect(result.matched).toHaveLength(0);
+  });
+
+  it("returns an empty library instead of throwing when database V2 is unreadable", () => {
+    const root = tempDir("autolight-serato-missing-");
+    const { rows, retainedTagCount } = readSeratoDatabase(root);
+    expect(rows).toEqual([]);
+    expect(retainedTagCount).toBe(0);
   });
 
   it("discovers external-drive roots and merges their rows by path", () => {

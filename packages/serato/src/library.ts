@@ -16,9 +16,10 @@
 //   so this parser is deliberately tolerant and never guesses at a layout it
 //   cannot see; HW-SER-01 confirms the real rule records.
 //
-// Library roots come from `library.serato.root` when set, otherwise
-// auto-detection: the default `~/Music/_Serato_` plus every mounted external
-// volume that carries its own `_Serato_` folder, merged into one row set.
+// Library roots in priority order: the configured `library.serato.root` first
+// when set, then auto-detection (the default `~/Music/_Serato_` plus every
+// mounted external volume that carries its own `_Serato_` folder), merged
+// into one row set with first-wins dedup in `mergeSeratoRows`.
 // Change detection reuses the DS-35 watcher (T-RBL-06) with Serato's file
 // classes, so an audio change invalidates only the track that changed.
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -171,8 +172,11 @@ interface WalkedRecord {
   payload: Buffer;
 }
 
-/** Tagged-record walk shared by the database, crates and smart crates. */
-function walkRecords(bytes: Buffer, start = 0, end = bytes.length): WalkedRecord[] {
+/** Tagged-record walk shared by the database, crates and smart crates.
+ * A truncated tail has no recoverable boundary, so the walk stops and reports
+ * `truncated` instead of silently dropping the remainder: smart crates keep
+ * the truncation as an unsupported record, which flags the crate partial. */
+function walkRecords(bytes: Buffer, start = 0, end = bytes.length): { records: WalkedRecord[]; truncated: boolean } {
   const records: WalkedRecord[] = [];
   let offset = start;
 
@@ -181,14 +185,17 @@ function walkRecords(bytes: Buffer, start = 0, end = bytes.length): WalkedRecord
     const length = bytes.readUInt32BE(offset + 4);
     offset += 8;
 
-    if (offset + length > end) break;
+    if (offset + length > end) return { records, truncated: true };
     records.push({ tag, payload: bytes.subarray(offset, offset + length) });
     offset += length;
   }
 
-  return records;
+  return { records, truncated: false };
 }
 
+/** UTF-16BE text decode with the exact null handling serato-connect's
+ * database parser uses (it strips every NUL, not just trailing ones), so a
+ * retention key decoded here always equals the `filePath` it parses. */
 function decodeUtf16be(bytes: Buffer): string {
   const swapped = Buffer.alloc(bytes.length);
 
@@ -197,7 +204,7 @@ function decodeUtf16be(bytes: Buffer): string {
     swapped[i + 1] = bytes[i] as number;
   }
 
-  return swapped.toString("utf16le").replace(/\0+$/, "");
+  return swapped.toString("utf16le").replace(/\0/g, "");
 }
 
 function asRow(track: SeratoDatabaseTrack, rawTags: Record<string, string>): SeratoTrackRow {
@@ -236,13 +243,21 @@ function asRow(track: SeratoDatabaseTrack, rawTags: Record<string, string>): Ser
  * filePath so a row and its retained bytes line up.
  */
 export function readSeratoDatabase(root: string): { rows: SeratoTrackRow[]; retainedTagCount: number } {
-  const bytes = readFileSync(join(root, "database V2"));
-  const parsed = parseDatabaseSync(join(root, "database V2"));
+  const path = join(root, "database V2");
+  let bytes: Buffer;
+  let parsed: SeratoDatabaseTrack[];
+
+  try {
+    bytes = readFileSync(path);
+    parsed = parseDatabaseSync(path);
+  } catch {
+    return { rows: [], retainedTagCount: 0 };
+  }
   const retention = new Map<string, Record<string, string>>();
 
-  for (const record of walkRecords(bytes)) {
+  for (const record of walkRecords(bytes).records) {
     if (record.tag !== "otrk") continue;
-    const fields = walkRecords(record.payload, 0, record.payload.length);
+    const fields = walkRecords(record.payload, 0, record.payload.length).records;
     const pathField = fields.find((field) => field.tag === "pfil");
 
     if (!pathField) continue;
@@ -273,11 +288,16 @@ export function readSeratoCrates(root: string): SeratoCrate[] {
     return [];
   }
 
-  return entries.sort().map((name) => {
+  return entries.sort().flatMap((name) => {
     const path = join(dir, name);
-    const crate = parseCrateSync(path);
 
-    return { name, path, trackPaths: crate.trackPaths };
+    try {
+      const crate = parseCrateSync(path);
+
+      return [{ name, path, trackPaths: crate.trackPaths }];
+    } catch {
+      return [];
+    }
   });
 }
 
@@ -297,13 +317,20 @@ export function readSeratoSmartCrates(root: string): SeratoSmartCrate[] {
     return [];
   }
 
-  return entries.sort().map((name) => {
+  return entries.sort().flatMap((name) => {
     const path = join(dir, name);
-    const bytes = readFileSync(path);
+    let bytes: Buffer;
+
+    try {
+      bytes = readFileSync(path);
+    } catch {
+      return [];
+    }
     const rules: SeratoSmartCrateRule[] = [];
     const unsupported: { tag: string; payloadBase64: string }[] = [];
+    const walked = walkRecords(bytes);
 
-    for (const record of walkRecords(bytes)) {
+    for (const record of walked.records) {
       if (CONTAINER_TAGS[record.tag] === true) continue;
       const rule = parseSmartCrateRule(record.tag, record.payload);
 
@@ -315,9 +342,14 @@ export function readSeratoSmartCrates(root: string): SeratoSmartCrate[] {
       unsupported.push({ tag: record.tag, payloadBase64: record.payload.toString("base64") });
     }
 
-    return { name, path, rules, unsupported };
+    if (walked.truncated) unsupported.push({ tag: "truncated", payloadBase64: "" });
+    return [{ name, path, rules, unsupported }];
   });
 }
+
+const NUMERIC_OPERATORS: Record<string, true> = { ">": true, "<": true, ">=": true, "<=": true, is: true, equals: true };
+
+const TEXT_OPERATORS: Record<string, true> = { is: true, equals: true, contains: true };
 
 function parseSmartCrateRule(tag: string, payload: Buffer): SeratoSmartCrateRule | null {
   const text = decodeUtf16be(payload).trim();
@@ -327,23 +359,30 @@ function parseSmartCrateRule(tag: string, payload: Buffer): SeratoSmartCrateRule
   const field = (match[1] ?? "").toLowerCase();
 
   if (RULE_FIELDS[field] !== true) return null;
+  const operator = (match[2] ?? "").toLowerCase();
+  const numeric = NUMERIC_FIELDS[field] === true;
 
-  return { tag, field, operator: (match[2] ?? "").toLowerCase(), value: (match[3] ?? "").trim(), text };
+  if (numeric ? NUMERIC_OPERATORS[operator] !== true : TEXT_OPERATORS[operator] !== true) return null;
+
+  return { tag, field, operator, value: (match[3] ?? "").trim(), text };
 }
 
 /**
  * Evaluate a smart crate's rules against library rows. Every rule must match
  * (Serato smart crates are conjunctions of their conditions). Rows whose field
- * is absent never match; unsupported rules are not silently treated as true.
- */
+ * is absent never match. A crate with any unsupported record is partial: the
+ * conditions we cannot decode are never treated as true, so `matched` is
+ * empty and callers surface the crate as partial instead of authoritative. */
 export function evaluateSmartCrate(
   crate: SeratoSmartCrate,
   rows: readonly SeratoTrackRow[],
-): { matched: SeratoTrackRow[]; unsupportedRules: number } {
-  if (crate.rules.length === 0) return { matched: [], unsupportedRules: crate.unsupported.length };
+): { matched: SeratoTrackRow[]; unsupportedRules: number; partial: boolean } {
+  const partial = crate.unsupported.length > 0;
+
+  if (partial || crate.rules.length === 0) return { matched: [], unsupportedRules: crate.unsupported.length, partial };
   const matched = rows.filter((row) => crate.rules.every((rule) => rowMatchesRule(row, rule)));
 
-  return { matched, unsupportedRules: crate.unsupported.length };
+  return { matched, unsupportedRules: crate.unsupported.length, partial };
 }
 
 function rowMatchesRule(row: SeratoTrackRow, rule: SeratoSmartCrateRule): boolean {

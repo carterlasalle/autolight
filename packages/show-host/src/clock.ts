@@ -126,21 +126,28 @@ export function startClock(strategy: TimerStrategy, options: ClockOptions): Cloc
   };
 
   if (strategy === "interval") {
-    // Tick 0 is scheduled at startNs itself: fire it immediately so all
-    // three strategies produce [0..N) with identical numbering. The interval
-    // then covers tick 1 onward; drift correction never skips tick 0.
-    fire(0);
+    // The interval is installed before the first fire so an auto-stop from
+    // `fire(0)` (ticks 0/1) clears a live timer instead of leaking it, and
+    // `ticks: 0` emits nothing like the other two strategies. Tick 0 is
+    // scheduled at startNs itself, so it still fires synchronously first.
     let next = 1;
     timer = setInterval(() => {
       if (!running) return;
       const actual = now();
       // Drift correction: re-anchor to start and skip ticks the loop missed.
+      // Never emit a tick whose scheduled time has not arrived: an early
+      // timer would otherwise walk the phase ahead with jitter floored to 0.
+      const scheduledNext = startNs + nominalNs * BigInt(next);
+      if (actual < scheduledNext) return;
       const behind = actual <= startNs ? 0 : Math.floor(Number(actual - startNs) / Number(nominalNs));
 
       if (behind > next) next = behind;
       fire(next);
       next += 1;
     }, 1000 / tickHz);
+
+    if (maxTicks === undefined || maxTicks > 0) fire(0);
+    else stop();
   } else if (strategy === "timeout-spin") {
     const arm = (index: number): void => {
       if (!running) return;
@@ -159,8 +166,12 @@ export function startClock(strategy: TimerStrategy, options: ClockOptions): Cloc
         }
 
         if (!running) return;
-        fire(index);
-        arm(index + 1);
+
+        try {
+          fire(index);
+        } finally {
+          arm(index + 1);
+        }
       }, Math.max(0, delayMs));
     };
 
@@ -189,11 +200,22 @@ export function startClock(strategy: TimerStrategy, options: ClockOptions): Cloc
         }
 
         if (!coarseOk) {
-          // Thread forbids Atomics.wait: same shape as timeout-spin.
+          // Thread forbids Atomics.wait: same shape as timeout-spin,
+          // including the spin tail so ticks never land early.
           timer = setTimeout(() => {
             if (!running) return;
-            fire(index);
-            immediate = setImmediate(() => step(index + 1));
+
+            while (running && now() < expected) {
+              // Spin tail to the anchored time.
+            }
+
+            if (!running) return;
+
+            try {
+              fire(index);
+            } finally {
+              immediate = setImmediate(() => step(index + 1));
+            }
           }, coarseMs);
 
           return;
@@ -207,8 +229,12 @@ export function startClock(strategy: TimerStrategy, options: ClockOptions): Cloc
       }
 
       if (!running) return;
-      fire(index);
-      immediate = setImmediate(() => step(index + 1));
+
+      try {
+        fire(index);
+      } finally {
+        immediate = setImmediate(() => step(index + 1));
+      }
     };
 
     immediate = setImmediate(() => step(0));
