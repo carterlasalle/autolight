@@ -14,7 +14,7 @@ function storeWithLibrary(): { store: MemoryAliasStore; byId: (id: string) => { 
 
 describe("resolveLiveTrack", () => {
   it("follows the DS-22 chain order with confidence per step", () => {
-    expect(RESOLVER_CHAIN).toEqual(["memory-reader-id", "lighting-ipc-id", "agent-api", "history-table", "title-path"]);
+    expect(RESOLVER_CHAIN).toEqual(["memory-reader-id", "rekordbox-id", "lighting-ipc-id", "agent-api", "history-table", "path-library", "title-path"]);
     const { store, byId } = storeWithLibrary();
     const r = resolveLiveTrack(store, { memoryReaderId: "101", libraryById: byId }, () => "t1");
     expect(r.trackId).not.toBeNull();

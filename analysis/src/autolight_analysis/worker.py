@@ -718,9 +718,7 @@ def main() -> None:
                         }
                     )
                 continue
-            writer.write(
-                error_frame(ident, "unknown-type", f"unknown type {mtype!r}")
-            )
+            writer.write(error_frame(ident, "unknown-type", f"unknown type {mtype!r}"))
     finally:
         beat.stop()
         log_event("worker-stop")

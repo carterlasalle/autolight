@@ -13,7 +13,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import subprocess
+import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -45,13 +47,15 @@ def ffmpeg_version() -> str:
 def resampler_args(resampler: str = "soxr") -> list[str]:
     """aresample filter selecting the configured resampler (T-ANA-03).
 
-    Plain ``aresample=44100``: FFmpeg picks its default engine (soxr when
-    linked, else swr), which is exactly the configured preference order.
-    An explicit engine suffix is avoided: this build rejects both the named
-    and numeric ``:resampler=`` forms for f32le output.
+    ``soxr`` uses plain ``aresample=44100``: FFmpeg picks its default engine
+    (soxr when linked, else swr), which is exactly the configured preference
+    order. ``swr`` pins the engine explicitly so the two settings decode
+    differently instead of silently sharing one cache-equivalent pipeline.
     """
     if resampler not in RESAMPLERS:
         raise ValueError(f"resampler={resampler!r} not in {RESAMPLERS}")
+    if resampler == "swr":
+        return ["-af", "aresample=44100:resampler=swr"]
     return ["-af", "aresample=44100"]
 
 
@@ -60,7 +64,7 @@ def ffmpeg_args(src: str, dst: str, resampler: str = "soxr") -> list[str]:
         _ffmpeg(),
         "-y",
         "-i",
-        src,
+        str(Path(src).resolve()),
         *resampler_args(resampler),
         "-ar",
         str(CANONICAL_RATE),
@@ -92,7 +96,7 @@ def probe_start_offset(src: str | Path) -> float:
                 "stream=start_time",
                 "-of",
                 "default=noprint_wrappers=1:nokey=1",
-                str(src),
+                str(Path(src).resolve()),
             ],
             check=True,
             capture_output=True,
@@ -102,8 +106,8 @@ def probe_start_offset(src: str | Path) -> float:
             value = line.strip()
             if value and value != "N/A":
                 return max(0.0, float(value))
-    except (OSError, subprocess.CalledProcessError, ValueError):
-        pass
+    except (OSError, subprocess.CalledProcessError, ValueError) as exc:
+        logging.warning("ffprobe start_time unavailable for %s: %s", src, exc)
     return 0.0
 
 
@@ -138,23 +142,39 @@ def canonical_pcm(
     sidecar = cache / f"{key}.json"
     if raw.exists() and sidecar.exists():
         return raw, json.loads(sidecar.read_text())
-    tmp = cache / f"{key}.tmp"
-    decode(src, tmp, resampler)
-    data = np.fromfile(tmp, dtype=np.float32)
-    frames = data.size // CANONICAL_CHANNELS
-    meta = {
-        "frames": frames,
-        "channels": CANONICAL_CHANNELS,
-        "rate": CANONICAL_RATE,
-        "durationSeconds": frames / CANONICAL_RATE,
-        "decoder": "ffmpeg",
-        "ffmpegVersion": ffmpeg_version(),
-        "resampler": resampler,
-        "startOffsetSeconds": probe_start_offset(src),
-        "key": key,
-    }
-    sidecar.write_text(json.dumps(meta))
-    tmp.rename(raw)
+    # Process/task-unique temp name: concurrent decodes of the same source
+    # must not interleave bytes into one shared path.
+    tmp_handle = tempfile.NamedTemporaryFile(
+        dir=cache, prefix=f"{key}.", suffix=".tmp", delete=False
+    )
+    tmp_handle.close()
+    tmp = Path(tmp_handle.name)
+    try:
+        decode(src, tmp, resampler)
+        data = np.fromfile(tmp, dtype=np.float32)
+        frames = data.size // CANONICAL_CHANNELS
+        meta = {
+            "frames": frames,
+            "channels": CANONICAL_CHANNELS,
+            "rate": CANONICAL_RATE,
+            "durationSeconds": frames / CANONICAL_RATE,
+            "decoder": "ffmpeg",
+            "ffmpegVersion": ffmpeg_version(),
+            "resampler": resampler,
+            "startOffsetSeconds": probe_start_offset(src),
+            "key": key,
+        }
+        # Publish the raw file first (atomic rename), then the sidecar, so a
+        # crash never leaves a sidecar without its raw file.
+        tmp.rename(raw)
+        with tempfile.NamedTemporaryFile(
+            dir=cache, prefix=f"{key}.", suffix=".json.tmp", delete=False, mode="w"
+        ) as sidecar_handle:
+            sidecar_handle.write(json.dumps(meta))
+        Path(sidecar_handle.name).rename(sidecar)
+    except Exception:
+        tmp.unlink(missing_ok=True)
+        raise
     return raw, meta
 
 

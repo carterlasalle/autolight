@@ -100,6 +100,11 @@ def normalize_ml_label(label: str) -> str:
     return HARMONIX_TO_SECTION.get(label.strip().lower(), "unknown")
 
 
+def is_unknown_kind(kind: str) -> bool:
+    """True when a normalized section kind carries no usable label."""
+    return kind in UNKNOWN_KINDS
+
+
 def ml_sections(
     segments: list[dict],
     beat_times: list[float],
@@ -130,10 +135,31 @@ def ml_sections(
                 "startBeat": start + 1,
                 "endBeat": end + 1,
                 "confidence": min(1.0, max(0.0, conf)),
-                "evidence": ["allin1:boundary"],
+                "evidence": ["allin1:boundary"]
+                + (
+                    ["allin1:unknown-label"]
+                    if is_unknown_kind(normalize_ml_label(label))
+                    else []
+                ),
             }
         )
     return out
+
+
+def _segment_confidence(segment: object) -> float:
+    """Model's own per-segment probability, with a bounded fallback.
+
+    The upstream Segment shape is not pinned here, so probe the fields the
+    model actually exposes (confidence, then probability) before falling
+    back to the historical constant.
+    """
+    for field in ("confidence", "probability"):
+        value = getattr(segment, field, None)
+        if isinstance(value, bool):
+            continue
+        if isinstance(value, (int, float)):
+            return min(1.0, max(0.0, float(value)))
+    return 0.7
 
 
 def analyze_full(
@@ -156,10 +182,11 @@ def analyze_full(
     import allin1_infer
 
     global _load_count
-    first = _load_count == 0
-    ensure_session(device)
-    if first:
-        _load_count += 1
+    with _session_lock:
+        first = _load_count == 0
+        ensure_session(device)
+        if first:
+            _load_count += 1
     result = allin1_infer.analyze(
         paths=audio_path,
         out_dir=out_dir,
@@ -176,7 +203,8 @@ def analyze_full(
             "start": float(s.start),
             "end": float(s.end),
             "label": str(s.label),
-            "confidence": 0.7,
+            # Prefer the model's own per-segment probability over a constant.
+            "confidence": _segment_confidence(s),
         }
         for s in getattr(result, "segments", []) or []
     ]
@@ -203,10 +231,10 @@ def analyze_full(
 
 def model_cache_dir(config_dir: str = "") -> Path:
     """Weight download location (T-ANA-05); offline mode blocks downloads."""
-    if config_dir and config_dir != "<userData>/models":
-        return Path(config_dir)
     if os.environ.get("AUTOLIGHT_OFFLINE") == "1":
         raise RuntimeError("offlineOnly: weight download blocked during Live")
+    if config_dir and config_dir != "<userData>/models":
+        return Path(config_dir)
     return Path.home() / ".autolight" / "models"
 
 
