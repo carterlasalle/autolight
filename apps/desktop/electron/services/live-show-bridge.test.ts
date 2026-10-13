@@ -5,6 +5,7 @@ import { describe, expect, it, vi, afterEach } from "vitest";
 import { LiveShowBridge, resetLiveShowBridgeForTest } from "./live-show-bridge.js";
 
 const REAL_ANLZ_DIR = "/Users/rocket/Library/Pioneer/rekordbox/share/PIONEER/USBANLZ/135/fb47d-24bc-49c5-b5e7-ce275ed46465";
+
 const REAL_ARTIFACT = "/Users/rocket/.autolight/analysis-cache/39ec10359514c496a6164306.trackmodel.json";
 
 describe("live show bridge", () => {
@@ -74,6 +75,7 @@ describe("live show bridge", () => {
     const supervisor = new AnalysisSupervisor();
     const res = await supervisor.submit({ trackId: "t", audioPath: "", priority: "deck" });
     expect(res.ok).toBe(false);
+
     if (!res.ok) expect(res.error.code).toBe("E_SUPERVISOR_NOT_STARTED");
     supervisor.start();
   });

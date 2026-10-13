@@ -41,20 +41,24 @@ describe("rkbx_link setup assistant (T-LIVE-04)", () => {
   it("walks to receiving from a real OSC sim stream, not hand-set counters", () => {
     let now = 1_000n * 1_000_000_000n;
     const provider = new RkbxOscProvider({ now: () => now, bind: null });
+
     const datagrams = buildRkbxDatagrams({
       deck: 1, fromSeconds: 0, bpm: 128, hz: 60, durationMs: 500,
       steps: [{ atMs: 0, action: "play" }],
     });
+
     for (const datagram of datagrams) {
       now += 16n * 1_000_000n;
       const decoded = decodeOscDatagram(datagram.bytes);
       expect(decoded.malformed).toHaveLength(0);
       provider.ingestDatagram(datagram.bytes);
     }
+
     const snapshot = summarizeRKBXAssistant({
       ...baseInput(),
       packets: sampleFromProvider(provider.getStatus(), provider.getStats(), provider.lastSeenAddress),
     });
+
     expect(snapshot.packets.received).toBeGreaterThan(0);
     expect(snapshot.packets.lastAddress).toBe("/1/time");
     expect(snapshot.report.state).toBe("receiving");
@@ -66,6 +70,7 @@ describe("rkbx_link setup assistant (T-LIVE-04)", () => {
       ...baseInput(),
       packets: { received: 0, updateHz: 0, lastAddress: null },
     });
+
     expect(snapshot.report.state).toBe("no-packets");
     expect(snapshot.report.remedy).toContain("no OSC packets");
     expect(snapshot.capability).toBe("MISSING");
@@ -81,11 +86,14 @@ describe("rkbx_link setup assistant (T-LIVE-04)", () => {
       ...baseInput(),
       configText: "osc_enabled = false\nosc_dest = 127.0.0.1:4460\n",
     });
+
     expect(disabled.report.state).toBe("osc-disabled");
+
     const wrongPort = summarizeRKBXAssistant({
       ...baseInput(),
       configText: "osc_enabled = true\nosc_dest = 127.0.0.1:9999\n",
     });
+
     expect(wrongPort.report.state).toBe("wrong-destination");
     expect(wrongPort.report.remedy).toContain("127.0.0.1:4460");
   });
@@ -144,6 +152,7 @@ describe("rkbx_link setup assistant (T-LIVE-04)", () => {
     // above), and RegExp.exec is the config parser, so neither is flagged.
     for (const file of ["setup-assistant.ts", "rkbx-osc.ts"]) {
       const source = readFileSync(join(dir, file), "utf8");
+
       for (const token of ["child_process", "spawnSync", "spawn(", "execFile", "codesign", "curl ", "wget ", "fetch(", "https.get", "createWriteStream"]) {
         expect(source, `${file} contains ${token}`).not.toContain(token);
       }

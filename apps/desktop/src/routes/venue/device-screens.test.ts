@@ -22,9 +22,11 @@ describe("device screens (T-UI-08/09)", () => {
   it("marks setup steps done only with evidence", () => {
     expect(setupProgress({}).next).toBe("dj");
     expect(setupProgress({ dj: true, controller: true }).done).toEqual(["dj", "controller"]);
+
     const full = Object.fromEntries(
       ["dj", "controller", "library", "lights", "identify", "placement", "orientation", "qualification", "analysis", "preview"].map((s) => [s, true]),
     );
+
     expect(setupProgress(full as never).next).toBe("ready");
   });
 });

@@ -17,8 +17,10 @@ interface OscVector {
 }
 
 const fixturePath = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "protocol-fixtures", "rekordbox", "golden", "osc-vectors.json");
+
 // Reason for the cast: this is our own committed fixture, shaped below.
 const fixture = JSON.parse(readFileSync(fixturePath, "utf8")) as { vectors: OscVector[] };
+
 const vectors = fixture.vectors;
 
 describe("OSC 1.0 codec (T-LIVE-03)", () => {
@@ -26,19 +28,24 @@ describe("OSC 1.0 codec (T-LIVE-03)", () => {
     for (const vector of vectors) {
       const bytes = Uint8Array.from(Buffer.from(vector.hex, "hex"));
       const decoded = decodeOscDatagram(bytes);
+
       if (vector.malformed) {
         expect(decoded.malformed.length, vector.name).toBeGreaterThan(0);
         expect(decoded.messages, vector.name).toHaveLength(0);
         continue;
       }
+
       expect(decoded.malformed, vector.name).toEqual([]);
+
       if (vector.address !== undefined) {
         const message = decoded.messages[0];
         expect(message?.address, vector.name).toBe(vector.address);
+
         for (const [index, expected] of (vector.args ?? []).entries()) {
           expect(message?.args[index], vector.name).toBeCloseTo(Number(expected), 5);
         }
       }
+
       if (vector.timetag !== undefined) {
         expect(decoded.timetag, vector.name).toBe(BigInt(vector.timetag));
         expect(decoded.messages.map((m) => m.address)).toEqual(vector.addresses);

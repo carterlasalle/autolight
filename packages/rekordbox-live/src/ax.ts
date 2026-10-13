@@ -45,32 +45,40 @@ export interface AxSample {
 function flatten(nodes: readonly AxNode[], out: AxNode[] = []): AxNode[] {
   for (const node of nodes) {
     out.push(node);
+
     if (node.children) flatten(node.children, out);
   }
+
   return out;
 }
 
 function timeToSeconds(text: string | undefined): number | null {
   if (!text) return null;
   const m = text.match(/^\s*([+-])?\s*(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+
   if (!m) return null;
   const sign = m[1] === "-" ? -1 : 1;
   const a = Number(m[2] ?? 0);
   const b = Number(m[3] ?? 0);
   const c = m[4] === undefined ? null : Number(m[4]);
   const seconds = c === null ? a * 60 + b : a * 3600 + b * 60 + c;
+
   return sign * seconds;
 }
 
 function isRemaining(label: string | undefined, value: string | undefined): boolean {
   if (label && /remain|left/i.test(label)) return true;
+
   if (value && value.trim().startsWith("-")) return true;
+
   return false;
 }
 
 function isElapsed(label: string | undefined, value: string | undefined): boolean {
   if (label && /elapsed|played|total played/i.test(label)) return true;
+
   if (value && value.trim().startsWith("+")) return true;
+
   return false;
 }
 
@@ -81,10 +89,14 @@ function hasTime(node: AxNode): boolean {
 function parsePlayState(nodes: readonly AxNode[]): boolean | null {
   for (const node of nodes) {
     const text = `${node.label ?? ""} ${node.value ?? ""}`;
+
     if (/\bpause\b/i.test(text)) return false;
+
     if (/\bplay(ing)?\b/i.test(text)) return true;
+
     if (/\bcue(d)?\b/i.test(text)) return false;
   }
+
   return null;
 }
 
@@ -92,7 +104,9 @@ function parsePlayState(nodes: readonly AxNode[]): boolean | null {
 // Rekordbox exposes the deck area as one container with a deck child each.
 function deckIndexOf(node: AxNode, siblings: readonly AxNode[]): number {
   const hinted = /deck\s*([1-4])/i.exec(node.label ?? "");
+
   if (hinted) return Number(hinted[1]);
+
   return siblings.indexOf(node) + 1;
 }
 
@@ -101,6 +115,7 @@ export function readAxDecks(root: readonly AxNode[]): AxDeckReading[] {
   const deckContainers = all.filter((n) => (/deck|player/i.test(n.role) && !/button/i.test(n.role)) || /deck\s*[1-4]/i.test(n.label ?? ""));
   const containers: AxNode[] = deckContainers.length > 0 ? deckContainers : all.filter((n) => /group|pane/i.test(n.role));
   const readings: AxDeckReading[] = [];
+
   for (const container of containers) {
     const nodes = container.children ? flatten(container.children) : [container];
     const timeNodes = nodes.filter(hasTime);
@@ -122,6 +137,7 @@ export function readAxDecks(root: readonly AxNode[]): AxDeckReading[] {
       readable,
     });
   }
+
   return readings.sort((a, b) => a.deckId - b.deckId);
 }
 
@@ -130,16 +146,23 @@ export function readAxDecks(root: readonly AxNode[]): AxDeckReading[] {
 // identifies the remaining-time field even without a label.
 export function refineAxReading(current: AxDeckReading, previous: AxDeckReading | undefined): AxDeckReading {
   if (current.elapsedSeconds === null && current.remainingSeconds === null) return { ...current, readable: false };
+
   if (current.elapsedSeconds !== null && current.remainingSeconds === null) {
     const playing = current.playing ?? (previous !== undefined && previous.elapsedSeconds !== null && current.elapsedSeconds > previous.elapsedSeconds ? true : current.playing);
+
     return { ...current, playing, readable: true };
   }
+
   if (current.elapsedSeconds === null && current.remainingSeconds !== null) {
     const playing = current.playing ?? (previous !== undefined && previous.remainingSeconds !== null && current.remainingSeconds < previous.remainingSeconds ? true : current.playing);
+
     return { ...current, playing, readable: true };
   }
+
   const sameValue = current.elapsedSeconds === current.remainingSeconds;
+
   if (sameValue) return { ...current, readable: false };
+
   // Both fields labelled: elapsed rising means playing, remaining falling
   // confirms it; either motion alone is enough when the labels disambiguate.
   if (previous !== undefined) {
@@ -147,12 +170,15 @@ export function refineAxReading(current: AxDeckReading, previous: AxDeckReading 
       previous.elapsedSeconds !== null &&
       current.elapsedSeconds !== null &&
       current.elapsedSeconds > previous.elapsedSeconds;
+
     const remainingFalling =
       previous.remainingSeconds !== null &&
       current.remainingSeconds !== null &&
       current.remainingSeconds < previous.remainingSeconds;
+
     if (elapsedRising || remainingFalling) return { ...current, playing: true, readable: true };
   }
+
   return { ...current, readable: true };
 }
 
@@ -170,17 +196,23 @@ export function axFractionalBeat(elapsedSeconds: number, grid: readonly { source
   if (grid.length === 0) return null;
   const t = elapsedSeconds * 1000;
   const indexFor = (i: number): number => grid[i]?.sourceTimeMs ?? Number.POSITIVE_INFINITY;
+
   if (t <= indexFor(0)) return 1;
   let lo = 0;
   let hi = grid.length - 1;
+
   while (lo < hi) {
     const mid = Math.floor((lo + hi + 1) / 2);
+
     if (indexFor(mid) <= t) lo = mid;
     else hi = mid - 1;
   }
+
   const start = indexFor(lo);
   const next = indexFor(lo + 1);
+
   if (!Number.isFinite(next) || next === start) return lo + 1;
+
   return lo + 1 + (t - start) / (next - start);
 }
 

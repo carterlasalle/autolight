@@ -6,6 +6,7 @@ import { InspectorPanel } from "../../components/kit.js";
 import type { TrackModel } from "@autolight/contracts";
 import { useShell, invoke } from "../../app/store.js";
 import { addDropBeat, auditionAtBeat, type CorrectionOp } from "../../routes/inspector/inspector-helpers.js";
+
 // state, never refetched per tick. Beat audition renders that beat in the
 // preview; nothing reaches the lights unless send-to-lights is on. Blend A/B
 // viewer and corrections ops sit below the lanes.
@@ -24,28 +25,40 @@ export function InspectorView(): JSX.Element {
         const raw = (await invoke("show/live", { version: 1 })) as unknown as {
           decks: { state: { deckId: number }; track: TrackModel | null }[];
         } | null;
+
         const decks = raw && Array.isArray(raw.decks) ? raw.decks : [];
+
         for (const d of decks) {
           if (!d.track) continue;
           const title = d.track.identity.title ?? d.track.identity.id;
+
           if (selected && title !== selected && live && title !== live.deckA.title && title !== live.deckB.title) continue;
-          if (!cancelled) { setLoaded(true); setTrack(d.track); return; }
+
+          if (!cancelled) { setLoaded(true); setTrack(d.track);
+
+ return; }
         }
+
         if (!cancelled) { setLoaded(true); setTrack(null); }
       } catch { /* show host unreachable: empty lanes below */ }
+
       if (!cancelled) { setLoaded(true); setTrack(null); }
     })();
+
     return () => { cancelled = true; };
   }, [selected, live]);
+
   const lanes = (beat: number): void => {
     if (!track) return;
     const pick = auditionAtBeat(track, [], beat, sendToLights);
     setAudition(pick ? `beat ${pick.beat}: ${pick.cueType}${sendToLights ? " to lights" : " in preview"}` : null);
   };
+
   const correct = (op: CorrectionOp): void => {
     void invoke("show/correction", { version: 1, op, sendToLights: false });
     setAudition(`correction queued: ${op.op}`);
   };
+
   return (
     <section className="flex max-w-5xl flex-col gap-2 rounded-xl border border-border bg-card px-4 py-3">
       <h2 className="min-w-0 truncate text-base font-medium" title={selected ? `Track inspector — ${selected}` : "Track inspector"}>Track inspector{selected ? ` — ${selected}` : ""}</h2>
@@ -80,8 +93,10 @@ function InspectorBody({ track, lanes, correct, sendToLights, setSendToLights, b
   audition: string | null;
 }): JSX.Element {
   const eventBeats = track.musicalEvents.map((e) => e.beat);
+
   const finiteMax = (values: number[], floor: number): number =>
     values.reduce((m, v) => (Number.isFinite(v) ? Math.max(m, v) : m), floor);
+
   const lastBeat = finiteMax([...track.sections.map((s) => s.endBeat), ...eventBeats], 1);
   const firstDrop = track.musicalEvents.find((e) => e.type === "drop")?.beat;
   const dropBeat = firstDrop ?? Math.min(lastBeat, finiteMax(eventBeats, 0));
@@ -90,6 +105,7 @@ function InspectorBody({ track, lanes, correct, sendToLights, setSendToLights, b
   const section = track.sections.find((s) => dropBeat >= s.startBeat && dropBeat < s.endBeat);
   const sectionStart = section?.startBeat ?? Math.max(0, dropBeat - 32);
   const sectionEnd = section?.endBeat ?? lastBeat;
+
   return (
     <>
       <InspectorPanel track={track} startBeat={0} endBeat={lastBeat} />

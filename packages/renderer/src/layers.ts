@@ -49,11 +49,13 @@ const GAMMA = 2.2;
 
 export function srgbByteToLinear(byte: number): number {
   const v = Math.min(255, Math.max(0, byte)) / 255;
+
   return Math.pow(v, GAMMA);
 }
 
 export function linearToSrgbByte(linear: number): number {
   const v = Math.min(1, Math.max(0, linear));
+
   return Math.round(Math.pow(v, 1 / GAMMA) * 255);
 }
 
@@ -107,8 +109,10 @@ export function isRenderLayer(value: string): value is RenderLayer {
 export function layerForCue(cue: ShowCue): RenderLayer {
   if ("layer" in cue) {
     const tagged: unknown = cue.layer;
+
     if (typeof tagged === "string" && isRenderLayer(tagged)) return tagged;
   }
+
   return CUE_LAYER[cue.type] ?? "accents";
 }
 
@@ -116,12 +120,14 @@ export function layerForCue(cue: ShowCue): RenderLayer {
 export function compositeLayers(layers: readonly LayerContribution[]): LinearCells {
   const out: LinearCells = new Map();
   const ordered = [...layers].sort((x, y) => LAYER_ORDER.indexOf(x.layer) - LAYER_ORDER.indexOf(y.layer));
+
   for (const layer of ordered) {
     for (const [key, contribution] of layer.cells) {
       const previous: [number, number, number] = out.get(key) ?? [0, 0, 0];
       out.set(key, blend(previous, contribution));
     }
   }
+
   return out;
 }
 
@@ -131,13 +137,16 @@ function blend(
 ): [number, number, number] {
   const { color, alpha, blend: mode } = contribution;
   const a = Math.min(1, Math.max(0, alpha));
+
   const c: [number, number, number] = [
     Math.min(1, Math.max(0, color[0])),
     Math.min(1, Math.max(0, color[1])),
     Math.min(1, Math.max(0, color[2])),
   ];
+
   const channel = (i: 0 | 1 | 2): number => {
     const base = previous[i];
+
     switch (mode) {
       case "replace":
         return c[i] * a;
@@ -151,6 +160,7 @@ function blend(
         return Math.max(base, c[i] * a);
     }
   };
+
   return [channel(0), channel(1), channel(2)];
 }
 
@@ -158,7 +168,9 @@ function blend(
 // linear light, in place.
 export function scaleLinear(cells: LinearCells, factor: number): void {
   const f = Math.min(1, Math.max(0, factor));
+
   if (f === 1) return;
+
   for (const [key, value] of cells) {
     cells.set(key, [value[0] * f, value[1] * f, value[2] * f]);
   }

@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { SETUP_EVIDENCE_STEPS, setupEvidence, setupProgress, type EvidenceStep } from "../../routes/setup/setup-model.js";
 import { RkbxSetupAssistant } from "./rkbx-setup-panel.js";
 import { SIMULATOR_SCENARIOS, type SimulatorScenario } from "../../routes/settings/simulator-mode.js";
+
 export const STEP_LABELS: Record<EvidenceStep, { title: string; hint: string; route: "setup" | "library" | "venue" | "inspector" | "live" }> = {
   dj: { title: "DJ link", hint: "Rekordbox or Serato deck state flowing", route: "live" },
   controller: { title: "Controller", hint: "No controller evidence over IPC yet — stays pending", route: "setup" },
@@ -18,6 +19,7 @@ export const STEP_LABELS: Record<EvidenceStep, { title: string; hint: string; ro
   analysis: { title: "Analysis", hint: "ANLZ grid plus sections resolved", route: "inspector" },
   preview: { title: "Preview", hint: "Venue preview rendered a show frame", route: "live" },
 };
+
 const MODES: { id: FollowMode; title: string; body: string }[] = [
   { id: "preview", title: "Preview", body: "Resolves the loaded track's ANLZ grid + plan, renders the venue preview. No playhead sync, no Govee output until a light is on the LAN." },
   { id: "ax-beat", title: "AX beat", body: "Polls Rekordbox's deck time fields at ~1Hz onto the ANLZ grid (±1 beat). Needs: Rekordbox AX readable. No board needed." },
@@ -34,6 +36,7 @@ export function SetupView(): JSX.Element {
   const tiles = useShell((s) => s.tiles);
   const simulatorMode = useShell((s) => s.simulatorMode);
   const [scenario, setScenario] = useState<SimulatorScenario>("normal-night");
+
   // Follow-mode restore lives in Shell on route-enter (covers HMR/reset);
   // this view only writes via the mode buttons below.
   const evidence = setupEvidence({
@@ -42,8 +45,10 @@ export function SetupView(): JSX.Element {
     chasePassedIds: useShell((s) => s.chasePassedIds),
     roomSaved: useShell((s) => s.roomSaved),
   });
+
   const { done, next } = setupProgress(evidence);
   const nextMeta = next === "ready" ? null : STEP_LABELS[next];
+
   return (
     <div className="flex max-w-5xl flex-col gap-3">
       <section className="rounded-xl border border-border bg-card px-4 py-3">
@@ -86,6 +91,7 @@ export function SetupView(): JSX.Element {
             const meta: (typeof STEP_LABELS)[EvidenceStep] = STEP_LABELS[s];
             const ready = done.includes(s);
             const isNext = next === s;
+
             return (
               <li key={s} aria-current={isNext ? "step" : undefined} className="flex min-w-0 flex-wrap items-center gap-2">
                 <span className="min-w-0 flex-1 truncate" title={`${meta.title} — ${ready ? "ready" : meta.hint}`}>{ready ? "✓ " : ""}{meta.title}<span className="text-muted-foreground"> — {ready ? "ready" : meta.hint}</span></span>

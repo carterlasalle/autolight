@@ -51,11 +51,13 @@ export const STATUS_COMMAND = JSON.stringify({ msg: { cmd: "status", data: {} } 
 
 /** Visible badge for a unit whose segmented channel is not verified (§153). */
 export const SINGLE_ZONE_BADGE = "SINGLE-ZONE (fallback)";
+
 /** Visible badge for a unit that does not answer LAN at all (F-GOV-24). */
 export const LAN_UNAVAILABLE_BADGE = "LAN unavailable on this firmware";
 
 /** Whole-fixture modes a verified fallback may use (T-GOV-10). */
 export type FallbackMode = "lan-json-colorwc" | "ble-single" | "matter";
+
 /** Alternative transports offered when LAN is absent (config
  *  `govee.device.<fixtureId>.transportOrder` order, spec 148). */
 export type AlternativeTransport = "ble-segmented" | "ble-single" | "matter";
@@ -119,6 +121,7 @@ export class CommandSequencer {
 
   async next(): Promise<void> {
     const remaining = this.lastAt + this.minSpacingMs - this.clock();
+
     if (remaining > 0) await this.wait(remaining);
     this.lastAt = this.clock();
   }
@@ -193,6 +196,7 @@ export interface ReadbackOptions {
  *  answers with null immediately instead of waiting out the window. */
 async function paceRetry(sentAt: number, retryMs: number, wait: Waiter): Promise<void> {
   const elapsed = Date.now() - sentAt;
+
   if (elapsed < retryMs) await wait(retryMs - elapsed);
 }
 
@@ -210,27 +214,34 @@ export async function readB2Status(
   let answers = 0;
   let rttMs: number | null = null;
   let status: B2Readback["status"] = null;
+
   while (Date.now() - started <= deadlineMs) {
     const sentAt = Date.now();
     await link.sendJson(STATUS_COMMAND);
     const text = await link.reply(retryMs);
+
     if (text !== null) {
       answers += 1;
       rttMs = Date.now() - sentAt;
       let decoded: unknown = null;
+
       try {
         decoded = JSON.parse(text) as unknown;
       } catch {
         decoded = null;
       }
+
       const parsed = parseStatus(decoded);
+
       if (parsed !== null) {
         status = parsed;
         break;
       }
     }
+
     await paceRetry(sentAt, retryMs, wait);
   }
+
   return { answered: answers > 0, answers, rttMs, status };
 }
 
@@ -246,27 +257,34 @@ export async function readDevStatus(
   let answers = 0;
   let rttMs: number | null = null;
   let status: LanDeviceStatus | null = null;
+
   while (Date.now() - started <= deadlineMs) {
     const sentAt = Date.now();
     await link.sendJson(devStatusCommand());
     const text = await link.reply(retryMs);
+
     if (text !== null) {
       answers += 1;
       rttMs = Date.now() - sentAt;
       let decoded: unknown = null;
+
       try {
         decoded = JSON.parse(text) as unknown;
       } catch {
         decoded = null;
       }
+
       const parsed = parseDevStatus(decoded);
+
       if (parsed !== null) {
         status = parsed;
         break;
       }
     }
+
     await paceRetry(sentAt, retryMs, wait);
   }
+
   return { answered: answers > 0, answers, rttMs, status };
 }
 
@@ -360,18 +378,21 @@ export function twoColourFrame(zones: number): Uint8Array {
   const n = Math.max(1, Math.floor(zones));
   const frame = new Uint8Array(n * 3);
   const mid = Math.floor(n / 2);
+
   for (let zone = 0; zone < n; zone++) {
     const [r, g, b] = zone < mid ? [255, 0, 0] : [0, 0, 255];
     frame[zone * 3] = r;
     frame[zone * 3 + 1] = g;
     frame[zone * 3 + 2] = b;
   }
+
   return frame;
 }
 
 /** Zoned B4 probe: first zone red, last zone blue. */
 export function zonedProbeEntries(zones: number): { r: number; g: number; b: number; zone: number }[] {
   const n = Math.max(1, Math.floor(zones));
+
   return [
     { r: 255, g: 0, b: 0, zone: 0 },
     { r: 0, g: 0, b: 255, zone: n - 1 },
@@ -399,6 +420,7 @@ export async function probeSegmentedCapability(
   const wait = options.wait ?? sleep;
   const attemptedZones = Math.max(1, Math.floor(options.zones));
   const armSettleMs = options.armSettleMs ?? PROBE_DEFAULTS.armSettleMs;
+
   const link = new DeviceLink(
     exchange,
     identity.hardwareId,
@@ -408,8 +430,11 @@ export async function probeSegmentedCapability(
       clock,
     }),
   );
+
   const readOpts: ReadbackOptions = { wait };
+
   if (options.retryMs !== undefined) readOpts.retryMs = options.retryMs;
+
   if (options.deadlineMs !== undefined) readOpts.deadlineMs = options.deadlineMs;
 
   const before = await readB2Status(link, readOpts);
@@ -439,6 +464,7 @@ export async function probeSegmentedCapability(
       probedAtMs: startedAt,
       elapsedMs: Date.now() - startedAt,
     };
+
     return probe;
   };
 
@@ -467,6 +493,7 @@ export async function probeSegmentedCapability(
   await wait(armSettleMs);
 
   const armedProbe = before.status !== null ? await readB2Status(link, readOpts) : null;
+
   const armedReadBack: CapabilityProbe["armedReadBack"] =
     armedProbe?.status == null ? "silent" : armedProbe.status.armed ? "armed" : "disarmed";
 
@@ -510,9 +537,11 @@ export function probeLabel(verdict: ProbeVerdict): string {
   if (verdict.kind === "segmented") {
     return `SEGMENTED (${verdict.zones} zones, user confirmed)`;
   }
+
   if (verdict.kind === "single-zone-fallback") {
     return verdict.badge;
   }
+
   return verdict.badge;
 }
 
@@ -520,6 +549,8 @@ export function probeLabel(verdict: ProbeVerdict): string {
  *  razer channel is not verified. */
 export function fallbackOrder(verdict: ProbeVerdict): readonly string[] {
   if (verdict.kind === "segmented") return ["lan-razer"];
+
   if (verdict.kind === "single-zone-fallback") return [verdict.fallbackMode, "ble-single", "matter"];
+
   return [verdict.bleAlternative, "ble-single", "matter"];
 }

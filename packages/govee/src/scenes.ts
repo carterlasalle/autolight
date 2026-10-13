@@ -20,21 +20,31 @@ export interface SceneCatalog {
 export function ptRealCommand(sceneBytes: readonly string[]): string {
   return JSON.stringify({ msg: { cmd: "ptReal", data: { command: [...sceneBytes] } } });
 }
+
 export function parsePtRealCommand(raw: unknown): string[] | null {
   if (typeof raw !== "object" || raw === null || !("msg" in raw)) return null;
   const msg = raw.msg;
+
   if (typeof msg !== "object" || msg === null || !("cmd" in msg) || !("data" in msg)) return null;
+
   if (msg.cmd !== "ptReal") return null;
   const data = msg.data;
+
   if (typeof data !== "object" || data === null || !("command" in data)) return null;
   const command = data.command;
+
   if (!Array.isArray(command) || command.length === 0) return null;
+
   if (!command.every((entry) => typeof entry === "string" && entry.length > 0)) return null;
+
   return [...command];
 }
+
 export function sceneFromCatalog(catalog: SceneCatalog, name: string): string[] | null {
   const scene = catalog.scenes[name];
+
   if (!scene || scene.length === 0) return null;
+
   return [...scene];
 }
 
@@ -53,8 +63,10 @@ export interface SceneRequest {
 /** Resolves a scene name to the LAN datagram, or null with the reason. */
 export function sceneCommand(request: SceneRequest): { json: string; bytes: string[] } | { error: string } {
   const bytes = sceneFromCatalog(request.catalog, request.scene);
+
   if (!bytes) {
     return { error: `scene ${request.scene} is not in the ${request.catalog.source} catalogue (${request.moment})` };
   }
+
   return { json: ptRealCommand(bytes), bytes };
 }

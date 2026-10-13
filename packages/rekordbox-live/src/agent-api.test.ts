@@ -21,39 +21,52 @@ interface FakeAgent {
 // check on the resolve endpoints, one known content id, one unknown id.
 async function fakeAgent(): Promise<FakeAgent> {
   const requests: string[] = [];
+
   const server = createServer((req, res) => {
     const url = req.url ?? "/";
     requests.push(url);
+
     if (url === "/") {
       res.statusCode = 404;
       res.end("not found");
+
       return;
     }
+
     const auth = req.headers.authorization ?? "";
+
     if (!url.startsWith("/api/data/")) {
       res.statusCode = 404;
       res.end("not found");
+
       return;
     }
+
     if (auth !== `Bearer ${TOKEN}`) {
       res.statusCode = 401;
       res.end("unauthorized");
+
       return;
     }
+
     if (url === "/api/data/1234") {
       res.statusCode = 200;
       res.setHeader("content-type", "application/json");
       res.end(JSON.stringify({ path: "/music/track.mp3" }));
+
       return;
     }
+
     res.statusCode = 404;
     res.end("missing");
   });
+
   const { promise, resolve } = Promise.withResolvers<void>();
   server.listen(0, "127.0.0.1", () => resolve());
   await promise;
   const address = server.address();
   const port = address !== null && typeof address === "object" ? address.port : 0;
+
   return { server, port, requests };
 }
 
@@ -66,6 +79,7 @@ async function closeAgent(agent: FakeAgent): Promise<void> {
 describe("Rekordbox agent API client (T-LIVE-08)", () => {
   it("reports the agent as present without a token", async () => {
     const agent = await fakeAgent();
+
     try {
       const client = new RekordboxAgentClient({ port: agent.port, timeoutMs: 500 });
       const probe = await client.probe();
@@ -80,6 +94,7 @@ describe("Rekordbox agent API client (T-LIVE-08)", () => {
 
   it("resolves a content id once a token is adopted, and reports not-found otherwise", async () => {
     const agent = await fakeAgent();
+
     try {
       const client = new RekordboxAgentClient({ port: agent.port, timeoutMs: 500 });
       client.adoptToken(TOKEN, "manual");
@@ -100,6 +115,7 @@ describe("Rekordbox agent API client (T-LIVE-08)", () => {
 
   it("reports denied when the agent rejects the token", async () => {
     const agent = await fakeAgent();
+
     try {
       const client = new RekordboxAgentClient({ port: agent.port, timeoutMs: 500 });
       client.adoptToken("wrong-token", "file");
@@ -118,6 +134,7 @@ describe("Rekordbox agent API client (T-LIVE-08)", () => {
 
   it("never lets the token into a log line", async () => {
     const agent = await fakeAgent();
+
     try {
       const client = new RekordboxAgentClient({ port: agent.port, timeoutMs: 500 });
       client.adoptToken(TOKEN, "memory-cleanroom");
@@ -137,6 +154,7 @@ describe("Rekordbox agent API client (T-LIVE-08)", () => {
       { source: "file", available: true, detail: "found at userData/agent-token" },
       { source: "manual", available: false, detail: "not entered" },
     ];
+
     const picked = pickAgentTokenSource(sources);
     expect(picked.source).toBe("file");
     expect(picked.report).toHaveLength(3);
@@ -145,6 +163,7 @@ describe("Rekordbox agent API client (T-LIVE-08)", () => {
 
   it("reports 'agent API: no token' for the DS-22 resolver step without a source", async () => {
     const agent = await fakeAgent();
+
     try {
       const client = new RekordboxAgentClient({ port: agent.port, timeoutMs: 500 });
       const step = await resolveWithAgent(client, "1234", [{ source: "file", available: false, detail: "no token file found" }]);

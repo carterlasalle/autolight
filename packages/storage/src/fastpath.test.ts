@@ -9,12 +9,17 @@ import { clearFastPathCache, fastPathBudget, fastPathCacheSize, fastPathTimings,
 import { Store } from "./index.js";
 
 const fixtureDir = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "test-fixtures", "analysis");
+
 const trackFixture = join(fixtureDir, "live-deck1.trackmodel.json");
+
 const planFixture = join(fixtureDir, "live-deck1.showplan.json");
 
 const trackModel = trackModelSchema.parse(JSON.parse(readFileSync(trackFixture, "utf8")));
+
 const showPlan = showPlanSchema.parse(JSON.parse(readFileSync(planFixture, "utf8")));
+
 const style = { id: showPlan.styleId };
+
 const configHash = configSnapshotHash({ "runtime.clock.tickHz": 60, "runtime.fastPath.budgetMs": 100 });
 
 function request(overrides: Partial<FastPathRequest> = {}): FastPathRequest {
@@ -36,6 +41,7 @@ function storeWith(artifactPath: string, planJson: string | null): Store {
   const key = request();
   store.saveTrack(key.trackId, JSON.stringify(trackModel.identity), trackModel.durationSeconds);
   store.saveArtifact(key.trackId, key.analyzerVersion, artifactPath, key.sourceFingerprint, { configHash: key.configHash });
+
   if (planJson !== null) {
     store.saveShowPlan(key.trackId, key.styleId, key.plannerVersion, showPlan.seed, planJson, {
       sourceFingerprint: key.sourceFingerprint,
@@ -44,6 +50,7 @@ function storeWith(artifactPath: string, planJson: string | null): Store {
       configHash: key.configHash,
     });
   }
+
   return store;
 }
 
@@ -51,6 +58,7 @@ describe("fast path loader (T-DATA-04, spec 138)", () => {
   it("returns parsed and validated TrackModel and ShowPlan objects (P-138)", () => {
     resetFastPath();
     const store = storeWith(trackFixture, JSON.stringify(showPlan));
+
     try {
       const result = loadFastPath(store, request());
       expect(result.miss).toBeNull();
@@ -67,6 +75,7 @@ describe("fast path loader (T-DATA-04, spec 138)", () => {
   it("never returns an artifact path as the track model (F-DATA-04 regression)", () => {
     resetFastPath();
     const store = storeWith("/cache/real.json", JSON.stringify(showPlan));
+
     try {
       const result = loadFastPath(store, request());
       expect(typeof result.track).not.toBe("string");
@@ -83,9 +92,11 @@ describe("fast path loader (T-DATA-04, spec 138)", () => {
     resetFastPath();
     const dir = mkdtempSync(join(tmpdir(), "autolight-fastpath-"));
     const bogus = join(dir, "bogus.json");
+
     try {
       writeFileSync(bogus, JSON.stringify({ schemaVersion: 2 }));
       const store = storeWith(bogus, JSON.stringify(showPlan));
+
       try {
         const result = loadFastPath(store, request());
         expect(result.miss).toBe("invalid-artifact");
@@ -102,9 +113,11 @@ describe("fast path loader (T-DATA-04, spec 138)", () => {
     resetFastPath();
     const dir = mkdtempSync(join(tmpdir(), "autolight-lru-"));
     const copy = join(dir, "trackmodel.json");
+
     try {
       copyFileSync(trackFixture, copy);
       const store = storeWith(copy, JSON.stringify(showPlan));
+
       try {
         const cold = loadFastPath(store, request());
         expect(cold.track).not.toBeNull();
@@ -125,11 +138,13 @@ describe("fast path loader (T-DATA-04, spec 138)", () => {
   it("answers with typed misses", () => {
     resetFastPath();
     const store = storeWith(trackFixture, JSON.stringify(showPlan));
+
     try {
       expect(loadFastPath(store, request({ analyzerVersion: "9.9.9" })).miss).toBe("no-artifact");
       expect(loadFastPath(store, request({ sourceFingerprint: "fp-other" })).miss).toBe("no-artifact");
 
       const withoutPlan = storeWith(trackFixture, null);
+
       try {
         const result = loadFastPath(withoutPlan, request());
         expect(result.miss).toBe("no-plan");
@@ -141,6 +156,7 @@ describe("fast path loader (T-DATA-04, spec 138)", () => {
       }
 
       const otherStyle = storeWith(trackFixture, JSON.stringify(showPlan));
+
       try {
         const styled = loadFastPath(otherStyle, request({ styleHash: styleHash({ id: "house" }) }));
         expect(styled.miss).toBe("no-plan");
@@ -156,6 +172,7 @@ describe("fast path loader (T-DATA-04, spec 138)", () => {
   it("reports an unparseable plan row as an invalid plan, not as a missing one", () => {
     resetFastPath();
     const store = storeWith(trackFixture, "{not json");
+
     try {
       const result = loadFastPath(store, request());
       expect(result.miss).toBe("invalid-plan");
@@ -171,6 +188,7 @@ describe("fast path loader (T-DATA-04, spec 138)", () => {
     resetFastPath();
     const mismatched = JSON.stringify({ ...showPlan, trackId: "someone-else" });
     const store = storeWith(trackFixture, mismatched);
+
     try {
       const result = loadFastPath(store, request());
       expect(result.miss).toBe("invalid-plan");
@@ -184,12 +202,14 @@ describe("fast path loader (T-DATA-04, spec 138)", () => {
     resetFastPath();
     const store = storeWith(trackFixture, JSON.stringify(showPlan));
     const budgetMs = 100;
+
     try {
       for (let i = 0; i < 150; i += 1) {
         clearFastPathCache();
         const result = loadFastPath(store, request());
         expect(result.track).not.toBeNull();
       }
+
       const stats = fastPathTimings();
       expect(stats.count).toBe(150);
       expect(stats.p95).toBeLessThan(budgetMs);

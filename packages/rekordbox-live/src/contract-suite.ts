@@ -18,6 +18,7 @@ export interface VirtualClock {
 
 export function virtualClock(startNs = 1_000_000_000_000n): VirtualClock {
   let t = startNs;
+
   return {
     nowNs: () => t,
     advance: (ms: number) => {
@@ -61,6 +62,7 @@ function capture(provider: DJLiveProvider): Capture {
   const statuses: string[] = [];
   provider.onDeckState((state) => states.push(state));
   provider.onConnection((status) => statuses.push(status.state));
+
   return { states, statuses };
 }
 
@@ -72,11 +74,14 @@ function lastFor(states: readonly ProviderDeckState[], deckId: number): Provider
 // not claim (track text) is skipped.
 export async function runProviderContractSuite(subject: ProviderContractSubject): Promise<string[]> {
   const failures: string[] = [];
+
   const check = (ok: boolean, message: string): void => {
     if (!ok) failures.push(message);
   };
+
   const { provider } = subject;
   const trace = capture(provider);
+
   try {
     await provider.start();
     await provider.start();
@@ -94,9 +99,11 @@ export async function runProviderContractSuite(subject: ProviderContractSubject)
     await subject.advance(100);
     const second = lastFor(trace.states, 1);
     check((second?.generation ?? -1) > generationA, "generation did not increase on track change");
+
     if (subject.reportsTrackText) {
       check(second?.track?.title === "Generation B", `track text did not follow the new generation: ${second?.track?.title ?? "null"}`);
     }
+
     const leaked = trace.states.filter((s) => s.deckId === 1 && (s.generation ?? 0) > generationA && s.track?.title === "Generation A");
     check(leaked.length === 0, `metadata leaked from generation ${generationA} into a later generation (${leaked.length} states)`);
 
@@ -109,8 +116,10 @@ export async function runProviderContractSuite(subject: ProviderContractSubject)
 
     // Monotonic receivedAtNs per deck.
     let previous: bigint | null = null;
+
     for (const s of trace.states) {
       if (s.deckId !== 1) continue;
+
       if (previous !== null) check(s.receivedAtNs > previous, "receivedAtNs went backwards");
       previous = s.receivedAtNs;
     }
@@ -119,6 +128,7 @@ export async function runProviderContractSuite(subject: ProviderContractSubject)
     for (let i = 0; i < 40; i++) {
       await subject.advance(10);
     }
+
     check(provider.getStats().queueDepth <= 1, `queue depth grew to ${provider.getStats().queueDepth} (latest-wins is 1)`);
 
     // Malformed input is rejected and counted, never thrown.
@@ -133,6 +143,7 @@ export async function runProviderContractSuite(subject: ProviderContractSubject)
     await provider.stop();
     await provider.stop();
   }
+
   return failures;
 }
 

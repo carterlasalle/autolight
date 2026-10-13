@@ -66,6 +66,7 @@ function makeCue(
   const layerName = layerForCueName(init.type);
   const layer: PlanLayer = isPlanLayer(layerName) ? layerName : "accents";
   const n = ordinal.n++;
+
   return {
     id: cueId(seed, section, level, n),
     type: init.type,
@@ -107,6 +108,7 @@ export function compileShow(input: CompileInput): CompileResult {
   const cues: PlanCue[] = [];
   const ordinal = { n: 0 };
   const deleted = new Set(edits?.deletedCueIds ?? []);
+
   const emit = (c: PlanCue): void => {
     if (!deleted.has(c.id)) cues.push(c);
   };
@@ -118,11 +120,13 @@ export function compileShow(input: CompileInput): CompileResult {
   const dropByBeat = new Map(drops.map((d) => [d.impactBeat, d] as const));
   const dropOccurrence = new Map<number, number>();
   const fakeActuals = new Map<number, number>();
+
   for (const ev of input.track.musicalEvents) {
     if (ev.type === "fake-drop" && ev.endBeat !== undefined) {
       fakeActuals.set(ev.beat, ev.endBeat);
     }
   }
+
   const phraseStarts = input.track.sections.flatMap((s) => phraseStartsIn(s.startBeat, s.endBeat));
   void phraseStarts;
   const restraint = freshRestraint();
@@ -132,10 +136,12 @@ export function compileShow(input: CompileInput): CompileResult {
 
   const sections: SectionPlan[] = input.track.sections.map((s, idx) => {
     const kind = edits?.sectionKindOverrides[idx] ?? s.kind;
+
     const energy = Math.min(
       style.intensityRange[1],
       Math.max(style.intensityRange[0], config.sectionEnergy[kind] ?? 0.5),
     );
+
     return {
       index: idx,
       kind,
@@ -171,6 +177,7 @@ export function compileShow(input: CompileInput): CompileResult {
 
     // Candidate hook (DS-19): build perSection variants, pick by mode.
     const variants: SectionCandidate[] = [];
+
     for (let v = 0; v < perSection; v++) {
       variants.push({
         index: v,
@@ -182,13 +189,15 @@ export function compileShow(input: CompileInput): CompileResult {
         seed: `${seed}:${idx}:${v}`,
       });
     }
+
     const { winner, vetoed } = pickCandidate(variants, input.mode ?? "rules-with-veto");
+
     for (const v of vetoed) rejected.push({ candidate: candidateNo + v, reasons: ["pathological section candidate"] });
     const chosen = variants[winner] ?? variants[0]!;
     candidateNo += perSection;
     void chosen;
 
-    const secStyle = { ...style, ...(edits?.sectionStyles[idx] ?? {}) };
+    const secStyle = { ...style, ...edits?.sectionStyles[idx] };
     const drop = dropByBeat.get(section.startBeat) ?? null;
     void drop;
 
@@ -202,6 +211,7 @@ export function compileShow(input: CompileInput): CompileResult {
     const symmetricTarget = (occ % 2 === 0) ? "PRIMARY" : "SECONDARY";
     const lookTarget = style.symmetry > 0.75 ? "PRIMARY" : symmetricTarget;
     const repaint = style.paletteChangeRate > 0.55 && occ > 0 && idx % 2 === 1;
+
     const look = makeCue(seed, idx, ordinal, {
       type: "section-look",
       startBeat: section.startBeat,
@@ -213,7 +223,9 @@ export function compileShow(input: CompileInput): CompileResult {
       paletteRef: `core-${idx % Math.max(1, core.length)}`,
       reason: motifId ? `section look in ${motifId} (colour ${lookColour.h})` : "section look",
     });
+
     emit(look);
+
     // darknessPreference is visible: a shade dip per section whose duration
     // scales with the preference, at mid-range intensity so style peaks
     // stay inside intensityRange.
@@ -233,6 +245,7 @@ export function compileShow(input: CompileInput): CompileResult {
         }),
       );
     }
+
     if (sec.kind === "breakdown") {
       for (const b of breakdownCues(section.startBeat, section.endBeat, secStyle, config, core)) {
         emit(
@@ -263,15 +276,18 @@ export function compileShow(input: CompileInput): CompileResult {
         }),
       );
     }
+
     for (const b of barCues(section.startBeat, section.endBeat, Math.max(2, config.chaseBasePeriodBeats / (0.5 + secStyle.spatialDensity)), energy)) {
       const r = restrain(restraint, "chase", b.startBeat, b.durationBeats, secStyle, config, {
         direction: b.target,
         family: "chase",
       });
+
       if (r.verdict.decision === "reject") {
         rejected.push({ candidate: candidateNo++, reasons: [r.verdict.reason] });
         continue;
       }
+
       emit(
         makeCue(seed, idx, ordinal, {
           type: r.verdict.decision === "substitute" ? "pulse" : b.type,
@@ -284,6 +300,7 @@ export function compileShow(input: CompileInput): CompileResult {
         }),
       );
     }
+
     for (const b of beatCues(section.startBeat, section.endBeat, energy, secStyle.movementDensity)) {
       const scaled = b.intensity * (0.5 + secStyle.movementDensity * 0.5) * (0.7 + secStyle.reactiveAmount);
       emit(
@@ -298,7 +315,9 @@ export function compileShow(input: CompileInput): CompileResult {
         }),
       );
     }
+
     const mover = sec.movementFamily;
+
     if (mover === "rotation" || mover === "fan" || mover === "converge" || mover === "diverge") {
       emit(
         makeCue(seed, idx, ordinal, {
@@ -324,6 +343,7 @@ export function compileShow(input: CompileInput): CompileResult {
       const occCount = dropOccurrence.get(d.impactBeat) ?? 0;
       const prog = dropProgram(d.buildStart, d.impactBeat, strength * (0.5 + secStyle.impactAggression), occCount, secStyle, config, core, bpm);
       dropOccurrence.set(d.impactBeat, occCount + 1);
+
       for (const c of prog.cues) {
         if (c.type === "white-hit") {
           const moved = edits?.movedEvents[`drop@${d.impactBeat}`];
@@ -332,13 +352,16 @@ export function compileShow(input: CompileInput): CompileResult {
           // full-colour impact through the same restraint path.
           const draw = ((at * 2654435761 + seed.length * 97) % 100) / 100;
           const forceImpact = draw >= secStyle.whiteHitFrequency;
+
           const r = forceImpact
             ? { state: restraint, verdict: { decision: "substitute", substitute: "impact", reason: "white-hit frequency draw favours a full-colour impact" } as const }
             : restrain(restraint, "white-hit", at, c.durationBeats, secStyle, config, { impact: true });
+
           if (r.verdict.decision === "reject") {
             rejected.push({ candidate: candidateNo++, reasons: [r.verdict.reason] });
             continue;
           }
+
           const useType = r.verdict.decision === "substitute" ? r.verdict.substitute : c.type;
           emit(
             makeCue(seed, idx, ordinal, {
@@ -356,10 +379,12 @@ export function compileShow(input: CompileInput): CompileResult {
           );
         } else if (c.type === "blackout") {
           const r = restrain(restraint, "blackout", c.startBeat, c.durationBeats, secStyle, config);
+
           if (r.verdict.decision === "reject") {
             rejected.push({ candidate: candidateNo++, reasons: [r.verdict.reason] });
             continue;
           }
+
           emit(
             makeCue(seed, idx, ordinal, {
               type: r.verdict.decision === "substitute" ? r.verdict.substitute : c.type,
@@ -386,6 +411,7 @@ export function compileShow(input: CompileInput): CompileResult {
           );
         }
       }
+
       // Foreshadowing: a brief glimpse of the drop motif in the build.
       emit(
         makeCue(seed, idx, ordinal, {
@@ -420,10 +446,12 @@ export function compileShow(input: CompileInput): CompileResult {
 
     for (const s of subBeatCues(section.startBeat + 0.5, secStyle.strobeFrequency, () => (idx % 2 === 0 ? 0 : 1))) {
       const r = restrain(restraint, "strobe-burst", s.startBeat, s.durationBeats, secStyle, config);
+
       if (r.verdict.decision === "reject") {
         rejected.push({ candidate: candidateNo++, reasons: [r.verdict.reason] });
         continue;
       }
+
       emit(
         makeCue(seed, idx, ordinal, {
           type: "strobe-burst",
@@ -444,16 +472,21 @@ export function compileShow(input: CompileInput): CompileResult {
 
   // Event layer: every musical event becomes planning behaviour.
   const movedMap = edits?.movedEvents ?? {};
+
   for (const p of planTrackEvents(input.track, style, config, movedMap)) {
     if (p.cueType === "build-ramp" || p.cueType === "drop-pattern") continue;
+
     if (p.kind === "fake-hold") {
       const actual = fakeActuals.get(p.beat) ?? p.endBeat;
+
       for (const h of fakeDropHold(p.beat, actual)) {
         const r = restrain(restraint, "blackout", h.startBeat, h.durationBeats, style, config);
+
         if (r.verdict.decision === "reject") {
           rejected.push({ candidate: candidateNo++, reasons: [r.verdict.reason] });
           continue;
         }
+
         emit(
           makeCue(seed, 0, ordinal, {
             type: r.verdict.decision === "substitute" ? r.verdict.substitute : h.type,
@@ -466,21 +499,27 @@ export function compileShow(input: CompileInput): CompileResult {
           }),
         );
       }
+
       continue;
     }
+
     if (p.cueType === "blackout" || p.cueType === "dip") {
       const r = restrain(restraint, p.cueType === "blackout" ? "blackout" : "dip", p.beat, p.durationBeats, style, config);
+
       if (r.verdict.decision === "reject") {
         rejected.push({ candidate: candidateNo++, reasons: [r.verdict.reason] });
         continue;
       }
     }
+
     if (p.cueType === "white-hit") {
       const r = restrain(restraint, "white-hit", p.beat, p.durationBeats, style, config, { impact: true });
+
       if (r.verdict.decision === "reject") {
         rejected.push({ candidate: candidateNo++, reasons: [r.verdict.reason] });
         continue;
       }
+
       if (r.verdict.decision === "substitute") {
         emit(
           makeCue(seed, 0, ordinal, {
@@ -497,6 +536,7 @@ export function compileShow(input: CompileInput): CompileResult {
         continue;
       }
     }
+
     emit(
       makeCue(seed, 0, ordinal, {
         type: p.cueType,
@@ -532,6 +572,7 @@ export function compileShow(input: CompileInput): CompileResult {
     blinderBeats: restraint.blinderBeats,
     strobeBeats: restraint.strobeBeats,
   };
+
   const budgetsRemaining: Record<string, number> = {
     impacts: Math.max(0, config.trackImpactMax - restraint.wholeTrackImpactCount),
     strobeBeats: Math.max(0, 32 - restraint.strobeBeats),
@@ -568,4 +609,5 @@ export function compileShow(input: CompileInput): CompileResult {
 }
 
 export { resolveConfig, DEFAULT_CONFIG } from "./config.js";
+
 export type { PlannerConfigSnapshot };

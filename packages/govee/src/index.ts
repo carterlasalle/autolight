@@ -11,6 +11,7 @@ export {
   turnCommand, brightnessCommand, colorCommand, devStatusCommand, parseDevStatus,
   PacingStream, WALL_SCHEDULER,
 } from "./razer.js";
+
 export type {
   ScanReply, LanDeviceStatus, StreamTransport, Scheduler, TimerHandle,
   StreamOptions, EngineMetrics, EngineHealth, EngineStatus, EngineReport,
@@ -19,18 +20,31 @@ export type {
 
 // DS-02 engine switch (T-GOV-03): toolkit primary, native-ts fallback.
 export { EngineSelector, createEngineSelector, ToolkitLoadFailure } from "./engines/index.js";
+
 export type { EngineSummary, DeviceEngineDecision, EngineSelectorOptions } from "./engines/index.js";
+
 export { ToolkitEngine, defaultToolkitLoader, isUnavailableError, ToolkitUnavailableError, unavailable, resolutionFor } from "./engines/toolkit.js";
+
 export type { BindingModule, BindingDevice, BindingDeviceStatus, BindingStream, BindingSdk, BindingDeviceHandle, ToolkitLoader, ToolkitLoadResult, UnavailableReasonClass } from "./engines/toolkit.js";
+
 export { NativeStreamEngine, SocketTransport, hasStatus, hasDiscover } from "./engines/native-ts.js";
+
 export type { NativeEngineOptions, StatusCapable, DiscoverCapable } from "./engines/native-ts.js";
+
 export { selectResolution } from "./resolution.js";
+
 export type { ResolutionKind, ResolutionMode, ResolutionInput, ResolutionCandidate, ResolutionDecision } from "./resolution.js";
+
 export { FirmwarePolicy } from "./firmware.js";
+
 export type { FirmwarePolicyOptions, StreamGate, FirmwareDecision } from "./firmware.js";
+
 export { ptRealCommand, parsePtRealCommand, sceneFromCatalog, listScenes, sceneCommand } from "./scenes.js";
+
 export type { SceneCatalog, SceneMoment, SceneRequest } from "./scenes.js";
+
 export { DeviceMetrics } from "./metrics.js";
+
 export type { DeviceHealthState, DeviceMetricsRow, MetricsSample } from "./metrics.js";
 
 // Legacy alias kept until T-GOV-02 deletes encodeFrame (M1): maps to encodeRaw.
@@ -42,7 +56,9 @@ export function encodeFrame(opcode: number, payload: Uint8Array): Uint8Array {
 export class FrameCoalescer {
   private pending: Uint8Array | null = null;
   push(frame: Uint8Array): void { this.pending = frame; }
-  take(): Uint8Array | null { const f = this.pending; this.pending = null; return f; }
+  take(): Uint8Array | null { const f = this.pending; this.pending = null;
+
+ return f; }
 }
 
 export interface DeviceIdentity {
@@ -69,6 +85,7 @@ export function blackoutPayload(segmentCount: number): Uint8Array {
 // Linear-light channel scale (§49). Shared with renderer math.
 export function scaleChannel(v: number, intensity: number, gamma = 2.2): number {
   const lin = Math.pow(Math.min(255, Math.max(0, v)) / 255, gamma) * Math.min(1, Math.max(0, intensity));
+
   return Math.round(Math.pow(lin, 1 / gamma) * 255);
 }
 
@@ -76,13 +93,16 @@ export function scaleChannel(v: number, intensity: number, gamma = 2.2): number 
 export function whiteHitPayload(segmentCount: number, intensity: number): Uint8Array {
   const out = new Uint8Array(Math.max(0, segmentCount) * 3);
   const w = scaleChannel(255, intensity);
+
   for (let i = 0; i < segmentCount; i++) { out[i * 3] = w; out[i * 3 + 1] = w; out[i * 3 + 2] = w; }
+
   return out;
 }
 
 // Latency offset in beats for per-fixture early send (§55).
 export function latencyBeats(latencyMs: number, bpm: number): number {
   if (!(bpm > 0)) return 0;
+
   return (Math.max(0, latencyMs) / 1000) * (bpm / 60);
 }
 
@@ -110,6 +130,7 @@ export class LatestStream implements SegmentStream {
   flush(): void {
     if (this.closed) return;
     const f = this.coalescer.take();
+
     if (f) this.sender(f);
   }
   close(): void {
@@ -128,14 +149,17 @@ export interface ToolkitStreamFactory {
 // colorwc versus segmented paint. No default claim until qualified.
 export function collapseToSingleColor(frame: Uint8Array): [number, number, number] {
   const n = Math.floor(frame.length / 3);
+
   if (n <= 0) return [0, 0, 0];
   const mid = Math.floor(n / 2) * 3;
+
   return [frame[mid] ?? 0, frame[mid + 1] ?? 0, frame[mid + 2] ?? 0];
 }
 
 // LAN manager (§46, §106-107): discovery → arm → stream; per-device FPS
 // backoff on congestion; reconnect re-arms and sends current frame only.
 export type DeviceHealth = "online" | "degraded" | "offline";
+
 export interface ManagedDevice {
   identity: DeviceIdentity;
   health: DeviceHealth;
@@ -148,22 +172,28 @@ export class DeviceManager {
   private devices = new Map<string, ManagedDevice>();
   discover(identity: DeviceIdentity, fps: number): ManagedDevice {
     const existing = this.devices.get(identity.hardwareId);
+
     if (existing) {
       existing.identity = identity;
       existing.health = "online";
+
       return existing;
     }
+
     const dev: ManagedDevice = { identity, health: "online", fps, sentFrames: 0, supersededFrames: 0 };
     this.devices.set(identity.hardwareId, dev);
+
     return dev;
   }
   markOffline(hardwareId: string): void {
     const dev = this.devices.get(hardwareId);
+
     if (dev) dev.health = "offline";
   }
   // Congestion: reduce only the affected device's FPS (§107); show stays 60Hz.
   backoff(hardwareId: string): void {
     const dev = this.devices.get(hardwareId);
+
     if (dev && dev.fps > 5) {
       dev.fps = Math.max(5, Math.floor(dev.fps / 2));
       dev.health = "degraded";
@@ -171,6 +201,7 @@ export class DeviceManager {
   }
   recordSend(hardwareId: string, superseded: number): void {
     const dev = this.devices.get(hardwareId);
+
     if (dev) {
       dev.sentFrames += 1;
       dev.supersededFrames += superseded;

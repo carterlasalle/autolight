@@ -9,6 +9,7 @@ export const errorSchema = z.object({
   ok: z.literal(false),
   error: z.object({ code: z.string(), message: z.string() }),
 });
+
 export type IpcError = z.infer<typeof errorSchema>;
 
 function ok<T extends z.ZodRawShape>(payload: z.ZodObject<T>) {
@@ -182,7 +183,9 @@ export const channels = {
 } as const;
 
 export type Channel = keyof typeof channels;
+
 export type ChannelRequest<C extends Channel> = z.infer<(typeof channels)[C]["request"]>;
+
 export type ChannelResponse<C extends Channel> = z.infer<(typeof channels)[C]["response"]>;
 
 export type Handler<C extends Channel> = (
@@ -205,8 +208,10 @@ export async function callChannel<C extends Channel>(
   const parsed = channels[channel].request.parse(request);
   const raw = await invokeFn(channel, parsed);
   const res = channels[channel].response.parse(raw) as ChannelResponse<C>;
+
   if (!res.ok) {
     throw new Error(`${(res as IpcError).error.code}: ${(res as IpcError).error.message}`);
   }
+
   return res as Extract<ChannelResponse<C>, { ok: true }>;
 }

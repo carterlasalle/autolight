@@ -11,6 +11,7 @@ import type { AltPattern } from "../../app/store.js";
 import { trackPalette } from "../../routes/live/manual-intents.js";
 import { nextPhraseBeat } from "../../routes/live/live-fields.js";
 import { CueList, DeckPanel, FixturePreview, MasterControls } from "../../components/kit.js";
+
 // Live, redesigned: the beat leads (big mono clock between the decks), the
 // room preview plus upcoming cues sit side by side, the emergency bar pins to
 // the section bottom so it never scrolls away mid-set. Every prior control
@@ -31,6 +32,7 @@ export function LiveView({ live }: { live: LiveState | null }): JSX.Element {
   const set = useShell((s) => s.set);
   const manual = useShell((s) => s.manual);
   const intensity = useShell((s) => s.overridesIntensity);
+
   if (!live) {
     return (
       <div className="flex max-w-5xl flex-col gap-4">
@@ -48,6 +50,7 @@ export function LiveView({ live }: { live: LiveState | null }): JSX.Element {
       </div>
     );
   }
+
   return (
     <div className="flex max-w-5xl flex-col gap-4">
       <section aria-label="Decks and clock" className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-[1fr_auto_1fr] md:items-stretch">
@@ -115,6 +118,7 @@ export function LiveView({ live }: { live: LiveState | null }): JSX.Element {
 // heading each. Same controls and intents, no new behavior.
 export function ControlGrid(): JSX.Element {
   const s = useShell();
+
   return (
     <section aria-label="Manual control" className="mt-4">
       <h2 className="mb-2 text-sm font-semibold text-muted-foreground">Manual</h2>

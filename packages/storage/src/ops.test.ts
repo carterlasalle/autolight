@@ -27,10 +27,12 @@ import {
 describe("session recorder and exact replay (T-DATA-06, F-DATA-06, spec 103)", () => {
   it("records bounded rings without shift() and exports ndjson", () => {
     const rec = new SessionRecorder({ enabled: true, maxMb: 0.001 });
+
     for (let tick = 0; tick < 200; tick++) {
       rec.record("tick-input", { tick, inputs: { deck: tick } }, tick);
       rec.record("frame-hash", { tick, hash: frameHashFor(tick, { deck: tick }, { style: "club" }) }, tick);
     }
+
     expect(rec.count).toBeGreaterThan(0);
     expect(rec.count).toBeLessThan(400);
     expect(rec.droppedCount).toBeGreaterThan(0);
@@ -42,13 +44,16 @@ describe("session recorder and exact replay (T-DATA-06, F-DATA-06, spec 103)", (
   it("replays with 100 percent frame hash equality on the same snapshot", () => {
     const snapshot = { "mixer.crossfader.curve": "source", style: "club" };
     const rec = new SessionRecorder({ enabled: true, maxMb: 64 });
+
     for (let tick = 0; tick < 60; tick++) {
       rec.record("tick-input", { tick, inputs: { deck: tick % 4 } }, tick);
       rec.record("frame-hash", { tick, hash: frameHashFor(tick, { deck: tick % 4 }, snapshot) }, tick);
     }
+
     const result = replaySession(rec.entries(), snapshot, (tick, inputs, snap) =>
       frameHashFor(tick, inputs, snap),
     );
+
     expect(result.ticks).toBe(60);
     expect(result.mismatched).toBe(0);
     expect(result.matched).toBe(60);
@@ -57,10 +62,12 @@ describe("session recorder and exact replay (T-DATA-06, F-DATA-06, spec 103)", (
   it("fails replay when the render is deliberately nondeterministic", () => {
     const snapshot = { style: "club" };
     const rec = new SessionRecorder({ enabled: true, maxMb: 64 });
+
     for (let tick = 0; tick < 10; tick++) {
       rec.record("tick-input", { tick, inputs: {} }, tick);
       rec.record("frame-hash", { tick, hash: frameHashFor(tick, {}, snapshot) }, tick);
     }
+
     let calls = 0;
     const result = replaySession(rec.entries(), snapshot, () => `random-${calls++}`);
     expect(result.mismatched).toBe(10);
@@ -114,6 +121,7 @@ describe("structured logging (T-OPS-02, F-OPS-01, spec 130)", () => {
   it("rate-limits repeated messages and rejects non-JSON lines", () => {
     const lines: string[] = [];
     let suppressed = 0;
+
     const logger = new Logger({
       module: "lan",
       maxRepeated: 2,
@@ -124,6 +132,7 @@ describe("structured logging (T-OPS-02, F-OPS-01, spec 130)", () => {
         suppressed += n;
       },
     });
+
     for (let i = 0; i < 5; i++) logger.warn("same storm");
     expect(lines).toHaveLength(2);
     expect(suppressed).toBe(3);
@@ -149,6 +158,7 @@ describe("metrics (T-OPS-03, F-OPS-02, spec 131)", () => {
     ] as const) {
       expect(METRIC_NAMES).toContain(name);
     }
+
     for (const name of ["queueDrops", "failoverSwitches", "fusionAuthoritySwitches", "missedWatcherChanges"] as const) {
       expect(METRIC_NAMES).toContain(name);
     }
@@ -157,6 +167,7 @@ describe("metrics (T-OPS-03, F-OPS-02, spec 131)", () => {
   it("reports histograms with p50, p95, p99 and moves under activity", () => {
     const registry = new MetricsRegistry();
     expect(registry.snapshot()).toEqual({});
+
     for (let i = 1; i <= 100; i++) registry.observe("renderTimeMs", i);
     const snap = registry.snapshot();
     expect(snap["renderTimeMs"]?.count).toBe(100);
@@ -187,6 +198,7 @@ describe("network exposure audit (T-SEC-02, spec 110/111)", () => {
       { name: "prolink-discovery", host: "0.0.0.0", port: 50000, reason: "PRO DJ LINK discovery", loopbackOnly: false },
       { name: "control-server", host: "0.0.0.0", port: 8080, reason: "remote control", loopbackOnly: false },
     ]);
+
     expect(result.allowed).toHaveLength(3);
     expect(result.denied).toHaveLength(1);
     expect(result.denied[0]?.reason).toContain("control-server");
@@ -195,9 +207,11 @@ describe("network exposure audit (T-SEC-02, spec 110/111)", () => {
   it("refuses non-loopback OSC bindings by default", () => {
     expect(oscMustRefuseRemote("0.0.0.0")).toBe(true);
     expect(oscMustRefuseRemote("127.0.0.1")).toBe(false);
+
     const result = auditListeners([
       { name: "osc", host: "0.0.0.0", port: 4460, reason: "OSC bound wide", loopbackOnly: true },
     ]);
+
     expect(result.denied).toHaveLength(1);
   });
 });

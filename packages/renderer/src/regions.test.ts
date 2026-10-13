@@ -28,11 +28,17 @@ describe("T-REND-05 physical regions, dense arrays, correct addressing", () => {
   it("caches selector resolution per venue version", () => {
     const cache = new SelectorCache();
     let calls = 0;
-    const first = cache.resolve(1, "LEFT", () => { calls++; return ["a:0"]; });
-    const second = cache.resolve(1, "LEFT", () => { calls++; return ["a:0"]; });
+    const first = cache.resolve(1, "LEFT", () => { calls++;
+
+ return ["a:0"]; });
+    const second = cache.resolve(1, "LEFT", () => { calls++;
+
+ return ["a:0"]; });
     expect(second).toBe(first);
     expect(calls).toBe(1);
-    cache.resolve(2, "LEFT", () => { calls++; return ["a:1"]; });
+    cache.resolve(2, "LEFT", () => { calls++;
+
+ return ["a:1"]; });
     expect(calls).toBe(2);
   });
 

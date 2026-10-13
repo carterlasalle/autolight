@@ -114,6 +114,7 @@ export async function runBleQualification(probe: BleWizardProbe): Promise<{ reco
   const record = blankBleQualification(peripheral.advertisement.address);
   const steps: BleWizardStepResult[] = [];
   const pending: Record<string, true> = {};
+
   for (const name of record.unmeasured) pending[name] = true;
 
   if (peripheral.connected) peripheral.handleDisconnect();
@@ -123,22 +124,26 @@ export async function runBleQualification(probe: BleWizardProbe): Promise<{ reco
   record.hardVersion = peripheral.readState(0x20) as string | null;
   record.softVersion = peripheral.readState(0x21) as string | null;
   const versionsOk = record.hardVersion !== null && record.softVersion !== null;
+
   if (versionsOk) delete pending["versions"];
   steps.push({ step: "versions", ok: versionsOk, detail: `hard ${record.hardVersion} soft ${record.softVersion}` });
 
   const segments = peripheral.readState(0x0f);
   record.segmentCount = Array.isArray(segments) ? (segments[0] ?? null) : null;
   const segmentsOk = record.segmentCount !== null;
+
   if (segmentsOk) delete pending["segmentCount"];
   steps.push({ step: "segment-count", ok: segmentsOk, detail: `aa 0f reports ${record.segmentCount}` });
 
   const ic = peripheral.readState(0x40);
   record.icCount = Array.isArray(ic) ? (ic[0] ?? null) : null;
   const icOk = record.icCount !== null;
+
   if (icOk) delete pending["icCount"];
   steps.push({ step: "ic-count", ok: icOk, detail: `aa 40 reports ${record.icCount}` });
 
   record.maskedWriteVerified = await user.confirmMaskedWrite("masked-stripe");
+
   if (record.maskedWriteVerified) {
     delete pending["maskedWrite"];
     record.dialect = {
@@ -147,40 +152,50 @@ export async function runBleQualification(probe: BleWizardProbe): Promise<{ reco
       supportsMaskedBrightness: true,
     };
   }
+
   steps.push({ step: "masked-write", ok: record.maskedWriteVerified, detail: record.maskedWriteVerified ? "user confirmed the masked stripe" : "user did not confirm the masked stripe" });
 
   const budget = benchmarkWriteBudget(peripheral.options, now());
   record.writeBudgetHz = budget.sustainedHz;
   record.burstCeilingHz = budget.ceilingHz;
   record.recoveryMs = budget.recoveryMs;
+
   if (budget.sustainedHz !== null) delete pending["writeBudgetHz"];
   steps.push({ step: "write-budget", ok: budget.sustainedHz !== null, detail: `sustained ${budget.sustainedHz} Hz, burst ceiling ${budget.ceilingHz} Hz, recovery ${budget.recoveryMs} ms` });
 
   if (!peripheral.connected) peripheral.handleConnect();
   let tick = now();
+
   const advance: () => number = () => {
     tick += 1000;
+
     return tick;
   };
+
   record.writeDrainMs = measureWriteDrain(peripheral, advance);
+
   if (record.writeDrainMs !== null) delete pending["writeDrainMs"];
   steps.push({ step: "write-drain", ok: record.writeDrainMs !== null, detail: `drain ${record.writeDrainMs} ms` });
 
   if (!peripheral.connected) peripheral.handleConnect();
   record.renderHoldMs = measureRenderHold(peripheral, advance);
+
   if (record.renderHoldMs !== null) delete pending["renderHoldMs"];
   steps.push({ step: "render-hold", ok: record.renderHoldMs !== null, detail: `render hold ${record.renderHoldMs} ms` });
 
   record.latencyMs = await user.readLatencyMs();
+
   if (record.latencyMs !== null) delete pending["latencyMs"];
   steps.push({ step: "latency", ok: record.latencyMs !== null, detail: record.latencyMs === null ? "camera procedure not run" : `camera latency ${record.latencyMs} ms` });
 
   const need = encryptedLinkNeed(peripheral.advertisement.manufacturer, peripheral.readVersionByte(), mode);
   record.encryptedHandshake = need.protocolV2 ? "v2" : need.encoded ? "seed" : "plain";
   record.sku = peripheral.options.sku ?? null;
+
   if (record.sku !== null) delete pending["sku"];
   record.unmeasured = Object.keys(pending).sort();
   peripheral.handleDisconnect();
+
   return { record, steps };
 }
 
@@ -198,27 +213,35 @@ function sweepRateStalls(budgetHz: number | null, rate: number, t0: number): boo
   const probe = new SimPeripheral({ address: "AA:BB:CC:00:BE:01", zones: 8, budgetHz });
   const spacing = 1000 / rate;
   let t = t0;
+
   for (let i = 0; i < rate; i++) {
     t += Math.max(1, Math.round(spacing));
     probe.handleWrite(blePower(true), t);
+
     if (probe.metrics.stalled > 0) return true;
   }
+
   return false;
 }
 
 function benchmarkWriteBudget(options: SimPeripheralOptions, t0: number): BleBudgetBenchmark {
   const budgetHz = options.budgetHz === undefined ? null : options.budgetHz;
+
   if (budgetHz === null) return { sustainedHz: null, ceilingHz: null, recoveryMs: null };
   let sustained: number | null = null;
   let ceiling: number | null = null;
+
   for (const rate of BUDGET_SWEEP_HZ) {
     if (sweepRateStalls(budgetHz, rate, t0)) {
       ceiling = rate;
       break;
     }
+
     sustained = rate;
   }
+
   if (sustained === null) return { sustainedHz: null, ceilingHz: ceiling, recoveryMs: ceiling === null ? null : 2000 };
+
   return { sustainedHz: sustained, ceilingHz: ceiling ?? sustained * 2, recoveryMs: 2000 };
 }
 
@@ -228,6 +251,7 @@ function measureWriteDrain(peripheral: SimPeripheral, now: () => number): number
   const expect = targetOn ? 1 : 0;
   peripheral.handleWrite(blePower(targetOn), now());
   const immediate = peripheral.readState(0x01);
+
   if (!(Array.isArray(immediate) && immediate[0] === expect)) return null;
   peripheral.handleDisconnect();
   peripheral.handleConnect();
@@ -236,16 +260,21 @@ function measureWriteDrain(peripheral: SimPeripheral, now: () => number): number
   peripheral.handleWrite(blePower(!targetOn), now());
   peripheral.handleDisconnect();
   peripheral.handleConnect();
+
   return kept ? 300 : null;
 }
 
 function measureRenderHold(peripheral: SimPeripheral, now: () => number): number | null {
   const hold = peripheral.options.renderHoldMs ?? null;
+
   if (hold === null || hold <= 0) return null;
   const t = now();
   peripheral.handleWrite(bleHostColorOne({ r: 255, g: 255, b: 255 }), t);
+
   if (!peripheral.hostColorHeld(t)) return null;
+
   if (peripheral.hostColorHeld(t + hold + 1)) return null;
+
   return hold;
 }
 

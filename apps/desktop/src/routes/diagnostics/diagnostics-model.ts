@@ -7,10 +7,12 @@ export const DIAGNOSTIC_TABS = [
   "DJ Events", "Transport", "Beat Clock", "Track Resolver", "Analysis",
   "Planner", "Renderer", "Fixtures", "Latency", "Logs",
 ] as const;
+
 export type DiagnosticTab = (typeof DIAGNOSTIC_TABS)[number];
 
 export function isFresh(updatedAtMs: number | null, nowMs: number, staleAfterMs = 2000): boolean {
   if (updatedAtMs === null) return false;
+
   return nowMs - updatedAtMs <= staleAfterMs;
 }
 
@@ -28,6 +30,7 @@ export function djEventRow(timestampMs: number, source: string, deck: number, ev
 
 export function settingsGroup(key: string): string {
   const head = key.split(".")[0];
+
   return head === undefined || head === "" ? key : head;
 }
 
@@ -40,7 +43,9 @@ export interface PendingChange {
 
 export function routeConfigChange(change: PendingChange, liveActive: boolean): "apply-now" | "apply-at-bar" | "queue-until-live-ends" {
   if (!liveActive) return "apply-now";
+
   if (change.liveSafe) return "apply-at-bar";
+
   return "queue-until-live-ends";
 }
 

@@ -66,14 +66,19 @@ describe("T-PLAN-06 contrast and drops (P-35, P-36)", () => {
       style: BUILT_IN_STYLES["club"]!,
       config: DEFAULT_CONFIG,
     });
+
     const mean = (from: number, to: number): number => {
       const inRange = plan.cues.filter((c) => c.startBeat >= from && c.startBeat < to);
+
       return inRange.reduce((n, c) => n + c.intensity, 0) / Math.max(1, inRange.length);
     };
+
     expect(mean(160, 225)).toBeLessThanOrEqual(DEFAULT_CONFIG.breakdownMaxMean + 0.15);
+
     const ramps = plan.cues
       .filter((c) => c.type === "build-ramp" && c.startBeat >= 225 && c.startBeat < 257)
       .sort((a, b) => a.startBeat - b.startBeat);
+
     expect(ramps.length).toBeGreaterThanOrEqual(3);
     expect(ramps[ramps.length - 1]!.intensity).toBeGreaterThan(ramps[0]!.intensity);
   });
@@ -85,10 +90,12 @@ describe("T-PLAN-06 contrast and drops (P-35, P-36)", () => {
       style: BUILT_IN_STYLES["club"]!,
       config: DEFAULT_CONFIG,
     });
+
     // Pre-drop darkness ends exactly at the impact.
     const dark = plan.cues.find(
       (c) => c.type === "blackout" && c.startBeat + c.durationBeats === 257,
     );
+
     expect(dark).toBeDefined();
     // White impact at the drop, then burst, then saturated body.
     const hit = plan.cues.find((c) => c.type === "white-hit" && c.startBeat === 257);
@@ -104,12 +111,14 @@ describe("T-PLAN-06 contrast and drops (P-35, P-36)", () => {
 
   it("fires nothing at the fake impact and holds through to the actual beat", () => {
     expect(fakeDropHold(300, 302)).toHaveLength(1);
+
     const { plan } = compileShow({
       track: model(),
       venue: DEFAULT_VENUE_CLASS,
       style: BUILT_IN_STYLES["club"]!,
       config: DEFAULT_CONFIG,
     });
+
     // No exclusive impact fires at the fake beat; the hold is darkness.
     const atFake = plan.cues.filter((c) => c.startBeat === 300);
     expect(atFake.some((c) => c.type === "white-hit" || c.type === "impact" || c.type === "drop-pattern")).toBe(false);

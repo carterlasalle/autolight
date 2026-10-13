@@ -9,6 +9,7 @@ import { launchAutolight } from "./_harness.js";
 // with a clean profile. Nothing here runs against `yarn dev`.
 test("m1 slice: clean launch to graceful shutdown in Simulator mode", async () => {
   const harness = await launchAutolight();
+
   try {
     // 1. Clean userData. Launch the built app (not `yarn dev`).
     await test.step("step 1: clean profile launches the built app", async () => {
@@ -24,6 +25,7 @@ test("m1 slice: clean launch to graceful shutdown in Simulator mode", async () =
         "db", "show-worker", "govee", "dj-adapter", "library",
         "analysis", "venue", "tracks", "plans", "arm", "ready",
       ]);
+
       for (let i = 1; i < stages.length; i++) {
         expect(stages[i]?.atMs).toBeGreaterThanOrEqual(stages[i - 1]?.atMs ?? 0);
       }
@@ -35,6 +37,7 @@ test("m1 slice: clean launch to graceful shutdown in Simulator mode", async () =
       const library = (await harness.invokeTestChannel("library")) as {
         tracks: { id: string; readiness: string }[];
       };
+
       expect(library.tracks.length).toBeGreaterThanOrEqual(1);
       expect(library.tracks.some((t) => t.readiness === "READY")).toBe(true);
     });
@@ -45,6 +48,7 @@ test("m1 slice: clean launch to graceful shutdown in Simulator mode", async () =
       const fixtures = (await harness.invokeTestChannel("fixtures")) as {
         id: string; sku: string; segmentCount: number; qualified: boolean;
       }[];
+
       const h6076 = fixtures.find((f) => f.sku === "H6076");
       expect(h6076).toBeDefined();
       expect(h6076?.segmentCount).toBeGreaterThan(1);
@@ -56,6 +60,7 @@ test("m1 slice: clean launch to graceful shutdown in Simulator mode", async () =
       const decks = (await harness.invokeTestChannel("decks")) as {
         deckId: number; loaded: boolean; playing: boolean;
       }[];
+
       const one = decks.find((d) => d.deckId === 1);
       expect(one?.loaded).toBe(true);
       expect(one?.playing).toBe(true);
@@ -67,6 +72,7 @@ test("m1 slice: clean launch to graceful shutdown in Simulator mode", async () =
       const plan = (await harness.invokeTestChannel("plan")) as {
         cues: unknown[]; installMs: number; budgetMs: number;
       };
+
       expect(plan.cues.length).toBeGreaterThan(0);
       expect(plan.installMs).toBeLessThanOrEqual(plan.budgetMs);
     });
@@ -77,13 +83,17 @@ test("m1 slice: clean launch to graceful shutdown in Simulator mode", async () =
     await test.step("step 7: razer frames with per-segment color, one arm, zero turn", async () => {
       const frames = await harness.readFrames();
       expect(frames.length).toBeGreaterThan(0);
+
       const varied = frames.some(
         (f) => new Set(f.cells.map(([r, g, b]) => `${r},${g},${b}`)).size > 1,
       );
+
       expect(varied).toBe(true);
+
       const commands = (await harness.invokeTestChannel("commands")) as {
         cmd: string; kelvin?: number;
       }[];
+
       expect(commands.filter((c) => c.cmd === "turn").length).toBe(0);
       expect(
         commands.filter((c) => c.cmd === "colorwc" && typeof c.kelvin === "number" && c.kelvin > 0).length,
@@ -102,7 +112,9 @@ test("m1 slice: clean launch to graceful shutdown in Simulator mode", async () =
       const snapshot = (await harness.invokeTestChannel("snapshot")) as {
         cells: Array<[number, number, number]>;
       };
+
       const frames = await harness.readFrames();
+
       const match = frames.find(
         (f) =>
           f.cells.length === snapshot.cells.length &&
@@ -113,6 +125,7 @@ test("m1 slice: clean launch to graceful shutdown in Simulator mode", async () =
               c[2] === snapshot.cells[i]?.[2],
           ),
       );
+
       expect(match).toBeDefined();
     });
 
@@ -138,6 +151,7 @@ test("m1 slice: clean launch to graceful shutdown in Simulator mode", async () =
       const after = await harness.readFrames();
       const during = after.filter((f) => f.sentAtMs > lastBefore);
       expect(during.length).toBeGreaterThan(0);
+
       for (let i = 1; i < during.length; i++) {
         expect((during[i]?.sentAtMs ?? 0) - (during[i - 1]?.sentAtMs ?? 0)).toBeLessThan(500);
       }
@@ -148,6 +162,7 @@ test("m1 slice: clean launch to graceful shutdown in Simulator mode", async () =
       const shutdown = (await harness.invokeTestChannel("shutdown")) as {
         endingLookSent: boolean; streamsDisarmed: boolean; dbFlushed: boolean;
       };
+
       expect(shutdown.endingLookSent).toBe(true);
       expect(shutdown.streamsDisarmed).toBe(true);
       expect(shutdown.dbFlushed).toBe(true);

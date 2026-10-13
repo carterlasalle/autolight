@@ -31,9 +31,11 @@ function everyMeasurement(profile: DeviceProfile): { where: string; measured: Me
     { where: "segment_chain", measured: profile.segmentChain },
     { where: "native_pixels_per_meter", measured: profile.nativePixelsPerMeter },
   ];
+
   for (const [key, measured] of Object.entries(profile.measurements)) {
     entries.push({ where: `measurements.${key}`, measured });
   }
+
   return entries;
 }
 
@@ -53,6 +55,7 @@ describe("govee device profiles", () => {
 
       const measurements = everyMeasurement(profile);
       expect(measurements.length).toBeGreaterThan(0);
+
       for (const { where, measured } of measurements) {
         expect(measured.receipt.trim().length, `${sku} ${where} needs a receipt`).toBeGreaterThan(0);
         // No unit has been qualified on hardware, so no profile may claim a
@@ -96,6 +99,7 @@ describe("govee device profiles", () => {
 
   it("refuses a profile whose number has no receipt", () => {
     const dir = mkdtempSync(join(tmpdir(), "autolight-profile-"));
+
     try {
       const text = readFileSync(new URL("H6076.yaml", DEFAULT_DEVICES_DIR), "utf8");
       writeFileSync(join(dir, "H6076.yaml"), text.replace(/receipt: [^\n]+/, 'receipt: ""'));
@@ -107,6 +111,7 @@ describe("govee device profiles", () => {
 
   it("refuses a profile whose file name does not match its SKU", () => {
     const dir = mkdtempSync(join(tmpdir(), "autolight-profile-"));
+
     try {
       writeFileSync(join(dir, "H0000.yaml"), readFileSync(new URL("H1A45.yaml", DEFAULT_DEVICES_DIR), "utf8"));
       expect(() => loadDeviceCatalog(dir)).toThrow(/does not match sku/);

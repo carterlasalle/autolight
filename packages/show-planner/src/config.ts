@@ -58,12 +58,13 @@ export function resolveConfig(
   partial?: Partial<PlannerConfigSnapshot>,
 ): PlannerConfigSnapshot {
   if (!partial) return DEFAULT_CONFIG;
+
   return {
     ...DEFAULT_CONFIG,
     ...partial,
-    sectionEnergy: { ...DEFAULT_CONFIG.sectionEnergy, ...(partial.sectionEnergy ?? {}) },
-    eventMinConfidence: { ...(partial.eventMinConfidence ?? {}) },
-    evaluationBounds: { ...DEFAULT_CONFIG.evaluationBounds, ...(partial.evaluationBounds ?? {}) },
+    sectionEnergy: { ...DEFAULT_CONFIG.sectionEnergy, ...partial.sectionEnergy },
+    eventMinConfidence: { ...partial.eventMinConfidence },
+    evaluationBounds: { ...DEFAULT_CONFIG.evaluationBounds, ...partial.evaluationBounds },
   };
 }
 

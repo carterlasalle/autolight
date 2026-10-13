@@ -26,10 +26,13 @@ export function VenueView(): JSX.Element {
   const [tab, setTab] = useState<"lights" | "room">("lights");
   const [room, setRoom] = useState<Room>(() => rectangleRoom(5, 5));
   const [roomSaved, setRoomSaved] = useState(false);
+
   const recordRoomSaved = (saved: boolean): void => {
     setRoomSaved(saved);
+
     if (saved) useShell.getState().set({ roomSaved: true });
   };
+
   const [modes, setModes] = useState<Record<string, TransportMode>>({});
   const [scanning, setScanning] = useState(false);
   const [scanTargets, setScanTargets] = useState("");
@@ -39,21 +42,27 @@ export function VenueView(): JSX.Element {
     void invoke("config/get", { version: 1, key: "govee.lan.discovery.scanList" }).then((raw: unknown) => {
       if (cancelled) return;
       const envelope = raw as { ok?: boolean; value?: unknown } | null;
+
       const saved = envelope && envelope.ok !== false && Array.isArray(envelope.value)
         ? (envelope.value as unknown[]).map((v) => String(v))
         : [];
+
       const seeded = saved.length > 0 ? saved : [...KNOWN_SCAN_TARGETS];
       setScanTargets(seeded.join(", "));
+
       if (saved.length === 0 && seeded.length > 0) {
         void invoke("config/set", { version: 1, scope: "app", key: "govee.lan.discovery.scanList", value: seeded });
       }
     });
+
     return () => { cancelled = true; };
   }, []);
+
   const saveScanTargets = (): void => {
     const list = scanTargets.split(",").map((t) => t.trim()).filter((t) => t.length > 0);
     void invoke("config/set", { version: 1, scope: "app", key: "govee.lan.discovery.scanList", value: list }).then(() => setScanSaved(true));
   };
+
   const scan = (): void => {
     setScanning(true);
     void invoke("venue/scan", { version: 1 }).then((result: unknown) => {
@@ -77,8 +86,10 @@ export function VenueView(): JSX.Element {
       setScanning(false);
     });
   };
+
   const identified = useShell((st) => st.identifiedIds);
   const chased = useShell((st) => st.chasePassedIds);
+
   return (
     <div className="flex max-w-5xl flex-col gap-4">
       <div role="tablist" aria-label="Venue sections" className="flex gap-2">
@@ -125,6 +136,7 @@ export function VenueView(): JSX.Element {
             const isIdentified = identified.includes(t.id);
             const isChased = chased.includes(t.id);
             const healthTone = t.health === "online" ? "bg-emerald-500" : t.health === "degraded" ? "bg-amber-500" : "bg-red-500";
+
             return (
               <article key={t.id} aria-label={`${t.sku} ${t.ip ?? t.id}`} className="min-w-0 rounded-xl border border-border bg-card px-4 py-3">
                 <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -143,6 +155,7 @@ export function VenueView(): JSX.Element {
                     onClick={() => {
                       void invoke("venue/identify", { version: 1, id: t.id }).then((result: unknown) => {
                         const ok = (result as { ok?: boolean } | null)?.ok !== false;
+
                         if (ok && !useShell.getState().identifiedIds.includes(t.id)) {
                           useShell.getState().set({ identifiedIds: [...useShell.getState().identifiedIds, t.id] });
                         }
@@ -157,6 +170,7 @@ export function VenueView(): JSX.Element {
                     onClick={() => {
                       void invoke("venue/test-chase", { version: 1, id: t.id }).then((result: unknown) => {
                         const ok = (result as { ok?: boolean } | null)?.ok !== false;
+
                         if (ok && !useShell.getState().chasePassedIds.includes(t.id)) {
                           useShell.getState().set({ chasePassedIds: [...useShell.getState().chasePassedIds, t.id] });
                         }

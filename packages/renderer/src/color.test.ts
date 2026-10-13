@@ -16,8 +16,10 @@ describe("colour pipeline (T-REND-03)", () => {
   it("renders (255, 0, 90) at 0.30 in linear light (P-49)", () => {
     const srgb = (v: number): number => {
       const s = v / 255;
+
       return s <= 0.04045 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
     };
+
     const linear = [srgb(255), srgb(0), srgb(90)] as [number, number, number];
     const scaled: [number, number, number] = [linear[0] * 0.3, linear[1] * 0.3, linear[2] * 0.3];
     const bytes = fixtureBytes(scaled);

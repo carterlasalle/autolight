@@ -21,6 +21,7 @@ function fixture() {
   const dbPath = join(root, "master.db");
   const sharePath = join(root, "share");
   const summary = writeFixtureDb({ dbPath, sharePath, audioDir: join(root, "audio") });
+
   return { root, dbPath, sharePath, summary };
 }
 
@@ -36,6 +37,7 @@ describe("T-SEC-04 read-only by construction", () => {
   it("rejects writes through the openReadOnly handle", async () => {
     const { dbPath } = fixture();
     const db = await openReadOnly(dbPath);
+
     try {
       const probe = attemptWrite(db);
       expect(probe.rejected).toBe(true);
@@ -52,6 +54,7 @@ describe("T-SEC-04 read-only by construction", () => {
   it("rejects writes through the RekordboxReader handle", async () => {
     const { dbPath, sharePath } = fixture();
     const reader = await RekordboxReader.open({ dbPath, sharePath });
+
     try {
       const probe = reader.probeWrite();
       expect(probe.rejected).toBe(true);
@@ -65,6 +68,7 @@ describe("T-SEC-04 read-only by construction", () => {
   it("rejects writes through the SidecarReader transport", async () => {
     const { dbPath } = fixture();
     const payload = readFixturePayload(dbPath);
+
     const reader = await SidecarReader.open({
       dbPath,
       encrypted: false,
@@ -75,6 +79,7 @@ describe("T-SEC-04 read-only by construction", () => {
           stderr: "",
         }),
     });
+
     const probe = await reader.probeWrite();
     expect(probe.rejected).toBe(true);
     expect(probe.error).toMatch(/readonly|read-only/i);
@@ -83,6 +88,7 @@ describe("T-SEC-04 read-only by construction", () => {
 
   it("rejects writes through the sidecar protocol against the real fixture", async () => {
     const { dbPath } = fixture();
+
     const result = await readLibraryViaSidecar(
       { dbPath, encrypted: false, probeWrite: true },
       {
@@ -94,6 +100,7 @@ describe("T-SEC-04 read-only by construction", () => {
           }),
       },
     );
+
     expect(result.ok).toBe(true);
     expect(result.writeProbe?.rejected).toBe(true);
   });
@@ -101,11 +108,14 @@ describe("T-SEC-04 read-only by construction", () => {
   it("exposes no write method on the library service", async () => {
     const { dbPath, sharePath } = fixture();
     const service = await LibraryService.open({ dbPath, sharePath, mode: "rekordbox-connect" });
+
     try {
       const names = Object.getOwnPropertyNames(Object.getPrototypeOf(service));
+
       for (const name of names) {
         expect(name).not.toMatch(/^(insert|update|delete|upsert|write|save|remove|create|drop|exec|run|checkpoint)$/i);
       }
+
       expect("insert" in service).toBe(false);
       expect("update" in service).toBe(false);
       expect("delete" in service).toBe(false);
@@ -120,6 +130,7 @@ describe("T-SEC-04 read-only by construction", () => {
     const { dbPath, sharePath } = fixture();
     const before = sha256(dbPath);
     const reader = await RekordboxReader.open({ dbPath, sharePath });
+
     try {
       expect(reader.counts().tracks).toBe(4);
       expect(reader.trackRows({ limit: 10 })).toHaveLength(4);
@@ -129,12 +140,15 @@ describe("T-SEC-04 read-only by construction", () => {
     } finally {
       reader.close();
     }
+
     const db = await openReadOnly(dbPath);
+
     try {
       expect(attemptWrite(db, WRITE_PROBE_SQL).rejected).toBe(true);
     } finally {
       db.close();
     }
+
     expect(sha256(dbPath)).toBe(before);
   });
 });

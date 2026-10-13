@@ -14,6 +14,7 @@ import { LAYER_ORDER, layerForCue, type RenderLayer } from "@autolight/renderer"
 import { DEFAULT_BLEND_SPACE, type BlendSpace } from "./blend.js";
 
 export type { CrossfaderConfig, CrossfaderSide, DeckState };
+
 export { DEFAULT_BLEND_SPACE };
 
 // Show mixer (T-MIX-01 to T-MIX-06).
@@ -25,7 +26,9 @@ export { DEFAULT_BLEND_SPACE };
 // Layer tags (spec 33, T-PLAN-13): one definition, owned by the renderer.
 
 export type LayerTag = RenderLayer;
+
 export const LAYERS = LAYER_ORDER;
+
 export { layerForCue as cueLayer };
 
 const EXCLUSIVE: Record<string, true> = { blackout: true, "white-hit": true, strobe: true, impact: true };
@@ -48,9 +51,13 @@ export interface WeightContext {
 
 export function deckWeightOf(state: DeckState, ctx: WeightContext = {}): number {
   const opts: WeightOptions = {};
+
   if (ctx.position !== undefined) opts.position = ctx.position;
+
   if (ctx.masterBonus !== undefined) opts.masterBonus = ctx.masterBonus;
+
   if (ctx.crossfader !== undefined) opts.crossfader = ctx.crossfader;
+
   return audibleWeight(state, opts);
 }
 
@@ -63,6 +70,7 @@ export function baseWeights(a: DeckState, b: DeckState, ctx: WeightContext = {})
 export function crossfaderGainOf(position: number, deckId: number, cfg: Partial<CrossfaderConfig> = {}): number {
   const curve = cfg.curve ?? DEFAULT_CROSSFADER.curve;
   const assignment = cfg.assignment ?? DEFAULT_ASSIGNMENT;
+
   return crossfaderGain(position, sideOf(deckId, assignment), curve);
 }
 
@@ -119,15 +127,18 @@ export interface OwnerOptions {
 export function ownerScore(input: OwnerInput, opts: OwnerOptions = {}): number {
   const factors = opts.factors ?? DEFAULT_OWNER_FACTORS;
   const weight = deckWeightOf(input.state, opts.weightContext ?? {});
+
   if (weight <= 0) return 0;
   const master = input.state.master === true ? 1 : 0;
   const confidence = input.confidence ?? 1;
   const strength = input.strength;
+
   const significance =
     input.significance ?? Math.max(
       0,
       ...(input.cues ?? []).filter((c) => isExclusive(c.type)).map((c) => SIGNIFICANCE_BY_TYPE[c.type] ?? 0.5),
     );
+
   return (
     factors.weight * weight +
     factors.master * master +
@@ -143,10 +154,14 @@ export function ownerScore(input: OwnerInput, opts: OwnerOptions = {}): number {
 export function impactOwner(a: OwnerInput, b: OwnerInput, opts: OwnerOptions = {}): "a" | "b" | null {
   const scoreA = ownerScore(a, opts);
   const scoreB = ownerScore(b, opts);
+
   if (scoreA <= 0 && scoreB <= 0) return null;
   const hysteresis = opts.hysteresis ?? DEFAULT_OWNER_HYSTERESIS;
+
   if (opts.current === "a" && scoreA > 0 && scoreB <= scoreA * (1 + hysteresis)) return "a";
+
   if (opts.current === "b" && scoreB > 0 && scoreA <= scoreB * (1 + hysteresis)) return "b";
+
   return scoreA >= scoreB ? "a" : "b";
 }
 
@@ -154,13 +169,17 @@ export function impactOwner(a: OwnerInput, b: OwnerInput, opts: OwnerOptions = {
 // T-MIX-04 Transition-aware blackout translation (spec 66, DS-18)
 
 export type BlackoutPolicy = "full" | "deck-spatial-dip" | "deck-side-blackout" | "global-partial-dip" | "auto";
+
 export type StructuralState = "pre-drop" | "section-end" | null;
 
 /** mixer.blackout.otherDeckThreshold default. */
 export const DEFAULT_BLACKOUT_THRESHOLD = 0.3;
+
 /** auto: side blackout for the loudest other deck, a global dip above mid. */
 const AUTO_SIDE_BLACKOUT_AT = 0.8;
+
 const AUTO_GLOBAL_DIP_AT = 0.5;
+
 /** A partial dip keeps a quarter of the light. */
 const DIP_INTENSITY = 0.25;
 
@@ -192,23 +211,30 @@ export function deckSideTarget(side: "a" | "b"): string {
 // and a look ending on the blackout beat means it is at a section end.
 export function structuralState(cues: ShowCue[], beat: number): StructuralState {
   if (cues.some((c) => c.type === "build-ramp")) return "pre-drop";
+
   if (cues.some((c) => Math.abs(c.startBeat + c.durationBeats - beat) < 1)) return "section-end";
+
   return null;
 }
 
 export function blackoutDecision(cue: ShowCue, ctx: BlackoutContext): BlackoutDecision {
   const threshold = ctx.threshold ?? DEFAULT_BLACKOUT_THRESHOLD;
+
   if (cue.type !== "blackout") {
     return { cue, policy: "full", translated: false, reason: `not a blackout (${cue.type})` };
   }
+
   if (ctx.otherWeight < threshold) {
     return { cue, policy: "full", translated: false, reason: "other deck below mixer.blackout.otherDeckThreshold" };
   }
+
   const policy = ctx.policy === "auto" ? autoPolicy(ctx) : ctx.policy;
   const side = deckSideTarget(ctx.side);
+
   if (policy === "full") {
     return { cue, policy, translated: false, reason: "both tracks structurally support a full blackout" };
   }
+
   if (policy === "deck-side-blackout") {
     return {
       cue: { ...cue, target: side },
@@ -217,6 +243,7 @@ export function blackoutDecision(cue: ShowCue, ctx: BlackoutContext): BlackoutDe
       reason: `other deck at ${ctx.otherWeight.toFixed(2)}: blackout narrowed to the deck's side (${side})`,
     };
   }
+
   if (policy === "global-partial-dip") {
     return {
       cue: { ...cue, type: "dip", target: "ALL", intensity: DIP_INTENSITY },
@@ -225,6 +252,7 @@ export function blackoutDecision(cue: ShowCue, ctx: BlackoutContext): BlackoutDe
       reason: `other deck at ${ctx.otherWeight.toFixed(2)}: blackout translated to a global partial dip`,
     };
   }
+
   return {
     cue: { ...cue, type: "dip", target: side, intensity: DIP_INTENSITY },
     policy,
@@ -235,9 +263,13 @@ export function blackoutDecision(cue: ShowCue, ctx: BlackoutContext): BlackoutDe
 
 function autoPolicy(ctx: BlackoutContext): BlackoutPolicy {
   const structural = ctx.structural;
+
   if (structural !== undefined && structural.self !== null && structural.self === structural.other) return "full";
+
   if (ctx.otherWeight >= AUTO_SIDE_BLACKOUT_AT) return "deck-side-blackout";
+
   if (ctx.otherWeight >= AUTO_GLOBAL_DIP_AT) return "global-partial-dip";
+
   return "deck-spatial-dip";
 }
 
@@ -264,8 +296,11 @@ export type IntroStage = "silent" | "palette" | "rhythm" | "impacts";
 
 export function introductionStage(weight: number, thresholds: IntroThresholds = INTRO_DEFAULTS): IntroStage {
   if (weight < thresholds.paletteAt) return "silent";
+
   if (weight < thresholds.rhythmAt) return "palette";
+
   if (weight < thresholds.impactsAt) return "rhythm";
+
   return "impacts";
 }
 
@@ -328,12 +363,17 @@ export interface MixResult {
 // and each deck contributes only the layers its weight has introduced.
 export function mixDown(a: DeckMix, b: DeckMix, opts: MixOptions = {}): MixResult {
   const weights = baseWeights(a.state, b.state, opts);
+
   const ownerInput = (deck: DeckMix): OwnerInput => {
     const input: OwnerInput = { state: deck.state, strength: deck.impactStrength, cues: deck.cues };
+
     if (deck.confidence !== undefined) input.confidence = deck.confidence;
+
     if (deck.significance !== undefined) input.significance = deck.significance;
+
     return input;
   };
+
   const owner = impactOwner(ownerInput(a), ownerInput(b), opts);
   const intro = opts.intro ?? INTRO_DEFAULTS;
   const dropped: DroppedCue[] = [];
@@ -342,17 +382,22 @@ export function mixDown(a: DeckMix, b: DeckMix, opts: MixOptions = {}): MixResul
 
   const contribute = (deck: DeckMix, side: "a" | "b", weight: number, other: DeckMix, otherWeight: number): void => {
     const stage = introductionStage(weight, intro);
+
     for (const cue of deck.cues) {
       const layer = layerForCue(cue);
+
       if (!admits(stage, layer)) {
         dropped.push({ side, cue, reason: `introduction stage ${stage} does not admit the ${layer} layer` });
         continue;
       }
+
       if (weight <= 0) {
         dropped.push({ side, cue, reason: "deck is not audible" });
         continue;
       }
+
       const exclusive = isExclusive(cue.type);
+
       // Transition-aware blackout translation (DS-18) applies to whichever
       // deck fired the blackout while the other deck is audible; the winner of
       // the exclusive resource keeps it, the loser's is translated or dropped.
@@ -366,20 +411,25 @@ export function mixDown(a: DeckMix, b: DeckMix, opts: MixOptions = {}): MixResul
             other: structuralState(other.cues, cue.startBeat),
           },
         };
+
         if (opts.blackoutThreshold !== undefined) context.threshold = opts.blackoutThreshold;
         const decision = blackoutDecision(cue, context);
+
         if (!decision.translated && owner !== side) {
           dropped.push({ side, cue, reason: `exclusive ownership: ${decision.reason}` });
           continue;
         }
+
         kept.push(decision.cue);
         addLayer(layers, layer, side, decision.cue);
         continue;
       }
+
       if (exclusive && owner !== side) {
         dropped.push({ side, cue, reason: `exclusive ownership: ${owner ?? "nobody"} owns ${cue.type}` });
         continue;
       }
+
       const scaled: ShowCue = { ...cue, intensity: Math.min(1, Math.max(0, cue.intensity * weight)) };
       kept.push(scaled);
       addLayer(layers, layer, side, scaled);
@@ -389,6 +439,7 @@ export function mixDown(a: DeckMix, b: DeckMix, opts: MixOptions = {}): MixResul
   contribute(a, "a", weights.a, b, weights.b);
   contribute(b, "b", weights.b, a, weights.a);
   layers.sort((x, y) => LAYERS.indexOf(x.tag) - LAYERS.indexOf(y.tag) || (x.side === y.side ? 0 : x.side === "a" ? -1 : 1));
+
   return {
     owner,
     cues: kept,
@@ -401,6 +452,7 @@ export function mixDown(a: DeckMix, b: DeckMix, opts: MixOptions = {}): MixResul
 
 function addLayer(layers: MixedLayer[], tag: LayerTag, side: "a" | "b", cue: ShowCue): void {
   const existing = layers.find((l) => l.tag === tag && l.side === side);
+
   if (existing === undefined) layers.push({ tag, side, cues: [cue] });
   else existing.cues.push(cue);
 }
@@ -425,6 +477,8 @@ export function loadFastPath(
   plannerVersion: string,
 ): LoadedDeck {
   const trackJson = store.loadArtifact(trackId, analyzerVersion, fingerprint);
+
   if (!trackJson) return { trackJson: null, planJson: null };
+
   return { trackJson, planJson: store.loadShowPlan(trackId, styleId, plannerVersion) };
 }

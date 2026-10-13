@@ -9,8 +9,10 @@ import { tokens } from "../app/tokens.js";
 // Baked at bundle time by vite.config.ts `define` (short HEAD + dirty flag +
 // timestamp). Lets the running UI prove which commit it is.
 declare const __AUTOLIGHT_BUILD__: { sha: string; dirty: boolean; builtAt: string } | undefined;
+
 const BUILD_INFO: { sha: string; dirty: boolean; builtAt: string } =
   typeof __AUTOLIGHT_BUILD__ !== "undefined" ? __AUTOLIGHT_BUILD__ : { sha: "dev", dirty: true, builtAt: "unknown" };
+
 // Titlebar: hiddenInset traffic lights on macOS, overlay on Win/Linux
 // (electron/main.ts). Drag region + no-drag controls per Electron docs.
 export function Titlebar(): JSX.Element {
@@ -18,6 +20,7 @@ export function Titlebar(): JSX.Element {
   const live = useShell((s) => s.live);
   const simulatorMode = useShell((s) => s.simulatorMode);
   const set = useShell((s) => s.set);
+
   return (
     <header className="app-drag-region sticky top-0 z-10 flex h-11 min-w-0 items-center gap-2 overflow-x-clip border-b bg-background/90 px-4 backdrop-blur-xl">
       <span className="hidden w-16 shrink-0 min-[900px]:block" aria-hidden />
@@ -61,6 +64,7 @@ export function Statusbar(): JSX.Element {
   const bpm = useShell((s) => s.bpm);
   const live = useShell((s) => s.live);
   const devices = useShell((s) => s.devices);
+
   return (
     <footer className="flex h-8 min-w-0 items-center gap-3 overflow-x-clip border-t px-4 text-xs text-muted-foreground">
       <StatusDot tone={live ? "ok" : "neutral"} label={live ? live.source : "No DJ link"} />
@@ -84,6 +88,7 @@ export function Sidebar({ route, onRoute }: {
     { label: "Lighting", items: [{ id: "venue", label: "Venue" }, { id: "setup", label: "Setup" }] },
     { label: "System", items: [{ id: "diagnostics", label: "Diagnostics" }, { id: "settings", label: "Settings" }] },
   ];
+
   return (
     <nav aria-label="Routes" className="flex w-44 shrink-0 flex-col gap-4 border-r p-3">
       {groups.map((g) => (

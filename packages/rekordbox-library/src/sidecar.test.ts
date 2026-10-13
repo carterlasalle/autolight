@@ -17,11 +17,13 @@ import { readLibraryViaSidecar, SidecarReader } from "./sidecar.js";
 import { readFixturePayload, writeFixtureDb, type FixtureSummary } from "./test-fixtures.js";
 
 const created: string[] = [];
+
 const OWNER = process.env["AUTOLIGHT_OWNER_LIBRARY"] === "1";
 
 function uvAvailable(): boolean {
   try {
     execFileSync("uv", ["--version"], { stdio: "ignore", timeout: 30_000 });
+
     return true;
   } catch {
     return false;
@@ -43,6 +45,7 @@ function fixture(): Fixture {
   const dbPath = join(root, "master.db");
   const sharePath = join(root, "share");
   const summary = writeFixtureDb({ dbPath, sharePath, audioDir: join(root, "audio") });
+
   return { root, dbPath, sharePath, summary };
 }
 
@@ -61,12 +64,15 @@ print("exported")
 /** Encrypt a plain fixture with the key the blob derivation produces. */
 function encryptFixture(root: string, dbPath: string): string {
   const encrypted = join(root, "master-encrypted.db");
+
   const stdout = execFileSync(
     "uv",
     ["run", "--project", fileURLToPath(new URL("../../../analysis", import.meta.url)), "python", "-c", EXPORT_SCRIPT, dbPath, encrypted, deobfuscateKey()],
     { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 180_000 },
   );
+
   expect(stdout).toContain("exported");
+
   return encrypted;
 }
 
@@ -79,34 +85,40 @@ describe("sidecar client", () => {
     const failing = await readLibraryViaSidecar({ dbPath: "/nonexistent.db" }, {
       run: () => Promise.resolve({ code: 2, stdout: "", stderr: "Traceback\nModuleNotFoundError: no sqlcipher3\n" }),
     });
+
     expect(failing.ok).toBe(false);
     expect(failing.error).toContain("ModuleNotFoundError");
 
     const selfReported = await readLibraryViaSidecar({ dbPath: "/nonexistent.db" }, {
       run: () => Promise.resolve({ code: 1, stdout: '{"ok": false, "error": "no interpreter"}\n', stderr: "" }),
     });
+
     expect(selfReported.error).toContain("no interpreter");
 
     const junk = await readLibraryViaSidecar({ dbPath: "/nonexistent.db" }, {
       run: () => Promise.resolve({ code: 0, stdout: "not json\n", stderr: "" }),
     });
+
     expect(junk.ok).toBe(false);
     expect(junk.error).toContain("unexpected payload");
 
     const missingInterpreter = await readLibraryViaSidecar({ dbPath: "/nonexistent.db" }, {
       run: () => Promise.reject(new Error("spawn uv ENOENT")),
     });
+
     expect(missingInterpreter.error).toContain("ENOENT");
   });
 
   it("builds a reader from an injected dump without an interpreter", async () => {
     const { dbPath, sharePath } = fixture();
     const payload = readFixturePayload(dbPath);
+
     const reader = await SidecarReader.open({
       dbPath,
       encrypted: false,
       run: () => Promise.resolve({ code: 0, stdout: JSON.stringify(payload), stderr: "" }),
     });
+
     expect(reader.driver).toBe("pyrekordbox-sidecar");
     expect(reader.counts()).toEqual(payload.counts);
     expect(reader.dbVersion()).toBe("6000");
@@ -121,6 +133,7 @@ describe.skipIf(!UV)("sidecar against the real interpreter", () => {
     const { root, dbPath, sharePath, summary } = fixture();
     const sidecar = await SidecarReader.open({ dbPath, encrypted: false, probeWrite: true });
     const reader = await RekordboxReader.open({ dbPath, sharePath });
+
     try {
       expect(sidecar.counts()).toEqual(summary.counts);
       expect(reader.counts()).toEqual(sidecar.counts());
@@ -149,8 +162,10 @@ describe.skipIf(!UV)("sidecar against the real interpreter", () => {
     expect((await sidecar.probeWrite()).rejected).toBe(true);
 
     const opened = RekordboxReader.open({ dbPath: encrypted, sharePath, key: deobfuscateKey() });
+
     try {
       const reader = await opened;
+
       try {
         expect(reader.counts()).toEqual(sidecar.counts());
         expect(reader.probeWrite().rejected).toBe(true);
@@ -163,6 +178,7 @@ describe.skipIf(!UV)("sidecar against the real interpreter", () => {
       expect(error).toBeInstanceOf(LibraryDbError);
       expect((error as LibraryDbError).code).toBe("cipher-module-missing");
     }
+
     // The share-relative paths in the encrypted copy still resolve.
     const first = sidecar.trackRow("101");
     expect(mapTrackRow(first ?? {}, { sharePath }).anlz.statuses).toEqual(["audio-ok", "anlz-ok"]);

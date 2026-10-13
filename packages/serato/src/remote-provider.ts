@@ -262,17 +262,17 @@ export class SeratoRemoteProvider extends ProviderBase {
 
     switch (address) {
       case "/Status/Deck/Song/Title":
-        acc.track = { ...(acc.track ?? {}), title: stringArg(args, 1) ?? undefined };
+        acc.track = { ...acc.track, title: stringArg(args, 1) ?? undefined };
         this.noteTrackFieldsChanged(deckId, atNs);
 
         return deckId;
       case "/Status/Deck/Song/Artist":
-        acc.track = { ...(acc.track ?? {}), artist: stringArg(args, 1) ?? undefined };
+        acc.track = { ...acc.track, artist: stringArg(args, 1) ?? undefined };
         this.noteTrackFieldsChanged(deckId, atNs);
 
         return deckId;
       case "/Status/Deck/Song/Filepath":
-        acc.track = { ...(acc.track ?? {}), filePath: stringArg(args, 1) ?? undefined };
+        acc.track = { ...acc.track, filePath: stringArg(args, 1) ?? undefined };
         this.noteTrackFieldsChanged(deckId, atNs);
 
         return deckId;
@@ -280,7 +280,7 @@ export class SeratoRemoteProvider extends ProviderBase {
         const valid = boolArg(args, 1);
         // An invalid song is an eject: the client drops the deck's track, so
         // the file path must not linger into the next generation.
-        acc.track = valid === false ? { valid: false } : { ...(acc.track ?? {}), valid };
+        acc.track = valid === false ? { valid: false } : { ...acc.track, valid };
         this.noteTrackFieldsChanged(deckId, atNs);
 
         return deckId;

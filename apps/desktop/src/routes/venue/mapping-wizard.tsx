@@ -22,6 +22,7 @@ export function MappingWizard({ onDone }: { onDone: (topology: RunTopology) => v
   const [direction, setDirection] = useState<"clockwise" | "counterclockwise" | "both">("clockwise");
   const [places, setPlaces] = useState(1);
   const check = mirrorCheck(places);
+
   return (
     <section aria-label="Strip mapping wizard" className="flex flex-col gap-2">
       <h2 className="text-sm font-semibold">Strip mapping wizard (step {step} of 10)</h2>

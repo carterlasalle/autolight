@@ -12,6 +12,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+
 const matrix = readFileSync(join(root, "docs", "finish", "02-conformance-matrix.md"), "utf8");
 
 // Probe ID -> owning file(s), relative to repo root. A probe passes when at
@@ -184,30 +185,41 @@ const PROBES = {
 };
 
 const ids = [...new Set([...matrix.matchAll(/`(P-[0-9.]+-[a-z0-9-]+)`/g)].map((m) => m[1]))];
+
 let missing = 0;
+
 let pass = 0;
+
 const missingIds = [];
+
 for (const id of ids.sort()) {
   const owners = PROBES[id];
+
   if (!owners) {
     console.log(`${id}: UNMAPPED (no owner in conformance-report.mjs)`);
     missing++;
     missingIds.push(id);
     continue;
   }
+
   const found = owners.filter((f) => existsSync(join(root, f)));
+
   if (found.length === 0) {
     console.log(`${id}: MISSING (none of ${owners.join(", ")} exists)`);
     missing++;
     missingIds.push(id);
     continue;
   }
+
   console.log(`${id}: PASS (${found[0]})`);
   pass++;
 }
+
 console.log(`probe report: ${pass}/${ids.length} mapped and present`);
+
 if (missing > 0) {
   console.error(`probe report: ${missing} MISSING or UNMAPPED: ${missingIds.join(", ")}`);
   process.exit(1);
 }
+
 console.log("probe report: matrix and tree agree");

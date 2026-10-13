@@ -23,12 +23,14 @@ function closeTo(actual: number, expected: number, tolerance = 0.001): boolean {
 function yieldToLoop(): Promise<void> {
   const { promise, resolve } = Promise.withResolvers<void>();
   setImmediate(resolve);
+
   return promise;
 }
 
 /** Await a condition the code under test will reach; fails on timeout. */
 async function awaitCondition(condition: () => boolean, what: string, timeoutMs = 3000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
+
   while (!condition()) {
     if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
     await yieldToLoop();
@@ -46,25 +48,31 @@ export interface StateWatcher {
  */
 function stateWatcher(provider: SeratoRemoteProvider): StateWatcher {
   const seen: ProviderDeckState[] = [];
+
   const waiters: {
     deckId: number;
     predicate: (state: ProviderDeckState) => boolean;
     resolve: (state: ProviderDeckState) => void;
   }[] = [];
+
   provider.onDeckState((state) => {
     seen.push(state);
+
     for (const waiter of [...waiters]) {
       if (state.deckId !== waiter.deckId || !waiter.predicate(state)) continue;
       waiters.splice(waiters.indexOf(waiter), 1);
       waiter.resolve(state);
     }
   });
+
   return {
     next: (deckId, predicate = () => true) => {
       const hit = seen.find((state) => state.deckId === deckId && predicate(state));
+
       if (hit) return Promise.resolve(hit);
       const { promise, resolve } = Promise.withResolvers<ProviderDeckState>();
       waiters.push({ deckId, predicate, resolve });
+
       return promise;
     },
   };
@@ -88,6 +96,7 @@ function prepareProvider(peerName: string): Prepared {
   const clock = { nowNs: 1_000_000_000_000n };
   const provider = new SeratoRemoteProvider({ peerName, port: 0, host: "127.0.0.1", now: () => clock.nowNs });
   running.push(() => provider.stop());
+
   return { provider, watcher: stateWatcher(provider), clock };
 }
 
@@ -95,17 +104,20 @@ function prepareProvider(peerName: string): Prepared {
 async function connectEmulator(provider: SeratoRemoteProvider, peerName: string): Promise<SeratoRemoteEmulator> {
   if (provider.getStatus().state === "starting") await provider.start();
   const advertisedPort = provider.setupSnapshot().advertisedPort;
+
   if (advertisedPort === null) throw new Error("provider advertised no port");
   const emulator = new SeratoRemoteEmulator({ port: advertisedPort, peerName: `${peerName} emulator` });
   await emulator.connect();
   running.push(() => emulator.close());
   await emulator.handshake();
+
   return emulator;
 }
 
 async function startProvider(peerName: string): Promise<Started> {
   const prepared = prepareProvider(peerName);
   const emulator = await connectEmulator(prepared.provider, peerName);
+
   return { ...prepared, emulator };
 }
 
@@ -138,6 +150,7 @@ function filePathFor(track: ContractTrack): string {
 describe("serato remote provider (T-SER-01)", () => {
   it("passes the shared provider contract suite against the emulator", async () => {
     const started: Prepared[] = [];
+
     const harness: ContractHarness = {
       name: "serato-remote",
       create: async (): Promise<ProviderContractSubject> => {
@@ -145,10 +158,13 @@ describe("serato remote provider (T-SER-01)", () => {
         started.push(prepared);
         const { provider, watcher, clock } = prepared;
         let emulator: SeratoRemoteEmulator | null = null;
+
         const peer = async (): Promise<SeratoRemoteEmulator> => {
           if (emulator === null) emulator = await connectEmulator(provider, "autolight-suite");
+
           return emulator;
         };
+
         return {
           provider,
           reportsTrackText: true,
@@ -158,6 +174,7 @@ describe("serato remote provider (T-SER-01)", () => {
           },
           loadTrack: async (deckId: number, track: ContractTrack) => {
             const socket = await peer();
+
             for (const message of loadTrackBurst(deckId, track, filePathFor(track))) socket.send(message);
             await watcher.next(deckId, (state) => state.track?.title === track.title);
           },
@@ -174,6 +191,7 @@ describe("serato remote provider (T-SER-01)", () => {
         };
       },
     };
+
     const failures = await runProviderContractSuite(await harness.create());
     expect(failures).toEqual([]);
     // The suite's malformed step must have been counted by the provider.
@@ -194,13 +212,17 @@ describe("serato remote provider (T-SER-01)", () => {
 
   it("reports all four decks independently with their own identities", async () => {
     const { provider, emulator, watcher } = await startProvider("autolight-four-decks");
+
     for (const deckId of [1, 2, 3, 4]) {
       const track: ContractTrack = { id: `deck-${deckId}`, title: `Track ${deckId}`, artist: "Emulator" };
+
       for (const message of loadTrackBurst(deckId, track, filePathFor(track))) emulator.send(message);
       await watcher.next(deckId, (state) => state.track?.title === `Track ${deckId}`);
     }
+
     const decks = provider.getDecks();
     expect(decks.map((deck) => deck.deckId)).toEqual([1, 2, 3, 4]);
+
     for (const deck of decks) {
       expect(deck.source).toBe("serato");
       expect(deck.track?.sourceIds.seratoPath).toBe(`/deck-${deck.deckId}.mp3`);
@@ -283,6 +305,7 @@ describe("serato remote provider (T-SER-01)", () => {
 
   it("plays every Remote-expressible action script without a rejected frame", async () => {
     const { provider, emulator, watcher } = await startProvider("autolight-actions");
+
     for (const action of ["load-deck-1", "play", "pause", "seek", "loop-1-beat", "loop-roll", "two-decks"] as const) {
       const before = provider.getStats().rejected;
       await emulator.playAction(action, 20);
@@ -290,6 +313,7 @@ describe("serato remote provider (T-SER-01)", () => {
       expect(provider.getStats().rejected).toBe(before);
       expect(seratoActionScript(action).length).toBeGreaterThan(0);
     }
+
     await emulator.playAction("eject-deck-1", 20);
     const ejected = await watcher.next(1, (state) => state.track === null);
     expect(ejected.track).toBeNull();

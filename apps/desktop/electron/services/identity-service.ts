@@ -36,21 +36,25 @@ export class IdentityService implements Service {
 
   start(): ServiceStatus {
     this.tracker.set("running", "resolver chain rb id, path, file hash, PCM fingerprint");
+
     return this.status();
   }
 
   stop(): ServiceStatus {
     this.tracker.set("stopped");
+
     return this.status();
   }
 
   status(): ServiceStatus {
     this.tracker.setCounter("cached", this.cache.size);
+
     return this.tracker.status();
   }
 
   resolve(parts: IdentityParts): IdentityResolution | IdentityFailure {
     const key = parts.rekordboxId ?? parts.seratoPath ?? parts.canonicalPath ?? parts.fileHash ?? parts.pcmFingerprint;
+
     if (key === undefined) {
       return {
         ok: false,
@@ -60,21 +64,29 @@ export class IdentityService implements Service {
         },
       };
     }
+
     const cached = this.cache.get(key);
+
     if (cached !== undefined) {
       this.tracker.count("hits");
+
       return { ok: true, identity: cached, cached: true };
     }
+
     let identity: TrackIdentity;
+
     try {
       identity = resolveIdentity(parts);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.tracker.count("failures");
+
       return { ok: false, error: { code: "E_IDENTITY_RESOLVE", message } };
     }
+
     this.cache.set(key, identity);
     this.tracker.count("misses");
+
     return { ok: true, identity, cached: false };
   }
 
@@ -87,5 +99,6 @@ let instance: IdentityService | null = null;
 
 export function getIdentityService(): IdentityService {
   instance ??= new IdentityService();
+
   return instance;
 }

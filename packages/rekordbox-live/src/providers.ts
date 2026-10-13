@@ -113,9 +113,13 @@ export function systemClock(): bigint {
 
 export function describeStatus(status: ProviderStatus): string {
   if (status.state === "live") return `live ${status.updateHz.toFixed(1)} Hz, ${Math.round(status.ageMs)} ms old`;
+
   if (status.state === "degraded") return `degraded: ${status.reason}`;
+
   if (status.state === "unavailable") return `unavailable: ${status.reason}`;
+
   if (status.state === "failed") return `failed: ${status.error}`;
+
   return "starting";
 }
 
@@ -168,31 +172,38 @@ export abstract class ProviderBase implements DJLiveProvider {
 
   onDeckState(listener: (state: ProviderDeckState) => void): () => void {
     this.listeners.add(listener);
+
     return () => this.listeners.delete(listener);
   }
 
   onConnection(listener: (status: ProviderStatus) => void): () => void {
     this.statusListeners.add(listener);
+
     return () => this.statusListeners.delete(listener);
   }
 
   protected setStatus(status: ProviderStatus): void {
     this.status = status;
+
     for (const l of this.statusListeners) l(status);
   }
 
   protected emit(state: ProviderDeckState): void {
     this.received += 1;
     this.queueDepth = Math.min(1, this.queueDepth + 1);
+
     if (state.receivedAtNs <= this.lastStateAtNs) {
       state = { ...state, receivedAtNs: this.lastStateAtNs + 1n };
     }
+
     this.lastStateAtNs = state.receivedAtNs;
+
     for (const l of this.listeners) l(state);
   }
 
   protected markRejected(reason: string): void {
     this.rejected += 1;
+
     if (this.status.state === "live" || this.status.state === "degraded") {
       this.setStatus({ state: "degraded", reason, updateHz: 0, ageMs: 0 });
     }
@@ -241,14 +252,18 @@ export class DeckGenerationMapper {
     const deckId = hint.deckId;
     const incoming = hint.track === undefined ? undefined : toTrack(hint.track);
     const previous = this.tracks.get(deckId) ?? null;
+
     if (incoming !== undefined && (incoming?.id ?? null) !== (previous?.id ?? null)) {
       this.generations.set(deckId, (this.generations.get(deckId) ?? 0) + 1);
     }
+
     if (incoming !== undefined) this.tracks.set(deckId, incoming);
     const track = incoming !== undefined ? incoming : previous;
     const generation = this.generations.get(deckId) ?? 0;
     const beat = hint.beat === undefined ? (this.beats.get(deckId) ?? null) : hint.beat;
+
     if (beat !== null) this.beats.set(deckId, beat);
+
     const state: ProviderDeckState = {
       source: "rekordbox",
       deckId,
@@ -280,12 +295,14 @@ export class DeckGenerationMapper {
       },
       quality: hint.quality ?? {},
     };
+
     return state;
   }
 }
 
 function toTrack(hint: TrackHint | null): ProviderDeckState["track"] {
   if (hint === null) return null;
+
   return {
     id: hint.id ?? "unknown",
     sourceIds: {},
@@ -324,6 +341,7 @@ export class ScriptedProvider extends ProviderBase {
     const merged: ProviderDeckState = { ...state, master: hint.master ?? existing?.master ?? null };
     this.decks.set(hint.deckId, merged);
     this.emit(merged);
+
     return merged;
   }
 
@@ -353,6 +371,7 @@ export class LeakyProvider extends ScriptedProvider {
       ...this.update(hint),
       track: { id: hint.track?.id ?? "new", sourceIds: {}, title: hint.staleTitle },
     };
+
     this.emit(leaked);
   }
 }

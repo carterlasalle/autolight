@@ -8,6 +8,7 @@ import { CONFIG_CHANGED, PersistentConfigStore, validateImportValues } from "./s
 describe("config registry", () => {
   it("holds all 240 catalog keys with receipts", () => {
     expect(KEYS.length).toBe(240);
+
     for (const k of KEYS) {
       expect(k.receipt.length, k.key).toBeGreaterThan(0);
     }
@@ -30,15 +31,19 @@ describe("config registry", () => {
   });
   it("rejects invalid imports naming every bad key", () => {
     const s = new ConfigStore();
+
     const bad = s.importJson(JSON.stringify({ version: 1, values: {
       "nope.key": 1,
       "runtime.clock.tickHz": "fast",
     } }));
+
     expect(bad.ok).toBe(false);
+
     if (!bad.ok) {
       expect(bad.badKeys.join("\n")).toContain("nope.key");
       expect(bad.badKeys.join("\n")).toContain("runtime.clock.tickHz");
     }
+
     expect(s.importJson("{oops")).toEqual({ ok: false, badKeys: ["<unparseable JSON>"] });
   });
   it("round-trips export and import", () => {
@@ -56,6 +61,7 @@ describe("secrets boundary (T-SEC-01)", () => {
     expect(() => s.set("app", "govee.cloud.apiKey", "PLAIN")).toThrow(/secrets-service/);
     const bad = s.importJson(JSON.stringify({ version: 1, values: { "govee.cloud.apiKey": "PLAIN" } }));
     expect(bad.ok).toBe(false);
+
     if (!bad.ok) expect(bad.badKeys.join("\n")).toContain("govee.cloud.apiKey");
     expect(validateImportValues({ "agent.apiToken": "PLAIN" }).join("\n")).toContain("agent.apiToken");
   });
@@ -64,6 +70,7 @@ describe("secrets boundary (T-SEC-01)", () => {
 describe("config persistence (T-CFG-02)", () => {
   it("device-scope value persists across re-instantiation and wins over app", () => {
     const dir = mkdtempSync(join(tmpdir(), "autolight-cfg-"));
+
     try {
       const file = join(dir, "config.json");
       const a = new PersistentConfigStore(file);
@@ -87,6 +94,7 @@ describe("config persistence (T-CFG-02)", () => {
       "runtime.clock.tickHz": 5,
       "runtime.snapshot.uiRateHz": "fast",
     });
+
     const joined = bad.join("\n");
     expect(bad.length).toBe(3);
     expect(joined).toContain("nope.key");
@@ -97,6 +105,7 @@ describe("config persistence (T-CFG-02)", () => {
     const store = new PersistentConfigStore();
     const res = store.importJson(JSON.stringify({ version: 1, values: { "nope.key": 1, "runtime.clock.tickHz": 5 } }));
     expect(res.ok).toBe(false);
+
     if (!res.ok) expect(res.badKeys.join("\n")).toContain("30 to 120");
     expect(store.get("runtime.clock.tickHz")).toBe(60);
   });

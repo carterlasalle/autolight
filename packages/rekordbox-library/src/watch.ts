@@ -19,7 +19,9 @@ import type { FSWatcher } from "node:fs";
 import type { StatFile } from "./anlz.js";
 
 export type WatchEngine = "auto" | "native-events" | "polling";
+
 export type WatchSource = "native" | "poll" | "manual";
+
 export type WatchedKind = "db" | "wal" | "anlz" | "audio";
 
 export interface WatchedFile {
@@ -46,7 +48,9 @@ export interface WatchChange {
 export type InvalidationScope = "row" | "identity" | "native-analysis" | "model" | "plan" | "audio-derived";
 
 export const DEFAULT_DEBOUNCE_MS = 2000;
+
 export const DEFAULT_POLL_MS = 60_000;
+
 /** Best-effort canonical path: falls back to the raw path when missing. */
 function canonicalPath(path: string): string {
   try {
@@ -64,6 +68,7 @@ const ANALYSIS_COLUMNS: Record<string, true> = {
   AnalysisUpdated: true,
   CueUpdated: true,
 };
+
 // Path columns change identity (a move or rename keeps the TrackId, the alias
 // graph follows the new path).
 const IDENTITY_COLUMNS: Record<string, true> = { FolderPath: true, OrgFolderPath: true, rb_LocalFolderPath: true };
@@ -99,6 +104,7 @@ export interface LibraryWatcherOptions {
 function defaultStat(path: string): { sizeBytes: number; mtimeMs: number } | undefined {
   try {
     const stats = fsStatSync(path);
+
     return { sizeBytes: stats.size, mtimeMs: stats.mtimeMs };
   } catch {
     return undefined;
@@ -134,6 +140,7 @@ export class LibraryWatcher {
 
   on(listener: (change: WatchChange) => void): () => void {
     this.listeners.push(listener);
+
     return () => {
       this.listeners = this.listeners.filter((entry) => entry !== listener);
     };
@@ -147,6 +154,7 @@ export class LibraryWatcher {
         this.queue(this.files.filter((file) => file.path === path), "native");
       });
     }
+
     if (this.engine !== "native-events") {
       this.interval = setInterval(() => {
         this.sweep();
@@ -156,6 +164,7 @@ export class LibraryWatcher {
 
   async stop(): Promise<void> {
     if (this.timer !== undefined) clearTimeout(this.timer);
+
     if (this.interval !== undefined) clearInterval(this.interval);
     this.timer = undefined;
     this.interval = undefined;
@@ -172,36 +181,47 @@ export class LibraryWatcher {
     const next = this.readSnapshots();
     const changed: WatchedFile[] = [];
     let missedNow = 0;
+
     for (let i = 0; i < next.length; i++) {
       const before = this.snapshots[i];
       const after = next[i]!;
+
       if (before === undefined) continue;
+
       if (before.sizeBytes !== after.sizeBytes || before.mtimeMs !== after.mtimeMs) {
-        changed.push({ path: after.path, kind: after.kind, ...(this.trackOf(after.path) ?? {}) });
+        changed.push({ path: after.path, kind: after.kind, ...this.trackOf(after.path) });
+
         if (!this.nativeReported.has(after.path)) missedNow++;
       }
     }
+
     this.snapshots = next;
     this.nativeReported.clear();
+
     if (changed.length === 0) return undefined;
+
     if (this.engine === "auto") this.missed += missedNow;
+
     return this.emit(changed, source);
   }
 
   /** Feed a change by hand (tests, and callers that already know a path moved). */
   report(files: WatchedFile[], source: WatchSource = "manual"): WatchChange {
     this.snapshots = this.readSnapshots();
+
     return this.emit(files, source);
   }
 
   private trackOf(path: string): { trackId?: string } {
     const found = this.files.find((file) => file.path === path && file.trackId !== undefined);
+
     return found?.trackId === undefined ? {} : { trackId: found.trackId };
   }
 
   private readSnapshots(): FileSnapshot[] {
     return this.files.map((file) => {
       const stats = this.statFile(file.path);
+
       return {
         path: file.path,
         kind: file.kind,
@@ -220,6 +240,7 @@ export class LibraryWatcher {
       const pending = this.pending;
       this.pending = [];
       this.timer = undefined;
+
       if (pending.length > 0) this.emit(pending, source);
     }, this.debounceMs);
   }
@@ -231,7 +252,9 @@ export class LibraryWatcher {
       files,
       invalidated: invalidationForFiles(files),
     };
+
     for (const listener of this.listeners) listener(change);
+
     return change;
   }
 }
@@ -239,13 +262,16 @@ export class LibraryWatcher {
 /** Which artifacts a set of changed files invalidates. */
 export function invalidationForFiles(files: readonly WatchedFile[]): InvalidationScope[] {
   const scopes: Partial<Record<InvalidationScope, true>> = {};
+
   for (const file of files) {
     scopes["row"] = true;
+
     if (file.kind === "anlz") {
       scopes["native-analysis"] = true;
       scopes["model"] = true;
       scopes["plan"] = true;
     }
+
     if (file.kind === "audio") {
       scopes["audio-derived"] = true;
       scopes["native-analysis"] = true;
@@ -253,6 +279,7 @@ export function invalidationForFiles(files: readonly WatchedFile[]): Invalidatio
       scopes["plan"] = true;
     }
   }
+
   return (Object.keys(scopes) as InvalidationScope[]).sort();
 }
 
@@ -262,41 +289,53 @@ export function diffLibraryRows(prev: readonly LibraryRowSnapshot[], next: reado
   const afterIds = new Set(next.map((row) => row.rekordboxId));
   const added: string[] = [];
   const changed: { rekordboxId: string; columns: string[] }[] = [];
+
   for (const row of next) {
     const old = before.get(row.rekordboxId);
+
     if (old === undefined) {
       added.push(row.rekordboxId);
       continue;
     }
+
     const columns = Object.keys(row.columns).filter((column) => old[column] !== row.columns[column]);
+
     if (columns.length > 0) changed.push({ rekordboxId: row.rekordboxId, columns });
   }
+
   const removed = [...before.keys()].filter((id) => !afterIds.has(id));
+
   return { added, removed, changed };
 }
 
 /** Which artifacts a row diff invalidates, per column class. */
 export function invalidationForDiff(diff: LibraryRowDiff): InvalidationScope[] {
   const scopes: Partial<Record<InvalidationScope, true>> = {};
+
   if (diff.added.length > 0 || diff.removed.length > 0) {
     scopes["row"] = true;
     scopes["identity"] = true;
   }
+
   for (const row of diff.changed) {
     scopes["row"] = true;
+
     if (row.columns.some((column) => ANALYSIS_COLUMNS[column] === true)) {
       scopes["native-analysis"] = true;
       scopes["model"] = true;
       scopes["plan"] = true;
     }
+
     if (row.columns.some((column) => IDENTITY_COLUMNS[column] === true)) scopes["identity"] = true;
   }
+
   return (Object.keys(scopes) as InvalidationScope[]).sort();
 }
 
 export const PARCEL_WATCHER_MODULE = "@parcel/watcher";
 
 type ParcelSubscription = { unsubscribe(): Promise<void> };
+
 interface ParcelWatcherModule {
   subscribe(
     dir: string,
@@ -310,13 +349,16 @@ interface ParcelWatcherModule {
 // events for the handful of files this watcher holds.
 export async function createNativeWatch(): Promise<NativeWatch> {
   const specifier = PARCEL_WATCHER_MODULE;
+
   try {
     const mod: unknown = await import(/* @vite-ignore */ specifier);
     const parcel = mod as Partial<ParcelWatcherModule>;
+
     if (typeof parcel.subscribe === "function") return new ParcelWatcher(parcel as ParcelWatcherModule);
   } catch {
     // fall through to fs.watch
   }
+
   return new FsWatcher();
 }
 
@@ -335,6 +377,7 @@ class ParcelWatcher implements NativeWatch {
     // downstream path filtering keeps working.
     const canonical = new Map(files.map((file) => [file.path, canonicalPath(file.path)] as const));
     const dirs = new Set(files.map((file) => file.path.slice(0, file.path.lastIndexOf("/"))));
+
     for (const dir of dirs) {
       const subscription = await this.parcel.subscribe(
         dir,
@@ -342,11 +385,13 @@ class ParcelWatcher implements NativeWatch {
           for (const event of events) {
             const resolved = canonicalPath(event.path);
             const match = files.find((file) => file.path === event.path || canonical.get(file.path) === resolved);
+
             if (match !== undefined) onEvent(match.path);
           }
         },
         { ignore: [] },
       );
+
       this.subscriptions.push(subscription);
     }
   }
@@ -354,6 +399,7 @@ class ParcelWatcher implements NativeWatch {
   async stop(): Promise<void> {
     const subscriptions = this.subscriptions;
     this.subscriptions = [];
+
     for (const subscription of subscriptions) await subscription.unsubscribe();
   }
 }
@@ -367,6 +413,7 @@ class FsWatcher implements NativeWatch {
         const watcher = fsWatch(file.path, () => {
           onEvent(file.path);
         });
+
         watcher.on("error", () => {
           watcher.close();
         });
@@ -376,12 +423,14 @@ class FsWatcher implements NativeWatch {
         // reported by the polling sweep instead.
       }
     }
+
     return Promise.resolve();
   }
 
   stop(): Promise<void> {
     for (const watcher of this.watchers) watcher.close();
     this.watchers = [];
+
     return Promise.resolve();
   }
 }

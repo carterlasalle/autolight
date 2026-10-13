@@ -62,6 +62,7 @@ function notePattern(state: RestraintState, family: string, config: PlannerConfi
     state.currentPatternFamily = family;
     state.patternRepeatCount = 1;
   }
+
   if (state.patternRepeatCount > config.patternRepeatMax) {
     return {
       decision: "substitute",
@@ -69,6 +70,7 @@ function notePattern(state: RestraintState, family: string, config: PlannerConfi
       reason: `pattern ${family} repeated ${state.patternRepeatCount}, varying with a pulse`,
     };
   }
+
   return null;
 }
 
@@ -84,6 +86,7 @@ export function restrain(
   const scale = 0.5 + style.impactAggression;
   const whiteMin = config.whiteHitMinBeats;
   const blackoutMin = config.blackoutMinBeats;
+
   if (type === "white-hit") {
     if (beat - state.lastWhiteHitBeat < whiteMin) {
       return {
@@ -95,6 +98,7 @@ export function restrain(
         },
       };
     }
+
     if (state.wholeTrackImpactCount >= config.trackImpactMax * scale) {
       return {
         state,
@@ -105,6 +109,7 @@ export function restrain(
         },
       };
     }
+
     if (state.sectionImpactCount >= config.sectionImpactMax) {
       return {
         state,
@@ -115,9 +120,11 @@ export function restrain(
         },
       };
     }
+
     state.lastWhiteHitBeat = beat;
     state.blinderBeats += durationBeats;
   }
+
   if (type === "blackout") {
     if (beat - state.lastBlackoutBeat < blackoutMin) {
       return {
@@ -129,29 +136,37 @@ export function restrain(
         },
       };
     }
+
     state.lastBlackoutBeat = beat;
   }
+
   if (type === "strobe-burst" || type === "strobe") {
     const duty = state.strobeWindowBeats > 0 ? state.strobeBeats / state.strobeWindowBeats : 0;
+
     if (duty + durationBeats / 64 > config.strobeMaxDuty * scale + 0.02) {
       return {
         state,
         verdict: { decision: "reject", reason: `strobe duty ${duty.toFixed(3)} at budget, rejecting` },
       };
     }
+
     if (style.strobeFrequency <= 0 && durationBeats > 0) {
       return {
         state,
         verdict: { decision: "reject", reason: "style disables strobes" },
       };
     }
+
     state.lastStrobeBeat = beat;
     state.strobeBeats += durationBeats;
   }
+
   if (opts.direction) {
     state.recentSpatialDirections.push(opts.direction);
+
     if (state.recentSpatialDirections.length > 8) state.recentSpatialDirections.shift();
     const same = state.recentSpatialDirections.filter((d) => d === opts.direction).length;
+
     if (same >= 5) {
       return {
         state,
@@ -163,16 +178,21 @@ export function restrain(
       };
     }
   }
+
   if (opts.family) {
     const varied = notePattern(state, opts.family, config);
+
     if (varied) return { state, verdict: varied };
   }
+
   if (opts.impact) {
     state.sectionImpactCount++;
     state.wholeTrackImpactCount++;
     state.recentImpactTypes.push(type);
+
     if (state.recentImpactTypes.length > 6) state.recentImpactTypes.shift();
     const repeats = state.recentImpactTypes.filter((t) => t === type).length;
+
     if (repeats >= 3 && type === "white-hit") {
       return {
         state,
@@ -184,6 +204,7 @@ export function restrain(
       };
     }
   }
+
   return { state, verdict: { decision: "accept" } };
 }
 
@@ -203,14 +224,18 @@ export function requestBlinder(
   if (!phraseBoundary) {
     return { decision: "reject", reason: "blinder request off a phrase boundary" };
   }
+
   if (beat - state.lastWhiteHitBeat < config.whiteHitMinBeats) {
     return { decision: "reject", reason: "blinder request inside the white-hit gap" };
   }
+
   if (state.wholeTrackImpactCount >= config.trackImpactMax) {
     return { decision: "reject", reason: "blinder request over the track impact budget" };
   }
+
   state.lastWhiteHitBeat = beat;
   state.wholeTrackImpactCount++;
   state.blinderBeats += durationBeats;
+
   return { decision: "accept" };
 }

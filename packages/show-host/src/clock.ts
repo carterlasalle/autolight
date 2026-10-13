@@ -18,6 +18,7 @@
 // setInterval nor setTimeout supplies a timestamp argument.
 
 export const TIMER_STRATEGIES = ["interval", "timeout-spin", "hybrid"] as const;
+
 export type TimerStrategy = (typeof TIMER_STRATEGIES)[number];
 
 export interface ClockTick {
@@ -53,9 +54,11 @@ export interface JitterSummary {
 export function summarizeJitter(samplesMs: readonly number[]): JitterSummary {
   const sorted = [...samplesMs].sort((a, b) => a - b);
   const count = sorted.length;
+
   if (count === 0) return { count: 0, p50Ms: 0, p99Ms: 0, maxMs: 0 };
   const p50Index = Math.min(count - 1, Math.max(0, Math.floor(0.5 * (count - 1))));
   const p99Index = Math.min(count - 1, Math.max(0, Math.floor(0.99 * (count - 1))));
+
   return {
     count,
     p50Ms: sorted[p50Index] ?? 0,
@@ -68,10 +71,13 @@ export function startClock(strategy: TimerStrategy, options: ClockOptions): Cloc
   if (!(TIMER_STRATEGIES as readonly string[]).includes(strategy)) {
     throw new Error(`unknown timer strategy: ${String(strategy)}`);
   }
+
   const tickHz = options.tickHz;
+
   if (!Number.isFinite(tickHz) || tickHz <= 0) {
     throw new Error(`tickHz must be a positive number, got ${String(tickHz)}`);
   }
+
   const now = options.nowNs ?? process.hrtime.bigint;
   const rawSpin = options.spinWindowMs ?? 1.5;
   const spinMs = Number.isNaN(rawSpin) ? 1.5 : Math.min(5, Math.max(0, rawSpin));
@@ -88,15 +94,18 @@ export function startClock(strategy: TimerStrategy, options: ClockOptions): Cloc
 
   const stop = (): void => {
     running = false;
+
     if (timer !== null) {
       clearInterval(timer);
       clearTimeout(timer);
       timer = null;
     }
+
     if (immediate !== null) {
       clearImmediate(immediate);
       immediate = null;
     }
+
     try {
       Atomics.notify(cell, 0, 1);
     } catch {
@@ -112,6 +121,7 @@ export function startClock(strategy: TimerStrategy, options: ClockOptions): Cloc
     const jitterMs = actualNs <= scheduledNs ? 0 : Number(actualNs - scheduledNs) / 1e6;
     fired += 1;
     options.onTick({ index, scheduledNs, actualNs, jitterMs });
+
     if (maxTicks !== undefined && fired >= maxTicks) stop();
   };
 
@@ -126,6 +136,7 @@ export function startClock(strategy: TimerStrategy, options: ClockOptions): Cloc
       const actual = now();
       // Drift correction: re-anchor to start and skip ticks the loop missed.
       const behind = actual <= startNs ? 0 : Math.floor(Number(actual - startNs) / Number(nominalNs));
+
       if (behind > next) next = behind;
       fire(next);
       next += 1;
@@ -133,31 +144,40 @@ export function startClock(strategy: TimerStrategy, options: ClockOptions): Cloc
   } else if (strategy === "timeout-spin") {
     const arm = (index: number): void => {
       if (!running) return;
+
       if (maxTicks !== undefined && index >= maxTicks) {
         stop();
+
         return;
       }
+
       const expected = startNs + nominalNs * BigInt(index);
       const delayMs = Number(expected - now()) / 1e6 - spinMs;
       timer = setTimeout(() => {
         while (running && now() < expected) {
           // Busy-wait tail: trade CPU for sub-millisecond phase accuracy.
         }
+
         if (!running) return;
         fire(index);
         arm(index + 1);
       }, Math.max(0, delayMs));
     };
+
     arm(0);
   } else {
     const step = (index: number): void => {
       if (!running) return;
+
       if (maxTicks !== undefined && index >= maxTicks) {
         stop();
+
         return;
       }
+
       const expected = startNs + nominalNs * BigInt(index);
       const coarseMs = Number(expected - now()) / 1e6 - spinMs;
+
       if (coarseMs > 0) {
         if (coarseOk === null) {
           try {
@@ -167,6 +187,7 @@ export function startClock(strategy: TimerStrategy, options: ClockOptions): Cloc
             coarseOk = false;
           }
         }
+
         if (!coarseOk) {
           // Thread forbids Atomics.wait: same shape as timeout-spin.
           timer = setTimeout(() => {
@@ -174,17 +195,22 @@ export function startClock(strategy: TimerStrategy, options: ClockOptions): Cloc
             fire(index);
             immediate = setImmediate(() => step(index + 1));
           }, coarseMs);
+
           return;
         }
+
         Atomics.wait(cell, 0, 0, Math.ceil(coarseMs));
       }
+
       while (running && now() < expected) {
         // Spin tail over the last spinWindowMs.
       }
+
       if (!running) return;
       fire(index);
       immediate = setImmediate(() => step(index + 1));
     };
+
     immediate = setImmediate(() => step(0));
   }
 

@@ -22,6 +22,7 @@ function ok(body: string, headers: Record<string, string> = {}, seen: CloudFetch
     seen,
     fetchFn: async (req: CloudFetchRequest) => {
       seen.push(req);
+
       return { status: 200, headers, body };
     },
   };
@@ -59,6 +60,7 @@ const SCENES_BODY = JSON.stringify({
 
 function enabled(over: Partial<ConstructorParameters<typeof CloudMetadataClient>[0]> = {}) {
   const stub = ok(DEVICES_BODY);
+
   const client = new CloudMetadataClient({
     apiKey: "secret",
     fetchFn: stub.fetchFn,
@@ -66,6 +68,7 @@ function enabled(over: Partial<ConstructorParameters<typeof CloudMetadataClient>
     cloudAllowed: true,
     ...over,
   });
+
   return { client, seen: stub.seen };
 }
 
@@ -100,8 +103,10 @@ describe("cloud metadata client", () => {
       enabled: true,
       cloudAllowed: true,
     });
+
     await expect(client.listDevices()).rejects.toBeInstanceOf(CloudApiError);
     await expect(client.listDevices()).rejects.toThrowError(/status 500/);
+
     try {
       await client.listDevices();
     } catch (err) {
@@ -111,12 +116,14 @@ describe("cloud metadata client", () => {
 
   it("lists scenes from a recorded catalogue response", async () => {
     const stub = ok(SCENES_BODY);
+
     const client = new CloudMetadataClient({
       apiKey: "secret",
       fetchFn: stub.fetchFn,
       enabled: true,
       cloudAllowed: true,
     });
+
     const scenes = await client.listScenes("AA:BB:CC:DD:EE:01", "H6076");
     expect(scenes).toEqual([
       { sceneId: "s1", name: "Sunset" },
@@ -129,12 +136,14 @@ describe("cloud metadata client", () => {
     const off = new CloudMetadataClient({ apiKey: "k", fetchFn: offStub.fetchFn });
     await expect(off.listDevices()).rejects.toBeInstanceOf(CloudDisabledError);
     const halfStub = ok(DEVICES_BODY);
+
     const half = new CloudMetadataClient({
       apiKey: "k",
       fetchFn: halfStub.fetchFn,
       enabled: true,
       cloudAllowed: false,
     });
+
     await expect(half.listDevices()).rejects.toBeInstanceOf(CloudDisabledError);
   });
 
@@ -149,6 +158,7 @@ describe("cloud metadata client", () => {
   it("enforces the per-device minute budget from configuration", async () => {
     let at = 1_000_000;
     const stub = ok(DEVICES_BODY);
+
     const client = new CloudMetadataClient({
       apiKey: "k",
       fetchFn: stub.fetchFn,
@@ -158,6 +168,7 @@ describe("cloud metadata client", () => {
       perAccountPerDay: 10000,
       now: () => at,
     });
+
     await client.listDevices({ deviceKey: "lamp" });
     await client.listDevices({ deviceKey: "lamp" });
     await expect(client.listDevices({ deviceKey: "lamp" })).rejects.toBeInstanceOf(CloudRateLimitError);
@@ -168,6 +179,7 @@ describe("cloud metadata client", () => {
   it("enforces the per-account day budget from configuration", async () => {
     const at = 1_000_000;
     const stub = ok(DEVICES_BODY);
+
     const client = new CloudMetadataClient({
       apiKey: "k",
       fetchFn: stub.fetchFn,
@@ -177,6 +189,7 @@ describe("cloud metadata client", () => {
       perAccountPerDay: 1,
       now: () => at,
     });
+
     await client.listDevices({ deviceKey: "a" });
     await expect(client.listDevices({ deviceKey: "b" })).rejects.toBeInstanceOf(CloudRateLimitError);
   });
@@ -186,12 +199,14 @@ describe("cloud metadata client", () => {
       "X-RateLimit-Remaining-Minute": "7",
       "X-RateLimit-Remaining-Day": "9000",
     });
+
     const client = new CloudMetadataClient({
       apiKey: "k",
       fetchFn: stub.fetchFn,
       enabled: true,
       cloudAllowed: true,
     });
+
     await client.listDevices();
     expect(client.accounting.lastServerMinuteRemaining).toBe(7);
     expect(client.accounting.lastServerDayRemaining).toBe(9000);
@@ -202,11 +217,14 @@ describe("cloud metadata client", () => {
       enabled: true,
       cloudAllowed: true,
     });
+
     const err = await limited.listDevices().catch((e: unknown) => e);
     expect(err).toBeInstanceOf(CloudRateLimitError);
+
     if (err instanceof CloudRateLimitError) {
       expect(err.retryAfterMs).toBe(30_000);
     }
+
     expect(limited.accounting.lastRetryAfterMs).toBe(30_000);
   });
   it("parses rate headers case-insensitively and ignores garbage", () => {
@@ -224,7 +242,9 @@ describe("cloud metadata client", () => {
       retrievable: true,
       supportCmds: [],
     });
+
     expect(bare.capabilities.declaredSegmentCount).toBeNull();
+
     const zoned = parseDeviceEntry({
       device: "d",
       model: "m",
@@ -234,6 +254,7 @@ describe("cloud metadata client", () => {
       supportCmds: [],
       properties: { zoneCount: 8.9 },
     });
+
     expect(zoned.capabilities.declaredSegmentCount).toBe(8);
   });
 });

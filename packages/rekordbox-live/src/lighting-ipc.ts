@@ -74,6 +74,7 @@ export interface LightingDecodeResult {
 export function encodeLightingCapture(events: readonly LightingEvent[]): Uint8Array {
   const parts: Uint8Array[] = [];
   const encoder = new TextEncoder();
+
   for (const event of events) {
     const body = encoder.encode(JSON.stringify(event));
     const header = new Uint8Array(4);
@@ -83,13 +84,16 @@ export function encodeLightingCapture(events: readonly LightingEvent[]): Uint8Ar
     merged.set(body, 4);
     parts.push(merged);
   }
+
   const total = parts.reduce((n, p) => n + p.length, 0);
   const out = new Uint8Array(total);
   let at = 0;
+
   for (const part of parts) {
     out.set(part, at);
     at += part.length;
   }
+
   return out;
 }
 
@@ -102,50 +106,63 @@ export function decodeLightingCapture(bytes: Uint8Array): LightingDecodeResult {
   const malformed: string[] = [];
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   let offset = 0;
+
   while (offset < bytes.length) {
     if (offset + 4 > bytes.length) {
       malformed.push(`truncated frame header at ${offset}`);
       break;
     }
+
     const length = view.getUint32(offset, false);
     offset += 4;
+
     if (length > 4 * 1024 * 1024) {
       malformed.push(`frame too large (${length} bytes at ${offset - 4})`);
       break;
     }
+
     if (offset + length > bytes.length) {
       malformed.push(`truncated frame body at ${offset} (need ${length})`);
       break;
     }
+
     const body = bytes.slice(offset, offset + length);
     offset += length;
+
     try {
       const parsed: unknown = JSON.parse(new TextDecoder().decode(body));
       const event = lightingEventSchema.parse(parsed);
+
       const known: Record<string, true> = {
         deck: true, playing: true, playheadSeconds: true, playRate: true, effectiveBpm: true,
         trackId: true, title: true, artist: true, loopActive: true, loopBeatLength: true,
         pitchPercent: true, sync: true, master: true, channelFader: true, crossfader: true,
         hotCue: true, rollActive: true, rollBeats: true,
       };
+
       const raw: Record<string, unknown> = {};
+
       for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
         if (!known[key]) raw[key] = value;
       }
+
       raw["provider"] = LIGHTING_PROVIDER_ID;
       frames.push({ event, raw });
     } catch (err) {
       malformed.push(`bad frame at ${offset - length}: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
+
   return { frames, malformed };
 }
 
 export function decodeLightingCaptureBase64(capture: string): LightingDecodeResult {
   if (!capture || capture.length === 0) return { frames: [], malformed: ["empty capture"] };
+
   if (capture.startsWith("handwritten-synthetic:")) {
     return { frames: [], malformed: ["handwritten-synthetic capture marker, no bytes to decode"] };
   }
+
   try {
     return decodeLightingCapture(new Uint8Array(Buffer.from(capture, "base64")));
   } catch (err) {
@@ -170,6 +187,7 @@ export const LIGHTING_MATRIX_CONDITIONS = [
 ] as const;
 
 export type LightingMatrixAction = (typeof LIGHTING_MATRIX_ACTIONS)[number];
+
 export type LightingMatrixCondition = (typeof LIGHTING_MATRIX_CONDITIONS)[number];
 
 export interface LightingMatrixCell {
@@ -179,11 +197,13 @@ export interface LightingMatrixCell {
 
 export function lightingMatrixCells(): LightingMatrixCell[] {
   const out: LightingMatrixCell[] = [];
+
   for (const action of LIGHTING_MATRIX_ACTIONS) {
     for (const condition of LIGHTING_MATRIX_CONDITIONS) {
       out.push({ action, condition });
     }
   }
+
   return out;
 }
 
@@ -209,10 +229,13 @@ export interface LightingSurfaceInventory {
 
 export function validateSurfaceInventory(inventory: LightingSurfaceInventory): string[] {
   const missing: string[] = [];
+
   for (const surface of LIGHTING_SURFACES) {
     const entry = inventory.surfaces[surface];
+
     if (!entry || !entry.observed) missing.push(surface);
   }
+
   return missing;
 }
 
@@ -235,23 +258,28 @@ const lightingFixtureSchema = z.object({
   decoder: z.string().min(1),
   expectedBy: z.string().min(1),
 });
+
 export function parseLightingFixture(raw: unknown): LightingFixture {
   return lightingFixtureSchema.parse(raw);
 }
 
 export function lintLightingFixture(raw: unknown): string[] {
   const failures: string[] = [];
+
   try {
     const fixture = parseLightingFixture(raw);
+
     if (fixture.capture.startsWith("handwritten-synthetic:")) {
       failures.push("capture is a synthetic marker, not transport bytes");
     }
+
     if (/decoder/i.test(fixture.expectedBy)) {
       failures.push("expectedBy names the decoder, not the human author");
     }
   } catch (err) {
     failures.push(err instanceof Error ? err.message : String(err));
   }
+
   return failures;
 }
 
@@ -275,10 +303,13 @@ export function replayLightingCapture(
   const { frames, malformed } = decodeLightingCaptureBase64(fixture.capture);
   const baseNs = 1_000_000_000n;
   const clock = now ?? (() => baseNs);
+
   const states = frames.map((frame, index) => {
     const atNs = baseNs + BigInt(Math.round((index * stepMs * 1_000_000) / rate));
+
     return frameToState(frame, mapper, atNs, clock);
   });
+
   return { states, malformed };
 }
 
@@ -290,6 +321,7 @@ function frameToState(
 ): ProviderDeckState {
   void clock;
   const event = frame.event;
+
   const state = mapper.update(LIGHTING_PROVIDER_ID, {
     deckId: event.deck,
     atNs,
@@ -324,6 +356,7 @@ function frameToState(
     crossfader: event.crossfader ?? null,
     quality: lightingQuality(),
   });
+
   return { ...state, raw: frame.raw };
 }
 
@@ -371,8 +404,10 @@ export class LightingIpcProvider extends ProviderBase {
         reason: "no Lighting IPC captures committed (owner runbook HW-RB-LIGHT-01 not run)",
         remedy: "run the capture matrix with Rekordbox 7.2.19+ and SoundSwitch 2.11+, or use another live source",
       });
+
       return;
     }
+
     this.setStatus({ state: "starting" });
   }
 
@@ -389,19 +424,24 @@ export class LightingIpcProvider extends ProviderBase {
   replayAll(opts: LightingReplayOptions = {}): { states: ProviderDeckState[]; malformed: string[] } {
     const states: ProviderDeckState[] = [];
     const malformed: string[] = [];
+
     for (const fixture of this.fixtures) {
       const result = replayLightingCapture(fixture, this.mapper, opts, this.now);
       malformed.push(...result.malformed.map((m) => `${fixture.action}: ${m}`));
       states.push(...result.states);
     }
+
     this.replayed.length = 0;
     this.replayed.push(...states);
+
     for (const state of states) this.emit(state);
+
     if (states.length > 0 && malformed.length === 0) {
       this.setStatus({ state: "live", updateHz: 0, ageMs: 0 });
     } else if (states.length === 0 && malformed.length > 0) {
       this.markRejected(malformed[0] ?? "lighting capture did not decode");
     }
+
     return { states, malformed };
   }
   // Direct event ingest for tests and the contract suite: encodes the event
@@ -411,29 +451,37 @@ export class LightingIpcProvider extends ProviderBase {
     const at = atNs ?? this.now();
     const decoded = decodeLightingCapture(encodeLightingCapture([event]));
     const frame = decoded.frames[0];
+
     if (decoded.malformed.length > 0 || !frame) {
       this.markRejected(decoded.malformed[0] ?? "lighting event did not encode");
+
       return null;
     }
+
     const state = frameToState(frame, this.mapper, at, this.now);
     this.replayed.push(state);
     this.emit(state);
     this.setStatus({ state: "live", updateHz: 0, ageMs: 0 });
+
     return state;
   }
 
   ingestBytes(bytes: Uint8Array, atNs?: bigint): void {
     const at = atNs ?? this.now();
     const decoded = decodeLightingCapture(bytes);
+
     if (decoded.malformed.length > 0 || decoded.frames.length === 0) {
       this.markRejected(decoded.malformed[0] ?? "lighting bytes did not decode");
+
       return;
     }
+
     for (const frame of decoded.frames) {
       const state = frameToState(frame, this.mapper, at, this.now);
       this.replayed.push(state);
       this.emit(state);
     }
+
     this.setStatus({ state: "live", updateHz: 0, ageMs: 0 });
   }
 }

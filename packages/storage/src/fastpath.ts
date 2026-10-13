@@ -36,9 +36,11 @@ interface CacheEntry {
 }
 
 const DEFAULT_CAPACITY = 32;
+
 const TIMING_WINDOW = 512;
 
 const lru = new Map<string, CacheEntry>();
+
 const loadTimingsMs: number[] = [];
 
 function now(): number {
@@ -47,17 +49,21 @@ function now(): number {
 
 function lruGet(key: string): CacheEntry | undefined {
   const entry = lru.get(key);
+
   if (!entry) return undefined;
   lru.delete(key);
   lru.set(key, entry);
+
   return entry;
 }
 
 function lruSet(key: string, entry: CacheEntry, capacity: number): void {
   if (lru.has(key)) lru.delete(key);
   lru.set(key, entry);
+
   while (lru.size > capacity) {
     const oldest = lru.keys().next().value;
+
     if (oldest === undefined) break;
     lru.delete(oldest);
   }
@@ -65,6 +71,7 @@ function lruSet(key: string, entry: CacheEntry, capacity: number): void {
 
 function recordTiming(ms: number): void {
   loadTimingsMs.push(ms);
+
   if (loadTimingsMs.length > TIMING_WINDOW) loadTimingsMs.shift();
 }
 
@@ -105,6 +112,7 @@ export function fastPathTimings(): FastPathStats {
 // `runtime.fastPath.budgetMs`.
 export function fastPathBudget(budgetMs: number): { budgetMs: number; p95: number; count: number; pass: boolean } {
   const stats = fastPathTimings();
+
   return { budgetMs, p95: stats.p95, count: stats.count, pass: stats.count > 0 && stats.p95 <= budgetMs };
 }
 
@@ -116,9 +124,11 @@ export function loadFastPath(store: Store, request: FastPathRequest, options: Lo
   const key = `${planKey(request)}::${artifactKey(request)}`;
   const started = now();
   const cached = lruGet(key);
+
   if (cached) {
     const totalMs = now() - started;
     recordTiming(totalMs);
+
     return {
       track: cached.track,
       plan: cached.plan,
@@ -137,6 +147,7 @@ export function loadFastPath(store: Store, request: FastPathRequest, options: Lo
   if (!artifact) {
     const totalMs = now() - started;
     recordTiming(totalMs);
+
     return {
       track: null,
       plan: null,
@@ -150,6 +161,7 @@ export function loadFastPath(store: Store, request: FastPathRequest, options: Lo
   const parseStarted = now();
   let track: TrackModel | null = null;
   let detail: string | null = null;
+
   try {
     // The row holds an artifact path. Reading the file is the only way to a
     // TrackModel; the path itself is never the answer.
@@ -157,11 +169,13 @@ export function loadFastPath(store: Store, request: FastPathRequest, options: Lo
   } catch (error) {
     detail = `artifact ${artifact.artifact_path} did not parse to a TrackModel: ${(error as Error).message}`;
   }
+
   const parseMs = now() - parseStarted;
 
   if (!track) {
     const totalMs = now() - started;
     recordTiming(totalMs);
+
     return {
       track: null,
       plan: null,
@@ -174,9 +188,11 @@ export function loadFastPath(store: Store, request: FastPathRequest, options: Lo
 
   let plan: ShowPlan | null = null;
   let planDetail: string | null = null;
+
   if (planRow) {
     try {
       const parsed = showPlanSchema.parse(JSON.parse(planRow.plan_json));
+
       if (parsed.trackId !== request.trackId || parsed.styleId !== request.styleId) {
         planDetail = `plan key mismatch: trackId ${parsed.trackId}, styleId ${parsed.styleId}`;
       } else {
@@ -192,6 +208,7 @@ export function loadFastPath(store: Store, request: FastPathRequest, options: Lo
   lruSet(key, { track, plan }, options.capacity ?? DEFAULT_CAPACITY);
   const totalMs = now() - started;
   recordTiming(totalMs);
+
   return {
     track,
     plan,

@@ -17,6 +17,7 @@ import {
 } from "@autolight/dj-core";
 
 export type { DeckState, ShowCue, ShowPlan, TrackModel };
+
 export { estimatePosition };
 
 // Show runtime (T-RUN-01 to T-RUN-07).
@@ -28,7 +29,9 @@ export { estimatePosition };
 // director, mixer, renderer and output handoff live in their own packages.
 
 export const DEFAULT_BPM = 120;
+
 export const MAX_DECKS = 4;
+
 const NS_PER_MS = 1e6;
 
 // ---------------------------------------------------------------------------
@@ -60,8 +63,10 @@ export function upcomingCues(plan: ShowPlan, beat: number, count = 8): ShowCue[]
 // Pass parity drives deterministic traversal variation (spec 59): A/B/A...
 export function loopBeat(beat: number, loopStart: number, loopEnd: number): { beat: number; pass: number } {
   const len = loopEnd - loopStart;
+
   if (!(len > 0) || beat < loopStart) return { beat, pass: 0 };
   const pass = Math.floor((beat - loopStart) / len);
+
   return { beat: loopStart + ((beat - loopStart) % len), pass };
 }
 
@@ -69,13 +74,16 @@ export function loopBeat(beat: number, loopStart: number, loopEnd: number): { be
 // Loops, rolls and pass variation (T-RUN-04, spec 59, 60)
 
 export type LoopVariation = "none" | "alternate-ab" | "rotate-3";
+
 export type RollDegrade = "full" | "pulse" | "contraction" | "impact";
 
 /** runtime.loop.variation default. */
 export const DEFAULT_LOOP_VARIATION: LoopVariation = "alternate-ab";
+
 /** runtime.roll.degradeOrder default: brightness pulse, spatial contraction,
  * single impact, in that order (spec 60). */
 export const DEFAULT_DEGRADE_ORDER: readonly RollDegrade[] = ["pulse", "contraction", "impact"];
+
 /** Samples the fixture must manage per roll toggle to show it un-degraded. */
 const SAMPLES_PER_TOGGLE = 3;
 
@@ -83,8 +91,11 @@ const SAMPLES_PER_TOGGLE = 3;
 // between two, rotate-3 cycles through three.
 export function loopPassVariant(pass: number, mode: LoopVariation = DEFAULT_LOOP_VARIATION): number {
   const p = Math.max(0, Math.floor(pass));
+
   if (mode === "none") return 0;
+
   if (mode === "rotate-3") return p % 3;
+
   return p % 2;
 }
 
@@ -102,8 +113,10 @@ export function varyCueForPass(cue: ShowCue, variant: number): ShowCue {
   if (variant <= 0) return cue;
   const mirrored = MIRROR_TARGET[cue.target];
   const target = mirrored ?? cue.target;
+
   if (variant === 1) return target === cue.target ? cue : { ...cue, target };
   const intensity = Math.min(1, Math.max(0, (Math.round(cue.intensity * 100) / 100) * 0.85));
+
   return { ...cue, target, intensity };
 }
 
@@ -118,7 +131,9 @@ export function rollDegradeChoice(opts: {
 }): RollDegrade {
   const order = opts.order ?? DEFAULT_DEGRADE_ORDER;
   const toggleHz = opts.bpm > 0 && opts.rollBeats > 0 ? opts.bpm / 60 / opts.rollBeats : 0;
+
   if (!(toggleHz > 0) || opts.fixtureFps >= toggleHz * SAMPLES_PER_TOGGLE) return "full";
+
   return order[0] ?? "pulse";
 }
 
@@ -126,6 +141,7 @@ export function rollDegradeChoice(opts: {
 // Reverse and scratch (T-RUN-05, spec 61)
 
 export type OverrideKind = "none" | "blackout" | "white" | "freeze" | "force-low" | "force-high";
+
 export type ResumeAt = "beat" | "bar" | "phrase" | "immediate";
 
 export interface ScratchOptions {
@@ -138,9 +154,12 @@ export interface ScratchOptions {
 }
 
 export const SCRATCH_DEFAULTS: ScratchOptions = { rateDeviation: 0.5, minReversalsPerSec: 2, resyncAt: "bar" };
+
 const REVERSAL_WINDOW_SECONDS = 1;
+
 /** While the look is held, a jog may drift it by at most this many beats. */
 const SCRATCH_MODULATION_BEATS = 0.25;
+
 const SCRATCH_MODULATION_GAIN = 0.25;
 
 export interface ScratchState {
@@ -160,6 +179,7 @@ export function initialScratchState(beat = 0): ScratchState {
 
 export function recentReversals(scratch: ScratchState, nowNs: bigint): number {
   const windowNs = BigInt(Math.round(REVERSAL_WINDOW_SECONDS * 1e9));
+
   return scratch.reversals.filter((ns) => nowNs - ns <= windowNs).length;
 }
 
@@ -173,7 +193,9 @@ export function scratchDetected(
   opts: ScratchOptions = SCRATCH_DEFAULTS,
 ): boolean {
   const reversals = recentReversals(scratch, state.receivedAtNs);
+
   if (state.playing && state.playRate >= 0 && Math.abs(state.playRate - 1) > opts.rateDeviation) return true;
+
   return reversals >= opts.minReversalsPerSec;
 }
 
@@ -181,6 +203,7 @@ export function observeRate(scratch: ScratchState, state: DeckState): ScratchSta
   const previous = scratch.lastRate;
   const reversed = Math.sign(state.playRate) !== Math.sign(previous) && previous !== 0 && state.playRate !== 0;
   const reversals = reversed ? [...scratch.reversals, state.receivedAtNs] : scratch.reversals;
+
   return { ...scratch, reversals, lastRate: state.playRate };
 }
 
@@ -189,6 +212,7 @@ export function observeRate(scratch: ScratchState, state: DeckState): ScratchSta
 
 /** runtime.override.resumeDefault. */
 export const DEFAULT_RESUME_AT: ResumeAt = "bar";
+
 /** runtime.override.whiteIntensity. */
 export const DEFAULT_WHITE_INTENSITY = 1;
 
@@ -203,6 +227,7 @@ export interface ResumeGrid {
 
 export function resumeGridFromModel(model: TrackModel | null): ResumeGrid {
   if (model === null) return { beats: [], barBeats: [], phraseBeats: [] };
+
   return {
     beats: model.beatGrid.beats.map((b) => b.index),
     barBeats: model.beatGrid.beats.filter((b) => b.beatInBar === 1).map((b) => b.index),
@@ -212,9 +237,11 @@ export function resumeGridFromModel(model: TrackModel | null): ResumeGrid {
 
 function nextBoundary(beat: number, boundaries: number[]): number | null {
   let best: number | null = null;
+
   for (const b of boundaries) {
     if (b >= beat && (best === null || b < best)) best = b;
   }
+
   return best;
 }
 
@@ -223,13 +250,18 @@ function nextBoundary(beat: number, boundaries: number[]): number | null {
 // 16. `immediate` is really immediate, not rounded up (spec 134).
 export function quantizeResume(beat: number, at: ResumeAt, grid?: ResumeGrid | null): number {
   if (at === "immediate") return beat;
+
   if (grid !== undefined && grid !== null) {
     const boundaries = at === "beat" ? grid.beats : at === "bar" ? grid.barBeats : grid.phraseBeats;
     const next = nextBoundary(beat, boundaries);
+
     if (next !== null) return next;
   }
+
   if (at === "beat") return Math.ceil(beat);
+
   if (at === "bar") return Math.ceil(beat / 4) * 4;
+
   return Math.ceil(beat / 16) * 16;
 }
 
@@ -268,6 +300,7 @@ const FORCE_ENERGY: Record<string, number> = { "force-low": 0.25, "force-high": 
 
 export function overrideEffect(state: OverrideState, masterIntensity = 1): OverrideEffect {
   const master = Math.min(1, Math.max(0, masterIntensity));
+
   switch (state.kind) {
     case "blackout":
       return { kind: state.kind, factor: 0, hold: false, white: null, energy: null };
@@ -298,11 +331,14 @@ export function setOverride(
   opts: { beat: number; at?: ResumeAt; grid?: ResumeGrid | null; whiteIntensity?: number },
 ): OverrideState {
   const whiteIntensity = opts.whiteIntensity ?? prev.whiteIntensity;
+
   if (kind !== "none") {
     return { ...prev, kind, whiteIntensity, resumeBeat: null, pendingResume: false };
   }
+
   const at = opts.at ?? DEFAULT_RESUME_AT;
   const resumeBeat = quantizeResume(opts.beat, at, opts.grid ?? null);
+
   return { ...prev, kind: "none", resumeAt: at, whiteIntensity, resumeBeat, pendingResume: resumeBeat > opts.beat };
 }
 
@@ -311,6 +347,7 @@ export function advanceOverride(state: OverrideState, beat: number): { state: Ov
   if (!state.pendingResume || state.resumeBeat === null || beat < state.resumeBeat) {
     return { state, resumed: false };
   }
+
   return { state: { ...state, pendingResume: false, resumeBeat: null, kind: "none" }, resumed: true };
 }
 
@@ -321,6 +358,7 @@ export type ClockHealth = "live" | "extrapolating" | "holding" | "degraded";
 
 /** runtime.health.extrapolateMs / runtime.health.holdMs. */
 export const HEALTH_EXTRAPOLATE_MS = 500;
+
 export const HEALTH_HOLD_MS = 2000;
 
 export function clockHealth(
@@ -331,8 +369,11 @@ export function clockHealth(
   },
 ): ClockHealth {
   if (msSinceLastUpdate <= 0) return "live";
+
   if (msSinceLastUpdate <= thresholds.extrapolateMs) return "extrapolating";
+
   if (msSinceLastUpdate <= thresholds.holdMs) return "holding";
+
   return "degraded";
 }
 
@@ -346,6 +387,7 @@ export function motionFactor(health: ClockHealth, msSinceLastUpdate: number): nu
   if (health === "live" || health === "extrapolating") return 1;
   const span = Math.max(1, HEALTH_HOLD_MS - HEALTH_EXTRAPOLATE_MS);
   const fade = Math.min(1, Math.max(0, (msSinceLastUpdate - HEALTH_EXTRAPOLATE_MS) / span));
+
   return 1 - (1 - HOLD_MOTION_FLOOR) * fade;
 }
 
@@ -389,29 +431,42 @@ export function adaptiveBeat(
 ): AdaptiveBeat | null {
   const elapsedSeconds = (anchorNs: bigint | null): number =>
     anchorNs === null ? 0 : Math.max(0, Number(nowNs - anchorNs) / 1e9);
+
   const atTempo = (beat: number | null, bpm: number | null, anchorNs: bigint | null): number | null =>
     beat === null || bpm === null || bpm <= 0 || anchorNs === null ? null : beat + elapsedSeconds(anchorNs) * (bpm / 60);
+
   const dj = atTempo(inputs.djBeat, inputs.djBpm, inputs.djAnchorNs);
   const audio = atTempo(inputs.audioBeat, inputs.audioBpm, inputs.audioAnchorNs);
+
   if (mode === "dj-bpm") {
     return dj === null || inputs.djBpm === null ? null : { beat: dj, bpm: inputs.djBpm, source: "dj-bpm" };
   }
+
   if (mode === "audio-onset") {
     if (audio !== null && inputs.audioBpm !== null) return { beat: audio, bpm: inputs.audioBpm, source: "audio-onset" };
     // Without an audio phase, follow the provider phase at the live tempo.
     const fromDjPhase = atTempo(inputs.djBeat, inputs.audioBpm, inputs.djAnchorNs);
+
     if (fromDjPhase === null || inputs.audioBpm === null) return null;
+
     return { beat: fromDjPhase, bpm: inputs.audioBpm, source: "audio-onset" };
   }
+
   const audioWeight = Math.min(1, Math.max(0, inputs.audioConfidence));
+
   if (inputs.djBpm !== null && inputs.audioBpm !== null && inputs.audioBpm > 0 && audioWeight > 0) {
     const bpm = (inputs.djBpm + inputs.audioBpm * audioWeight) / (1 + audioWeight);
     const blended = atTempo(inputs.djBeat, bpm, inputs.djAnchorNs);
+
     if (blended !== null) return { beat: blended, bpm, source: "blend" };
+
     if (audio !== null) return { beat: audio, bpm, source: "blend" };
   }
+
   if (dj !== null && inputs.djBpm !== null) return { beat: dj, bpm: inputs.djBpm, source: "dj-bpm" };
+
   if (audio !== null && inputs.audioBpm !== null) return { beat: audio, bpm: inputs.audioBpm, source: "audio-onset" };
+
   return null;
 }
 
@@ -432,6 +487,7 @@ export function setAudioTempo(world: DeckWorld, tempo: AudioTempo | null): void 
 function adaptiveInputsOf(world: DeckWorld): AdaptiveClockInputs {
   const known = world.lastKnown;
   const tempo = world.audioTempo;
+
   return {
     djBpm: known === null ? null : known.beatsPerSecond * 60,
     djBeat: known?.beat ?? null,
@@ -465,6 +521,7 @@ export function deviceFrameDue(device: DeviceRuntimeState, tickIndex: number, lo
   if (!device.online || !(device.fps > 0) || tickIndex < 0 || logicalHz <= 0) return false;
   const before = Math.floor((tickIndex * device.fps) / logicalHz);
   const after = Math.floor(((tickIndex + 1) * device.fps) / logicalHz);
+
   return after > before;
 }
 
@@ -537,6 +594,7 @@ export interface DeckWorldOptions {
 
 export function createDeckWorld(deckId: number, opts: DeckWorldOptions = {}): DeckWorld {
   const estimatorOptions: EstimatorOptions = { ...ESTIMATOR_DEFAULTS, ...opts.estimator };
+
   return {
     deckId,
     estimatorOptions,
@@ -564,7 +622,9 @@ export function createDeckWorld(deckId: number, opts: DeckWorldOptions = {}): De
 export function ingestDeck(world: DeckWorld, state: DeckState, quality?: ObservationQuality): boolean {
   if (world.state !== null && state.receivedAtNs < world.state.receivedAtNs) return false;
   world.state = state;
+
   if (quality !== undefined) world.quality = quality;
+
   return true;
 }
 
@@ -584,6 +644,7 @@ export function beatsPerSecondOf(state: DeckState): number {
 
 export function gridBeatOf(world: DeckWorld, seconds: number): number {
   if (world.model !== null) return sourceSecondsToBeat(world.model.beatGrid, seconds);
+
   return seconds * (world.state?.effectiveBpm ?? DEFAULT_BPM) / 60;
 }
 
@@ -599,12 +660,14 @@ export function seekWorld(
   const cancelled = world.transients.filter(
     (t) => !(beat >= t.startBeat && beat < t.startBeat + t.durationBeats),
   );
+
   world.estimator.reset(beat, nowNs);
   world.cursor = { beat, loopPass: 0, scratchHold: world.cursor.scratchHold };
   world.scratch = { ...initialScratchState(beat), lastRate: world.scratch.lastRate };
   world.cancelled = cancelled;
   const cues = world.plan === null ? [] : evaluateCues(world.plan, beat);
   world.transients = exclusiveOf(cues);
+
   return { cancelled, cues };
 }
 
@@ -616,9 +679,11 @@ export function exclusiveOf(cues: ShowCue[]): ShowCue[] {
 
 function loopWindow(world: DeckWorld, state: DeckState): { start: number; end: number } | null {
   const { startSeconds, endSeconds } = state.loop;
+
   if (!state.loop.active || startSeconds === null || endSeconds === null) return null;
   const start = gridBeatOf(world, startSeconds);
   const end = gridBeatOf(world, endSeconds);
+
   return end > start ? { start, end } : null;
 }
 
@@ -630,9 +695,11 @@ export interface TickOptions {
 // scratch hold, evaluate, override.
 export function tickWorld(world: DeckWorld, nowNs: bigint, opts: TickOptions = {}): DeckTick | null {
   const state = world.state;
+
   if (state === null) return null;
   const tempoBps = beatsPerSecondOf(state);
   const observed = gridBeatOf(world, state.playheadSeconds);
+
   const observation: BeatObservation = {
     beat: observed,
     nowNs,
@@ -640,6 +707,7 @@ export function tickWorld(world: DeckWorld, nowNs: bigint, opts: TickOptions = {
     playing: state.playing,
     beatsPerSecond: state.playing ? tempoBps * state.playRate : 0,
   };
+
   const ageMs = nowNs >= state.receivedAtNs ? Number(nowNs - state.receivedAtNs) / NS_PER_MS : 0;
   const health = clockHealth(ageMs);
 
@@ -653,12 +721,14 @@ export function tickWorld(world: DeckWorld, nowNs: bigint, opts: TickOptions = {
   const fresh = ageMs <= world.estimatorOptions.seekThresholdMs;
   let estimated: EstimateResult;
   let adaptive: AdaptiveBeat | null = null;
+
   if (fresh) {
     estimated = world.estimator.observe(observation);
     world.lastKnown = { beatsPerSecond: observation.beatsPerSecond, beat: observed, anchorNs: state.receivedAtNs };
     world.holdBeat = null;
   } else {
     const extrapolated = world.estimator.advance(nowNs);
+
     if (health === "holding") {
       world.holdBeat = world.holdBeat ?? extrapolated;
       estimated = { beat: world.holdBeat, seeked: false, corrected: 0, errorMs: 0 };
@@ -671,6 +741,7 @@ export function tickWorld(world: DeckWorld, nowNs: bigint, opts: TickOptions = {
       estimated = { beat: extrapolated, seeked: false, corrected: 0, errorMs: 0 };
     }
   }
+
   const clockSource: ClockSource = adaptive !== null ? "adaptive" : health === "holding" ? "hold" : "provider";
   const motion = motionFactor(health, ageMs);
 
@@ -683,21 +754,26 @@ export function tickWorld(world: DeckWorld, nowNs: bigint, opts: TickOptions = {
   // playback without scratch follows the timeline, which the estimator already
   // does with a negative rate.
   let beat = estimated.beat;
+
   if (scratching) {
     const base = world.scratch.holding ? world.scratch.heldBeat : world.cursor.beat;
+
     // Limited gesture modulation: the look drifts at most a quarter beat.
     const drift = Math.max(
       -SCRATCH_MODULATION_BEATS,
       Math.min(SCRATCH_MODULATION_BEATS, (observed - base) * SCRATCH_MODULATION_GAIN),
     );
+
     beat = base + drift;
     world.scratch = { ...world.scratch, holding: true, heldBeat: base, resyncBeat: null };
+
     if (estimated.seeked) world.cancelled = world.transients;
   } else if (world.scratch.holding) {
     // Leaving the hold: resync at the next boundary once forward playback is
     // stable, whatever the interpolator did in between.
     const resyncBeat = world.scratch.resyncBeat ?? quantizeResume(observed, world.scratchOptions.resyncAt, resumeGridFromModel(world.model));
     const stable = state.playRate > 0 && Math.abs(state.playRate - 1) <= world.scratchOptions.rateDeviation;
+
     if (stable && observed >= resyncBeat) {
       world.cancelled = world.transients;
       world.scratch = { ...world.scratch, holding: false, resyncBeat: null, heldBeat: observed };
@@ -718,6 +794,7 @@ export function tickWorld(world: DeckWorld, nowNs: bigint, opts: TickOptions = {
   // from the folded beat, so a hit at the loop start fires on every pass.
   let loopPass = world.cursor.loopPass;
   const window = loopWindow(world, state);
+
   if (window !== null && !world.scratch.holding) {
     const folded = loopBeat(beat, window.start, window.end);
     beat = folded.beat;
@@ -728,10 +805,12 @@ export function tickWorld(world: DeckWorld, nowNs: bigint, opts: TickOptions = {
 
   let cues = world.plan === null ? [] : evaluateCues(world.plan, beat);
   const variant = loopPassVariant(loopPass, opts.loopVariation ?? DEFAULT_LOOP_VARIATION);
+
   if (window !== null && variant > 0) cues = cues.map((c) => varyCueForPass(c, variant));
   world.transients = exclusiveOf(cues);
   world.cursor = { beat, loopPass, scratchHold: world.scratch.holding };
   world.override = advanceOverride(world.override, beat).state;
+
   return {
     deckId: world.deckId,
     generation: world.generation,
@@ -762,17 +841,22 @@ export class ShowRuntime {
 
   constructor(opts: ShowRuntimeOptions = {}) {
     this.options = opts.world ?? {};
+
     for (const deckId of opts.deckIds ?? []) this.world(deckId);
   }
 
   world(deckId: number): DeckWorld {
     const existing = this.worlds.get(deckId);
+
     if (existing !== undefined) return existing;
+
     if (this.worlds.size >= MAX_DECKS) {
       throw new Error(`show runtime holds at most ${MAX_DECKS} deck worlds (spec 62)`);
     }
+
     const created = createDeckWorld(deckId, this.options);
     this.worlds.set(deckId, created);
+
     return created;
   }
 
@@ -803,6 +887,7 @@ export class ShowRuntime {
   ): OverrideState {
     const world = this.world(deckId);
     world.override = setOverride(world.override, kind, opts);
+
     return world.override;
   }
 
@@ -813,10 +898,13 @@ export class ShowRuntime {
 
   tick(nowNs: bigint, opts: TickOptions = {}): DeckTick[] {
     const ticks: DeckTick[] = [];
+
     for (const world of this.worlds.values()) {
       const tick = tickWorld(world, nowNs, opts);
+
       if (tick !== null) ticks.push(tick);
     }
+
     return ticks;
   }
 }
@@ -849,12 +937,15 @@ export function trackDeck(
   const observed = gridBeat(obs.playheadSeconds);
   const scratchOpts: ScratchOptions = { ...SCRATCH_DEFAULTS, ...opts.scratch };
   const scratch = observeRate(initialScratchState(prevBeat), obs);
+
   if (scratchDetected(obs, scratch, scratchOpts)) return { beat: prevBeat, scratchHold: true, seeked: false };
   const bps = opts.beatsPerSecond ?? beatsPerSecondOf(obs);
+
   const jumped = exceedsSeekThreshold(prevBeat, observed, bps, {
     beats: opts.seekThresholdBeats ?? ESTIMATOR_DEFAULTS.seekThresholdBeats,
     ms: opts.seekThresholdMs ?? ESTIMATOR_DEFAULTS.seekThresholdMs,
   });
+
   return { beat: observed, scratchHold: false, seeked: jumped };
 }
 

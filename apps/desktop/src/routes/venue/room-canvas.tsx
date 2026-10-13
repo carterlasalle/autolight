@@ -18,6 +18,7 @@ export function RoomCanvas({ room, onPatch }: { room: Room; onPatch: (room: Room
   const sx = (x: number): number => ((x - minX) / Math.max(1e-6, maxX - minX)) * (w - 40) + 20;
   const sy = (y: number): number => h - (((y - minY) / Math.max(1e-6, maxY - minY)) * (h - 40) + 20);
   const pts = room.outline.map((p) => `${sx(p.x).toFixed(1)},${sy(p.y).toFixed(1)}`).join(" ");
+
   return (
     <svg viewBox={`0 0 ${w} ${h}`} role="img" aria-label={`Room outline: ${room.name}`} className="w-full rounded border">
       <polygon points={pts} fill="none" strokeWidth={2} stroke="currentColor" />
@@ -53,5 +54,6 @@ export function RoomCanvas({ room, onPatch }: { room: Room; onPatch: (room: Room
 
 export function useRoomState(initial?: Room): { room: Room; setRoom: (room: Room) => void; resetSquare: () => void } {
   const [room, setRoom] = useState<Room>(() => initial ?? rectangleRoom(5, 5));
+
   return { room, setRoom, resetSquare: () => setRoom(rectangleRoom(5, 5)) };
 }

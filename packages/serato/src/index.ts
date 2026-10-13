@@ -9,36 +9,48 @@ export interface SeratoCrateEntry { path: string }
 export function parseCrate(buf: Uint8Array): SeratoCrateEntry[] {
   const v = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
   const magic = String.fromCharCode(...buf.slice(0, 4));
+
   if (magic !== "vrsn") throw new Error(`bad crate magic ${JSON.stringify(magic)}`);
   const readU32 = (o: number): number => v.getUint32(o, false);
   const readTag = (o: number): string => String.fromCharCode(...buf.slice(o, o + 4));
   const vlen = readU32(4);
   let o = 8 + vlen;
   const out: SeratoCrateEntry[] = [];
+
   const decodePath = (start: number, len: number): string => {
     const raw = buf.slice(start, start + len);
     let s = "";
+
     for (let i = 0; i + 1 < raw.length; i += 2) s += String.fromCharCode((raw[i]! << 8) | raw[i + 1]!);
+
     return s;
   };
+
   while (o + 8 <= buf.length) {
     const tag = readTag(o);
     const len = readU32(o + 4);
     o += 8;
+
     if (o + len > buf.length) break;
+
     if (tag === "otrk") {
       let j = o;
+
       while (j + 8 <= o + len) {
         const it = readTag(j);
         const il = readU32(j + 4);
         j += 8;
+
         if (j + il > o + len) break;
+
         if (it === "ptrk") out.push({ path: decodePath(j, il) });
         j += il;
       }
     }
+
     o += len;
   }
+
   return out;
 }
 
@@ -66,6 +78,7 @@ export function remoteToDeckState(msg: SeratoRemoteDeck, receivedAtNs: bigint): 
   const loop = msg.trackChanged && !msg.loopActive
     ? { active: false, startSeconds: null, endSeconds: null, beatLength: null }
     : { active: msg.loopActive, startSeconds: msg.loopStartSeconds, endSeconds: msg.loopEndSeconds, beatLength: msg.loopBeatLength };
+
   return {
     state: {
       source: "serato",
@@ -90,13 +103,18 @@ export function remoteToDeckState(msg: SeratoRemoteDeck, receivedAtNs: bigint): 
 // Verified live against ScratchBeat4 (85 BPM @ 0.046s) + ScratchBeat5 (88 BPM).
 // Throws on bad magic/version so corrupt tags fail loudly, never silently.
 export interface SeratoTempoRegion { startSeconds: number; bpm: number; beatInBar: 1 | 2 | 3 | 4 }
+
 export function parseBeatGrid(payload: Uint8Array): SeratoTempoRegion[] {
   const v = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
+
   if (payload.length < 6) throw new Error(`beatgrid too short: ${payload.length}`);
+
   if (payload[0] !== 0x01) throw new Error(`beatgrid version=${payload[0]}, expected 1`);
   const count = payload[5]!;
+
   if (payload.length < 6 + count * 8) throw new Error(`beatgrid truncated: need ${6 + count * 8}, got ${payload.length}`);
   const out: SeratoTempoRegion[] = [];
+
   for (let i = 0; i < count; i++) {
     out.push({
       startSeconds: v.getFloat32(6 + i * 8, false),
@@ -104,8 +122,10 @@ export function parseBeatGrid(payload: Uint8Array): SeratoTempoRegion[] {
       beatInBar: 1,
     });
   }
+
   return out;
 }
+
 export function tempoRegionsToBeats(regions: SeratoTempoRegion[]): { index: number; beatInBar: 1 | 2 | 3 | 4; sourceTimeMs: number; bpm: number }[] {
   const out: { index: number; beatInBar: 1 | 2 | 3 | 4; sourceTimeMs: number; bpm: number }[] = [];
   regions.forEach((r, ri) => {
@@ -113,10 +133,12 @@ export function tempoRegionsToBeats(regions: SeratoTempoRegion[]): { index: numb
     const nextStart = regions[ri + 1]?.startSeconds;
     const regionLen = nextStart !== undefined ? nextStart - r.startSeconds : 60 / r.bpm * 4;
     const count = Math.max(1, Math.round(regionLen / (60 / r.bpm)));
+
     for (let i = 0; i < count; i++) {
       out.push({ index: startBeat + i, beatInBar: (((r.beatInBar - 1 + i) % 4) + 1) as 1 | 2 | 3 | 4, sourceTimeMs: (r.startSeconds + i * (60 / r.bpm)) * 1000, bpm: r.bpm });
     }
   });
+
   return out;
 }
 
@@ -126,8 +148,13 @@ export function tempoRegionsToBeats(regions: SeratoTempoRegion[]): { index: numb
 // of the public surface on purpose: this package reads DJ data, never writes
 // it (T-SEC-04).
 export * from "./remote-provider.js";
+
 export * from "./setup.js";
+
 export * from "./emulator.js";
+
 export * from "./capture.js";
+
 export * from "./library.js";
+
 export * from "./replay.js";

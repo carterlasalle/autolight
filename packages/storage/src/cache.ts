@@ -55,10 +55,13 @@ export interface PlanRow {
 
 function canonical(value: unknown): string {
   if (value === null || typeof value !== "object") return JSON.stringify(value) ?? "null";
+
   if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+
   const entries = Object.entries(value as Record<string, unknown>)
     .filter(([, v]) => v !== undefined)
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+
   return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonical(v)}`).join(",")}}`;
 }
 
@@ -146,7 +149,9 @@ export interface InvalidationReport {
 function deleteWhere(db: SqlExec, table: string, where: string, params: readonly (string | number)[]): number {
   const row = db.get<{ n: number }>(`SELECT COUNT(*) AS n FROM ${table} WHERE ${where}`, params);
   const count = Number(row?.n ?? 0);
+
   if (count > 0) db.run(`DELETE FROM ${table} WHERE ${where}`, params);
+
   return count;
 }
 
@@ -157,6 +162,7 @@ export function invalidate(db: SqlExec, invalidation: Invalidation): Invalidatio
       // and the library-derived native analysis survive (spec 82).
       const artifacts = deleteWhere(db, "analysis_artifacts", "analyzer_version <> ?", [invalidation.analyzerVersion]);
       const runs = deleteWhere(db, "analysis_runs", "analyzer_version <> ?", [invalidation.analyzerVersion]);
+
       return {
         rule: "analyzer",
         deleted: { analysis_artifacts: artifacts, analysis_runs: runs },
@@ -164,9 +170,11 @@ export function invalidate(db: SqlExec, invalidation: Invalidation): Invalidatio
         note: `artifacts from analyzer versions other than ${invalidation.analyzerVersion} are invalid; TrackModels stay until reanalysis rewrites them`,
       };
     }
+
     case "planner": {
       // Planner change reuses TrackModels and regenerates plans.
       const plans = deleteWhere(db, "show_plans", "planner_version <> ?", [invalidation.plannerVersion]);
+
       return {
         rule: "planner",
         deleted: { show_plans: plans },
@@ -174,6 +182,7 @@ export function invalidate(db: SqlExec, invalidation: Invalidation): Invalidatio
         note: `plans from planner versions other than ${invalidation.plannerVersion} are invalid; TrackModels are reused`,
       };
     }
+
     case "venue": {
       // Venue change reuses TrackModels and semantic plans: the renderer
       // adapts, so nothing is deleted. Rows keyed by the old venue class stay
@@ -185,9 +194,11 @@ export function invalidate(db: SqlExec, invalidation: Invalidation): Invalidatio
         note: `venue class ${invalidation.venueClass} re-keys plan lookups; semantic plans are reused, not regenerated`,
       };
     }
+
     case "style": {
       // Style change regenerates plans for that style only.
       const plans = deleteWhere(db, "show_plans", "style_id = ?", [invalidation.styleId]);
+
       return {
         rule: "style",
         deleted: { show_plans: plans },
@@ -195,6 +206,7 @@ export function invalidate(db: SqlExec, invalidation: Invalidation): Invalidatio
         note: `plans for style ${invalidation.styleId} are invalid; every other style keeps its plans`,
       };
     }
+
     case "library": {
       // Library change follows T-RBL-06: only the changed track's derived rows
       // are invalidated, keyed by source fingerprint.
@@ -204,13 +216,16 @@ export function invalidate(db: SqlExec, invalidation: Invalidation): Invalidatio
         "track_id = ? AND fingerprint <> ?",
         [invalidation.trackId, invalidation.sourceFingerprint],
       );
+
       const plans = deleteWhere(
         db,
         "show_plans",
         "track_id = ? AND source_fingerprint <> ?",
         [invalidation.trackId, invalidation.sourceFingerprint],
       );
+
       const native = deleteWhere(db, "native_analysis", "track_id = ?", [invalidation.trackId]);
+
       return {
         rule: "library",
         deleted: { analysis_artifacts: artifacts, show_plans: plans, native_analysis: native },
@@ -218,9 +233,11 @@ export function invalidate(db: SqlExec, invalidation: Invalidation): Invalidatio
         note: `track ${invalidation.trackId} changed on disk; only its derived rows for other fingerprints are invalid`,
       };
     }
+
     case "config": {
       // A different config snapshot is a different plan cache entry.
       const plans = deleteWhere(db, "show_plans", "config_hash <> ?", [invalidation.configHash]);
+
       return {
         rule: "config",
         deleted: { show_plans: plans },

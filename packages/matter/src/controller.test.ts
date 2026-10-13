@@ -81,12 +81,14 @@ describe("InMemoryAdapter command and read", () => {
     const adapter = new InMemoryAdapter("store-g");
     await expect(adapter.command(99, "onOff", "on")).rejects.toMatchObject({ reason: "unknown-node" });
     await expect(adapter.read(99, "basicInformation", "vendorId")).rejects.toMatchObject({ reason: "unknown-node" });
+
     try {
       await adapter.command(99, "onOff", "on");
       expect.unreachable();
     } catch (err) {
       expect(err).toBeInstanceOf(MatterError);
     }
+
     await adapter.close();
   });
 });

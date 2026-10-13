@@ -8,6 +8,7 @@ function storeWithLibrary(): { store: MemoryAliasStore; byId: (id: string) => { 
     "101": { rekordboxId: "101", canonicalPath: "/Music/Aurora.mp3" },
     "102": { rekordboxId: "102", canonicalPath: "/Music/Basalt.mp3" },
   };
+
   return { store: new MemoryAliasStore(), byId: (id: string) => rows[id] };
 }
 
@@ -44,15 +45,19 @@ describe("resolveLiveTrack", () => {
   it("resolves an ANLZ path through the library and a unique title", () => {
     const { store } = storeWithLibrary();
     let n = 0;
+
     const byPath = (p: string): { rekordboxId: string; canonicalPath: string } | undefined =>
       p === "/Music/Aurora.mp3" ? { rekordboxId: "101", canonicalPath: p } : undefined;
+
     const viaPath = resolveLiveTrack(store, { anlzPath: "/Music/Aurora.mp3", libraryByPath: byPath }, () => `t${++n}`);
     expect(viaPath.trackId).not.toBeNull();
+
     const viaTitle = resolveLiveTrack(
       store,
       { title: "Aurora", artist: "Nova", titleIndex: () => ["101"], libraryById: (id) => (id === "101" ? { rekordboxId: "101", canonicalPath: "/Music/Aurora.mp3" } : undefined) },
       () => `t${++n}`,
     );
+
     expect(viaTitle.matchedStep).toBe("title-path");
     expect(viaTitle.confidence).toBe(0.5);
   });

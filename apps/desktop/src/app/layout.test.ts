@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 // file disappears, if the renderer leaves the spec 83 directories, or if a
 // legacy electron file comes back.
 const desktop = fileURLToPath(new URL("../../", import.meta.url));
+
 const at = (rel: string): string => join(desktop, rel);
 
 const SERVICE_FILES = [
@@ -37,6 +38,7 @@ describe("P-83-layout", () => {
     for (const dir of SRC_DIRS) {
       expect(existsSync(at(`src/${dir}`)), `src/${dir}`).toBe(true);
     }
+
     expect(existsSync(at("src/index.html")), "src/index.html").toBe(true);
   });
 

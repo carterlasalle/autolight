@@ -67,6 +67,7 @@ const handlers: { [C in Channel]: ChannelHandler<C> } = {
   "config/import": async (req) => (await getConfigService()).importJson(req.json),
   "config/schema": async (req) => (await getConfigService()).schema(req.key),
 };
+
 // Payload keys, never blobs: enough to identify the button pressed without
 // flooding the file. Full payloads log on error paths only.
 function summarizeReq(req: ChannelRequest<Channel>): string {
@@ -87,12 +88,15 @@ export class IpcRouter implements Service {
       for (const name of Object.keys(channels) as Channel[]) {
         this.port.handle(name, (event, payload) => this.dispatch(name, event, payload));
       }
+
       this.registered = true;
       this.tracker.count("registrations");
     }
+
     this.tracker.setCounter("channels", Object.keys(channels).length);
     this.tracker.setCounter("registered", this.registered ? 1 : 0);
     this.tracker.set("running", `${Object.keys(channels).length} typed channels registered`);
+
     return this.status();
   }
 
@@ -101,20 +105,25 @@ export class IpcRouter implements Service {
       for (const name of Object.keys(channels) as Channel[]) this.port.removeHandler(name);
       this.registered = false;
     }
+
     this.tracker.set("stopped");
+
     return this.status();
   }
 
   status(): ServiceStatus {
     this.tracker.setCounter("channels", Object.keys(channels).length);
     this.tracker.setCounter("registered", this.registered ? 1 : 0);
+
     return this.tracker.status();
   }
 
   private senderAllowed(event: IpcEventLike): boolean {
     try {
       const url = event.senderFrame?.url ?? "";
+
       if (!url) return true;
+
       return url.startsWith("file://") || url.startsWith("http://localhost:5173");
     } catch {
       return false;
@@ -183,5 +192,6 @@ export function getIpcRouter(): IpcRouter {
       ipcMain.removeHandler(channel);
     },
   });
+
   return instance;
 }

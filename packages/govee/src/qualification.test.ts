@@ -17,8 +17,11 @@ import { SINGLE_ZONE_BADGE } from "./probe.js";
 import { FakeLamp, ScriptedUser, goldenHex } from "./lan-fake.test-support.js";
 
 const MAC = "AA:BB:CC:DD:EE:07";
+
 const OPCODE_B0 = 0xb0;
+
 const OPCODE_ARM = 0xb1;
+
 const FIRMWARE = "1.02.03";
 
 function makeLamp(over: Partial<ConstructorParameters<typeof FakeLamp>[0]> = {}): FakeLamp {
@@ -65,9 +68,11 @@ function opsOf(lamp: FakeLamp, opcode: number): string[] {
 /** One zebra stripe payload: candidates are counted on what the unit renders. */
 function stripePayload(zones: number): number[] {
   const payload = [0, zones];
+
   for (let zone = 0; zone < zones; zone++) {
     payload.push(...(zone % 2 === 0 ? [255, 0, 0] : [0, 0, 255]));
   }
+
   return payload;
 }
 
@@ -208,6 +213,7 @@ describe("govee qualification wizard", () => {
     const store = new MemoryCalibrationStore();
     const session = QualificationSession.open(options(lamp, store));
     const user = new ScriptedUser(lamp);
+
     for (let step = 0; step < 9; step++) await session.runStep(user);
 
     const recorded = session.record("segment-count");

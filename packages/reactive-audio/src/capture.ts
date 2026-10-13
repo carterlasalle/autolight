@@ -15,6 +15,7 @@
 import type { LiveFeatures } from "./dsp.js";
 
 export type CaptureHost = "audio-window" | "renderer";
+
 export type CaptureHostMode = CaptureHost | "audio-window-with-renderer-fallback";
 
 /** audio.capture.host default (DS-14). */
@@ -39,6 +40,7 @@ export interface CaptureConstraints {
  */
 export function captureConstraints(deviceId: string): CaptureConstraints {
   const id = deviceId.trim();
+
   return id === "" ? { audio: true } : { audio: { deviceId: { exact: id } } };
 }
 
@@ -52,7 +54,9 @@ export function resolveCaptureHost(
   audioWindowAvailable: boolean,
 ): { host: CaptureHost; fellBack: boolean } {
   if (mode === "renderer") return { host: "renderer", fellBack: false };
+
   if (mode === "audio-window") return { host: "audio-window", fellBack: false };
+
   return audioWindowAvailable ? { host: "audio-window", fellBack: false } : { host: "renderer", fellBack: true };
 }
 
@@ -110,6 +114,7 @@ export class AudioCaptureHost {
 
   get status(): CaptureStatus {
     const resolution = resolveCaptureHost(this.mode, this.audioWindowAvailable);
+
     return {
       host: resolution.host,
       fellBack: resolution.fellBack,
@@ -128,16 +133,21 @@ export class AudioCaptureHost {
     if (this.session !== null) return { ok: true, reason: null };
     const permission = this.permissionState === "granted" ? "granted" : await this.platform.requestPermission();
     this.permissionState = permission;
+
     if (permission !== "granted") {
       this.lastReason = `permission ${permission}`;
+
       return { ok: false, reason: this.lastReason };
     }
+
     try {
       this.session = await this.platform.start(captureConstraints(this.deviceIdValue));
       this.lastReason = null;
+
       return { ok: true, reason: null };
     } catch (error) {
       this.lastReason = error instanceof Error ? error.message : "capture start failed";
+
       return { ok: false, reason: this.lastReason };
     }
   }
@@ -145,6 +155,7 @@ export class AudioCaptureHost {
   /** Idempotent: stopping a stopped host is a no-op, never a second stop. */
   stop(): void {
     const session = this.session;
+
     if (session === null) return;
     this.session = null;
     session.stop();
@@ -154,10 +165,13 @@ export class AudioCaptureHost {
   async setDevice(deviceId: string): Promise<{ ok: boolean; reason: string | null }> {
     const previous = this.deviceIdValue;
     this.deviceIdValue = deviceId;
+
     if (this.session === null) return { ok: true, reason: null };
     this.stop();
     const result = await this.start();
+
     if (!result.ok) this.deviceIdValue = previous;
+
     return result;
   }
 
@@ -174,6 +188,7 @@ export class AudioCaptureHost {
   /** Bounded, latest wins: a new frame supersedes an unread one. */
   publish(frame: LiveFeatures): void {
     this.received += 1;
+
     if (this.pending !== null) this.superseded += 1;
     this.pending = frame;
   }
@@ -181,6 +196,7 @@ export class AudioCaptureHost {
   latest(): LiveFeatures | null {
     const frame = this.pending;
     this.pending = null;
+
     return frame;
   }
 }

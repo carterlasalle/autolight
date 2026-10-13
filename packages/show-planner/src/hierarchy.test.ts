@@ -5,6 +5,7 @@ import { DEFAULT_CONFIG } from "./config.js";
 import { BUILT_IN_STYLES } from "./styles.js";
 import { DEFAULT_VENUE_CLASS } from "./types.js";
 import { validateCompiledPlan } from "./validate.js";
+
 function futureTrack(): TrackModel {
   return {
     schemaVersion: 2,
@@ -110,18 +111,24 @@ describe("T-PLAN-03 hierarchy (P-2.1, P-2.4, P-30)", () => {
       style: BUILT_IN_STYLES["festival"]!,
       config: DEFAULT_CONFIG,
     });
+
     const staged = plan.cues.filter((c) => c.startBeat >= 225 && c.startBeat < 257);
     expect(staged.length).toBeGreaterThanOrEqual(4);
+
     const ramps = staged
       .filter((c) => c.type === "build-ramp")
       .sort((a, b) => a.startBeat - b.startBeat);
+
     expect(ramps.length).toBeGreaterThanOrEqual(3);
+
     for (let i = 1; i < ramps.length; i++) {
       expect(ramps[i]!.intensity).toBeGreaterThanOrEqual(ramps[i - 1]!.intensity - 0.05);
     }
+
     const dark = plan.cues
       .filter((c) => c.type === "blackout" && c.startBeat + c.durationBeats <= 257 && c.startBeat >= 225)
       .sort((a, b) => b.startBeat - a.startBeat)[0];
+
     expect(dark).toBeDefined();
     expect(dark!.startBeat + dark!.durationBeats).toBe(257);
     expect(plan.cues.some((c) => c.reason.includes("foreshadowing"))).toBe(true);
@@ -134,7 +141,9 @@ describe("T-PLAN-03 hierarchy (P-2.1, P-2.4, P-30)", () => {
       style: BUILT_IN_STYLES["festival"]!,
       config: DEFAULT_CONFIG,
     });
+
     const levels = new Set(plan.cues.map((c) => c.level));
+
     for (const l of ["section", "phrase", "bar", "beat", "sub-beat"] as const) {
       expect(levels.has(l)).toBe(true);
     }
@@ -147,6 +156,7 @@ describe("T-PLAN-03 hierarchy (P-2.1, P-2.4, P-30)", () => {
       style: BUILT_IN_STYLES["club"]!,
       config: DEFAULT_CONFIG,
     });
+
     const bad = {
       ...plan,
       cues: [

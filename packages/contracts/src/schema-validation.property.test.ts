@@ -10,6 +10,7 @@ import {
   trackModelSchema,
   type BeatGrid,
 } from "./index.js";
+
 const fixtureDir = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "test-fixtures", "analysis");
 
 // T-QA-12 contract validation properties (T-DATA-05).
@@ -37,6 +38,7 @@ const goodDeck = {
   loop: { active: boolean; startSeconds: null; endSeconds: null; beatLength: null };
   channelFader: number; crossfader: number; master: boolean; receivedAtNs: bigint;
 };
+
 describe("contract validation properties", () => {
   it("rejects out-of-range faders and bad enums", () => {
     for (const bad of [
@@ -48,8 +50,10 @@ describe("contract validation properties", () => {
     ]) {
       const r = deckStateSchema.safeParse(bad);
       expect(r.success).toBe(false);
+
       if (!r.success) expect(r.error.issues.length).toBeGreaterThan(0);
     }
+
     expect(deckStateSchema.safeParse(goodDeck).success).toBe(true);
   });
 
@@ -75,6 +79,7 @@ describe("contract validation properties", () => {
       "fusion.structure": { status: "present" },
       "plan.generated": { status: "present" },
     };
+
     const model = {
       schemaVersion: 2, analyzerVersion: "t", identity: { id: "t", sourceIds: {} },
       durationSeconds: 200, beatGrid: grid(64),
@@ -97,6 +102,7 @@ describe("contract validation properties", () => {
         },
       },
     };
+
     expect(trackModelSchema.safeParse(model).success).toBe(true);
     expect(trackModelSchema.safeParse({ ...model, analysisCoverage: "nope" }).success).toBe(false);
     expect(trackModelSchema.safeParse({
@@ -123,6 +129,7 @@ describe("contract validation properties", () => {
     const raw = readFileSync(join(fixtureDir, "trackmodel-v2.fixture.json"), "utf8");
     const parsed = trackModelSchema.safeParse(JSON.parse(raw));
     expect(parsed.success).toBe(true);
+
     if (parsed.success) {
       expect(JSON.stringify(parsed.data)).toBe(JSON.stringify(JSON.parse(raw)));
     }
@@ -133,6 +140,7 @@ describe("contract validation properties", () => {
       schemaVersion: 1, plannerVersion: "0.1.0", trackId: "t", styleId: "s", seed: "00",
       cues: [{ type: "section-look", startBeat: 0, durationBeats: 16, intensity: 0.8, target: "PRIMARY", priority: 1 }],
     };
+
     expect(showPlanSchema.safeParse(plan).success).toBe(true);
     expect(showPlanSchema.safeParse({ ...plan, cues: [] }).success).toBe(true);
     expect(showPlanSchema.safeParse({
@@ -143,6 +151,7 @@ describe("contract validation properties", () => {
   it("maps a dropout grid without NaN or inversion", () => {
     const g = grid(128);
     let prev = -Infinity;
+
     for (let s = 0; s < 60; s += 0.1) {
       const b = sourceSecondsToBeat(g, s);
       expect(Number.isFinite(b)).toBe(true);

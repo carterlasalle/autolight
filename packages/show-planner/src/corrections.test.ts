@@ -60,6 +60,7 @@ describe("T-PLAN-11 corrections (P-97)", () => {
     const before = new Map(plan.cues.filter((c) => c.startBeat < 32 || c.startBeat >= 64).map((c) => [c.id, c.startBeat]));
     const fresh = plan.cues.filter((c) => c.startBeat >= 32 && c.startBeat < 64).map((c) => ({ ...c, intensity: 0.1 }));
     const { cues } = regenerateWithLocks({ plan, sectionStart: 32, sectionEnd: 64, fresh, edits: { ...EMPTY_EDITS, lockedRegions: [{ startBeat: 0, endBeat: 32 }, { startBeat: 64, endBeat: 96 }] } });
+
     for (const [id, beat] of before) {
       const kept = cues.find((c) => c.id === id);
       expect(kept, id).toBeDefined();

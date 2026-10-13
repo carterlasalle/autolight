@@ -109,6 +109,7 @@ export class ProlinkProvider extends ProviderBase {
 
   protected async onStart(): Promise<void> {
     this.setStatus({ state: "starting" });
+
     if (this.options.bind === null) return;
     const [host, port] = splitHostPort(this.options.bind);
     const socket = createSocket({ type: "udp4", reuseAddr: true });
@@ -134,6 +135,7 @@ export class ProlinkProvider extends ProviderBase {
   protected async onStop(): Promise<void> {
     const socket = this.socket;
     this.socket = null;
+
     if (!socket) return;
     const { promise, resolve } = Promise.withResolvers<void>();
     socket.close(() => resolve());
@@ -150,12 +152,14 @@ export class ProlinkProvider extends ProviderBase {
 
   get boundPort(): number | null {
     const address = this.socket?.address();
+
     return address && typeof address === "object" ? address.port : null;
   }
 
   getPeers(atNs?: bigint): ProlinkPeer[] {
     const at = atNs ?? this.now();
     this.expirePeers(at);
+
     return [...this.peersByNumber.values()].sort((a, b) => a.deviceNumber - b.deviceNumber);
   }
 
@@ -163,9 +167,11 @@ export class ProlinkProvider extends ProviderBase {
   // Peers expire on read: a collision older than peerExpiryMs no longer blocks.
   effectiveMode(atNs?: bigint): "passive" | "virtual-cdj" {
     if (this.options.mode === "virtual-cdj") return "virtual-cdj";
+
     if (this.options.mode === "passive") return "passive";
     this.expirePeers(atNs ?? this.now());
     const collision = this.peersByNumber.has(this.options.deviceNumber);
+
     return collision ? "passive" : "virtual-cdj";
   }
 
@@ -173,17 +179,22 @@ export class ProlinkProvider extends ProviderBase {
   shouldSendKeepalive(atNs?: bigint): boolean {
     if (this.effectiveMode() !== "virtual-cdj") return false;
     const at = atNs ?? this.now();
+
     if (this.lastKeepaliveNs === null) return true;
+
     return Number(at - this.lastKeepaliveNs) / 1e6 >= this.options.keepaliveMs;
   }
 
   ingestPacket(data: Uint8Array, atNs?: bigint): ProlinkDecoded {
     const at = atNs ?? this.now();
     const decoded = decodeProlinkPacket(data);
+
     if (decoded.kind === "malformed") {
       this.markRejected(decoded.reason);
+
       return decoded;
     }
+
     if (decoded.kind === "keepalive") {
       this.peersByNumber.set(decoded.deviceNumber, {
         deviceNumber: decoded.deviceNumber,
@@ -191,13 +202,17 @@ export class ProlinkProvider extends ProviderBase {
         lastSeenNs: at,
       });
       this.setStatus({ state: "live", updateHz: 0, ageMs: 0 });
+
       return decoded;
     }
+
     const buffer = this.bufferFor(decoded.deviceNumber);
+
     if (decoded.kind === "beat") this.applyBeat(buffer, decoded);
     else this.applyStatus(buffer, decoded);
     this.setStatus({ state: "live", updateHz: 0, ageMs: 0 });
     this.emit(this.stateFor(decoded.deviceNumber, at));
+
     return decoded;
   }
 
@@ -205,9 +220,11 @@ export class ProlinkProvider extends ProviderBase {
   tick(atNs?: bigint): void {
     const at = atNs ?? this.now();
     this.expirePeers(at);
+
     if (!this.shouldSendKeepalive(at)) return;
     const bytes = buildKeepalivePacket(this.options.deviceName, this.options.deviceNumber);
     this.lastKeepaliveNs = at;
+
     if (this.options.sendDatagram) this.options.sendDatagram(bytes);
     else if (this.socket) this.socket.send(Buffer.from(bytes), PROLINK_PORTS.keepalive, "255.255.255.255");
   }
@@ -220,17 +237,21 @@ export class ProlinkProvider extends ProviderBase {
 
   private bufferFor(device: number): DeviceBuffer {
     let buffer = this.devices.get(device);
+
     if (!buffer) {
       buffer = emptyDevice();
       this.devices.set(device, buffer);
     }
+
     return buffer;
   }
 
   private applyBeat(buffer: DeviceBuffer, beat: ProlinkBeat): void {
     buffer.beatCounter += 1;
     buffer.pitch = beat.pitch;
+
     if (beat.bpm !== null) buffer.bpm = beat.bpm;
+
     if (beat.beatInBar !== null) buffer.beatInBar = beat.beatInBar;
   }
 
@@ -242,6 +263,7 @@ export class ProlinkProvider extends ProviderBase {
       buffer.loopActive = null;
       buffer.beatCounter = 0;
     }
+
     buffer.playing = status.playing;
     buffer.master = status.master;
     buffer.sync = status.sync;
@@ -249,15 +271,18 @@ export class ProlinkProvider extends ProviderBase {
     buffer.pitch = status.pitch;
     buffer.trackId = status.trackId;
     buffer.trackSlot = status.trackSlot;
+
     if (status.beatInBar !== null) buffer.beatInBar = status.beatInBar;
   }
 
   private stateFor(device: number, atNs?: bigint): ProviderDeckState {
     const buffer = this.bufferFor(device);
     const playheadSeconds = this.estimatePlayhead(buffer);
+
     const track = buffer.trackId === null
       ? null
       : { id: `rb:${buffer.trackId}`, sourceIds: { rekordboxId: String(buffer.trackId) } };
+
     return this.mapper.update(this.id, {
       deckId: device,
       atNs: atNs ?? this.now(),
@@ -292,6 +317,7 @@ export class ProlinkProvider extends ProviderBase {
   // Beat-counter estimate only: these packets carry no absolute position.
   private estimatePlayhead(buffer: DeviceBuffer): number {
     if (buffer.bpm === null || buffer.beatCounter === 0) return 0;
+
     return ((buffer.beatCounter - 1) * 60) / buffer.bpm;
   }
 }
@@ -304,5 +330,6 @@ function splitHostPort(bind: string): [string, number] {
   const at = bind.lastIndexOf(":");
   const host = at === -1 ? "0.0.0.0" : bind.slice(0, at);
   const port = at === -1 ? Number(bind) : Number(bind.slice(at + 1));
+
   return [host.length > 0 ? host : "0.0.0.0", Number.isFinite(port) ? port : 0];
 }

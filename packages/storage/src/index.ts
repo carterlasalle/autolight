@@ -19,17 +19,29 @@ import {
 import { migrate, migratorStatus, schemaVersion, tableNames } from "./migrate.js";
 
 export * from "./cache.js";
+
 export * from "./consent.js";
+
 export * from "./driver.js";
+
 export * from "./fastpath.js";
+
 export * from "./keys.js";
+
 export * from "./logging.js";
+
 export * from "./metrics.js";
+
 export * from "./migrate.js";
+
 export * from "./netaudit.js";
+
 export * from "./perf.js";
+
 export * from "./replay.js";
+
 export * from "./session.js";
+
 export * from "./validation.js";
 
 // schema.sql is the readable snapshot of the head schema, used by the
@@ -38,14 +50,17 @@ export * from "./validation.js";
 // where import.meta is empty and the snapshot file is not shipped.
 export function schemaPath(): string | null {
   const metaUrl = esmModuleUrl();
+
   return metaUrl === null ? null : fileURLToPath(new URL("../schema.sql", metaUrl));
 }
 
 export function loadSchema(): string {
   const path = schemaPath();
+
   if (path === null) {
     throw new Error("schema.sql is only readable in an ESM runtime; the app applies the migrations instead");
   }
+
   return readFileSync(path, "utf8");
 }
 
@@ -95,18 +110,21 @@ export class Store implements SqlExec {
 
   constructor(pathOrOptions: string | StoreOptions = ":memory:") {
     const options: StoreOptions = typeof pathOrOptions === "string" ? { path: pathOrOptions } : pathOrOptions;
+
     const opened = openDatabase({
       path: options.path ?? ":memory:",
       ...(options.driver !== undefined ? { driver: options.driver } : {}),
       ...(options.synchronous !== undefined ? { synchronous: options.synchronous } : {}),
       ...(options.busyTimeoutMs !== undefined ? { busyTimeoutMs: options.busyTimeoutMs } : {}),
     });
+
     this.driver = opened.driver;
     this.status = opened.status;
     this.journalMode = opened.journalMode;
     this.synchronous = opened.synchronous;
     this.busyTimeoutMs = opened.busyTimeoutMs;
     this.foreignKeys = opened.foreignKeys;
+
     if (options.skipMigrations !== true) migrate(this.driver);
   }
 
@@ -176,6 +194,7 @@ export class Store implements SqlExec {
        ORDER BY rowid DESC LIMIT 1`,
       [trackId, analyzerVersion, fingerprint],
     );
+
     return row?.artifact_path ?? null;
   }
 
@@ -233,6 +252,7 @@ export class Store implements SqlExec {
        ORDER BY rowid DESC LIMIT 1`,
       [trackId, styleId, plannerVersion],
     );
+
     return row?.plan_json ?? null;
   }
 
@@ -267,7 +287,9 @@ export class Store implements SqlExec {
       "SELECT sku, firmware, calibration_json FROM devices WHERE hardware_id = ?",
       [hardwareId],
     );
+
     if (!row) return null;
+
     return { sku: row.sku, firmware: row.firmware, calibrationJson: row.calibration_json };
   }
 
@@ -281,6 +303,7 @@ export class Store implements SqlExec {
 
   loadVenue(id: string): string | null {
     const row = this.driver.get<{ layout_json: string }>("SELECT layout_json FROM venues WHERE id = ?", [id]);
+
     return row?.layout_json ?? null;
   }
 

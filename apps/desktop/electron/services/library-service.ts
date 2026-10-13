@@ -48,6 +48,7 @@ export function defaultLibraryRoots(
   const rekordbox = platform === "darwin"
     ? join(home, "Library", "Pioneer", "rekordbox")
     : join(home, "Pioneer", "rekordbox");
+
   return [
     { provider: "rekordbox", path: rekordbox },
     { provider: "serato", path: join(home, "Music", "_Serato_") },
@@ -77,8 +78,10 @@ export class LibraryService implements Service {
       readable: isReadableDir(candidate.path),
     }));
     const watchRoot = this.opts.watchRoot ?? defaultWatchRoot;
+
     for (const root of this.roots) {
       if (!root.readable) continue;
+
       try {
         const watcher = watchRoot(root.path, (file) => { this.enqueue(root, file); });
         watcher.on("error", (err) => {
@@ -89,23 +92,28 @@ export class LibraryService implements Service {
         this.tracker.set("degraded", `watch failed on ${root.path}: ${messageOf(err)}`);
       }
     }
+
     this.tracker.setCounter("roots", this.roots.length);
     this.tracker.setCounter("watchers", this.watchers.length);
     const readable = this.roots.filter((r) => r.readable);
+
     if (readable.length === 0) {
       this.tracker.set("degraded", "no readable library root (rekordbox or serato not installed, or permission denied)");
     } else {
       this.tracker.set("running", readable.map((r) => `${r.provider}: ${r.path}`).join(", "));
     }
+
     return this.status();
   }
 
   stop(): ServiceStatus {
     for (const watcher of this.watchers) watcher.close();
     this.watchers = [];
+
     if (this.debounce !== null) clearTimeout(this.debounce);
     this.debounce = null;
     this.tracker.set("stopped");
+
     return this.status();
   }
 
@@ -113,6 +121,7 @@ export class LibraryService implements Service {
     this.tracker.setCounter("roots", this.roots.length);
     this.tracker.setCounter("watchers", this.watchers.length);
     this.tracker.setCounter("pendingChanges", this.pending.length);
+
     return this.tracker.status();
   }
 
@@ -122,6 +131,7 @@ export class LibraryService implements Service {
 
   onChanges(listener: (changes: LibraryChange[]) => void): () => void {
     this.listeners.add(listener);
+
     return () => {
       this.listeners.delete(listener);
     };
@@ -132,12 +142,14 @@ export class LibraryService implements Service {
   private enqueue(root: LibraryRoot, file: string): void {
     this.pending.push({ provider: root.provider, root: root.path, file, atMs: Date.now() });
     this.tracker.count("events");
+
     if (this.debounce !== null) clearTimeout(this.debounce);
     this.debounce = setTimeout(() => {
       const batch = this.pending;
       this.pending = [];
       this.debounce = null;
       this.tracker.count("batches");
+
       for (const listener of this.listeners) listener(batch);
     }, this.opts.debounceMs ?? 150);
   }
@@ -158,6 +170,7 @@ function defaultWatchRoot(root: string, onEvent: (file: string) => void): Librar
   const watcher = watch(root, { recursive: true }, (eventType, filename) => {
     onEvent(filename === null ? eventType : filename);
   });
+
   return {
     close: () => { watcher.close(); },
     on: (event, listener) => { watcher.on(event, listener); },
@@ -168,5 +181,6 @@ let instance: LibraryService | null = null;
 
 export function getLibraryService(opts: LibraryServiceOptions = {}): LibraryService {
   instance ??= new LibraryService(opts);
+
   return instance;
 }

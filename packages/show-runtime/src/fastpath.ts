@@ -18,6 +18,7 @@ export type UpgradeBoundary = "section" | "phrase" | "bar";
 
 /** runtime.upgrade.boundary default. */
 export const DEFAULT_UPGRADE_BOUNDARY: UpgradeBoundary = "phrase";
+
 /** runtime.fastPath.budgetMs default: load event to installed plan. */
 export const DEFAULT_FAST_PATH_BUDGET_MS = 100;
 
@@ -62,34 +63,43 @@ export function loadGeneration(
   const started = performance.now();
   const makeId = deps.makeId ?? (() => `gen:${generation}:${Date.now()}`);
   const resolution = resolveLiveTrack(aliasStore, input, makeId);
+
   if (resolution.trackId === null) {
     deps.analyzeNow?.(`unknown:${generation}`);
+
     return {
       generation, resolution, track: null, plan: null, miss: "no-artifact",
       detail: "unresolved track: queued top-priority analysis, ADAPTIVE until it lands",
       cacheHit: false, totalMs: performance.now() - started, installed: false,
     };
   }
+
   const full: FastPathRequest = { ...request, trackId: resolution.trackId };
   const loaded = loadFastPath(deps.store, full);
+
   if (loaded.track !== null && loaded.plan !== null) {
     installModel(world, generation, loaded.track);
     installPlan(world, generation, loaded.plan);
+
     return {
       generation, resolution, track: loaded.track, plan: loaded.plan, miss: null,
       detail: null, cacheHit: loaded.timings.cacheHit, totalMs: performance.now() - started, installed: true,
     };
   }
+
   if (loaded.track !== null) {
     installModel(world, generation, loaded.track);
     deps.compileNow?.(resolution.trackId);
+
     return {
       generation, resolution, track: loaded.track, plan: null, miss: loaded.miss ?? "no-plan",
       detail: "plan missing: installed STRUCTURED model, compiling in planner worker",
       cacheHit: loaded.timings.cacheHit, totalMs: performance.now() - started, installed: true,
     };
   }
+
   deps.analyzeNow?.(resolution.trackId);
+
   return {
     generation, resolution, track: null, plan: null, miss: loaded.miss,
     detail: loaded.detail, cacheHit: false, totalMs: performance.now() - started, installed: false,
@@ -125,8 +135,11 @@ export function upgradeAtBoundary(proposal: UpgradeProposal): UpgradeDecision {
     : proposal.boundary === "section"
       ? proposal.sectionBoundaries
       : phraseOrBar(proposal);
+
   const next = pool.filter((b) => b >= proposal.beat).sort((a, b) => a - b)[0];
+
   if (next === undefined) return { installAtBeat: proposal.beat, waitBeats: 0, boundary: proposal.boundary };
+
   return { installAtBeat: next, waitBeats: next - proposal.beat, boundary: proposal.boundary };
 }
 
@@ -134,7 +147,9 @@ function phraseOrBar(proposal: UpgradeProposal): number[] {
   if (proposal.phraseBoundaries.length > 0) return proposal.phraseBoundaries;
   const out: number[] = [];
   const start = Math.ceil(proposal.beat);
+
   for (let b = start; b < start + 64; b++) out.push(b);
+
   return out;
 }
 
@@ -148,5 +163,6 @@ export function worldWithPlan(deckId: number, generation: number, track: TrackMo
   const world = createDeckWorld(deckId, { generation });
   installModel(world, generation, track);
   installPlan(world, generation, plan);
+
   return world;
 }

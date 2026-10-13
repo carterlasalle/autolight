@@ -28,18 +28,24 @@ import { Worker } from "node:worker_threads";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
+
 const distClock = join(here, "..", "..", "packages", "show-host", "dist", "clock.js");
 
 const LOADS = ["idle", "renderer-freeze", "db-burst"];
+
 const STRATEGIES = ["interval", "timeout-spin", "hybrid"];
 
 function flag(name, fallback) {
   const argv = process.argv.slice(2);
+
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i] ?? "";
+
     if (arg === name) return argv[i + 1] ?? "true";
+
     if (arg.startsWith(`${name}=`)) return arg.slice(name.length + 1);
   }
+
   return fallback;
 }
 
@@ -49,22 +55,30 @@ function splitList(value) {
     .map((part) => part.trim())
     .filter(Boolean);
 }
+
 async function applyLoad(load, durationMs) {
   if (load === "idle") {
     await sleep(durationMs);
+
     return;
   }
+
   const stallMs = load === "renderer-freeze" ? 5000 : 500;
   const gapMs = load === "renderer-freeze" ? 10000 : 5000;
   const started = Date.now();
+
   // At least one stall per run even when the run is shorter than the gap.
   if (durationMs <= gapMs) {
     await sleep(Math.max(0, durationMs - stallMs));
+
     if (Date.now() - started < durationMs) blockMs(Math.min(stallMs, durationMs));
+
     return;
   }
+
   while (Date.now() - started < durationMs) {
     await sleep(gapMs);
+
     if (Date.now() - started >= durationMs) break;
     blockMs(Math.min(stallMs, durationMs - (Date.now() - started)));
   }
@@ -72,6 +86,7 @@ async function applyLoad(load, durationMs) {
 
 function runStrategy(strategy, { tickHz, spinMs, minutes }) {
   const ticks = Math.max(1, Math.round(minutes * 60 * tickHz));
+
   const workerCode = `
     const { parentPort, workerData } = await import("node:worker_threads");
     const { startClock } = await import(workerData.distUrl);
@@ -82,8 +97,10 @@ function runStrategy(strategy, { tickHz, spinMs, minutes }) {
       onTick: (tick) => parentPort.postMessage(tick),
     });
   `;
+
   return new Promise((resolve, reject) => {
     const got = [];
+
     const worker = new Worker(workerCode, {
       eval: true,
       workerData: {
@@ -94,6 +111,7 @@ function runStrategy(strategy, { tickHz, spinMs, minutes }) {
         ticks,
       },
     });
+
     worker.on("message", (tick) => {
       got.push(tick);
     });
@@ -109,18 +127,23 @@ function summarize(ticks, tickHz) {
   const jitter = ticks.map((tick) =>
     tick.actualNs <= tick.scheduledNs ? 0 : Number(tick.actualNs - tick.scheduledNs) / 1e6,
   );
+
   const sorted = [...jitter].sort((a, b) => a - b);
   const count = sorted.length;
   const rank = (q) => sorted[Math.min(count - 1, Math.max(0, Math.floor(q * (count - 1))))] ?? 0;
   const nominalMs = 1000 / tickHz;
   const buckets = [];
+
   for (let lo = 0; lo < 20; lo += 0.5) buckets.push({ lo, hi: lo + 0.5, count: 0 });
   const overflow = { lo: 20, hi: null, count: 0 };
+
   for (const sample of jitter) {
     const slot = buckets[Math.min(buckets.length - 1, Math.floor(sample / 0.5))];
+
     if (sample >= 20) overflow.count += 1;
     else slot.count += 1;
   }
+
   return {
     ticks: count,
     p50Ms: rank(0.5),
@@ -136,31 +159,38 @@ async function main() {
     console.error(`jitter: missing ${distClock}; build first: yarn workspace @autolight/show-host build`);
     process.exit(1);
   }
+
   const minutes = Number(flag("--minutes", "1"));
   const tickHz = Number(flag("--tickHz", "60"));
   const spinMs = Number(flag("--spinMs", "1.5"));
   const mode = String(flag("--mode", "worker-thread"));
   const out = String(flag("--out", join(here, "jitter.json")));
+
   const strategies = splitList(flag("--strategies", STRATEGIES.join(","))).filter((s) => {
     if (!STRATEGIES.includes(s)) {
       console.error(`jitter: unknown strategy ${s} (want ${STRATEGIES.join(", ")})`);
       process.exit(1);
     }
+
     return true;
   });
+
   const loads = splitList(flag("--loads", LOADS.join(","))).filter((s) => {
     if (!LOADS.includes(s)) {
       console.error(`jitter: unknown load ${s} (want ${LOADS.join(", ")})`);
       process.exit(1);
     }
+
     return true;
   });
+
   if (!Number.isFinite(minutes) || minutes <= 0) {
     console.error("jitter: --minutes must be a positive number");
     process.exit(1);
   }
 
   const results = [];
+
   for (const strategy of strategies) {
     for (const load of loads) {
       const durationMs = minutes * 60 * 1000;
@@ -188,6 +218,7 @@ async function main() {
     minutesPerRun: minutes,
     results,
   };
+
   mkdirSync(dirname(out), { recursive: true });
   writeFileSync(out, `${JSON.stringify(report, null, 2)}\n`);
   console.log(`jitter: wrote ${out}`);

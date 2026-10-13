@@ -27,17 +27,21 @@ describe("version registry (T-LIVE-13, spec 145, 146)", () => {
     const unverified = qualifyProvider(registry, "rkbx-osc", "7.2.19", "macos");
     expect(unverified.status).toBe("unverified");
     expect(unverified.reason).toContain("UNVERIFIED REKORDBOX VERSION");
+
     const qualified = recordQualification(
       registry, "rkbx-osc", "7.2.x", "macos",
       { date: "2026-10-01", machine: "owner-m1", runbook: "HW-RB-RKBX-01", result: "pass", notes: "replay passed" },
       true,
     );
+
     expect(qualifyProvider(qualified, "rkbx-osc", "7.2.19", "macos").status).toBe("qualified");
+
     const failed = recordQualification(
       registry, "rkbx-osc", "7.2.x", "macos",
       { date: "2026-10-01", machine: "owner-m1", runbook: "HW-RB-RKBX-01", result: "pass", notes: "broken" },
       false,
     );
+
     expect(qualifyProvider(failed, "rkbx-osc", "7.2.19", "macos").status).toBe("unverified");
   });
 

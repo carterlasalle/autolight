@@ -18,6 +18,7 @@ afterEach(async () => {
 
 function withoutStamp(state: DeckState): Omit<DeckState, "receivedAtNs"> {
   const { receivedAtNs: _stamp, ...rest } = state;
+
   return rest;
 }
 
@@ -27,6 +28,7 @@ describe("serato capture proxy (T-SER-05)", () => {
     await provider.start();
     cleanups.push(() => provider.stop());
     const remotePort = provider.setupSnapshot().advertisedPort;
+
     if (remotePort === null) throw new Error("provider advertised no port");
 
     const proxy = new SeratoCaptureProxy({ upstreamHost: "127.0.0.1", upstreamPort: remotePort });
@@ -43,18 +45,23 @@ describe("serato capture proxy (T-SER-05)", () => {
     // the peer sent has been forwarded and recorded, and both decks published.
     const sentBytes = (): number => Buffer.concat(emulator.capturedFrames().map((frame) => frame.bytes)).length;
     const recordedBytes = (): number => Buffer.concat(proxy.inboundFrames().map((frame) => frame.bytes)).length;
+
     // Both decks carry a track (the client's settled deckChange) and the
     // crossfader frame has been processed, not merely forwarded.
     const settled = (): boolean => {
       const decks = provider.getDecks();
+
       return decks.length >= 2
         && decks.every((deck) => deck.track !== null)
         && decks.every((deck) => Math.abs((deck.crossfader ?? -1) - 0.25) < 0.001);
     };
+
     const deadline = Date.now() + 3000;
+
     while ((recordedBytes() !== sentBytes() || !settled()) && Date.now() < deadline) {
       await new Promise<void>((resolve) => setImmediate(resolve));
     }
+
     const liveStates = provider.getDecks();
 
     const inbound = proxy.inboundFrames();

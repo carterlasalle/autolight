@@ -9,19 +9,23 @@ import { startClock, summarizeJitter, TIMER_STRATEGIES, type ClockTick } from ".
 function collect(strategy: (typeof TIMER_STRATEGIES)[number], ticks: number): Promise<ClockTick[]> {
   const { promise, resolve, reject } = Promise.withResolvers<ClockTick[]>();
   const got: ClockTick[] = [];
+
   const handle = startClock(strategy, {
     tickHz: 120,
     spinWindowMs: 0,
     ticks,
     onTick: (tick) => {
       got.push(tick);
+
       if (got.length >= ticks) {
         handle.stop();
         resolve(got);
       }
     },
   });
+
   setTimeout(() => reject(new Error(`${strategy} fired ${got.length}/${ticks} ticks in time`)), 5000);
+
   return promise;
 }
 
@@ -43,10 +47,13 @@ describe.each(TIMER_STRATEGIES)("clock strategy %s", (strategy) => {
     // (drift correction re-anchors to start), so indices stay ordered and
     // start at 0 but may gap under parallel load.
     expect(ticks[0]!.index).toBe(0);
+
     for (let i = 1; i < ticks.length; i += 1) {
       expect(ticks[i]!.index).toBeGreaterThan(ticks[i - 1]!.index);
     }
+
     const nominal = ticks[1]!.scheduledNs - ticks[0]!.scheduledNs;
+
     for (let i = 1; i < ticks.length; i += 1) {
       const gap = ticks[i]!.scheduledNs - ticks[i - 1]!.scheduledNs;
       expect(gap % nominal).toBe(0n);
@@ -58,6 +65,7 @@ describe.each(TIMER_STRATEGIES)("clock strategy %s", (strategy) => {
 describe("startClock validation", () => {
   it("rejects unknown strategies and non-positive tick rates", () => {
     const noop = (): void => {};
+
     expect(() => startClock("ntp" as never, { tickHz: 60, onTick: noop })).toThrow(/unknown timer strategy/);
     expect(() => startClock("interval", { tickHz: 0, onTick: noop })).toThrow(/tickHz must be a positive number/);
   });

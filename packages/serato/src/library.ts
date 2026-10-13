@@ -28,16 +28,20 @@ import { LibraryWatcher, type NativeWatch, type StatFile, type WatchEngine, type
 import { detectSeratoInstallation, parseCrateSync, parseDatabaseSync, type SeratoDatabaseTrack } from "serato-connect";
 
 export const SERATO_FOLDER_NAME = "_Serato_";
+
 /** Tag names serato-connect maps into a row; anything else is retained raw. */
 const MODELLED_TAGS: Record<string, true> = {
   pfil: true, tsng: true, tart: true, talb: true, tgen: true, tkey: true, tbpm: true,
   tlen: true, tbit: true, tsmp: true, ttyp: true, bbgl: true, bmis: true, uadd: true,
   tcom: true, tgrp: true, tcmp: true, tlbl: true, ttyr: true,
 };
+
 const RULE_FIELDS: Record<string, true> = {
   artist: true, title: true, album: true, genre: true, key: true, bpm: true, length: true, filepath: true,
 };
+
 const NUMERIC_FIELDS: Record<string, true> = { bpm: true, length: true };
+
 /** Container records that are never rules: the version header. */
 const CONTAINER_TAGS: Record<string, true> = { vrsn: true };
 
@@ -112,24 +116,30 @@ export function detectSeratoRoots(opts: {
 } = {}): SeratoLibraryRoot[] {
   const roots: SeratoLibraryRoot[] = [];
   const seen = new Set<string>();
+
   const push = (path: string, external: boolean): void => {
     if (seen.has(path)) return;
     seen.add(path);
     roots.push({ path, external, readable: isReadable(path) });
   };
+
   const configured = opts.configured === null || opts.configured === undefined || opts.configured.length === 0
     ? null
     : opts.configured;
+
   if (configured !== null) push(configured, false);
   push(defaultSeratoRoot(opts.home), false);
   const volumesDir = opts.volumesDir ?? "/Volumes";
   let volumes: string[] = [];
+
   try {
     volumes = readdirSync(volumesDir);
   } catch {
     volumes = [];
   }
+
   for (const volume of volumes) push(join(volumesDir, volume, SERATO_FOLDER_NAME), true);
+
   return roots;
 }
 
@@ -137,6 +147,7 @@ export function detectSeratoRoots(opts: {
 export function seratoInstallation(): { found: boolean; path: string; version: string | null } {
   const detection = detectSeratoInstallation();
   const version = readInstalledVersion();
+
   return { found: detection.found, path: detection.path, version };
 }
 
@@ -145,11 +156,13 @@ function readInstalledVersion(): string | null {
     try {
       const xml = readFileSync(candidate, "utf8");
       const match = /<key>CFBundleShortVersionString<\/key>\s*<string>([^<]+)<\/string>/.exec(xml);
+
       if (match?.[1] !== undefined) return match[1];
     } catch {
       continue;
     }
   }
+
   return null;
 }
 
@@ -162,40 +175,58 @@ interface WalkedRecord {
 function walkRecords(bytes: Buffer, start = 0, end = bytes.length): WalkedRecord[] {
   const records: WalkedRecord[] = [];
   let offset = start;
+
   while (offset + 8 <= end) {
     const tag = bytes.toString("ascii", offset, offset + 4);
     const length = bytes.readUInt32BE(offset + 4);
     offset += 8;
+
     if (offset + length > end) break;
     records.push({ tag, payload: bytes.subarray(offset, offset + length) });
     offset += length;
   }
+
   return records;
 }
 
 function decodeUtf16be(bytes: Buffer): string {
   const swapped = Buffer.alloc(bytes.length);
+
   for (let i = 0; i + 1 < bytes.length; i += 2) {
     swapped[i] = bytes[i + 1] as number;
     swapped[i + 1] = bytes[i] as number;
   }
+
   return swapped.toString("utf16le").replace(/\0+$/, "");
 }
 
 function asRow(track: SeratoDatabaseTrack, rawTags: Record<string, string>): SeratoTrackRow {
   const row: SeratoTrackRow = { filePath: track.filePath, rawTags };
+
   if (track.title !== undefined) row.title = track.title;
+
   if (track.artist !== undefined) row.artist = track.artist;
+
   if (track.album !== undefined) row.album = track.album;
+
   if (track.genre !== undefined) row.genre = track.genre;
+
   if (track.key !== undefined) row.key = track.key;
+
   if (track.bpm !== undefined) row.bpm = track.bpm;
+
   if (track.length !== undefined) row.length = track.length;
+
   if (track.bitrate !== undefined) row.bitrate = track.bitrate;
+
   if (track.sampleRate !== undefined) row.sampleRate = track.sampleRate;
+
   if (track.fileType !== undefined) row.fileType = track.fileType;
+
   if (track.missing !== undefined) row.missing = track.missing;
+
   if (track.dateAdded !== undefined) row.dateAdded = track.dateAdded.toISOString();
+
   return row;
 }
 
@@ -208,20 +239,26 @@ export function readSeratoDatabase(root: string): { rows: SeratoTrackRow[]; reta
   const bytes = readFileSync(join(root, "database V2"));
   const parsed = parseDatabaseSync(join(root, "database V2"));
   const retention = new Map<string, Record<string, string>>();
+
   for (const record of walkRecords(bytes)) {
     if (record.tag !== "otrk") continue;
     const fields = walkRecords(record.payload, 0, record.payload.length);
     const pathField = fields.find((field) => field.tag === "pfil");
+
     if (!pathField) continue;
     const filePath = decodeUtf16be(pathField.payload);
     const kept: Record<string, string> = {};
+
     for (const field of fields) {
       if (MODELLED_TAGS[field.tag] === true) continue;
       kept[field.tag] = field.payload.toString("base64");
     }
+
     if (Object.keys(kept).length > 0) retention.set(filePath, kept);
   }
+
   const rows = parsed.map((track) => asRow(track, retention.get(track.filePath) ?? {}));
+
   return { rows, retainedTagCount: [...retention.values()].reduce((sum, tags) => sum + Object.keys(tags).length, 0) };
 }
 
@@ -229,14 +266,17 @@ export function readSeratoDatabase(root: string): { rows: SeratoTrackRow[]; reta
 export function readSeratoCrates(root: string): SeratoCrate[] {
   const dir = join(root, "Subcrates");
   let entries: string[] = [];
+
   try {
     entries = readdirSync(dir).filter((name) => name.endsWith(".crate"));
   } catch {
     return [];
   }
+
   return entries.sort().map((name) => {
     const path = join(dir, name);
     const crate = parseCrateSync(path);
+
     return { name, path, trackPaths: crate.trackPaths };
   });
 }
@@ -250,25 +290,31 @@ export function readSeratoCrates(root: string): SeratoCrate[] {
 export function readSeratoSmartCrates(root: string): SeratoSmartCrate[] {
   const dir = join(root, "SmartCrates");
   let entries: string[] = [];
+
   try {
     entries = readdirSync(dir).filter((name) => name.endsWith(".scrate"));
   } catch {
     return [];
   }
+
   return entries.sort().map((name) => {
     const path = join(dir, name);
     const bytes = readFileSync(path);
     const rules: SeratoSmartCrateRule[] = [];
     const unsupported: { tag: string; payloadBase64: string }[] = [];
+
     for (const record of walkRecords(bytes)) {
       if (CONTAINER_TAGS[record.tag] === true) continue;
       const rule = parseSmartCrateRule(record.tag, record.payload);
+
       if (rule) {
         rules.push(rule);
         continue;
       }
+
       unsupported.push({ tag: record.tag, payloadBase64: record.payload.toString("base64") });
     }
+
     return { name, path, rules, unsupported };
   });
 }
@@ -276,9 +322,12 @@ export function readSeratoSmartCrates(root: string): SeratoSmartCrate[] {
 function parseSmartCrateRule(tag: string, payload: Buffer): SeratoSmartCrateRule | null {
   const text = decodeUtf16be(payload).trim();
   const match = /^([A-Za-z]+)\s+(is|contains|equals|>=|<=|>|<)\s+(.+)$/.exec(text);
+
   if (!match) return null;
   const field = (match[1] ?? "").toLowerCase();
+
   if (RULE_FIELDS[field] !== true) return null;
+
   return { tag, field, operator: (match[2] ?? "").toLowerCase(), value: (match[3] ?? "").trim(), text };
 }
 
@@ -293,47 +342,68 @@ export function evaluateSmartCrate(
 ): { matched: SeratoTrackRow[]; unsupportedRules: number } {
   if (crate.rules.length === 0) return { matched: [], unsupportedRules: crate.unsupported.length };
   const matched = rows.filter((row) => crate.rules.every((rule) => rowMatchesRule(row, rule)));
+
   return { matched, unsupportedRules: crate.unsupported.length };
 }
 
 function rowMatchesRule(row: SeratoTrackRow, rule: SeratoSmartCrateRule): boolean {
   const value = rule.field === "filepath" ? row.filePath : fieldValue(row, rule.field);
+
   if (value === undefined) return false;
+
   if (NUMERIC_FIELDS[rule.field] === true) {
     const left = Number(value);
     const right = Number(rule.value);
+
     if (!Number.isFinite(left) || !Number.isFinite(right)) return false;
+
     if (rule.operator === ">") return left > right;
+
     if (rule.operator === "<") return left < right;
+
     if (rule.operator === ">=") return left >= right;
+
     if (rule.operator === "<=") return left <= right;
+
     return left === right;
   }
+
   const left = String(value).toLowerCase();
   const right = rule.value.toLowerCase();
+
   if (rule.operator === "contains") return left.includes(right);
+
   return left === right;
 }
 
 function fieldValue(row: SeratoTrackRow, field: string): string | number | undefined {
   if (field === "artist") return row.artist;
+
   if (field === "title") return row.title;
+
   if (field === "album") return row.album;
+
   if (field === "genre") return row.genre;
+
   if (field === "key") return row.key;
+
   if (field === "bpm") return row.bpm;
+
   if (field === "length") return row.length;
+
   return undefined;
 }
 
 /** Merge rows from several roots, keeping the first row for a duplicate path. */
 export function mergeSeratoRows(perRoot: readonly SeratoTrackRow[][]): SeratoTrackRow[] {
   const byPath = new Map<string, SeratoTrackRow>();
+
   for (const rows of perRoot) {
     for (const row of rows) {
       if (!byPath.has(row.filePath)) byPath.set(row.filePath, row);
     }
   }
+
   return [...byPath.values()];
 }
 
@@ -344,17 +414,22 @@ export function mergeSeratoRows(perRoot: readonly SeratoTrackRow[][]): SeratoTra
  */
 export function seratoWatchFiles(root: string, rows: readonly SeratoTrackRow[]): WatchedFile[] {
   const files: WatchedFile[] = [{ path: join(root, "database V2"), kind: "db" }];
+
   for (const folder of ["Subcrates", "SmartCrates"]) {
     const dir = join(root, folder);
     let entries: string[] = [];
+
     try {
       entries = readdirSync(dir);
     } catch {
       entries = [];
     }
+
     for (const name of entries) files.push({ path: join(dir, name), kind: "db" });
   }
+
   for (const row of rows) files.push({ path: row.filePath, kind: "audio", trackId: row.filePath });
+
   return files;
 }
 

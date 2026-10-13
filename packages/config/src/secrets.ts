@@ -30,10 +30,12 @@ export function containsSecretText(text: string, secrets: readonly string[]): bo
 
 export function redactSecretText(text: string, secrets: readonly string[]): string {
   let out = text;
+
   for (const s of secrets) {
     if (s.length === 0) continue;
     out = out.split(s).join("[redacted]");
   }
+
   return out;
 }
 
@@ -54,14 +56,18 @@ export interface SecretBlobStore {
 
 function toBase64(bytes: Uint8Array): string {
   let s = "";
+
   for (const b of bytes) s += String.fromCharCode(b);
+
   return btoa(s);
 }
 
 function fromBase64(raw: string): Uint8Array {
   const s = atob(raw);
   const out = new Uint8Array(s.length);
+
   for (let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i);
+
   return out;
 }
 
@@ -84,18 +90,24 @@ export class SecretVault {
 
   get(id: SecretId): string | null {
     const live = this.memory.get(id);
+
     if (live !== undefined) return live;
     const blob = this.blobs.loadBlob();
+
     if (blob === null) return null;
     let all: Record<string, string>;
+
     try {
       all = JSON.parse(this.crypto.decryptString(fromBase64(blob))) as Record<string, string>;
     } catch {
       return null;
     }
+
     const found = all[id];
+
     if (typeof found !== "string") return null;
     this.memory.set(id, found);
+
     return found;
   }
 
@@ -123,16 +135,21 @@ export class SecretVault {
 
   private flush(): void {
     const persist: Record<string, string> = {};
+
     for (const [id, value] of this.memory) {
       if (MEMORY_ONLY_TABLE[id] !== true) persist[id] = value;
     }
+
     if (Object.keys(persist).length === 0) {
       this.blobs.clearBlob();
+
       return;
     }
+
     if (!this.crypto.isEncryptionAvailable()) {
       throw new Error("secret encryption unavailable: OS keychain missing, refusing plain-text write");
     }
+
     this.blobs.saveBlob(toBase64(this.crypto.encryptString(JSON.stringify(persist))));
   }
 }

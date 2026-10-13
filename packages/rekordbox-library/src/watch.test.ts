@@ -17,17 +17,20 @@ import {
 } from "./watch.js";
 
 const created: string[] = [];
+
 // Long enough that a manual sweep is the only thing that runs during a test.
 const IDLE_POLL_MS = 60_000;
 
 function tempDir(): string {
   const root = mkdtempSync(join(tmpdir(), "autolight-rbl-watch-"));
   created.push(root);
+
   return root;
 }
 
 afterEach(() => {
   vi.useRealTimers();
+
   while (created.length > 0) rmSync(created.pop() as string, { recursive: true, force: true });
 });
 
@@ -43,11 +46,13 @@ class RecordingNativeWatch implements NativeWatch {
   start(files: readonly WatchedFile[], onEvent: (path: string) => void): Promise<void> {
     this.started = [...files];
     this.onEvent = onEvent;
+
     return Promise.resolve();
   }
 
   stop(): Promise<void> {
     this.stopped = true;
+
     return Promise.resolve();
   }
 
@@ -75,6 +80,7 @@ describe("library watcher", () => {
         { path: audioPath, kind: "audio", trackId: "101" },
       ],
     });
+
     const changes: WatchChange[] = [];
     watcher.on((change) => changes.push(change));
 
@@ -95,13 +101,16 @@ describe("library watcher", () => {
     const audioPath = join(dir, "track.mp3");
     writeFileSync(audioPath, "audio");
     const native = new RecordingNativeWatch();
+
     const watcher = new LibraryWatcher({
       engine: "auto",
       files: [{ path: audioPath, kind: "audio", trackId: "101" }],
       native,
       pollMs: IDLE_POLL_MS,
     });
+
     await watcher.start();
+
     try {
       expect(native.started).toHaveLength(1);
       writeFileSync(audioPath, "audio-changed");
@@ -115,6 +124,7 @@ describe("library watcher", () => {
     } finally {
       await watcher.stop();
     }
+
     expect(native.stopped).toBe(true);
   });
 
@@ -124,6 +134,7 @@ describe("library watcher", () => {
     const audioPath = join(dir, "track.mp3");
     writeFileSync(audioPath, "audio");
     const native = new RecordingNativeWatch();
+
     const watcher = new LibraryWatcher({
       engine: "auto",
       files: [{ path: audioPath, kind: "audio", trackId: "101" }],
@@ -131,9 +142,11 @@ describe("library watcher", () => {
       debounceMs: 5,
       pollMs: IDLE_POLL_MS,
     });
+
     const events: WatchChange[] = [];
     watcher.on((change) => events.push(change));
     await watcher.start();
+
     try {
       writeFileSync(audioPath, "audio-changed");
       native.fire(audioPath);
@@ -153,14 +166,17 @@ describe("library watcher", () => {
     const dir = tempDir();
     const audioPath = join(dir, "track.mp3");
     writeFileSync(audioPath, "audio");
+
     const watcher = new LibraryWatcher({
       engine: "native-events",
       files: [{ path: audioPath, kind: "audio", trackId: "101" }],
       debounceMs: 5,
     });
+
     const seen: WatchChange[] = [];
     watcher.on((change) => seen.push(change));
     await watcher.start();
+
     try {
       // kqueue (macOS) does not deliver events for writes that land in the same
       // tick the watch was registered, so the test keeps writing until the

@@ -44,21 +44,30 @@ export class MidiService implements Service {
 
   start(): ServiceStatus {
     if (this.backend !== null) return this.status();
+
     try {
       const backend = this.opts.openBackend?.();
+
       if (backend === undefined) {
         this.tracker.set("degraded", "no MIDI backend wired (DS-13 backend lands with the FLX4 task)");
+
         return this.status();
       }
+
       backend.open((message) => {
         this.tracker.count("messages");
+
         if (message.cc !== undefined) {
           const hint = classifyCC(message.cc, message.value);
+
           if (hint !== null) this.publish(hint);
+
           return;
         }
+
         if (message.note !== undefined) {
           const control = controlForNote(message.note);
+
           if (control !== undefined) this.publish({ kind: "transport", control, on: message.value > 0 });
         }
       });
@@ -67,6 +76,7 @@ export class MidiService implements Service {
     } catch (err) {
       this.tracker.set("degraded", `MIDI backend failed: ${messageOf(err)}`);
     }
+
     return this.status();
   }
 
@@ -74,19 +84,23 @@ export class MidiService implements Service {
     try {
       this.backend?.close();
     } catch { /* teardown never throws */ }
+
     this.backend = null;
     this.tracker.set("stopped");
+
     return this.status();
   }
 
   status(): ServiceStatus {
     this.tracker.setCounter("backend", this.backend === null ? 0 : 1);
     this.tracker.setCounter("hints", this.hints.length);
+
     return this.tracker.status();
   }
 
   onHint(listener: (hint: Flx4Hint) => void): () => void {
     this.listeners.add(listener);
+
     return () => {
       this.listeners.delete(listener);
     };
@@ -99,32 +113,40 @@ export class MidiService implements Service {
   // Direct CC injection, used by the capture tooling and by tests.
   handleCc(cc: number, value: number): Flx4Hint | null {
     const hint = classifyCC(cc, value);
+
     if (hint !== null) this.publish(hint);
+
     return hint;
   }
 
   handleNote(note: number, velocity: number): TransportHint | null {
     const control = controlForNote(note);
+
     if (control === undefined) return null;
     const hint: TransportHint = { kind: "transport", control, on: velocity > 0 };
     this.publish(hint);
+
     return hint;
   }
 
   private publish(hint: Flx4Hint): void {
     this.hints.push(hint);
+
     if (this.hints.length > 64) this.hints.shift();
     this.tracker.count("hints");
+
     for (const listener of this.listeners) listener(hint);
   }
 }
 
 export const FLX4_CC = CC;
+
 export const FLX4_NOTE = NOTE;
 
 let instance: MidiService | null = null;
 
 export function getMidiService(opts: MidiServiceOptions = {}): MidiService {
   instance ??= new MidiService(opts);
+
   return instance;
 }

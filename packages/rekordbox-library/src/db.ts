@@ -100,10 +100,15 @@ export interface ReaderConfig {
 }
 
 const CONTENT = "djmdContent";
+
 const PLAYLIST = "djmdPlaylist";
+
 const HISTORY = "djmdHistory";
+
 const SONG_HISTORY = "djmdSongHistory";
+
 const SONG_PLAYLIST = "djmdSongPlaylist";
+
 const PROPERTY = "djmdProperty";
 
 // Playlist Attribute: 0 playlist, 1 folder, 4 smart playlist (pyrekordbox
@@ -142,9 +147,11 @@ function text(value: unknown, fallback: string): string {
 export function mapTrackRow(row: SqlRow, opts: { sharePath: string; statFile?: StatFile }): LibraryTrack {
   const analysisDataPath = stringOrNull(row["AnalysisDataPath"] ?? null);
   const filePath = stringOrNull(row["FolderPath"] ?? null);
+
   const anlzOptions = opts.statFile === undefined
     ? { sharePath: opts.sharePath, audioPath: filePath }
     : { sharePath: opts.sharePath, audioPath: filePath, statFile: opts.statFile };
+
   return {
     rekordboxId: text(row["ID"], ""),
     title: stringOrNull(row["Title"] ?? null),
@@ -202,6 +209,7 @@ export class RekordboxReader implements LibrarySource {
 
   static async open(config: ReaderConfig): Promise<RekordboxReader> {
     const db = await openReadOnly(config.dbPath, config.key);
+
     return new RekordboxReader(db, config);
   }
 
@@ -220,8 +228,10 @@ export class RekordboxReader implements LibrarySource {
   counts(): LibraryCounts {
     const count = (table: string): number => {
       const row = this.db.get(`SELECT count(*) AS n FROM ${table}`);
+
       return numberOrNull(row?.["n"] ?? null) ?? 0;
     };
+
     return {
       tracks: count(CONTENT),
       playlists: count(PLAYLIST),
@@ -240,22 +250,28 @@ export class RekordboxReader implements LibrarySource {
       limit: query.limit ?? DEFAULT_PAGE_SIZE,
       offset: query.offset ?? 0,
     };
+
     let sql = TRACK_SELECT;
+
     if (query.search !== undefined && query.search !== "") {
       params["search"] = `%${query.search}%`;
       sql += SEARCH_WHERE;
     }
+
     sql += " ORDER BY c.ID LIMIT :limit OFFSET :offset";
+
     return this.db.all(sql, params);
   }
 
   trackCount(search?: string): number {
     const params: SqlParams = {};
     let sql = `SELECT count(*) AS n FROM ${CONTENT} AS c LEFT JOIN djmdArtist AS ar ON c.ArtistID = ar.ID`;
+
     if (search !== undefined && search !== "") {
       params["search"] = `%${search}%`;
       sql += SEARCH_WHERE;
     }
+
     return numberOrNull(this.db.get(sql, params)?.["n"] ?? null) ?? 0;
   }
 
@@ -289,9 +305,11 @@ export class RekordboxReader implements LibrarySource {
 
   historyTrackCounts(): Record<string, number> {
     const counts: Record<string, number> = {};
+
     for (const row of this.db.all(`SELECT HistoryID AS id, count(*) AS n FROM ${SONG_HISTORY} GROUP BY HistoryID`)) {
       counts[text(row["id"], "")] = numberOrNull(row["n"] ?? null) ?? 0;
     }
+
     return counts;
   }
 

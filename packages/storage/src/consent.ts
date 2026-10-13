@@ -36,6 +36,7 @@ export function consentTextFor(helperId: string): ConsentText {
       undo: "Remove consent in Settings to stop the helper; re-signing is never done by the app.",
     };
   }
+
   return {
     helperId,
     what: `Elevated helper ${helperId}.`,
@@ -53,6 +54,7 @@ export class ConsentStore {
     const record: ConsentRecord = { helperId, consentedAt: at, textHash };
     this.consents.set(helperId, record);
     this.audit.push({ at, helperId, action: "consent-granted", detail: textHash });
+
     return record;
   }
 
@@ -75,7 +77,9 @@ export class ConsentStore {
     if (!this.consents.has(helperId)) {
       return { ok: false, error: `${helperId}: no consent recorded (grant consent first)` };
     }
+
     this.audit.push({ at, helperId, action: "start", detail: "helper started by user request" });
+
     return { ok: true };
   }
 

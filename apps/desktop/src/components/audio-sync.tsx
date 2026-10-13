@@ -18,8 +18,10 @@ export function AudioSyncCard(): JSX.Element {
     void invoke("audio/devices", { version: 1 }).then((raw: unknown) => {
       const envelope = raw as { ok?: boolean; devices?: { index: number; name: string }[] } | null;
       const list = envelope && envelope.ok !== false && Array.isArray(envelope.devices) ? envelope.devices : [];
+
       if (list.length > 0) s.set({ audioDevices: list });
     });
+
     return () => {
       cancelAnimationFrame(rafRef.current);
       streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -31,8 +33,10 @@ export function AudioSyncCard(): JSX.Element {
       const inputs = devs
         .filter((d) => d.kind === "audioinput")
         .map((d, i) => ({ index: i, name: d.label || `Input ${i + 1}` }));
+
       if (inputs.length > 0) {
         s.set({ audioDevices: inputs, audioPermission: "granted" });
+
         if (s.audioDevice === null) s.set({ audioDevice: inputs[0]?.index ?? 0 });
       }
     }).catch(() => { s.set({ audioPermission: "denied" }); });
@@ -49,14 +53,17 @@ export function AudioSyncCard(): JSX.Element {
       analyser.fftSize = 256;
       src.connect(analyser);
       const data = new Uint8Array(analyser.frequencyBinCount);
+
       const tick = (): void => {
         analyser.getByteTimeDomainData(data);
         let peak = 0;
+
         for (const v of data) peak = Math.max(peak, Math.abs(v - 128) / 128);
         setLevel(peak);
         s.set({ audioLevel: peak, reactiveLevel: Math.min(1, peak * s.sensitivity) });
         rafRef.current = requestAnimationFrame(tick);
       };
+
       tick();
     } catch {
       s.set({ audioPermission: "denied" });

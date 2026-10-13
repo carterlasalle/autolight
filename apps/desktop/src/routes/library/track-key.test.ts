@@ -27,6 +27,7 @@ describe("library TrackId keying (T-ID-03, F-ID-03)", () => {
       { trackId: "track-bbb-2", title: "Same Title", artist: "B" },
       { trackId: "t3", title: "Only One" },
     ]);
+
     expect(labels.get("t3")).toBe("Only One");
     expect(labels.get("track-aaa-1")).not.toBe(labels.get("track-bbb-2"));
   });

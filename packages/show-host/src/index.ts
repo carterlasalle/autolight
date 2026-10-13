@@ -44,12 +44,14 @@ import {
 // Modes (DS-07)
 
 export const HOST_MODES = ["worker-thread", "utility-process", "utility-process-worker"] as const;
+
 export type HostMode = (typeof HOST_MODES)[number];
 
 // ---------------------------------------------------------------------------
 // Native addon probing (T-ARC-01: verify per mode, report unavailable)
 
 export const PROBE_IDS = ["govee-toolkit", "ble-toolkit-ble", "ble-noble"] as const;
+
 export type ProbeId = (typeof PROBE_IDS)[number];
 
 export interface ProbeResult {
@@ -95,25 +97,34 @@ export function defaultAddonProbe(id: ProbeId): ProbeResult {
   try {
     if (id === "govee-toolkit") {
       const toolkit = requireNativeAddon("govee-toolkit") as unknown;
+
       if (toolkit === null || typeof toolkit !== "object") {
         return unavailable(id, "govee-toolkit module exports no object");
       }
+
       return available(id);
     }
+
     if (id === "ble-toolkit-ble") {
       const toolkit = requireNativeAddon("govee-toolkit") as { ble?: unknown };
+
       if (toolkit.ble === undefined) {
         return unavailable(id, "govee-toolkit was built without the ble binding");
       }
+
       return available(id);
     }
+
     const noble = requireNativeAddon("@stoprocent/noble") as unknown;
+
     if (noble === null || typeof noble !== "object") {
       return unavailable(id, "@stoprocent/noble exports no object");
     }
+
     return available(id);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+
     return unavailable(id, message);
   }
 }
@@ -121,10 +132,13 @@ export function defaultAddonProbe(id: ProbeId): ProbeResult {
 export function probeMode(mode: HostMode, probe: AddonProbe = defaultAddonProbe): ModeStatus {
   const results = modeProbeIds[mode].map((id) => probe(id));
   const failed = results.filter((result) => !result.available);
+
   if (failed.length > 0) {
     const reason = failed.map((result) => `${result.id}: ${result.reason ?? "unknown failure"}`).join("; ");
+
     return { mode, available: false, reason, probes: results };
   }
+
   return { mode, available: true, reason: null, probes: results };
 }
 
@@ -159,9 +173,11 @@ export const hostInboundMessageSchema = z.discriminatedUnion("type", [
   }),
   z.object({ type: z.literal("close"), reason: z.string() }),
 ]);
+
 export type HostInboundMessage = z.infer<typeof hostInboundMessageSchema>;
 
 const OVERRIDE_KINDS = ["none", "blackout", "white", "freeze", "force-low", "force-high"] as const;
+
 const CLOCK_HEALTHS = ["live", "extrapolating", "holding", "degraded"] as const;
 
 export const deckSnapshotSchema = z.object({
@@ -174,6 +190,7 @@ export const deckSnapshotSchema = z.object({
   override: z.enum(OVERRIDE_KINDS),
   clockHealth: z.enum(CLOCK_HEALTHS),
 });
+
 export type DeckSnapshot = z.infer<typeof deckSnapshotSchema>;
 
 export const cellSnapshotSchema = z.object({
@@ -181,6 +198,7 @@ export const cellSnapshotSchema = z.object({
   cellIndex: z.number().int(),
   color: z.tuple([z.number(), z.number(), z.number()]),
 });
+
 export type CellSnapshot = z.infer<typeof cellSnapshotSchema>;
 
 export const hostSnapshotSchema = z.object({
@@ -192,6 +210,7 @@ export const hostSnapshotSchema = z.object({
   weights: z.object({ a: z.number(), b: z.number() }),
   cells: z.array(cellSnapshotSchema),
 });
+
 export type HostSnapshot = z.infer<typeof hostSnapshotSchema>;
 
 export const hostMetricsSchema = z.object({
@@ -203,6 +222,7 @@ export const hostMetricsSchema = z.object({
   intervalMaxMs: z.number(),
   missedTicksPerHour: z.number(),
 });
+
 export type HostMetrics = z.infer<typeof hostMetricsSchema>;
 
 export const hostOutboundMessageSchema = z.discriminatedUnion("type", [
@@ -211,6 +231,7 @@ export const hostOutboundMessageSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("error"), error: z.object({ code: z.string(), message: z.string() }) }),
   z.object({ type: z.literal("response"), channel: z.string(), response: z.unknown() }),
 ]);
+
 export type HostOutboundMessage = z.infer<typeof hostOutboundMessageSchema>;
 
 // ---------------------------------------------------------------------------
@@ -275,9 +296,11 @@ export class PortBus {
   send(message: unknown): void {
     if (this.ended) return;
     const error = this.options.validateOutbound(message);
+
     if (error !== null) {
       throw new Error(`show host refused to send invalid message: ${error}`);
     }
+
     for (const port of this.ports) {
       if (port.connected) port.postMessage(message);
     }
@@ -290,8 +313,11 @@ export class PortBus {
 
   private drop(port: HostPort, reason: string): void {
     const index = this.ports.indexOf(port);
+
     if (index >= 0) this.ports.splice(index, 1);
+
     if (this.ended) return;
+
     if (port.supervised) {
       this.ended = true;
       this.options.onGone(reason);
@@ -333,9 +359,13 @@ type IntentResult =
   | { ok: false; error: { code: string; message: string } };
 
 const DEFAULT_TICK_HZ = 60;
+
 const DEFAULT_UI_RATE_HZ = 30;
+
 const DEFAULT_MAX_BYTES = 262144;
+
 const SEEK_THRESHOLD_BEATS = 8;
+
 const MISSED_TICK_SLACK = 1.5;
 
 export class ShowHost {
@@ -386,6 +416,7 @@ export class ShowHost {
     this.bus = new PortBus({
       validateOutbound: (message) => {
         const parsed = hostOutboundMessageSchema.safeParse(message);
+
         return parsed.success ? null : parsed.error.message;
       },
       onGone: (reason) => this.handlePortGone(reason),
@@ -402,6 +433,7 @@ export class ShowHost {
         `show host mode ${this.mode} unavailable: ${this.addonStatus.reason ?? "addon probe failed"}`,
       );
     }
+
     if (this.interval !== null) return;
     const periodMs = 1000 / this.tickHz;
     this.interval = setInterval(() => this.tick(this.nowNsFn()), periodMs);
@@ -412,6 +444,7 @@ export class ShowHost {
       clearInterval(this.interval);
       this.interval = null;
     }
+
     this.bus.close();
   }
 
@@ -421,16 +454,21 @@ export class ShowHost {
   tick(nowNs: bigint): void {
     const last = this.lastTickNs;
     this.lastTickNs = nowNs;
+
     if (last !== null && nowNs >= last) {
       const deltaNs = nowNs - last;
       this.tickDeltasMs.push(Number(deltaNs) / 1e6);
+
       if (this.tickDeltasMs.length > this.maxDeltas) this.tickDeltasMs.shift();
+
       if (deltaNs > BigInt(Math.round(Number(this.nominalTickNs) * MISSED_TICK_SLACK))) this.missedTicks += 1;
     }
+
     this.tickCount += 1;
     this.advanceCursors(nowNs);
     const frames = this.composeFrames();
     this.lastFrames = this.applyOverrides(frames);
+
     if (nowNs - this.lastSnapshotNs >= this.snapshotIntervalNs) {
       this.publish(nowNs);
     }
@@ -439,13 +477,17 @@ export class ShowHost {
   getMetrics(): HostMetrics {
     const deltas = [...this.tickDeltasMs].sort((a, b) => a - b);
     const count = deltas.length;
+
     const pick = (quantile: number): number => {
       if (count === 0) return 0;
       const index = Math.min(count - 1, Math.max(0, Math.floor(quantile * (count - 1))));
+
       return deltas[index] ?? 0;
     };
+
     const elapsedNs = this.lastTickNs === null ? 0n : this.lastTickNs - this.metricsWindowStartNs;
     const missedPerHour = elapsedNs >= 1_000_000_000n ? (this.missedTicks * 3.6e12) / Number(elapsedNs) : 0;
+
     return {
       ticks: this.tickCount,
       snapshotsPublished: this.snapshotsPublished,
@@ -462,19 +504,23 @@ export class ShowHost {
 
   ingestDeck(deckId: number, state: DeckState): void {
     let world = this.worlds.get(deckId);
+
     if (world === undefined) {
       world = { state: null, cursor: { beat: 0, loopPass: 0, scratchHold: false }, plan: null, generation: 0 };
       this.worlds.set(deckId, world);
     }
+
     world.state = state; // latest wins, older observations are dropped
   }
 
   installPlan(deckId: number, generation: number, plan: ShowPlan | null): void {
     let world = this.worlds.get(deckId);
+
     if (world === undefined) {
       world = { state: null, cursor: { beat: 0, loopPass: 0, scratchHold: false }, plan: null, generation: 0 };
       this.worlds.set(deckId, world);
     }
+
     world.plan = plan;
     world.generation = generation;
   }
@@ -491,28 +537,36 @@ export class ShowHost {
       const bpm = state.effectiveBpm ?? 120;
       const beatPerSecond = bpm / 60;
       const elapsedNs = this.lastTickNs === null ? 0n : nowNs - this.lastTickNs;
+
       const predicted =
         world.cursor.beat +
         (elapsedNs < 0n ? 0 : (Number(elapsedNs) / 1e9) * (state.playing ? state.playRate : 0) * beatPerSecond);
+
       const estimated = estimatePosition(state, nowNs) * beatPerSecond;
       const gridBeat = (seconds: number): number => seconds * beatPerSecond;
       const tracked = trackDeck(predicted, state, gridBeat, { seekThresholdBeats: SEEK_THRESHOLD_BEATS });
+
       if (tracked.scratchHold) continue;
+
       if (tracked.seeked) {
         world.cursor = { beat: tracked.beat, loopPass: 0, scratchHold: false };
         continue;
       }
+
       let beat = tracked.beat;
       let loopPass = 0;
+
       if (state.loop.active && state.loop.startSeconds !== null && state.loop.endSeconds !== null) {
         const looped = loopBeatOf(
           beat,
           state.loop.startSeconds * beatPerSecond,
           state.loop.endSeconds * beatPerSecond,
         );
+
         beat = looped.beat;
         loopPass = looped.pass;
       }
+
       world.cursor = { beat, loopPass, scratchHold: false };
     }
   }
@@ -524,14 +578,18 @@ export class ShowHost {
     const audible = [...this.worlds.values()].filter(
       (world) => world.state !== null && audibleWeight(world.state) > 0,
     );
+
     if (audible.length === 0) {
       this.lastOwner = null;
       this.lastWeights = { a: 0, b: 0 };
+
       return new Map();
     }
+
     const first = audible[0]!;
     const firstMix = this.deckMixOf(first);
     let result: MixResult;
+
     if (audible.length === 1) {
       result = {
         owner: "a",
@@ -546,8 +604,10 @@ export class ShowHost {
       result = mixDown(firstMix, this.deckMixOf(second));
       this.lastWeights = baseWeights(first.state!, second.state!);
     }
+
     this.lastOwner = result.owner;
     const frames = new Map<string, Uint8Array>();
+
     if (result.cues.length > 0) {
       const mixedPlan: ShowPlan = {
         schemaVersion: 1,
@@ -557,14 +617,18 @@ export class ShowHost {
         seed: "mixed",
         cues: result.cues,
       };
+
       // Mixed cues render against the lead deck's beat; per-deck
       // progressive timing arrives with the full director (T-ARC-05).
       const rendered = renderFrame(mixedPlan, firstMix.beat, this.fixtures);
+
       for (const [fixtureId, bytes] of rendered) frames.set(fixtureId, bytes);
     }
+
     if (frames.size === 0 && this.fixtures.length > 0) {
       for (const fixture of this.fixtures) frames.set(fixture.id, new Uint8Array(fixture.cells.length * 3));
     }
+
     return frames;
   }
 
@@ -581,20 +645,27 @@ export class ShowHost {
     if (this.override === "freeze") {
       return this.lastFrames.size > 0 ? this.lastFrames : frames;
     }
+
     if (this.override === "blackout") return this.blankFrames(0);
+
     if (this.override === "white") return this.blankFrames(Math.round(255 * this.masterIntensity));
     const factor = this.masterIntensity * (this.override === "force-low" ? 0.25 : 1);
+
     if (factor === 1) return frames;
     const scaled = new Map<string, Uint8Array>();
+
     for (const [fixtureId, bytes] of frames) scaled.set(fixtureId, scaleBytes(bytes, factor));
+
     return scaled;
   }
 
   private blankFrames(value: number): Map<string, Uint8Array> {
     const out = new Map<string, Uint8Array>();
+
     for (const fixture of this.fixtures) {
       out.set(fixture.id, new Uint8Array(fixture.cells.length * 3).fill(value));
     }
+
     return out;
   }
 
@@ -604,9 +675,11 @@ export class ShowHost {
   private publish(nowNs: bigint): void {
     const snapshot = this.buildSnapshot(nowNs);
     const bytes = Buffer.byteLength(JSON.stringify(snapshot));
+
     if (bytes > this.maxBytes) {
       throw new Error(`snapshot is ${bytes} bytes, over runtime.snapshot.maxBytes ${this.maxBytes}`);
     }
+
     this.bus.send({ type: "snapshot", snapshot });
     this.bus.send({ type: "metrics", metrics: this.getMetrics() });
     this.supersededFrames += Math.max(0, this.tickCount - this.lastPublishedTick - 1);
@@ -617,6 +690,7 @@ export class ShowHost {
 
   private buildSnapshot(nowNs: bigint): HostSnapshot {
     const decks: DeckSnapshot[] = [];
+
     for (const world of this.worlds.values()) {
       if (world.state === null) continue;
       const state = world.state;
@@ -632,20 +706,27 @@ export class ShowHost {
         clockHealth: clockHealth(ageMs),
       });
     }
+
     const cells: CellSnapshot[] = [];
+
     for (const fixture of this.fixtures) {
       const bytes = this.lastFrames.get(fixture.id);
+
       if (bytes === undefined) continue;
+
       for (let i = 0; i < fixture.cells.length; i += 1) {
         const offset = i * 3;
+
         const color = [bytes[offset] ?? 0, bytes[offset + 1] ?? 0, bytes[offset + 2] ?? 0] as [
           number,
           number,
           number,
         ];
+
         cells.push({ fixtureId: fixture.id, cellIndex: fixture.cells[i]!.index, color });
       }
     }
+
     return {
       tick: this.tickCount,
       tMs: Number(nowNs) / 1e6,
@@ -662,29 +743,37 @@ export class ShowHost {
 
   private handlePortMessage(message: unknown): void {
     const parsed = hostInboundMessageSchema.safeParse(message);
+
     if (!parsed.success) {
       this.invalidInbound(parsed.error.issues[0]?.message ?? "schema violation");
+
       return;
     }
+
     const inbound = parsed.data;
+
     switch (inbound.type) {
       case "deck": {
         this.ingestDeck(inbound.deckId, { ...inbound.state, receivedAtNs: BigInt(inbound.state.receivedAtNs) });
         break;
       }
+
       case "plan": {
         this.installPlan(inbound.deckId, inbound.generation, inbound.plan);
         break;
       }
+
       case "fixtures": {
         this.installFixtures(inbound.generation, inbound.fixtures);
         break;
       }
+
       case "intent": {
         const response = this.handleIntent(inbound.channel, inbound.request);
         this.sendResponse(inbound.channel, response);
         break;
       }
+
       case "close": {
         this.stop();
         break;
@@ -699,81 +788,99 @@ export class ShowHost {
   private sendResponse(channel: Channel, result: IntentResult): void {
     const schema = channels[channel].response as unknown as z.ZodType<unknown>;
     const parsed = schema.safeParse(result);
+
     if (!parsed.success) {
       throw new Error(`show host response for ${channel} failed its schema: ${parsed.error.message}`);
     }
+
     this.bus.send({ type: "response", channel, response: parsed.data });
   }
 
   private handleIntent(channel: Channel, request: unknown): IntentResult {
     const schema = channels[channel].request as unknown as z.ZodType<unknown>;
     const parsed = schema.safeParse(request);
+
     if (!parsed.success) {
       return {
         ok: false,
         error: { code: "E_BAD_REQUEST", message: `${channel}: ${parsed.error.issues[0]?.message ?? "invalid"}` },
       };
     }
+
     const data = parsed.data as Record<string, unknown>;
     let response: Record<string, unknown>;
+
     switch (channel) {
       case "master/blackout": {
         this.override = "blackout";
         response = { blackout: true };
         break;
       }
+
       case "master/full": {
         this.override = "white";
         response = { full: true };
         break;
       }
+
       case "master/freeze": {
         const frozen = data.frozen as boolean;
+
         if (frozen) this.override = "freeze";
         else if (this.override === "freeze") this.override = "none";
         response = { frozen: this.override === "freeze" };
         break;
       }
+
       case "master/intensity": {
         this.masterIntensity = data.value as number;
         response = { value: this.masterIntensity };
         break;
       }
+
       case "master/resume": {
         this.override = "none";
         const at = data.at as ResumeAt;
         const lead = this.worlds.values().next().value;
+
         if (lead !== undefined && lead.state !== null) {
           lead.cursor = { ...lead.cursor, beat: quantizeResume(lead.cursor.beat, at) };
         }
+
         response = { at };
         break;
       }
+
       case "show/energy": {
         this.energyTier = data.tier as string;
         response = { tier: this.energyTier };
         break;
       }
+
       case "show/trigger-build": {
         this.lastTrigger = "build";
         response = { triggered: true };
         break;
       }
+
       case "show/trigger-drop": {
         this.lastTrigger = "drop";
         response = { triggered: true };
         break;
       }
+
       case "show/style": {
         this.style = { style: data.style as string, palette: data.palette as string };
         response = { style: this.style.style };
         break;
       }
+
       case "show/state": {
         this.activeDeck = data.deck as number;
         response = { deck: this.activeDeck };
         break;
       }
+
       default: {
         return {
           ok: false,
@@ -781,6 +888,7 @@ export class ShowHost {
         };
       }
     }
+
     return { ok: true, ...response };
   }
 
@@ -818,24 +926,33 @@ export function startHost(mode: HostMode, probeOrOptions?: AddonProbe | StartHos
     typeof probeOrOptions === "function"
       ? { probe: probeOrOptions as AddonProbe }
       : (probeOrOptions ?? {});
+
   const probe = options.probe ?? defaultAddonProbe;
   const status = probeMode(mode, probe);
+
   if (!status.available) {
     throw new Error(`show host mode ${mode} unavailable: ${status.reason ?? "addon probe failed"}`);
   }
+
   const channel = new MessageChannel();
   const hostConfig: { mode: HostMode; tickHz?: number; uiRateHz?: number; maxBytes?: number } = { mode };
+
   if (options.tickHz !== undefined) hostConfig.tickHz = options.tickHz;
+
   if (options.uiRateHz !== undefined) hostConfig.uiRateHz = options.uiRateHz;
+
   if (options.maxBytes !== undefined) hostConfig.maxBytes = options.maxBytes;
   const onCrash = options.onCrash ?? (() => undefined);
+
   const host = new ShowHost({
     config: hostConfig,
     onCrash,
     addonProbe: probe,
   });
+
   host.attach(wrapMessagePort(channel.port2, true));
   host.start();
+
   return {
     mode,
     port: channel.port1,
@@ -849,15 +966,19 @@ export function startHost(mode: HostMode, probeOrOptions?: AddonProbe | StartHos
 
 function scaleBytes(bytes: Uint8Array, factor: number): Uint8Array {
   const out = new Uint8Array(bytes.length);
+
   for (let i = 0; i < bytes.length; i += 1) {
     out[i] = Math.round(Math.min(255, (bytes[i] ?? 0) * factor));
   }
+
   return out;
 }
 
 function loopBeatOf(beat: number, loopStart: number, loopEnd: number): { beat: number; pass: number } {
   const length = loopEnd - loopStart;
+
   if (!(length > 0) || beat < loopStart) return { beat, pass: 0 };
   const pass = Math.floor((beat - loopStart) / length);
+
   return { beat: loopStart + ((beat - loopStart) % length), pass };
 }

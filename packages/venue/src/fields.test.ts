@@ -11,9 +11,11 @@ function stripCells(n: number, room = rectangleRoom(5, 5)): { cells: FieldCell[]
   const midS: number[] = [];
   let total = 0;
   const pts = [...run.polyline, run.polyline[0]!];
+
   for (let i = 0; i + 1 < pts.length; i++) {
     total += Math.hypot(pts[i + 1]!.x - pts[i]!.x, pts[i + 1]!.y - pts[i]!.y);
   }
+
   for (let i = 0; i < n; i++) {
     const arcM = ((i + 0.5) / n) * total;
     const at = runPointAt(run, arcM);
@@ -25,6 +27,7 @@ function stripCells(n: number, room = rectangleRoom(5, 5)): { cells: FieldCell[]
     });
     midS.push(proj.s);
   }
+
   return { cells, midS };
 }
 
@@ -34,11 +37,13 @@ describe("T-ROOM-05 spatial field computation", () => {
     const { cells } = stripCells(20, room);
     const f = computeFields(room, cells, outlineRuns(room, 2.5), { zeroS: 0 });
     let worst = 0;
+
     for (let i = 0; i < 20; i++) {
       const a = f.s[i]!;
       const b = f.s[(i + 1) % 20]!;
       worst = Math.max(worst, Math.min(Math.abs(b - a), 1 - Math.abs(b - a)));
     }
+
     expect(worst).toBeLessThan(0.08);
   });
 
@@ -46,6 +51,7 @@ describe("T-ROOM-05 spatial field computation", () => {
     const room = rectangleRoom(5, 5);
     const { cells } = stripCells(20, room);
     const f = computeFields(room, cells, outlineRuns(room, 2.5), { zeroS: 0 });
+
     for (let i = 0; i < 20; i++) expect(f.gDj[i]).toBeLessThanOrEqual(1 + 1e-6);
     expect(Math.min(...f.gDj)).toBeLessThan(0.35);
     expect(Math.max(...f.gDj)).toBeCloseTo(1, 1);
@@ -56,11 +62,13 @@ describe("T-ROOM-05 spatial field computation", () => {
 
   it("projects a corner lamp to the corner s", () => {
     const room = rectangleRoom(5, 5);
+
     const lamp = {
       fixtureId: "lamp", physicalIndex: 0, logicalIndex: 0,
       pos: { x: -2.5, y: 2.5, z: 1 }, extentStart: { x: -2.5, y: 2.5, z: 0 }, extentEnd: { x: -2.5, y: 2.5, z: 2 },
       runId: null, arcM: 0, chain: 0,
     };
+
     const f = computeFields(room, [lamp], outlineRuns(room, 2.5), { zeroS: 0 });
     const corner = projectToOutline({ x: -2.5, y: 2.5 }, room.outline);
     expect(f.s[0]).toBeCloseTo(((corner.s % 1) + 1) % 1, 6);
@@ -80,9 +88,11 @@ describe("T-ROOM-05 spatial field computation", () => {
     const room = rectangleRoom(5, 5);
     const { cells } = stripCells(20, room);
     const f = computeFields(room, cells, outlineRuns(room, 2.5), { zeroS: 0 });
+
     for (let i = 0; i < 20; i++) {
       expect(Math.hypot(f.tangent[i * 2]!, f.tangent[i * 2 + 1]!)).toBeCloseTo(1, 6);
     }
+
     expect(Math.abs(f.tangent[0]! - f.tangent[10]!)).toBeGreaterThan(0.5);
   });
 

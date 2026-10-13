@@ -64,6 +64,7 @@ describe("T-PLAN-02 identity and colour (P-28, P-29)", () => {
       style: BUILT_IN_STYLES["club"]!,
       config: DEFAULT_CONFIG,
     });
+
     const g = plan.globalDesign;
     expect(g.primary.length).toBeGreaterThanOrEqual(2);
     expect(g.primary.length + g.secondary.length).toBeLessThanOrEqual(3);
@@ -74,6 +75,7 @@ describe("T-PLAN-02 identity and colour (P-28, P-29)", () => {
     expect(g.impactBudget).toBeGreaterThan(0);
     // Core colours are distinguishable on fixtures.
     const core = [...g.primary, ...g.secondary];
+
     for (let i = 0; i < core.length; i++) {
       for (let j = i + 1; j < core.length; j++) {
         expect(oklchDistance(core[i]!, core[j]!)).toBeGreaterThanOrEqual(
@@ -81,6 +83,7 @@ describe("T-PLAN-02 identity and colour (P-28, P-29)", () => {
         );
       }
     }
+
     // Section looks use the identity colour, not an invented hue.
     const look = plan.cues.find((c) => c.type === "section-look" && c.startBeat === 0)!;
     expect(look.color?.h).toBe(core[0]!.h);
@@ -93,29 +96,38 @@ describe("T-PLAN-02 identity and colour (P-28, P-29)", () => {
       style: BUILT_IN_STYLES["club"]!,
       config: DEFAULT_CONFIG,
     });
+
     const sections = new Set(plan.sections.map((s) => s.startBeat));
+
     const returns = new Set(
       plan.recurrence.motifs.flatMap((m) =>
         m.sections.slice(1).map((i) => plan.sections[i]!.startBeat),
       ),
     );
+
     // Colour identity lives on section looks: ramps desaturate toward white
     // and foreshadowing glimpses the drop motif by design, neither is a
     // palette change.
     const coloured = [...plan.cues]
       .filter((c) => c.color !== undefined && (c.type === "section-look" || c.type === "static-look"))
       .sort((a, b) => a.startBeat - b.startBeat);
+
     let last: string | null = null;
     let changes = 0;
     let justified = 0;
+
     for (const c of coloured) {
       const key = `${Math.round(c.color!.h)}`;
+
       if (last !== null && key !== last) {
         changes++;
+
         if (sections.has(c.startBeat) || returns.has(c.startBeat)) justified++;
       }
+
       last = key;
     }
+
     expect(changes).toBeGreaterThan(0);
     expect(justified / changes).toBe(1);
   });

@@ -47,6 +47,7 @@ export class AnalysisSupervisor implements Service {
     // Lazy spawn: the worker starts with the first job so a missing `uv` or a
     // project path problem cannot block boot (spec 132 degraded stage).
     this.tracker.set("running", "worker spawns on the first analysis job");
+
     return this.status();
   }
 
@@ -54,8 +55,10 @@ export class AnalysisSupervisor implements Service {
     try {
       this.worker?.stop();
     } catch { /* teardown never throws */ }
+
     this.spawned = false;
     this.tracker.set("stopped");
+
     return this.status();
   }
 
@@ -63,6 +66,7 @@ export class AnalysisSupervisor implements Service {
     this.tracker.setCounter("spawned", this.spawned ? 1 : 0);
     this.tracker.setCounter("pending", this.worker?.pendingCount() ?? 0);
     this.tracker.setCounter("queued", this.worker?.queuedCount() ?? 0);
+
     return this.tracker.status();
   }
 
@@ -70,16 +74,19 @@ export class AnalysisSupervisor implements Service {
     if (this.worker === null) {
       this.worker = this.opts.createWorker?.() ?? new AnalysisClient(this.opts.command, this.opts.projectDir);
     }
+
     return this.worker;
   }
 
   private ensureWorker(): AnalysisWorkerPort {
     const port = this.workerPort();
+
     if (!this.spawned) {
       port.start();
       this.spawned = true;
       this.tracker.count("spawns");
     }
+
     return port;
   }
 
@@ -87,9 +94,12 @@ export class AnalysisSupervisor implements Service {
     if (this.tracker.current !== "running" && this.tracker.current !== "degraded") {
       return { ok: false, error: { code: "E_SUPERVISOR_NOT_STARTED", message: "analysis-supervisor is not started" } };
     }
+
     this.tracker.count("jobs");
+
     try {
       const result = await this.ensureWorker().analyze(req);
+
       return { ok: true, artifactPath: result.artifactPath };
     } catch (err) {
       const message = messageOf(err);
@@ -98,6 +108,7 @@ export class AnalysisSupervisor implements Service {
       this.spawned = false;
       this.tracker.count("restarts");
       this.tracker.set("degraded", `analysis job failed: ${message}`);
+
       return { ok: false, error: { code: "E_ANALYSIS_FAILED", message } };
     }
   }
@@ -107,5 +118,6 @@ let instance: AnalysisSupervisor | null = null;
 
 export function getAnalysisSupervisor(opts: AnalysisSupervisorOptions = {}): AnalysisSupervisor {
   instance ??= new AnalysisSupervisor(opts);
+
   return instance;
 }

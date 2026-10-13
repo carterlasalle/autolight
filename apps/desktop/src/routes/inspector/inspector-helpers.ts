@@ -20,9 +20,11 @@ export function auditionAtBeat(
   const lastBeat = Math.max(1, ...track.sections.map((s) => s.endBeat));
   const clamped = Math.min(lastBeat, Math.max(0, Math.round(beat)));
   let best: { type: string; startBeat: number } | null = null;
+
   for (const c of cues) {
     if (c.startBeat <= clamped && (!best || c.startBeat > best.startBeat)) best = c;
   }
+
   return { beat: clamped, cueType: best?.type ?? "section-look", sendToLights };
 }
 
@@ -32,15 +34,21 @@ export function auditionAtBeat(
 export function addDropBeat(events: { type: string; beat: number }[], lastBeat: number): number | null {
   const dropBeats = new Set(events.filter((e) => e.type === "drop").map((e) => e.beat));
   const firstDrop = events.find((e) => e.type === "drop")?.beat;
+
   if (firstDrop === undefined) {
     const fallback = events.reduce((m, e) => (Number.isFinite(e.beat) ? Math.max(m, e.beat) : m), 0);
+
     return Math.min(lastBeat, fallback);
   }
+
   const auditionBeat = Math.min(lastBeat, firstDrop + 1);
+
   if (!dropBeats.has(auditionBeat)) return auditionBeat;
+
   for (let b = auditionBeat + 1; b <= lastBeat; b++) {
     if (!dropBeats.has(b)) return b;
   }
+
   return null;
 }
 
@@ -72,5 +80,6 @@ export function undoStack<T>(stack: T[][], next: T[]): T[][] {
 
 export function redoPop<T>(stack: T[][]): { head: T[] | null; rest: T[][] } {
   if (stack.length === 0) return { head: null, rest: [] };
+
   return { head: stack[stack.length - 1] ?? null, rest: stack.slice(0, -1) };
 }

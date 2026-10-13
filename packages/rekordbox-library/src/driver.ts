@@ -16,7 +16,9 @@ import { existsSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 
 export type SqlParam = string | number | bigint | null | Uint8Array;
+
 export type SqlParams = Record<string, SqlParam>;
+
 export type SqlRow = Record<string, unknown>;
 
 export type LibraryDbErrorCode = "not-found" | "not-a-database" | "cipher-module-missing" | "driver-failed";
@@ -78,6 +80,7 @@ interface CipherHandle {
 // shape for the whole namespace object.
 function ctorOf(mod: unknown): unknown {
   if (typeof mod === "object" && mod !== null && "default" in mod) return mod.default;
+
   return mod;
 }
 
@@ -88,20 +91,26 @@ function ctorOf(mod: unknown): unknown {
 async function openWithCipher(dbPath: string, key: string): Promise<ReadOnlyDb | undefined> {
   const specifier = CIPHER_MODULE;
   let mod: unknown;
+
   try {
     mod = await import(/* @vite-ignore */ specifier);
   } catch {
     return undefined;
   }
+
   const ctor = ctorOf(mod);
+
   if (typeof ctor !== "function") return undefined;
+
   // Reason for the cast: the module ships no typings this package can import
   // statically while the dependency stays optional.
   const CipherCtor = ctor as new (
     path: string,
     options: { readonly: boolean; fileMustExist: boolean },
   ) => CipherHandle;
+
   let handle: CipherHandle;
+
   try {
     handle = new CipherCtor(dbPath, { readonly: true, fileMustExist: true });
   } catch {
@@ -110,6 +119,7 @@ async function openWithCipher(dbPath: string, key: string): Promise<ReadOnlyDb |
     // cipher-module-missing error, never a raw bindings threw.
     return undefined;
   }
+
   try {
     handle.pragma("cipher='sqlcipher'");
     handle.pragma("legacy=4");
@@ -122,14 +132,18 @@ async function openWithCipher(dbPath: string, key: string): Promise<ReadOnlyDb |
     handle.pragma("query_only=ON");
     const lockRow = handle.prepare("PRAGMA query_only").get({});
     const lockValue = lockRow === undefined ? undefined : "query_only" in lockRow ? lockRow["query_only"] : Object.values(lockRow)[0];
+
     if (lockValue !== 1 && lockValue !== "1") {
       throw new LibraryDbError(`${dbPath} refused the query_only lock`, "driver-failed");
     }
   } catch (error) {
     handle.close();
+
     if (error instanceof LibraryDbError) throw error;
+
     return undefined;
   }
+
   return adapter(
     "better-sqlite3-multiple-ciphers",
     (sql) => handle.prepare(sql),
@@ -142,31 +156,39 @@ async function openWithCipher(dbPath: string, key: string): Promise<ReadOnlyDb |
 
 function openWithNodeSqlite(dbPath: string): ReadOnlyDb {
   let handle: DatabaseSync;
+
   try {
     handle = new DatabaseSync(dbPath, { readOnly: true });
   } catch (error) {
     throw new LibraryDbError(`could not open ${dbPath} read-only: ${describe(error)}`, "driver-failed");
   }
+
   const prepare = (sql: string): StatementLike => {
     const stmt = handle.prepare(sql);
+
     return {
       all: (params) => stmt.all(params) as SqlRow[],
       get: (params) => stmt.get(params) as SqlRow | undefined,
     };
   };
+
   try {
     handle.exec("PRAGMA query_only=ON");
     const lockRow = prepare("PRAGMA query_only").get({});
     const lockValue = lockRow === undefined ? undefined : "query_only" in lockRow ? lockRow["query_only"] : Object.values(lockRow)[0];
+
     if (lockValue !== 1 && lockValue !== "1") {
       throw new LibraryDbError(`${dbPath} refused the query_only lock`, "driver-failed");
     }
+
     prepare("SELECT count(*) AS n FROM sqlite_master").get({});
   } catch (error) {
     handle.close();
+
     if (error instanceof LibraryDbError) throw error;
     throw new LibraryDbError(`${dbPath} is not a readable SQLite file: ${describe(error)}`, "not-a-database");
   }
+
   return adapter(
     "node:sqlite",
     prepare,
@@ -188,20 +210,24 @@ function describe(error: unknown): string {
  */
 export async function openReadOnly(dbPath: string, key?: string): Promise<ReadOnlyDb> {
   if (!existsSync(dbPath)) throw new LibraryDbError(`Rekordbox database not found: ${dbPath}`, "not-found");
+
   if (key !== undefined) {
     const cipher = await openWithCipher(dbPath, key);
+
     if (cipher !== undefined) return cipher;
     throw new LibraryDbError(
       `${CIPHER_MODULE} is not installed; the pyrekordbox reader covers this database`,
       "cipher-module-missing",
     );
   }
+
   try {
     return openWithNodeSqlite(dbPath);
   } catch (error) {
     if (error instanceof LibraryDbError && error.code === "not-a-database") {
       throw new LibraryDbError(`${dbPath} is encrypted; a SQLCipher driver is required`, "not-a-database");
     }
+
     throw error;
   }
 }
@@ -209,8 +235,10 @@ export async function openReadOnly(dbPath: string, key?: string): Promise<ReadOn
 /** True when the optional SQLCipher driver is present in this installation. */
 export async function cipherDriverAvailable(): Promise<boolean> {
   const specifier = CIPHER_MODULE;
+
   try {
     const mod: unknown = await import(/* @vite-ignore */ specifier);
+
     return typeof ctorOf(mod) === "function";
   } catch {
     return false;
@@ -225,6 +253,7 @@ interface ExecableHandle {
 
 function isExecable(value: unknown): value is ExecableHandle {
   if (typeof value !== "object" || value === null || !("exec" in value)) return false;
+
   return typeof value.exec === "function";
 }
 
@@ -234,8 +263,10 @@ function isExecable(value: unknown): value is ExecableHandle {
  */
 export function attemptWrite(db: ReadOnlyDb, sql = WRITE_PROBE_SQL): { rejected: boolean; error: string | null } {
   if (!isExecable(db.raw)) return { rejected: false, error: "driver handle exposes no write entry point" };
+
   try {
     db.raw.exec(sql);
+
     return { rejected: false, error: null };
   } catch (error) {
     return { rejected: true, error: describe(error) };

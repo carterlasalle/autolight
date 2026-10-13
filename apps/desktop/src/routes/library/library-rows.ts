@@ -34,13 +34,18 @@ export function libraryTrackRow(opts: {
   lastModified: string | null;
 }): LibraryTrackRow {
   const { track } = opts;
+
   if (opts.failed) {
     return emptyRow(track, opts, "FAILED", opts.failed);
   }
+
   if (!track) return emptyRow(null, opts, opts.analyzing ? "ANALYZING" : "NEEDS ANALYSIS", null);
+
   if (opts.sourceMissing) return emptyRow(track, opts, "SOURCE MISSING", null);
+
   if (opts.gridWarned) return emptyRow(track, opts, "GRID WARNING", null);
   const ready = coverageOf(track) !== "adaptive";
+
   return emptyRow(track, opts, ready ? "READY" : opts.analyzing ? "ANALYZING" : "NEEDS ANALYSIS", null);
 }
 
@@ -86,10 +91,14 @@ export function liveDeckRows(
       ? [{ id: "deck-b", title: decks[1].title, artist: decks[1].artist, readiness: decks[1].readiness, bpm: decks[1].bpm ?? fallbackBpm }]
       : []),
   ];
+
   const q = query.trim().toLowerCase();
+
   if (!q) return list;
+
   return list.filter((t) => t.title.toLowerCase().includes(q) || t.artist.toLowerCase().includes(q));
 }
+
 // Preanalysis queue (spec 139): one entry per queued track. Queue order is
 // the selection order; priority moves entries ahead of same-state entries.
 export interface QueueEntry {
@@ -110,9 +119,11 @@ export function advanceQueue(entries: QueueEntry[], trackId: string, next: Queue
 
 export function prioritiseQueue(entries: QueueEntry[], trackId: string): QueueEntry[] {
   const target = entries.find((e) => e.trackId === trackId);
+
   if (!target) return entries;
   const marked = entries.map((e) => (e.trackId === trackId ? { ...e, priority: true } : e));
   const rest = marked.filter((e) => e.trackId !== trackId);
+
   return [{ ...target, priority: true }, ...rest];
 }
 
@@ -130,15 +141,18 @@ export interface DeckUpcoming {
 
 export function upcomingForDecks(cuesByDeck: { deckId: number; beat: number; cues: ShowCue[] }[], limit = 5): DeckUpcoming[] {
   const out: DeckUpcoming[] = [];
+
   for (const d of cuesByDeck) {
     const after = d.cues
       .filter((c) => c.startBeat + c.durationBeats > d.beat)
       .sort((a, b) => a.startBeat - b.startBeat)
       .slice(0, limit);
+
     for (const cue of after) {
       const delta = Math.max(0, Math.round(cue.startBeat - d.beat));
       out.push({ deckId: d.deckId, label: delta === 0 ? "now" : `in ${delta} beats`, cue });
     }
   }
+
   return out;
 }

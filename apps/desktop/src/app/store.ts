@@ -27,14 +27,18 @@ export async function invoke(channel: string, payload: unknown): Promise<unknown
   try {
     if (!window.autolight) {
       useShell.getState().diagnostics[`ipc:${channel}`] = "unavailable: preload missing";
+
       return null;
     }
+
     return await window.autolight.invoke(channel, payload);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+
     try {
       useShell.getState().diagnostics[`ipc:${channel}`] = message;
     } catch { /* store not ready: error still propagates */ }
+
     return null;
   }
 }
@@ -42,8 +46,11 @@ export async function invoke(channel: string, payload: unknown): Promise<unknown
 export type Route = "live" | "library" | "inspector" | "venue" | "setup" | "diagnostics" | "settings";
 
 export type EnergyTier = "LOW" | "MED" | "HIGH";
+
 export const PARTY_PALETTES = ["ND", "Warm", "Cool", "Neon", "Fire", "Ocean", "UV"] as const;
+
 export type PartyPalette = (typeof PARTY_PALETTES)[number];
+
 export const ALT_PATTERNS = [
   "Alternating Flash",
   "Alternating On/Off",
@@ -51,7 +58,9 @@ export const ALT_PATTERNS = [
   "Chase (A→B→A→B)",
   "Opposite Colors",
 ] as const;
+
 export type AltPattern = (typeof ALT_PATTERNS)[number];
+
 export type LightTarget = "A" | "B" | "Both";
 
 // Follow mode: preview = designer tool (resolved grid + plan, no playhead

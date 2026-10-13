@@ -15,21 +15,26 @@ class FakeClock implements BleClock {
   setTimeout(fn: () => void, ms: number): number {
     const handle = this.next++;
     this.tasks.set(handle, { at: this.current + Math.max(0, ms), fn });
+
     return handle;
   }
   clearTimeout(handle: number): void { this.tasks.delete(handle); }
   advance(ms: number): void {
     const target = this.current + ms;
+
     for (;;) {
       let earliest: [number, { at: number; fn: () => void }] | null = null;
+
       for (const entry of this.tasks) {
         if (entry[1].at <= target && (earliest === null || entry[1].at < earliest[1].at)) earliest = entry;
       }
+
       if (earliest === null) break;
       this.tasks.delete(earliest[0]);
       this.current = Math.max(this.current, earliest[1].at);
       earliest[1].fn();
     }
+
     this.current = Math.max(this.current, target);
   }
 }
@@ -38,6 +43,7 @@ function simWith(clock: FakeClock, budgetHz: number | null, address = "AA:BB:CC:
   const adapter = new SimBleAdapter({ kind: "noble", clock: () => clock.now() });
   const peripheral = new SimPeripheral({ address, name: "GBK_H6076_AB12", manufacturer: new Uint8Array([0]), budgetHz });
   adapter.add(peripheral);
+
   return { adapter, peripheral };
 }
 
@@ -48,11 +54,13 @@ describe("ble link and pacing (T-BLE-03)", () => {
     const link = new BleLink("AA:BB:CC:DD:EE:01", adapter, { writeBudgetHz: 10, writeDrainMs: 0 }, clock);
     await link.open(() => undefined);
     clock.advance(100);
+
     for (let i = 0; i < 30; i++) {
       link.send(new Uint8Array([0x33, 0x01, i & 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]));
       clock.advance(100);
       link.tick();
     }
+
     clock.advance(500);
     expect(peripheral.metrics.stalled).toBe(0);
     expect(link.status().writesSent).toBe(30);
@@ -105,21 +113,25 @@ describe("ble link and pacing (T-BLE-03)", () => {
   it("reconnects with backoff after the advertising gap", async () => {
     const clock = new FakeClock();
     const { adapter } = simWith(clock, null);
+
     const link = new BleLink(
       "AA:BB:CC:DD:EE:01",
       adapter,
       { writeBudgetHz: 100, writeDrainMs: 0, advertiseGapMs: 1000, backoffMs: [500] },
       clock,
     );
+
     await link.open(() => undefined);
     clock.advance(1500);
     link.tick();
+
     for (let i = 0; i < 10 && link.status().state !== "connected"; i++) {
       clock.advance(600);
       await Promise.resolve();
       await Promise.resolve();
       link.tick();
     }
+
     expect(link.status().reconnects).toBeGreaterThanOrEqual(1);
     expect(link.status().state).toBe("connected");
     await link.close();

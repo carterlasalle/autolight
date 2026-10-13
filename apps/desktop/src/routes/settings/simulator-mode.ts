@@ -6,6 +6,7 @@
 export const SIMULATOR_SCENARIOS = [
   "normal-night", "pitch-loops", "two-deck-transition", "device-loss", "source-loss",
 ] as const;
+
 export type SimulatorScenario = (typeof SIMULATOR_SCENARIOS)[number];
 
 export function isSimulatorScenario(value: string): value is SimulatorScenario {

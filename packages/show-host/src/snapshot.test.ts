@@ -46,6 +46,7 @@ import type { ShowCue, ShowPlan, TrackModel } from "@autolight/contracts";
 // msg.cmd, and "razer" is all the transport needs to file it.
 function razerDatagram(frame: Uint8Array): string {
   const pt = Buffer.from(frame).toString("base64");
+
   return JSON.stringify({ msg: { cmd: "razer", data: { pt } } });
 }
 
@@ -53,6 +54,7 @@ function razerDatagram(frame: Uint8Array): string {
 // alias (a static import would fail this whole file at load instead of one
 // probe, so the dynamic import tries the barrel first, dist fallback second).
 const RECORDING_MODULE_SRC = "@autolight/simulator";
+
 const RECORDING_MODULE_DIST = "@autolight/simulator/dist/recording.js";
 
 interface RecordingTransportLike {
@@ -67,11 +69,13 @@ async function loadRecordingTransport(sender: (text: string) => void): Promise<R
       const module = (await import(specifier)) as {
         RecordingTransport: new (sender: (text: string) => void) => RecordingTransportLike;
       };
+
       return new module.RecordingTransport(sender);
     } catch {
       continue;
     }
   }
+
   return null;
 }
 
@@ -80,6 +84,7 @@ const allowAll: AddonProbe = () => ({ id: "govee-toolkit", available: true, reas
 function makeHost(opts: { uiRateHz?: number; maxBytes?: number } = {}) {
   const crashes: string[] = [];
   let now = 0n;
+
   const host = new ShowHost({
     config: {
       mode: "worker-thread",
@@ -93,6 +98,7 @@ function makeHost(opts: { uiRateHz?: number; maxBytes?: number } = {}) {
     addonProbe: allowAll,
     nowNs: () => now,
   });
+
   return { host, crashes, setNow: (ns: bigint) => { now = ns; } };
 }
 
@@ -100,9 +106,11 @@ function makeHost(opts: { uiRateHz?: number; maxBytes?: number } = {}) {
 // on the microtask queue, no timers.
 function pumpPair(): { main: HostPort; host: HostPort } {
   type Listener = (message: unknown) => void;
+
   const queues: { main: Listener[]; host: Listener[] } = { main: [], host: [] };
   const pending: { to: "main" | "host"; message: unknown }[] = [];
   let closed = false;
+
   const peer: { main: HostPort; host: HostPort } = {
     main: {
       connected: true,
@@ -147,22 +155,28 @@ function pumpPair(): { main: HostPort; host: HostPort } {
       },
     },
   };
+
   const flush = (): void => {
     let item = pending.shift();
+
     while (item !== undefined) {
       for (const listener of queues[item.to]) listener(item.message);
       item = pending.shift();
     }
   };
+
   return peer;
 }
 
 function snapshotsOf(seen: unknown[]): HostSnapshot[] {
   const out: HostSnapshot[] = [];
+
   for (const message of seen) {
     const parsed = hostOutboundMessageSchema.safeParse(message);
+
     if (parsed.success && parsed.data.type === "snapshot") out.push(parsed.data.snapshot);
   }
+
   return out;
 }
 
@@ -206,14 +220,18 @@ function deckState(tick: number) {
 
 function cellsToFrames(snapshot: HostSnapshot): Map<string, Uint8Array> {
   const out = new Map<string, Uint8Array>();
+
   for (const fixture of fixtures) out.set(fixture.id, new Uint8Array(fixture.cells.length * 3));
+
   for (const cell of snapshot.cells) {
     const buf = out.get(cell.fixtureId);
+
     if (!buf) continue;
     buf[cell.cellIndex * 3] = cell.color[0] ?? 0;
     buf[cell.cellIndex * 3 + 1] = cell.color[1] ?? 0;
     buf[cell.cellIndex * 3 + 2] = cell.color[2] ?? 0;
   }
+
   return out;
 }
 
@@ -222,12 +240,15 @@ function frameBytesOf(snapshot: HostSnapshot): Uint8Array {
   const total = [...frames.values()].reduce((sum, bytes) => sum + bytes.length, 0);
   const out = new Uint8Array(total);
   let offset = 0;
+
   for (const fixture of fixtures) {
     const bytes = frames.get(fixture.id);
+
     if (!bytes) continue;
     out.set(bytes, offset);
     offset += bytes.length;
   }
+
   return out;
 }
 
@@ -247,13 +268,16 @@ describe("T-ARC-04 snapshots and reload survival", () => {
     // every published tick. Clearing records below leaves zero frames and
     // the probe red.
     const sent: string[] = [];
+
     const transport = await loadRecordingTransport((text) => {
       sent.push(text);
     });
+
     expect(transport).not.toBeNull();
     const recorded: RecordedFrame[] = [];
     let delivered = 0;
     let now = 0n;
+
     for (let tick = 0; tick < 40; tick += 1) {
       host.ingestDeck(1, deckState(tick));
       now += TICK_NS;
@@ -261,17 +285,20 @@ describe("T-ARC-04 snapshots and reload survival", () => {
       host.tick(now);
       await Promise.resolve();
       const metrics = host.getMetrics();
+
       if (metrics.snapshotsPublished > delivered) {
         delivered = metrics.snapshotsPublished;
         const snapshots = snapshotsOf(seen);
         const snap = latestPublishedSnapshot(snapshots);
         expect(snap).not.toBeNull();
+
         if (snap && transport) {
           transport.send(razerDatagram(frameBytesOf(snap)));
           recorded.push({ tick: snap.tick, bytesByFixture: cellsToFrames(snap) });
         }
       }
     }
+
     await Promise.resolve();
     expect(sent.length).toBeGreaterThan(0);
     expect(transport?.records.length).toBe(recorded.length);
@@ -280,31 +307,39 @@ describe("T-ARC-04 snapshots and reload survival", () => {
     // transport for the same tick, before calibration.
     const snapshots = snapshotsOf(seen);
     expect(snapshots.length).toBeGreaterThan(0);
+
     for (const snapshot of snapshots) {
       const match = recorded.find((r) => r.tick === snapshot.tick);
       expect(match).toBeDefined();
       const snapshotBytes = cellsToFrames(snapshot);
+
       for (const fixture of fixtures) {
         const want = match?.bytesByFixture.get(fixture.id);
         const got = snapshotBytes.get(fixture.id);
         expect(want).toBeDefined();
         expect(got).toBeDefined();
+
         if (want && got) expect(Buffer.from(got).toString("hex")).toBe(Buffer.from(want).toString("hex"));
       }
     }
+
     // The colors are logical renderer output: re-rendering the active cues at
     // the snapshot beat reproduces the same bytes.
     const last = snapshots[snapshots.length - 1]!;
     const deck = last.decks[0]!;
+
     const active = plan.cues.filter(
       (c) => deck.beat >= c.startBeat && deck.beat < c.startBeat + c.durationBeats,
     );
+
     const frames = renderFrame({ ...plan, cues: active }, deck.beat, fixtures);
+
     for (const fixture of fixtures) {
       const want = frames.get(fixture.id)!;
       const got = cellsToFrames(last).get(fixture.id)!;
       expect(Buffer.from(got).toString("hex")).toBe(Buffer.from(want).toString("hex"));
     }
+
     host.stop();
   });
 
@@ -324,8 +359,10 @@ describe("T-ARC-04 snapshots and reload survival", () => {
     let reloads = 0;
     const transportTicks: number[] = [];
     const replayedTicks: number[] = [];
+
     while (tick < 120) {
       const reloading = reloads < 10 && (tick + 1) % 12 === 0;
+
       if (reloading) rendererLive = false;
       host.ingestDeck(1, deckState(tick));
       now += TICK_NS;
@@ -334,8 +371,10 @@ describe("T-ARC-04 snapshots and reload survival", () => {
       await Promise.resolve();
       transportTicks.push(host.getMetrics().ticks);
       tick += 1;
+
       if (reloading) {
         reloads += 1;
+
         // The window is dark for two ticks; the host is unaware and keeps
         // publishing. The transport keeps receiving every frame.
         for (let dark = 0; dark < 2; dark += 1) {
@@ -347,6 +386,7 @@ describe("T-ARC-04 snapshots and reload survival", () => {
           transportTicks.push(host.getMetrics().ticks);
           tick += 1;
         }
+
         // Resubscribe replays the latest published snapshot within one
         // publish interval: the reloaded renderer renders immediately.
         rendererLive = true;
@@ -356,25 +396,31 @@ describe("T-ARC-04 snapshots and reload survival", () => {
         const wire = snapshotsOf(seen);
         const replay = latest ?? wire[wire.length - 1] ?? null;
         expect(replay).not.toBeNull();
+
         if (replay) {
           replayedTicks.push(replay.tick);
           seen.push({ type: "snapshot", snapshot: replay });
         }
       }
     }
+
     expect(reloads).toBe(10);
     expect(replayedTicks.length).toBe(10);
+
     // Zero frame gap at the transport: the host tick counter never skips,
     // reloads included.
     for (let i = 1; i < transportTicks.length; i += 1) {
       expect(transportTicks[i]).toBe(transportTicks[i - 1]! + 1);
     }
+
     // Every replayed snapshot is the latest published tick: the reloaded
     // renderer never renders a stale frame.
     const published = snapshotsOf(seen).map((s) => s.tick);
+
     for (const replayed of replayedTicks) {
       expect(Math.max(...published.filter((t) => t <= replayed))).toBe(replayed);
     }
+
     host.stop();
   });
 
@@ -389,6 +435,7 @@ describe("T-ARC-04 snapshots and reload survival", () => {
     host.installFixtures(1, fixtures);
     host.installPlan(1, 1, plan);
     let now = 0n;
+
     for (let tick = 0; tick < 40; tick += 1) {
       host.ingestDeck(1, deckState(tick));
       now += TICK_NS;
@@ -396,21 +443,26 @@ describe("T-ARC-04 snapshots and reload survival", () => {
       host.tick(now);
       await Promise.resolve();
     }
+
     await Promise.resolve();
     const snapshots = snapshotsOf(seen);
     expect(snapshots.length).toBeGreaterThan(0);
     const last = snapshots[snapshots.length - 1]!;
+
     const health: DeviceHealth[] = [
       { hardwareId: "wash-1", health: "online", fps: 30 },
       { hardwareId: "wash-2", health: "online", fps: 30 },
     ];
+
     const models = new Map<number, TrackModel | null>();
+
     const ui: UiSnapshot = buildUiSnapshot(last, {
       plans: new Map([[1, plan]]),
       models,
       deviceHealth: health,
       metrics: null,
     });
+
     expect(uiSnapshotSchema.safeParse(ui).success).toBe(true);
     const measured = measureSnapshot(ui, SNAPSHOT_MAX_BYTES);
     expect(measured.bytes).toBeLessThanOrEqual(SNAPSHOT_MAX_BYTES);

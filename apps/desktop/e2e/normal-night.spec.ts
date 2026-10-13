@@ -32,8 +32,10 @@ const ROWS = [
 
 test("normal night: 17-row SIM acceptance", async () => {
   const harness = await launchAutolight();
+
   try {
     await harness.waitForReady();
+
     for (const row of ROWS) {
       await test.step(row, async () => {
         // Each row reads its state through the test channel; until the
@@ -42,6 +44,7 @@ test("normal night: 17-row SIM acceptance", async () => {
           pass: boolean;
           detail?: string;
         };
+
         expect(state.pass, state.detail ?? row).toBe(true);
       });
     }

@@ -66,22 +66,27 @@ export interface StorageService {
 }
 
 const SERVICE_NAME = "storage";
+
 const SYNCHRONOUS_DEFAULT = "NORMAL";
+
 const BUSY_TIMEOUT_DEFAULT = 5000;
 
 function configString(config: StorageConfig | undefined, key: string, fallback: string): string {
   const value = config?.get(key);
+
   return typeof value === "string" && value.length > 0 ? value : fallback;
 }
 
 function configNumber(config: StorageConfig | undefined, key: string, fallback: number): number {
   const value = config?.get(key);
+
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
 // DS-06 accepts auto, better-sqlite3 or node-sqlite; anything else is auto.
 function configDriver(config: StorageConfig | undefined): DriverPreference {
   const value = configString(config, "storage.driver", "auto");
+
   return value === "better-sqlite3" || value === "node-sqlite" ? value : "auto";
 }
 
@@ -89,7 +94,9 @@ function configDriver(config: StorageConfig | undefined): DriverPreference {
 // AUTOLIGHT_USER_DATA_DIR, which wins so tests can pin a temp profile.
 export function resolveUserDataDir(): string {
   const override = process.env["AUTOLIGHT_USER_DATA_DIR"];
+
   if (override !== undefined && override.length > 0) return override;
+
   try {
     return app.getPath("userData");
   } catch {
@@ -103,14 +110,17 @@ export function openStorageService(options: StorageServiceOptions = {}): Storage
   if (service) return service;
   const userDataDir = resolveUserDataDir();
   const path = options.path ?? join(userDataDir, "autolight.db");
+
   const store = new Store({
     path,
     driver: options.driver ?? configDriver(options.config),
     synchronous: configString(options.config, "storage.sqlite.synchronous", SYNCHRONOUS_DEFAULT),
     busyTimeoutMs: configNumber(options.config, "storage.sqlite.busyTimeoutMs", BUSY_TIMEOUT_DEFAULT),
   });
+
   const nodeSqlite = moduleStatus("node:sqlite");
   let open = true;
+
   // Everything the database reported at open time is recorded once, so a
   // status read after stop() still tells the truth instead of querying a
   // closed handle.
@@ -124,11 +134,13 @@ export function openStorageService(options: StorageServiceOptions = {}): Storage
     pendingMigrations: store.pendingMigrations,
     tables: store.tables.length,
   };
+
   const statusLine = (): string =>
     `db ${path}, ${describeDriver(opened.driverStatus)}, journal ${opened.journalMode}, ` +
     `synchronous ${opened.synchronous}, busyTimeout ${opened.busyTimeoutMs} ms, ` +
     `foreignKeys ${opened.foreignKeys ? "on" : "off"}, schema v${opened.schemaVersion}, ` +
     `${opened.tables} tables`;
+
   const snapshot = (): StorageServiceStatus => ({
     name: SERVICE_NAME,
     state: open ? "running" : "stopped",
@@ -151,6 +163,7 @@ export function openStorageService(options: StorageServiceOptions = {}): Storage
     electronVersion: opened.driverStatus.electronVersion,
     userDataDir,
   });
+
   const instance: StorageService = {
     name: SERVICE_NAME,
     store,
@@ -159,15 +172,19 @@ export function openStorageService(options: StorageServiceOptions = {}): Storage
       if (open) {
         store.close();
         open = false;
+
         if (service === instance) service = null;
       }
+
       return snapshot();
     },
     close: () => instance.stop(),
     status: snapshot,
     statusLine,
   };
+
   service = instance;
+
   return instance;
 }
 

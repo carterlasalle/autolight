@@ -31,6 +31,7 @@ function virtualDriver(ports: Flx4PortInfo[]): Flx4MidiDriver & {
   const listeners = new Set<(bytes: readonly number[]) => void>();
   let opens = 0;
   let closes = 0;
+
   return {
     name: "native",
     sharing: "shared",
@@ -39,6 +40,7 @@ function virtualDriver(ports: Flx4PortInfo[]): Flx4MidiDriver & {
     open: (port, onMessage) => {
       opens += 1;
       listeners.add(onMessage);
+
       return Promise.resolve({
         port,
         close: () => {
@@ -57,12 +59,14 @@ function virtualDriver(ports: Flx4PortInfo[]): Flx4MidiDriver & {
 
 async function bootWith(driver: Flx4MidiDriver, extra: Partial<CompositeFlx4BootOptions> = {}) {
   const logs: string[] = [];
+
   const result = await startCompositeFlx4Boot({
     log: (message) => logs.push(message),
     createService: (serviceOpts) =>
       new Flx4ControllerService({ ...serviceOpts, mode: "native", drivers: { native: driver } }),
     ...extra,
   });
+
   return { ...result, logs };
 }
 
@@ -70,6 +74,7 @@ describe("composite-flx4 plug-and-play", () => {
   it("opens a virtual port, maps PLAY/CUE/jog/tempo/faders, fuses with the grid, then closes", async () => {
     const driver = virtualDriver([VIRTUAL_PORT]);
     const { boot, connected, logs } = await bootWith(driver);
+
     try {
       expect(connected).toBe(true);
       expect(logs.some((line) => line.includes("connected on"))).toBe(true);
@@ -89,6 +94,7 @@ describe("composite-flx4 plug-and-play", () => {
         [0xb6, 0x3f, 0x08],
         [0xb0, 0x22, 0x45],
       ];
+
       for (const bytes of session) driver.emit(bytes);
       const events = boot.service.recentEvents(32);
       expect(events.length).toBeGreaterThan(0);
@@ -108,6 +114,7 @@ describe("composite-flx4 plug-and-play", () => {
     } finally {
       await boot.stop();
     }
+
     expect(driver.closeCount()).toBe(1);
     await stopCompositeFlx4Boot();
   });
@@ -115,6 +122,7 @@ describe("composite-flx4 plug-and-play", () => {
   it("logs idle instead of failing when the board is absent", async () => {
     const driver = virtualDriver([]);
     const { boot, connected, logs } = await bootWith(driver);
+
     try {
       expect(connected).toBe(false);
       expect(logs).toContain(FLX4_IDLE_MESSAGE);
@@ -122,6 +130,7 @@ describe("composite-flx4 plug-and-play", () => {
     } finally {
       await boot.stop();
     }
+
     await stopCompositeFlx4Boot();
   });
 
@@ -132,19 +141,23 @@ describe("composite-flx4 plug-and-play", () => {
 
   it("fuses only fresh AX input and never invents a playhead", () => {
     const at = 1_000_000_000_000n;
+
     const fused = compositeFuseAxPlayhead({
       anchorPosSeconds: 3,
       anchorAtNs: at,
       axPlayheadSeconds: 12.5,
       atNs: at,
     });
+
     expect(fused).toEqual({ anchorPosSeconds: 12.5, anchorAtNs: at, fused: true });
+
     const ignored = compositeFuseAxPlayhead({
       anchorPosSeconds: 3,
       anchorAtNs: at,
       axPlayheadSeconds: null,
       atNs: at,
     });
+
     expect(ignored.fused).toBe(false);
     expect(ignored.anchorPosSeconds).toBe(3);
   });

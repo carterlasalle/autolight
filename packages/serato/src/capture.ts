@@ -51,13 +51,17 @@ export class SeratoCaptureProxy {
     server.once("error", reject);
     server.listen(this.options.listenPort ?? 0, this.options.listenHost ?? "127.0.0.1", () => {
       const address = server.address();
+
       if (address === null || typeof address === "string") {
         reject(new Error("capture proxy bound to an unexpected address"));
+
         return;
       }
+
       this.port = address.port;
       resolve({ port: address.port });
     });
+
     return promise;
   }
 
@@ -76,10 +80,12 @@ export class SeratoCaptureProxy {
       connection.downstream.destroy();
       connection.upstream.destroy();
     }
+
     this.connections.clear();
     const server = this.server;
     this.server = null;
     this.port = null;
+
     if (!server) return;
     const { promise, resolve } = Promise.withResolvers<void>();
     server.close(() => resolve());
@@ -101,11 +107,13 @@ export class SeratoCaptureProxy {
     upstream.on("data", (chunk: Buffer) => {
       this.splitInto(this.capturedOutbound, chunk, null, now());
     });
+
     const drop = (): void => {
       this.connections.delete(connection);
       downstream.destroy();
       upstream.destroy();
     };
+
     downstream.on("error", drop);
     upstream.on("error", drop);
     downstream.on("close", drop);
@@ -121,12 +129,15 @@ export class SeratoCaptureProxy {
     const delimiter = seratoFrameDelimiter();
     const stream = carry === null || carry.length === 0 ? chunk : Buffer.concat([carry, chunk]);
     let offset = 0;
+
     for (;;) {
       const end = stream.indexOf(delimiter, offset);
+
       if (end === -1) break;
       sink.push({ atMs, bytes: Buffer.from(stream.subarray(offset, end + delimiter.length)) });
       offset = end + delimiter.length;
     }
+
     return Buffer.from(stream.subarray(offset));
   }
 }

@@ -45,10 +45,12 @@ describe("config-service", () => {
     const schema = svc.schema();
     const first = schema.keys[0];
     expect(first).toBeDefined();
+
     if (!first) throw new Error("config registry is empty");
 
     const before = svc.get(first.key);
     expect(before.ok).toBe(true);
+
     if (!before.ok) throw new Error("registry key not readable");
 
     const changes: ConfigChange[] = [];
@@ -72,6 +74,7 @@ describe("config-service", () => {
     expect((await svc.start()).state).toBe("running");
     // Write via the service, read via the raw store: one mirror, no copy.
     const first = svc.schema().keys[0];
+
     if (!first) throw new Error("config registry is empty");
     expect(svc.set("app", first.key, 0.5)).toMatchObject({ ok: true });
     expect(shared.get(first.key)).toBe(0.5);
@@ -113,14 +116,17 @@ describe("library-service", () => {
     const root = tempDir("autolight-library-");
     const emitted: ((file: string) => void)[] = [];
     let closed = 0;
+
     const svc = new LibraryService({
       roots: [{ provider: "serato", path: root }],
       debounceMs: 20,
       watchRoot: (_path, onEvent) => {
         emitted.push(onEvent);
+
         return { close: () => { closed += 1; }, on: () => undefined };
       },
     });
+
     const started = svc.start();
     expect(started.state).toBe("running");
     expect(svc.libraryRoots()[0]?.readable).toBe(true);
@@ -129,6 +135,7 @@ describe("library-service", () => {
     const batches: LibraryChange[][] = [];
     svc.onChanges((changes) => batches.push(changes));
     vi.useFakeTimers();
+
     try {
       // Two events inside one debounce window: one batch, one timer.
       emitted[0]?.("crate.txt");
@@ -138,6 +145,7 @@ describe("library-service", () => {
     } finally {
       vi.useRealTimers();
     }
+
     expect(batches).toHaveLength(1);
     expect(batches[0]?.map((change) => change.file)).toEqual(["crate.txt", "crate.txt"]);
     expect(batches[0]?.[0]?.provider).toBe("serato");
@@ -161,12 +169,14 @@ describe("identity-service", () => {
     expect(svc.start().state).toBe("running");
     const first = svc.resolve({ rekordboxId: "42", title: "Untitled" });
     expect(first.ok).toBe(true);
+
     if (!first.ok) throw new Error("native id should resolve");
     expect(first.identity.id).toBe("rb:42");
     expect(first.cached).toBe(false);
 
     const second = svc.resolve({ rekordboxId: "42" });
     expect(second.ok).toBe(true);
+
     if (!second.ok) throw new Error("cache hit should resolve");
     expect(second.cached).toBe(true);
     expect(svc.status().counters["hits"]).toBe(1);
@@ -179,6 +189,7 @@ describe("identity-service", () => {
 describe("analysis-supervisor", () => {
   it("refuses before start, spawns lazily on the first job and stops the worker", async () => {
     const calls = { starts: 0, stops: 0 };
+
     const worker: AnalysisWorkerPort = {
       start: () => { calls.starts += 1; },
       stop: () => { calls.stops += 1; },
@@ -186,6 +197,7 @@ describe("analysis-supervisor", () => {
       pendingCount: () => 0,
       queuedCount: () => 0,
     };
+
     const svc = new AnalysisSupervisor({ createWorker: () => worker });
 
     const refused = await svc.submit({ trackId: "t1", audioPath: "/tmp/a.wav" });
@@ -203,12 +215,14 @@ describe("analysis-supervisor", () => {
     expect(calls.stops).toBe(1);
   });
 });
+
 describe("show-host-supervisor", () => {
   it("spawns the worker lazily and reports jitter metrics (§131)", async () => {
     const { ShowHostSupervisor } = await import("../../electron/services/show-host-supervisor.js");
     const posted: unknown[] = [];
     const listeners: ((message: unknown) => void)[] = [];
     let terminated = 0;
+
     const svc = new ShowHostSupervisor({
       workerEntryUrl: "test-entry",
       createWorker: () => ({
@@ -217,6 +231,7 @@ describe("show-host-supervisor", () => {
         terminate: () => { terminated += 1; },
       }),
     });
+
     expect(svc.start().state).toBe("running");
     expect(posted).toHaveLength(0);
     // start() wires the master-intent forwarder to the worker: firing a
@@ -227,6 +242,7 @@ describe("show-host-supervisor", () => {
     expect(posted).toHaveLength(2);
     showService.resetHostIntentForwarderForTest();
     expect(svc.status().counters["spawned"]).toBe(1);
+
     // Jitter metrics arrive over the port and surface in status.
     for (const listener of listeners) {
       listener({ type: "metrics", metrics: {
@@ -235,6 +251,7 @@ describe("show-host-supervisor", () => {
         missedTicksPerHour: 0,
       } });
     }
+
     expect(svc.metrics()?.intervalP99Ms).toBeCloseTo(17.9, 9);
     expect(svc.status().counters["intervalP99Ms"]).toBeCloseTo(17.9, 9);
     expect(svc.stop().state).toBe("stopped");
@@ -245,6 +262,7 @@ describe("show-host-supervisor", () => {
 describe("provider-manager", () => {
   it("runs the AX poll loop and the ProLink observer, then stops both", async () => {
     const captured: { beat: ((beat: number, bpm: number | null) => void) | null } = { beat: null };
+
     const svc = new ProviderManager({
       pollMs: 5,
       readDecks: async () => [
@@ -253,18 +271,21 @@ describe("provider-manager", () => {
       ],
       watchProlink: (onBeat) => {
         captured.beat = onBeat;
+
         return () => { captured.beat = null; };
       },
     });
 
     expect(svc.start().state).toBe("running");
     vi.useFakeTimers();
+
     try {
       // Deterministic clock: the poll loop is driven by setInterval.
       await vi.advanceTimersByTimeAsync(20);
     } finally {
       vi.useRealTimers();
     }
+
     expect(svc.status().counters["axTicks"]).toBeGreaterThan(0);
     expect(svc.status().counters["readableDecks"]).toBe(1);
     expect(svc.latest().ax[0]?.deckId).toBe(1);
@@ -284,6 +305,7 @@ describe("provider-manager", () => {
       readDecks: async () => [],
       watchProlink: () => () => undefined,
     });
+
     idle.start();
     expect(idle.providers().find((p) => p.id === "composite-flx4")).toMatchObject({
       running: false,
@@ -292,6 +314,7 @@ describe("provider-manager", () => {
     idle.stop();
 
     let stopped = false;
+
     const svc = new ProviderManager({
       pollMs: 5,
       readDecks: async () => [],
@@ -301,6 +324,7 @@ describe("provider-manager", () => {
         stopped = true;
       },
     });
+
     svc.start();
     await vi.waitFor(() => {
       expect(svc.providers().find((p) => p.id === "composite-flx4")?.running).toBe(true);
@@ -327,6 +351,7 @@ describe("midi-service", () => {
 
   it("opens an injected backend and publishes its messages as hints", () => {
     const backend: { send: ((msg: { cc?: number; note?: number; value: number }) => void) | null; closed: boolean } = { send: null, closed: false };
+
     const svc = new MidiService({
       openBackend: () => ({
         name: "fake-flx4",
@@ -334,6 +359,7 @@ describe("midi-service", () => {
         close: () => { backend.closed = true; },
       }),
     });
+
     expect(svc.start().state).toBe("running");
     backend.send?.({ cc: CC.FILTER_2, value: 64 });
     expect(svc.latestHints().at(-1)?.kind).toBe("filter-sweep");
@@ -351,6 +377,7 @@ describe("matter-bridge", () => {
 
     const exits: ((code: number | null) => void)[] = [];
     const sent: unknown[] = [];
+
     const port: MatterProcessPort = {
       name: "matter-test",
       postMessage: (msg) => { sent.push(msg); },
@@ -358,6 +385,7 @@ describe("matter-bridge", () => {
       onExit: (listener) => { exits.push(listener); },
       kill: () => undefined,
     };
+
     const svc = new MatterBridge({ spawn: () => port });
     expect(svc.start().state).toBe("running");
     expect(svc.send({ op: "ping" })).toBe(true);
@@ -393,9 +421,11 @@ describe("cloud-service", () => {
         devices: async () => [{ device: "AA:BB:CC", sku: "H6076", name: "Strip" }],
       },
     });
+
     expect(svc.start().state).toBe("running");
     const res = await svc.devices();
     expect(res.ok).toBe(true);
+
     if (!res.ok) throw new Error("enabled cloud service should fetch");
     expect(res.devices[0]?.sku).toBe("H6076");
     expect(svc.deviceMetadata()).toHaveLength(1);
@@ -419,6 +449,7 @@ describe("lifecycle", () => {
     expect(svc.nextStage()).toBe("show-worker");
 
     svc.advance("show-worker", "degraded", "rekordbox closed");
+
     for (const stage of STARTUP_ORDER.slice(2)) svc.advance(stage, "ok");
     expect(svc.ready()).toBe(true);
     expect(svc.degradedReasons()).toEqual(["show-worker: rekordbox closed"]);
@@ -431,11 +462,13 @@ describe("lifecycle", () => {
     const svc = new LifecycleService();
     const wedged = Promise.withResolvers<void>();
     const seen: string[] = [];
+
     const logs = await svc.shutdown({
       timeoutMs: 20,
       ports: { workers: () => wedged.promise },
       onStep: (step) => { seen.push(step); },
     });
+
     expect(logs).toHaveLength(SHUTDOWN_ORDER.length);
     expect(logs.find((log) => log.step === "workers")?.timedOut).toBe(true);
     expect(logs.some((log) => log.step === "exit")).toBe(true);
@@ -445,6 +478,7 @@ describe("lifecycle", () => {
 
   it("runs the crash policy in order: record, hold, restart, dim", async () => {
     const calls: string[] = [];
+
     const policy = applyCrashPolicy({
       holdMs: 10,
       crashRecordPath: "/tmp/crash.json",
@@ -453,6 +487,7 @@ describe("lifecycle", () => {
       restartShowHost: () => { calls.push("restart"); },
       writeRecord: (path, json) => { calls.push(`record:${path}:${json.includes("boom")}`); },
     });
+
     await policy.dimmed;
     expect(calls).toEqual(["record:/tmp/crash.json:true", "look:hold", "restart", "look:dim"]);
     expect(policy.restarted).toBe(true);
@@ -462,13 +497,17 @@ describe("lifecycle", () => {
 describe("ipc-router", () => {
   it("registers every typed channel, validates both directions and checks the sender", async () => {
     const registered = new Map<string, (event: IpcEventLike, payload: unknown) => Promise<unknown>>();
+
     const port: IpcMainPort = {
       handle: (channel, listener) => { registered.set(channel, listener); },
       removeHandler: (channel) => { registered.delete(channel); },
     };
+
     const listener = (name: string): ((event: IpcEventLike, payload: unknown) => Promise<unknown>) => {
       const found = registered.get(name);
+
       if (!found) throw new Error(`channel ${name} not registered`);
+
       return found;
     };
 
@@ -489,6 +528,7 @@ describe("ipc-router", () => {
     // Config channels land on config-service, the single config owner.
     const schema = await listener("config/schema")(app, { version: 1 });
     expect(schema).toMatchObject({ ok: true });
+
     if (typeof schema !== "object" || schema === null || !("keys" in schema)) throw new Error("schema reply missing keys");
     expect(Array.isArray(schema.keys) && schema.keys.length > 0).toBe(true);
     expect(await listener("config/get")(app, { version: 1, key: "no.such.key" }))
@@ -498,6 +538,7 @@ describe("ipc-router", () => {
     expect(registered.size).toBe(0);
   });
 });
+
 // T-TRU-03: no channel echoes its payload. Every channel runs through the
 // same dispatch path as production (router with a recording port) and each
 // row asserts a channel-specific observable effect or an authoritative read
@@ -520,25 +561,32 @@ describe("ipc handlers have real effects (T-TRU-03)", () => {
       watchProlink: () => () => undefined,
     });
     const registered = new Map<string, (event: IpcEventLike, payload: unknown) => Promise<unknown>>();
+
     const port: IpcMainPort = {
       handle: (channel, listener) => { registered.set(channel, listener); },
       removeHandler: (channel) => { registered.delete(channel); },
     };
+
     const router = new IpcRouter(port);
     router.start();
     // Every typed channel is exercised: the count guards against a new
     // channel landing without a side-effect row below.
     expect(registered.size).toBe(Object.keys(channels).length);
     const app = { senderFrame: { url: "file:///index.html" } };
+
     const call = async (name: string, payload: unknown): Promise<Record<string, unknown>> => {
       const found = registered.get(name);
+
       if (!found) throw new Error(`channel ${name} not registered`);
       const res = (await found(app, payload)) as Record<string, unknown>;
       expect(res).toMatchObject({ ok: true });
+
       return res;
     };
+
     const svc = getShowService();
     const seenEvents = svc.recorder.count();
+
     try {
       // Master override channels mutate the override state (T-RUN-07) and
       // forward one intent each to the attached show host (issue #5 gap #6:
@@ -620,6 +668,7 @@ describe("ipc handlers have real effects (T-TRU-03)", () => {
       // Static imports: the sim source is a workspace file, always present.
       const sim = new GoveeLanSim({ device: "AA:BB:CC:DD:EE:01", sku: "H6076", zones: 14 });
       const simPort = await sim.start(0);
+
       const lan = new GoveeLanManager({
         replyPort: 0,
         scanPort: simPort,
@@ -632,6 +681,7 @@ describe("ipc handlers have real effects (T-TRU-03)", () => {
         statusDeadlineMs: 300,
         statusRetryMs: 50,
       });
+
       try {
         const found = await lan.scanOnce(400);
         expect(found.map((d) => d.mac)).toContain("AA:BB:CC:DD:EE:01");
@@ -672,6 +722,7 @@ describe("ipc handlers have real effects (T-TRU-03)", () => {
         svc.config.set("app", "govee.lan.discovery.globalBroadcast", false);
         svc.config.set("app", "govee.lan.discovery.scanList", ["127.0.0.1"]);
         const appMgr = showService.govee();
+
         try {
           const scanned = await call("venue/scan", { version: 1 });
           expect((scanned["devices"] as unknown[]).length).toBeGreaterThan(0);
@@ -690,6 +741,7 @@ describe("ipc handlers have real effects (T-TRU-03)", () => {
       } finally {
         await sim.stop();
       }
+
       // Audio surface: renderer owns enumeration, main reports none.
       const devices = await call("audio/devices", { version: 1 });
       expect(devices).toEqual({ ok: true, devices: [] });

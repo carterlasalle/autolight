@@ -9,16 +9,19 @@ type Row = readonly [status: number, data1: number, data2: number];
 function feed(model: Flx4StateModel, rows: readonly Row[], startNs = 1_000_000n): bigint {
   const decoder = new Flx4Decoder();
   let atNs = startNs;
+
   for (const [status, data1, data2] of rows) {
     atNs += 1_000_000n;
     model.apply(decoder.decode({ status, data1, data2, receivedAtNs: atNs }));
   }
+
   return atNs;
 }
 
 describe("flx4 state model", () => {
   it("follows LOAD, PLAY, jog touch and release with timestamps and quality", () => {
     const model = new Flx4StateModel();
+
     const last = feed(model, [
       [0x96, 0x46, 0x7f], // LOAD deck 1
       [0x90, 0x0b, 0x7f], // PLAY
@@ -27,6 +30,7 @@ describe("flx4 state model", () => {
       [0xb0, 0x22, 0x3b], // jog counterclockwise, one reversal
       [0x90, 0x36, 0x00], // release
     ]);
+
     const snapshot = model.snapshot();
     const deck = snapshot.decks[1];
     expect(deck.loads.count).toBe(1);
@@ -162,6 +166,7 @@ describe("flx4 tempo range fit", () => {
 
   it("recovers the range from a simulated provider within 0.5 percent", () => {
     const fit = new TempoRangeFit();
+
     for (const sample of samplesFor(10, [0.2, 0.35, 0.5, 0.62, 0.8, 0.95])) fit.add(sample);
     const result = fit.fit(1);
     expect(result).not.toBeNull();
@@ -178,9 +183,11 @@ describe("flx4 tempo range fit", () => {
     thin.add({ deck: 1, position: 0.7, pitchPercent: 4 });
     expect(thin.fit(1)).toBeNull();
     const flat = new TempoRangeFit();
+
     for (const sample of samplesFor(10, [0.51, 0.52, 0.53, 0.54])) flat.add(sample);
     expect(flat.fit(1)).toBeNull();
     const noisy = new TempoRangeFit();
+
     for (const sample of samplesFor(10, [0.2, 0.4, 0.6, 0.8])) noisy.add({ ...sample, pitchPercent: sample.pitchPercent + 3 });
     expect(noisy.fit(1)).toBeNull();
   });

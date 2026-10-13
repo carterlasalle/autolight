@@ -70,8 +70,10 @@ export class ConfigService implements Service {
   // in plain Node (tests) where `electron` has no app object.
   private async userDataDir(): Promise<string | undefined> {
     if (this.opts.userDataDir !== undefined) return this.opts.userDataDir;
+
     try {
       const { app } = await import("electron");
+
       return app.getPath("userData");
     } catch {
       return undefined;
@@ -82,6 +84,7 @@ export class ConfigService implements Service {
     this.store?.subscribe((change) => {
       this.history.push(change);
       this.tracker.count("changes");
+
       for (const listener of this.listeners) listener(change);
     });
   }
@@ -89,29 +92,37 @@ export class ConfigService implements Service {
   async start(): Promise<ServiceStatus> {
     if (this.store) return this.status();
     this.tracker.set("starting");
+
     if (this.opts.store) {
       this.store = this.opts.store;
       this.subscribeStore();
       this.tracker.setCounter("keys", CONFIG_KEYS.length);
       this.tracker.set("running", "shared store (owned by show-service)");
       this.tracker.setCounter("changes", this.history.length);
+
       return this.status();
     }
+
     let filePath = this.opts.filePath;
+
     if (filePath === undefined) {
       const dir = await this.userDataDir();
       filePath = dir === undefined ? undefined : join(dir, "config.json");
     }
+
     try {
       this.store = new PersistentConfigStore(filePath);
       this.subscribeStore();
     } catch (err) {
       this.tracker.set("failed", `config store unavailable: ${messageOf(err)}`);
+
       return this.status();
     }
+
     this.tracker.setCounter("keys", CONFIG_KEYS.length);
     this.tracker.set("running", filePath === undefined ? "in-memory (no userData path)" : `layers persisted at ${filePath}`);
     this.tracker.setCounter("changes", this.history.length);
+
     return this.status();
   }
 
@@ -120,25 +131,32 @@ export class ConfigService implements Service {
     try {
       this.store?.save();
     } catch { /* teardown never throws */ }
+
     this.store = null;
     this.tracker.set("stopped");
+
     return this.status();
   }
 
   status(): ServiceStatus {
     this.tracker.setCounter("changes", this.history.length);
+
     if (this.store) {
       let changed = 0;
+
       try {
         changed = Object.keys(this.store.changedOnly()).length;
       } catch { /* store still usable; counter keeps its last value */ }
+
       this.tracker.setCounter("savedLayers", changed);
     }
+
     return this.tracker.status();
   }
 
   private requireStore(): PersistentConfigStore {
     if (!this.store) throw new Error("config-service not started");
+
     return this.store;
   }
 
@@ -148,6 +166,7 @@ export class ConfigService implements Service {
 
   onChanged(listener: (change: ConfigChange) => void): () => void {
     this.listeners.add(listener);
+
     return () => {
       this.listeners.delete(listener);
     };
@@ -163,17 +182,21 @@ export class ConfigService implements Service {
 
   get(key: string): ConfigValueReply | ConfigErrorReply {
     let def;
+
     try {
       def = defineKey(key);
     } catch {
       return { ok: false, error: { code: "E_UNKNOWN_KEY", message: `${key}: unknown key (fix: remove it or pick a registry key)` } };
     }
+
     let value: unknown;
+
     try {
       value = this.requireStore().get(key);
     } catch (err) {
       return { ok: false, error: { code: "E_CONFIG_GET", message: `${key}: ${messageOf(err)}` } };
     }
+
     return { ok: true, key, value, layer: this.requireStore().layerOf(key), liveSafe: def.liveSafe };
   }
 
@@ -183,13 +206,17 @@ export class ConfigService implements Service {
     } catch {
       return { ok: false, error: { code: "E_UNKNOWN_KEY", message: `${key}: unknown key (fix: remove it or pick a registry key)` } };
     }
+
     const store = this.requireStore();
+
     try {
       store.set(scope, key, value);
     } catch (err) {
       return { ok: false, error: { code: "E_CONFIG_SET", message: `${key}: ${messageOf(err)}` } };
     }
+
     this.tracker.count("sets");
+
     return { ok: true, key, scope, value, layer: store.layerOf(key) };
   }
 
@@ -197,6 +224,7 @@ export class ConfigService implements Service {
     const store = this.requireStore();
     store.reset(scope, key);
     this.tracker.count("resets");
+
     return { ok: true, key, scope };
   }
 
@@ -206,20 +234,27 @@ export class ConfigService implements Service {
 
   importJson(json: string): ConfigImportReply | ConfigErrorReply {
     const res = this.requireStore().importJson(json);
+
     if (!res.ok) {
       return { ok: false, error: { code: "E_CONFIG_IMPORT", message: res.badKeys.join("; ") } };
     }
+
     let applied = 0;
+
     try {
       const parsed: unknown = JSON.parse(json);
+
       if (parsed !== null && typeof parsed === "object" && "values" in parsed) {
         const values = parsed.values;
+
         if (values !== null && typeof values === "object") applied = Object.keys(values).length;
       }
     } catch {
       applied = 0;
     }
+
     this.tracker.count("imports");
+
     return { ok: true, applied };
   }
 
@@ -232,6 +267,7 @@ export class ConfigService implements Service {
       range: k.range,
       liveSafe: k.liveSafe,
     }));
+
     return { ok: true, keys: rows };
   }
 }
@@ -247,7 +283,9 @@ let instance: ConfigService | null = null;
 export async function getConfigService(opts: ConfigServiceOptions = {}): Promise<ConfigService> {
   instance ??= new ConfigService(opts);
   const state = instance.status().state;
+
   if (state === "idle" || state === "stopped" || state === "failed") await instance.start();
+
   return instance;
 }
 

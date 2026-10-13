@@ -37,6 +37,7 @@ export function parseBleAdvertisement(input: BleScanInput): BleAdvertisement {
   const name = input.name ?? null;
   const manufacturer = input.manufacturer ?? new Uint8Array(0);
   const flag = manufacturer.length > 0 ? (manufacturer[0] ?? 0) : 0;
+
   return {
     address: input.address,
     name,
@@ -52,11 +53,17 @@ export function parseBleAdvertisement(input: BleScanInput): BleAdvertisement {
 /** Classifies an advertisement name into its family. Legacy prefixes kept. */
 export function nameFamilyOf(name: string | null): BleNameFamily {
   if (name === null || name.length === 0) return "unknown";
+
   if (name.startsWith("GBK_")) return "gbk";
+
   if (name.startsWith("GV")) return "gv";
+
   if (name.startsWith("ihoment_")) return "ihoment";
+
   if (name.startsWith("Govee_")) return "govee";
+
   if (name.startsWith("Minger_")) return "minger";
+
   return "unknown";
 }
 
@@ -105,9 +112,11 @@ export interface BleBindingInputs {
 export function bindBleToLan(inputs: BleBindingInputs): BleBinding {
   const ble = normalizeMac(inputs.bleWifiMac);
   const lan = normalizeMac(inputs.lanWifiMac);
+
   if (ble !== null && lan !== null && ble === lan) {
     return { bleAddress: inputs.bleAddress, lanDeviceId: inputs.lanDeviceId, basis: "wifi-mac-match", wifiMac: inputs.bleWifiMac };
   }
+
   if (inputs.identifyConfirmed) {
     return {
       bleAddress: inputs.bleAddress,
@@ -116,6 +125,7 @@ export function bindBleToLan(inputs: BleBindingInputs): BleBinding {
       wifiMac: inputs.bleWifiMac,
     };
   }
+
   throw new Error("refusing to bind: needs an aa 14 Wi-Fi MAC match or an explicit user confirmation after a BLE identify flash");
 }
 
@@ -123,8 +133,11 @@ export function bindBleToLan(inputs: BleBindingInputs): BleBinding {
 export function normalizeMac(mac: string | null): string | null {
   if (mac === null) return null;
   const hexes = mac.toLowerCase().replace(/[^0-9a-f]/g, "");
+
   if (hexes.length !== 12) return mac.toLowerCase();
   const parts: string[] = [];
+
   for (let i = 0; i < 12; i += 2) parts.push(hexes.slice(i, i + 2));
+
   return parts.join(":");
 }

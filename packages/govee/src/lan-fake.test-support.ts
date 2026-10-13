@@ -20,7 +20,9 @@ import type { QualificationUser } from "./qualification.js";
 export function goldenHex(opcode: number, payload: readonly number[]): string {
   const out = [0xbb, (payload.length >> 8) & 0xff, payload.length & 0xff, opcode, ...payload];
   let xor = 0;
+
   for (const byte of out) xor ^= byte;
+
   return Buffer.from([...out, xor & 0xff]).toString("hex");
 }
 
@@ -90,8 +92,11 @@ export class FakeLamp implements LanExchange {
   constructor(options: FakeLampOptions) {
     this.options = options;
     this.painted = Array.from({ length: options.zones }, () => [0, 0, 0] as [number, number, number]);
+
     if (options.on !== undefined) this.on = options.on;
+
     if (options.brightness !== undefined) this.brightness = options.brightness;
+
     if (options.color !== undefined) this.color = options.color;
   }
 
@@ -124,15 +129,19 @@ export class FakeLamp implements LanExchange {
 
   private pushReply(text: string): void {
     const waiter = this.waiters.shift();
+
     if (waiter !== undefined) {
       waiter.settle(text);
+
       return;
     }
+
     this.queue.push(text);
   }
 
   reply(_deviceId: string, timeoutMs: number): Promise<string | null> {
     if (this.options.behaviour === "lan-absent") return Promise.resolve(null);
+
     if (this.offline()) {
       // Reachable again once the power cycle finishes: answer nothing until the
       // deadline, like a unit still booting.
@@ -140,11 +149,15 @@ export class FakeLamp implements LanExchange {
         const timer = setTimeout(() => {
           resolve(null);
         }, Math.max(1, timeoutMs));
+
         timer.unref?.();
       });
     }
+
     const queued = this.queue.shift();
+
     if (queued !== undefined) return Promise.resolve(queued);
+
     return new Promise<string | null>((resolve) => {
       const waiter: QueuedReply = {
         settle: (text) => {
@@ -152,10 +165,12 @@ export class FakeLamp implements LanExchange {
           resolve(text);
         },
       };
+
       const timer = setTimeout(() => {
         this.waiters = this.waiters.filter((entry) => entry !== waiter);
         resolve(null);
       }, Math.max(1, timeoutMs));
+
       timer.unref?.();
       this.waiters.push(waiter);
     });
@@ -163,51 +178,69 @@ export class FakeLamp implements LanExchange {
 
   sendJson(_deviceId: string, text: string): void {
     this.sentJson.push(text);
+
     if (this.options.behaviour === "lan-absent" || this.offline()) return;
     let parsed: unknown = null;
+
     try {
       parsed = JSON.parse(text) as unknown;
     } catch {
       return;
     }
+
     if (typeof parsed !== "object" || parsed === null || !("msg" in parsed)) return;
     const msg = parsed.msg;
+
     if (typeof msg !== "object" || msg === null || !("cmd" in msg)) return;
     const cmd = typeof msg.cmd === "string" ? msg.cmd : "";
     const data = "data" in msg ? msg.data : undefined;
+
     switch (cmd) {
       case "turn": {
         this.on = typeof data === "object" && data !== null && "value" in data && data.value === 1;
+
         if (this.armed) this.armed = false;
+
         return;
       }
+
       case "brightness": {
         if (typeof data === "object" && data !== null && "value" in data && typeof data.value === "number") {
           this.brightness = Math.min(100, Math.max(1, Math.round(data.value)));
         }
+
         return;
       }
+
       case "colorwc": {
         if (typeof data === "object" && data !== null && "color" in data) {
           const color = data.color;
+
           if (typeof color === "object" && color !== null && "r" in color && "g" in color && "b" in color
             && typeof color.r === "number" && typeof color.g === "number" && typeof color.b === "number") {
             this.color = [color.r, color.g, color.b];
           }
         }
+
         if (typeof data === "object" && data !== null && "colorTemInKelvin" in data
           && typeof data.colorTemInKelvin === "number") {
           this.kelvin = data.colorTemInKelvin;
         }
+
         return;
       }
+
       case "devStatus": {
         this.metrics.devStatusQueries += 1;
+
         if (this.armed && this.options.answersStatusWhileArmed === false) return;
+
         if (this.options.garbageReplies === true) {
           this.pushReply("this unit does not answer in the documented shape");
+
           return;
         }
+
         this.pushReply(JSON.stringify({
           msg: {
             cmd: "devStatus",
@@ -219,15 +252,21 @@ export class FakeLamp implements LanExchange {
             },
           },
         }));
+
         return;
       }
+
       case "status": {
         this.metrics.statusQueries += 1;
+
         if (this.armed && this.options.answersStatusWhileArmed === false) return;
+
         if (this.options.garbageReplies === true) {
           this.pushReply("this unit does not answer in the documented shape");
+
           return;
         }
+
         const b2 = encodeRaw(OPCODE.ARM_STATUS, Uint8Array.from([this.armed ? 1 : 0]));
         this.pushReply(JSON.stringify({
           msg: {
@@ -239,8 +278,10 @@ export class FakeLamp implements LanExchange {
             },
           },
         }));
+
         return;
       }
+
       default:
         return;
     }
@@ -248,19 +289,26 @@ export class FakeLamp implements LanExchange {
 
   sendRaw(_deviceId: string, raw: Uint8Array): void {
     this.sentRaw.push(raw.slice());
+
     if (this.options.behaviour === "lan-absent" || this.offline()) return;
     const decoded = decodeRaw(raw);
+
     if (decoded === null) return;
+
     if (decoded.opcode === OPCODE.ARM) {
       this.metrics.armCommands += 1;
       this.armed = (decoded.payload[0] ?? 0) === 1;
+
       if (this.armed) {
         this.armedAt = Date.now();
         this.landedDelayMs = null;
       }
+
       this.lastPaintLanded = false;
+
       return;
     }
+
     if (decoded.opcode === OPCODE.RGB_STREAM || decoded.opcode === OPCODE.ZONED) {
       this.applyPaint(decoded.payload, decoded.opcode);
     }
@@ -268,23 +316,32 @@ export class FakeLamp implements LanExchange {
 
   private applyPaint(payload: Uint8Array, opcode: number): void {
     this.lastPaintLanded = false;
+
     if (!this.armed) {
       this.metrics.paintsIgnored += 1;
       this.lastPaintReason = "not-armed";
+
       return;
     }
+
     if (this.options.behaviour === "ignores-paints") {
       this.metrics.paintsIgnored += 1;
       this.lastPaintReason = "ignored";
+
       return;
     }
+
     const elapsed = Date.now() - this.armedAt;
+
     if (elapsed < (this.options.armSettleMs ?? 50)) {
       this.metrics.paintsDroppedInSettle += 1;
       this.lastPaintReason = "settle";
+
       return;
     }
+
     const ceiling = this.options.rateCeilingHz ?? null;
+
     if (ceiling !== null && this.lastPaintAt > 0 && Date.now() - this.lastPaintAt < (1000 / ceiling) * 0.85) {
       // 0.85: a real unit drops paints that arrive past its ceiling, but any
       // timer under load drifts a few percent. The fake only calls a paint
@@ -292,15 +349,19 @@ export class FakeLamp implements LanExchange {
       // sweep test does not turn timer jitter into a measurement.
       this.metrics.paintsStuttered += 1;
       this.lastPaintReason = "stutter";
+
       return;
     }
+
     this.lastPaintAt = Date.now();
     let litZone: number | null = null;
     const nbSeg = payload[1] ?? 0;
+
     if (opcode === OPCODE.RGB_STREAM) {
       for (let index = 0; index < nbSeg && index < this.painted.length; index++) {
         const zone: [number, number, number] = [payload[2 + index * 3] ?? 0, payload[2 + index * 3 + 1] ?? 0, payload[2 + index * 3 + 2] ?? 0];
         const lit = zone[0] > 0 || zone[1] > 0 || zone[2] > 0;
+
         if (lit) litZone = litZone === null ? index : -1;
         this.painted[index] = zone;
       }
@@ -308,10 +369,13 @@ export class FakeLamp implements LanExchange {
       for (let index = 0; index < nbSeg; index++) {
         const zone = payload[2 + index * 4 + 3] ?? 0;
         const colour: [number, number, number] = [payload[2 + index * 4] ?? 0, payload[2 + index * 4 + 1] ?? 0, payload[2 + index * 4 + 2] ?? 0];
+
         if (zone < this.painted.length) this.painted[zone] = colour;
+
         if (colour[0] > 0 || colour[1] > 0 || colour[2] > 0) litZone = litZone === null ? zone : -1;
       }
     }
+
     this.zoneLog.push(litZone ?? -1);
     this.metrics.paintsApplied += 1;
     this.lastPaintLanded = true;
@@ -330,12 +394,15 @@ export function armLamp(lamp: FakeLamp, on = true): void {
 export function countDistinctBands(painted: readonly (readonly [number, number, number])[]): number {
   let bands = 0;
   let previous: string | null = null;
+
   for (const zone of painted) {
     const lit = zone[0] > 0 || zone[1] > 0 || zone[2] > 0;
     const key = lit ? `${zone[0]},${zone[1]},${zone[2]}` : null;
+
     if (key !== null && key !== previous) bands += 1;
     previous = key;
   }
+
   return bands;
 }
 
@@ -385,16 +452,19 @@ export class ScriptedUser implements QualificationUser {
     const dropped = this.lamp.metrics.paintsStuttered;
     const stuttered = dropped > this.stutterSnapshot;
     this.stutterSnapshot = dropped;
+
     return Promise.resolve(stuttered);
   }
 
   measureLatencyMs(): Promise<{ valueMs: number; method: "camera" | "tap" } | null> {
     if (this.answers.latency === undefined) return Promise.resolve({ valueMs: 25, method: "camera" });
+
     return Promise.resolve(this.answers.latency);
   }
 
   powerCycled(): Promise<void> {
     this.lamp.powerCycle();
+
     return Promise.resolve();
   }
 }

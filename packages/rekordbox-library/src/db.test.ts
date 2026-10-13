@@ -17,6 +17,7 @@ function fixture(): { root: string; dbPath: string; sharePath: string; summary: 
   const dbPath = join(root, "master.db");
   const sharePath = join(root, "share");
   const summary = writeFixtureDb({ dbPath, sharePath, audioDir: join(root, "audio") });
+
   return { root, dbPath, sharePath, summary };
 }
 
@@ -28,6 +29,7 @@ describe("rekordbox reader", () => {
   it("opens the fixture read-only and lists tracks, playlists and history", async () => {
     const { dbPath, sharePath, summary } = fixture();
     const reader = await RekordboxReader.open({ dbPath, sharePath });
+
     try {
       expect(reader.driver).toBe("node:sqlite");
       expect(reader.counts()).toEqual(summary.counts);
@@ -59,6 +61,7 @@ describe("rekordbox reader", () => {
   it("rejects a write through the handle it holds", async () => {
     const { dbPath, sharePath } = fixture();
     const reader = await RekordboxReader.open({ dbPath, sharePath });
+
     try {
       const probe = reader.probeWrite();
       expect(probe.rejected).toBe(true);
@@ -72,12 +75,16 @@ describe("rekordbox reader", () => {
   it("resolves ANLZ sets into typed statuses instead of throwing", async () => {
     const { dbPath, sharePath } = fixture();
     const reader = await RekordboxReader.open({ dbPath, sharePath });
+
     try {
       const track = (id: string) => {
         const row = reader.trackRow(id);
+
         if (row === undefined) throw new Error(`fixture row ${id} missing`);
+
         return mapTrackRow(row, { sharePath });
       };
+
       const full = track("101");
       expect(full.anlz.statuses).toEqual(["audio-ok", "anlz-ok"]);
       expect(full.anlz.anlzDir).toBe(join(sharePath, "PIONEER", "USBANLZ", "101", "101"));
@@ -105,6 +112,7 @@ describe("rekordbox reader", () => {
   it("paginates and searches without touching the database", async () => {
     const { dbPath, sharePath } = fixture();
     const reader = await RekordboxReader.open({ dbPath, sharePath });
+
     try {
       expect(reader.trackRows({ limit: 2, offset: 0 }).map((row) => row["ID"])).toEqual(["101", "102"]);
       expect(reader.trackRows({ limit: 2, offset: 2 }).map((row) => row["ID"])).toEqual(["103", "104"]);
@@ -129,6 +137,7 @@ describe("rekordbox reader", () => {
     // A key selects the SQLCipher driver, which is optional and absent here.
     const cipherAvailable = await cipherDriverAvailable();
     const withKey = openReadOnly(junk, "402fd482");
+
     if (cipherAvailable) await expect(withKey).rejects.toBeInstanceOf(LibraryDbError);
     else await expect(withKey).rejects.toMatchObject({ code: "cipher-module-missing" });
   });

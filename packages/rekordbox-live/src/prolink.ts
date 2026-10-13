@@ -14,7 +14,9 @@
 // type, or an unknown type is rejected and never reaches the providers.
 
 export const PROLINK_MAGIC = "Qspt1WmJOL";
+
 export const PROLINK_BEAT_LENGTH = 0x60;
+
 export const PROLINK_HEADER_LENGTH = 10;
 
 export const PROLINK_PORTS = {
@@ -81,11 +83,14 @@ const view = (data: Uint8Array): DataView => new DataView(data.buffer, data.byte
 
 function readAscii(data: Uint8Array, offset: number, length: number): string {
   let text = "";
+
   for (let i = offset; i < Math.min(offset + length, data.length); i++) {
     const byte = data[i] ?? 0;
+
     if (byte === 0) break;
     text += String.fromCharCode(byte);
   }
+
   return text;
 }
 
@@ -98,24 +103,32 @@ function malformed(reason: string): ProlinkMalformed {
 export function decodeProlinkPacket(data: Uint8Array): ProlinkDecoded {
   if (data.length < PROLINK_HEADER_LENGTH + 3) return malformed(`short packet (${data.length} bytes)`);
   const magic = readAscii(data, 0, 10);
+
   if (magic !== PROLINK_MAGIC) return malformed(`bad magic (${JSON.stringify(magic)})`);
   const type = TYPE_BY_ID[data[10] ?? -1];
+
   if (!type) return malformed(`unknown packet type 0x${(data[10] ?? 0).toString(16)}`);
   const headerDevice = readAscii(data, 11, 20);
   const deviceNumber = data[0x21] ?? 0;
   const header: ProlinkHeader = { type, deviceName: headerDevice };
+
   if (type === "beat" && data.length !== PROLINK_BEAT_LENGTH) {
     return malformed(`beat packet must be ${PROLINK_BEAT_LENGTH} bytes, got ${data.length}`);
   }
+
   if (type === "keepalive" && data.length !== 0x36) {
     return malformed(`keepalive must be 0x36 bytes, got ${data.length}`);
   }
+
   if (type === "status" && data.length < 0x9c) {
     return malformed(`status packet too short (${data.length} bytes)`);
   }
+
   const dv = view(data);
+
   if (type === "beat") {
     const bpmRaw = dv.getUint16(0x5a, true);
+
     return {
       kind: "beat",
       header,
@@ -128,10 +141,12 @@ export function decodeProlinkPacket(data: Uint8Array): ProlinkDecoded {
       trackDevice: data[0x5e] ?? 0,
     };
   }
+
   if (type === "status") {
     const playState = data[0x6f] ?? 0;
     const flags = data[0x75] ?? 0;
     const bpmRaw = dv.getUint16(0x92, true);
+
     return {
       kind: "status",
       header,
@@ -147,6 +162,7 @@ export function decodeProlinkPacket(data: Uint8Array): ProlinkDecoded {
       pitch: dv.getUint32(0x8c, true),
     };
   }
+
   return { kind: "keepalive", header, deviceNumber };
 }
 
@@ -170,8 +186,10 @@ export function buildBeatPacket(opts: {
   beatInBar?: number;
 }): Uint8Array {
   const out = new Uint8Array(PROLINK_BEAT_LENGTH);
+
   for (let i = 0; i < PROLINK_MAGIC.length; i++) out[i] = PROLINK_MAGIC.charCodeAt(i);
   out[10] = 0x06;
+
   for (let i = 0; i < Math.min(opts.deviceName.length, 20); i++) out[11 + i] = opts.deviceName.charCodeAt(i);
   out[0x21] = opts.deviceNumber;
   const dv = view(out);
@@ -181,6 +199,7 @@ export function buildBeatPacket(opts: {
   dv.setUint16(0x5a, opts.bpm === undefined ? 0xffff : Math.round(opts.bpm * 100), true);
   out[0x5c] = opts.beatInBar ?? 1;
   out[0x5e] = opts.deviceNumber;
+
   return out;
 }
 
@@ -197,8 +216,10 @@ export function buildStatusPacket(opts: {
   bpm?: number;
 }): Uint8Array {
   const out = new Uint8Array(0x9c);
+
   for (let i = 0; i < PROLINK_MAGIC.length; i++) out[i] = PROLINK_MAGIC.charCodeAt(i);
   out[10] = 0x0a;
+
   for (let i = 0; i < Math.min(opts.deviceName.length, 20); i++) out[11 + i] = opts.deviceName.charCodeAt(i);
   out[0x21] = opts.deviceNumber;
   const dv = view(out);
@@ -209,14 +230,18 @@ export function buildStatusPacket(opts: {
   dv.setUint32(0x8c, opts.pitchRaw ?? 0x100000, true);
   dv.setUint16(0x92, opts.bpm === undefined ? 0xffff : Math.round(opts.bpm * 100), true);
   out[0x94] = opts.beatInBar ?? 0;
+
   return out;
 }
 
 export function buildKeepalivePacket(deviceName: string, deviceNumber: number): Uint8Array {
   const out = new Uint8Array(0x36);
+
   for (let i = 0; i < PROLINK_MAGIC.length; i++) out[i] = PROLINK_MAGIC.charCodeAt(i);
   out[10] = 0x02;
+
   for (let i = 0; i < Math.min(deviceName.length, 20); i++) out[11 + i] = deviceName.charCodeAt(i);
   out[0x21] = deviceNumber;
+
   return out;
 }

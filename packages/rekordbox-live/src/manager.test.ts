@@ -13,6 +13,7 @@ describe("P-7-priority", () => {
     const engine = new FusionEngine({ now: () => now });
     const lighting = new ScriptedProvider({ id: "lighting-ipc", now: () => now });
     const composite = new ScriptedProvider({ id: "composite-flx4", now: () => now });
+
     const emit = (provider: ScriptedProvider, seconds: number): void => {
       provider.update({
         deckId: 1,

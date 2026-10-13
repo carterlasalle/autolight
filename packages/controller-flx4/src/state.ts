@@ -100,6 +100,7 @@ export interface StateModelOptions {
 
 /** Reversal window over which jog reversals count toward a scratch. */
 export const DEFAULT_REVERSAL_WINDOW_SECONDS = 1;
+
 /** runtime.scratch.minReversalsPerSec default (registry default 2). */
 export const DEFAULT_MIN_REVERSALS_PER_SEC = 2;
 
@@ -177,25 +178,34 @@ export class Flx4StateModel {
     if (event.type === "unknown") return;
     this.state.updatedAtNs = event.receivedAtNs;
     this.state.eventsApplied += 1;
+
     if (event.group === "pad") {
       this.applyPad(event);
+
       return;
     }
+
     if (event.group === "deck") {
       this.applyDeck(event);
+
       return;
     }
+
     if (event.group === "mixer") {
       this.applyMixer(event);
+
       return;
     }
+
     if (event.group === "browse") {
       if (event.id.startsWith("browse.load") && event.deck !== null && event.on) {
         const deck = this.state.decks[event.deck];
         deck.loads = { count: deck.loads.count + 1, lastAtNs: event.receivedAtNs };
       }
+
       return;
     }
+
     if (event.group === "effect" && event.id === "fx.level-depth" && event.complete) {
       this.state.mixer.fxLevelDepth = event.value;
     }
@@ -205,59 +215,84 @@ export class Flx4StateModel {
     if (event.deck === null) return;
     const deck = this.state.decks[event.deck];
     const id = event.id.slice(`deck${event.deck}.`.length);
+
     if (id === "play" && !event.shift && event.on) {
       deck.play = { on: !deck.play.on, atNs: event.receivedAtNs, quality: "estimated" };
+
       return;
     }
+
     if (id === "cue") {
       deck.cue = { on: event.on, atNs: event.receivedAtNs, quality: "observed" };
+
       return;
     }
+
     if (id === "shift") {
       deck.shift = event.on;
+
       return;
     }
+
     if (id.startsWith("pad-mode.")) {
       if (event.on && event.padMode !== undefined) {
         deck.padMode = event.padMode;
         deck.padModeAtNs = event.receivedAtNs;
       }
+
       return;
     }
+
     if (id === "tempo" && event.complete) {
       deck.tempo = { position: event.value, atNs: event.receivedAtNs };
+
       return;
     }
+
     if (id.startsWith("jog.")) {
       this.applyJog(event, deck);
+
       return;
     }
+
     if (id === "sync" && event.on) {
       deck.sync = { enabled: !(deck.sync.enabled ?? false), master: false, atNs: event.receivedAtNs, quality: "estimated" };
+
       return;
     }
+
     if (id === "sync-master" && event.on) {
       deck.sync = { ...deck.sync, master: true, atNs: event.receivedAtNs };
+
       return;
     }
+
     if (id === "loop-in" && event.on) {
       deck.loop = { active: true, lastAction: "in", lastAtNs: event.receivedAtNs, beatLength: null, quality: "estimated" };
+
       return;
     }
+
     if (id === "loop-out" && event.on) {
       deck.loop = { ...deck.loop, active: true, lastAction: "out", lastAtNs: event.receivedAtNs, quality: "estimated" };
+
       return;
     }
+
     if (id === "loop-halve" && event.on) {
       const beatLength = deck.loop.beatLength === null ? null : deck.loop.beatLength / 2;
       deck.loop = { active: true, lastAction: "halve", lastAtNs: event.receivedAtNs, beatLength, quality: "estimated" };
+
       return;
     }
+
     if (id === "loop-double" && event.on) {
       const beatLength = deck.loop.beatLength === null ? null : deck.loop.beatLength * 2;
       deck.loop = { active: true, lastAction: "double", lastAtNs: event.receivedAtNs, beatLength, quality: "estimated" };
+
       return;
     }
+
     if (id === "loop-exit" && event.on) {
       const wasActive = deck.loop.active !== false;
       deck.loop = {
@@ -267,8 +302,10 @@ export class Flx4StateModel {
         beatLength: null,
         quality: "estimated",
       };
+
       return;
     }
+
     if (id === "loop-exit-shift" && event.on) {
       deck.loop = { active: false, lastAction: "exit", lastAtNs: event.receivedAtNs, beatLength: null, quality: "estimated" };
     }
@@ -276,12 +313,15 @@ export class Flx4StateModel {
 
   private applyJog(event: Flx4ControlEvent, deck: DeckControllerState): void {
     const atNs = event.receivedAtNs;
+
     if (event.kind === "touch") {
       // Touching clears the reversal window; the last velocity and direction
       // stay readable so a scratch-end signal keeps its direction.
       deck.jog = { ...deck.jog, touched: event.on, atNs, reversals: event.on ? [] : deck.jog.reversals, scratchActive: false };
+
       return;
     }
+
     if (event.kind !== "jog") return;
     const direction: -1 | 0 | 1 = event.value > 0 ? 1 : event.value < 0 ? -1 : 0;
     const previous = deck.jog.direction;
@@ -295,8 +335,10 @@ export class Flx4StateModel {
   private applyPad(event: Flx4ControlEvent): void {
     if (event.deck === null || event.padIndex === undefined || event.padMode === undefined) return;
     const deck = this.state.decks[event.deck];
+
     if (event.on) {
       if (!deck.padsDown.includes(event.padIndex)) deck.padsDown = [...deck.padsDown, event.padIndex];
+
       if (event.padMode === "beat-loop" && !event.shift) {
         deck.loop = {
           active: true,
@@ -306,53 +348,74 @@ export class Flx4StateModel {
           quality: "estimated",
         };
       }
+
       if (event.padMode === "beat-loop" && event.shift) {
         // +SHIFT beat-loop pads 1 to 4 halve the loop, 5 to 8 double it.
         const factor = event.padIndex <= 4 ? 0.5 : 2;
         const beatLength = deck.loop.beatLength === null ? null : deck.loop.beatLength * factor;
         deck.loop = { active: true, lastAction: factor === 0.5 ? "halve" : "double", lastAtNs: event.receivedAtNs, beatLength, quality: "estimated" };
       }
+
       return;
     }
+
     deck.padsDown = deck.padsDown.filter((pad) => pad !== event.padIndex);
   }
 
   private applyMixer(event: Flx4ControlEvent): void {
     const mixer = this.state.mixer;
     const id = event.id;
+
     if (id === "mixer.crossfader" && event.complete) {
       mixer.crossfader = { position: event.value, atNs: event.receivedAtNs };
+
       return;
     }
+
     if (id === "mixer.master-level" && event.complete) {
       mixer.masterLevel = event.value;
+
       return;
     }
+
     if (id === "mixer.head-mix" && event.complete) {
       mixer.headMix = event.value;
+
       return;
     }
+
     if (id === "mixer.head-level" && event.complete) {
       mixer.headLevel = event.value;
+
       return;
     }
+
     if (id === "mixer.smart-cfx") {
       mixer.smartCfx = event.on;
+
       return;
     }
+
     if (id === "mixer.smart-fader") {
       mixer.smartFader = event.on;
+
       return;
     }
+
     const deckMatch = /^mixer\.deck([12])\.(.+)$/.exec(id);
+
     if (deckMatch === null || event.deck === null) return;
     const deck = this.state.decks[event.deck];
     const field = deckMatch[2];
+
     if (field === "channel-fader" && event.complete) {
       deck.channelFader = { position: event.value, atNs: event.receivedAtNs };
+
       return;
     }
+
     if (!event.complete) return;
+
     if (field === "trim") deck.trim = event.value;
     else if (field === "eq-high") deck.eqHigh = event.value;
     else if (field === "eq-mid") deck.eqMid = event.value;
@@ -408,29 +471,37 @@ export class TempoRangeFit {
   add(sample: TempoFitSample): void {
     const list = this.samples[sample.deck];
     list.push(sample);
+
     if (list.length > 512) list.shift();
   }
 
   fit(deck: Flx4Deck): { rangePercent: number; samples: number; residualPercent: number } | null {
     const list = this.samples[deck];
+
     if (list.length < 3) return null;
     const xs = list.map((s) => (s.position - 0.5) * 2);
     const spread = Math.max(...xs) - Math.min(...xs);
+
     if (spread < 0.2) return null;
     let num = 0;
     let den = 0;
+
     for (let i = 0; i < list.length; i += 1) {
       const x = xs[i] ?? 0;
       num += x * (list[i]?.pitchPercent ?? 0);
       den += x * x;
     }
+
     if (den === 0) return null;
     const rangePercent = num / den;
     let residual = 0;
+
     for (let i = 0; i < list.length; i += 1) {
       residual = Math.max(residual, Math.abs((list[i]?.pitchPercent ?? 0) - (xs[i] ?? 0) * rangePercent));
     }
+
     if (residual > this.maxResidualPercent) return null;
+
     return { rangePercent, samples: list.length, residualPercent: residual };
   }
 }
@@ -440,7 +511,9 @@ export function resolveTempoRange(setting: TempoRangeSetting, fitted: TempoFitRe
   if (setting === "6" || setting === "10" || setting === "16") {
     return { percent: FIXED_TEMPO_RANGE_PERCENT[setting], source: "setting" };
   }
+
   if (fitted !== null) return { percent: fitted.rangePercent, source: "fit" };
+
   // "source" without provider samples and "wide" are not visible in MIDI.
   return { percent: null, source: "unknown" };
 }

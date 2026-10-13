@@ -38,10 +38,12 @@ describe("library rows and queue (T-UI-05, spec 95/139)", () => {
     const cues = [
       { type: "white-hit", startBeat: 40, durationBeats: 0.25, intensity: 1, target: "ALL", priority: 100 },
     ];
+
     const out = upcomingForDecks([
       { deckId: 1, beat: 32, cues: cues as never[] },
       { deckId: 2, beat: 100, cues: cues as never[] },
     ]);
+
     expect(out.find((r) => r.deckId === 1)?.label).toBe("in 8 beats");
     expect(out.find((r) => r.deckId === 2)).toBeUndefined();
   });

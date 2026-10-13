@@ -25,6 +25,7 @@ describe("TrackId keying (T-ID-03, F-ID-03)", () => {
       { trackId: "track-aaa-1", title: "Same Title", artist: "A" },
       { trackId: "track-bbb-2", title: "Same Title", artist: "B" },
     ]);
+
     expect(labels.size).toBe(2);
     const [a, b] = [labels.get("track-aaa-1"), labels.get("track-bbb-2")];
     expect(a).toContain("Same Title");

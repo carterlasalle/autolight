@@ -47,6 +47,7 @@ const ANLZ_SUFFIXES = [".EXT", ".2EX"] as const;
 function defaultStat(path: string): { sizeBytes: number; mtimeMs: number } | undefined {
   try {
     const stats = statSync(path);
+
     return { sizeBytes: stats.size, mtimeMs: stats.mtimeMs };
   } catch {
     return undefined;
@@ -55,6 +56,7 @@ function defaultStat(path: string): { sizeBytes: number; mtimeMs: number } | und
 
 function facts(path: string, statFile: StatFile): FileFacts {
   const found = statFile(path);
+
   return {
     path,
     exists: found !== undefined,
@@ -82,12 +84,15 @@ export function resolveAnlzSet(
   const audioPath = options.audioPath ?? null;
   const audio = audioPath === null || audioPath === "" ? null : facts(audioPath, statFile);
   const statuses: TrackFileStatus[] = [];
+
   if (audio !== null) statuses.push(audio.exists ? "audio-ok" : "audio-missing");
 
   if (relative === "") {
     statuses.push("anlz-missing");
+
     return { anlzDir: null, dat: null, ext: null, ex2: null, audio, statuses };
   }
+
   const joined = join(options.sharePath, relative);
   const datPath = isAbsolute(stored) && statFile(joined) === undefined && statFile(stored) !== undefined ? stored : joined;
   const extPath = swapSuffix(datPath, ANLZ_SUFFIXES[0]);
@@ -95,15 +100,19 @@ export function resolveAnlzSet(
   const dat = facts(datPath, statFile);
   const ext = facts(extPath, statFile);
   const ex2 = facts(ex2Path, statFile);
+
   if (!dat.exists) statuses.push("anlz-missing");
   else if (!ext.exists || !ex2.exists) statuses.push("anlz-partial");
   else statuses.push("anlz-ok");
+
   return { anlzDir: dirname(datPath), dat, ext, ex2, audio, statuses };
 }
 
 function swapSuffix(path: string, suffix: string): string {
   const dot = path.lastIndexOf(".");
   const slash = path.lastIndexOf("/");
+
   if (dot <= slash) return `${path}${suffix}`;
+
   return `${path.slice(0, dot)}${suffix}`;
 }

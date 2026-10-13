@@ -12,6 +12,7 @@ function tempShare(): string {
   const root = mkdtempSync(join(tmpdir(), "autolight-rbl-anlz-"));
   created.push(root);
   mkdirSync(join(root, "PIONEER", "USBANLZ", "7", "7a"), { recursive: true });
+
   return root;
 }
 
@@ -33,6 +34,7 @@ describe("anlz resolution", () => {
       { analysisDataPath: "/PIONEER/USBANLZ/7/7a/ANLZ0000.DAT" },
       { sharePath: share, audioPath: audio },
     );
+
     expect(resolved.statuses).toEqual(["audio-ok", "anlz-ok"]);
     expect(resolved.anlzDir).toBe(dir);
     expect(resolved.dat?.path).toBe(join(dir, "ANLZ0000.DAT"));
@@ -46,6 +48,7 @@ describe("anlz resolution", () => {
     const share = tempShare();
     const dir = join(share, "PIONEER", "USBANLZ", "9", "9b");
     mkdirSync(dir, { recursive: true });
+
     for (const suffix of [".DAT", ".EXT", ".2EX"]) writeFileSync(join(dir, `ANLZ0042${suffix}`), suffix);
     const resolved = resolveAnlzSet({ analysisDataPath: "PIONEER/USBANLZ/9/9b/ANLZ0042.DAT" }, { sharePath: share });
     expect(resolved.statuses).toEqual(["anlz-ok"]);
@@ -81,6 +84,7 @@ describe("anlz resolution", () => {
     const share = tempShare();
     const outside = mkdtempSync(join(tmpdir(), "autolight-rbl-anlz-abs-"));
     created.push(outside);
+
     for (const suffix of [".DAT", ".EXT", ".2EX"]) writeFileSync(join(outside, `ANLZ0000${suffix}`), suffix);
     const resolved = resolveAnlzSet({ analysisDataPath: join(outside, "ANLZ0000.DAT") }, { sharePath: share });
     expect(resolved.statuses).toEqual(["anlz-ok"]);
@@ -90,10 +94,12 @@ describe("anlz resolution", () => {
   it("keeps the displayed paths stable when a stat seam is injected", () => {
     const share = "/virtual/share";
     const stat: StatFile = (path) => (path.endsWith(".DAT") ? { sizeBytes: 10, mtimeMs: 5 } : undefined);
+
     const resolved = resolveAnlzSet(
       { analysisDataPath: "/PIONEER/USBANLZ/1/1/ANLZ0000.DAT" },
       { sharePath: share, statFile: stat, audioPath: "/virtual/share/a.mp3" },
     );
+
     expect(resolved.dat?.path).toBe(join(share, "PIONEER", "USBANLZ", "1", "1", "ANLZ0000.DAT"));
     expect(resolved.statuses).toEqual(["audio-missing", "anlz-partial"]);
   });

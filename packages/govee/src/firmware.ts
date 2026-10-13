@@ -22,6 +22,7 @@ export interface FirmwareDecision {
 }
 
 const DEFAULT_MAX_REARM = 3;
+
 const DEFAULT_REARM_WINDOW_MS = 60000;
 
 export class FirmwarePolicy {
@@ -38,9 +39,11 @@ export class FirmwarePolicy {
 
   decide(savedFirmware: string, currentFirmware: string, segmentedVerified: boolean): FirmwareDecision {
     const known = currentFirmware !== "" && currentFirmware === savedFirmware;
+
     if (known && segmentedVerified) {
       return { gate: "segmented", warning: null, reason: "firmware matches the qualified record" };
     }
+
     if (currentFirmware === "" || currentFirmware === "unmeasured") {
       return {
         gate: segmentedVerified ? "segmented" : "verified-fallback",
@@ -48,6 +51,7 @@ export class FirmwarePolicy {
         reason: "firmware unmeasured, treating as unknown per spec 147",
       };
     }
+
     if (!known) {
       return {
         gate: "verified-fallback",
@@ -55,6 +59,7 @@ export class FirmwarePolicy {
         reason: "unknown firmware, segmented resumes after wizard steps 8, 9, 12, 13",
       };
     }
+
     return {
       gate: "verified-fallback",
       warning: "segmented channel not verified on this unit: verified fallback only",
@@ -65,15 +70,20 @@ export class FirmwarePolicy {
   /** A failing raw stream asks before each re-arm. False means stop spamming. */
   mayRearm(): boolean {
     const now = this.clock();
+
     while (this.rearmAt.length > 0 && now - this.rearmAt[0]! >= this.windowMs) this.rearmAt.shift();
+
     if (this.rearmAt.length >= this.maxRearm) return false;
     this.rearmAt.push(now);
+
     return true;
   }
 
   rearmCount(): number {
     const now = this.clock();
+
     while (this.rearmAt.length > 0 && now - this.rearmAt[0]! >= this.windowMs) this.rearmAt.shift();
+
     return this.rearmAt.length;
   }
 }

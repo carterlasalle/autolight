@@ -8,7 +8,9 @@
 
 export function normalizeTrackId(id: string): string {
   const trimmed = id.trim();
+
   if (!trimmed) throw new Error("track-key: empty TrackId (never fall back to title)");
+
   return trimmed;
 }
 
@@ -29,9 +31,11 @@ export class TrackStateMap<V> {
   getOrCreate(trackId: string, create: () => V): V {
     const key = normalizeTrackId(trackId);
     const existing = this.entries.get(key);
+
     if (existing !== undefined) return existing;
     const value = create();
     this.entries.set(key, value);
+
     return value;
   }
 
@@ -46,7 +50,9 @@ export class TrackStateMap<V> {
   // Drop state for tracks no longer in the library; never called on rename.
   retain(trackIds: Iterable<string>): void {
     const keep = new Set<string>();
+
     for (const id of trackIds) keep.add(normalizeTrackId(id));
+
     for (const key of this.entries.keys()) {
       if (!keep.has(key)) this.entries.delete(key);
     }
@@ -67,22 +73,29 @@ export interface TitledRow {
 // the TrackIds, labels disambiguate with artist, then an id suffix.
 export function uniqueTrackLabels(rows: readonly TitledRow[]): Map<string, string> {
   const byTitle = new Map<string, TitledRow[]>();
+
   for (const row of rows) {
     const list = byTitle.get(row.title);
+
     if (list) list.push(row);
     else byTitle.set(row.title, [row]);
   }
+
   const labels = new Map<string, string>();
+
   for (const list of byTitle.values()) {
     if (list.length === 1) {
       const only = list[0];
+
       if (only) labels.set(normalizeTrackId(only.trackId), only.title);
       continue;
     }
+
     for (const row of list) {
       const base = row.artist ? `${row.title} - ${row.artist}` : row.title;
       labels.set(normalizeTrackId(row.trackId), `${base} (${normalizeTrackId(row.trackId).slice(0, 8)})`);
     }
   }
+
   return labels;
 }

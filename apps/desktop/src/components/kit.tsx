@@ -103,6 +103,7 @@ export function Waveform({ points, beat }: { points: WaveformPoint[]; beat: numb
   const span = maxAt - minAt;
   const x = (at: number): number => ((at - minAt) / span) * w;
   const d = points.map((p) => `${x(p.at)},${(1 - p.value) * h}`).join(" ");
+
   return (
     <svg viewBox={`0 0 ${w} ${h}`} role="img" aria-label="Waveform" className="block h-12 w-full" preserveAspectRatio="none">
       {d.length > 0 ? <polyline points={d} fill="none" stroke="currentColor" strokeWidth="1" /> : null}
@@ -124,11 +125,13 @@ export function BeatRuler({ ticks, startBeat, endBeat, beatsPerBar }: {
   beatsPerBar: number;
 }): JSX.Element {
   const span = Math.max(1, endBeat - startBeat);
+
   return (
     <div role="img" aria-label="Beat ruler" className="relative h-4 border-b border-border">
       {ticks.map((t) => {
         const isBar = (t.at - startBeat) % beatsPerBar === 0;
         const left = `${((t.at - startBeat) / span) * 100}%`;
+
         return (
           <span key={t.at} aria-hidden className={isBar ? "absolute h-3 w-px bg-foreground" : "absolute h-1.5 w-px bg-muted-foreground"} style={{ left }} />
         );
@@ -139,7 +142,9 @@ export function BeatRuler({ ticks, startBeat, endBeat, beatsPerBar }: {
 
 export function barTicks(startBeat: number, endBeat: number): BeatTick[] {
   const ticks: BeatTick[] = [];
+
   for (let b = Math.ceil(startBeat); b <= endBeat; b++) ticks.push({ at: b });
+
   return ticks;
 }
 
@@ -163,11 +168,13 @@ export function SectionLane({ bands, startBeat, endBeat }: {
   endBeat: number;
 }): JSX.Element {
   const span = Math.max(1, endBeat - startBeat);
+
   return (
     <div role="img" aria-label="Sections" className="relative h-6 border-b border-border">
       {bands.map((s) => {
         const left = ((s.start - startBeat) / span) * 100;
         const width = Math.max(0.5, ((s.end - s.start) / span) * 100);
+
         return (
           <span key={s.start} aria-hidden className="absolute top-0 h-6 bg-muted" style={{ left: `${left}%`, width: `${width}%` }}>
             <span className={"overflow-hidden px-1 " + tokens.type.caption}>{s.label}</span>
@@ -185,11 +192,13 @@ export function EventLane({ marks, startBeat, endBeat }: {
   endBeat: number;
 }): JSX.Element {
   const span = Math.max(1, endBeat - startBeat);
+
   return (
     <div role="img" aria-label="Events" className="relative h-5">
       {marks.map((m) => {
         const left = ((m.at - startBeat) / span) * 100;
         const tone = m.kind === "cue" ? tokens.statusWarn : m.kind === "event" ? tokens.statusOk : tokens.accent;
+
         return (
           <span key={`${m.kind}-${m.at}`} title={m.label} aria-hidden
             className="absolute top-1/2 size-2 -translate-y-1/2"
@@ -213,10 +222,12 @@ export function FixturePreview({ rows, rowHeight = 16 }: {
   rowHeight?: number;
 }): JSX.Element {
   const h = Math.max(4, rowHeight);
+
   return (
     <div role="img" aria-label="Venue preview" className="flex flex-col gap-1">
       {rows.map((row, i) => {
         const width = row.cells.reduce((max, c) => Math.max(max, c.x + 1), 1);
+
         return (
           <svg key={i} viewBox={`0 0 ${width} ${h}`} className="block h-4 w-full" preserveAspectRatio="none" role="presentation">
             {row.cells.map((c) => <rect key={c.x} x={String(c.x)} y="0" width="1" height={String(h)} fill={c.color} />)}
@@ -240,6 +251,7 @@ export function DeviceTile({ tile, onAction }: {
   onAction?: (action: "IDENTIFY" | "TEST CHASE" | "RECALIBRATE") => void;
 }): JSX.Element {
   const healthTone: StatusTone = tile.health === "online" ? "ok" : tile.health === "degraded" ? "warn" : "bad";
+
   return (
     <article aria-label={tile.id} className={tokens.panel}>
       <header className={tokens.space.paddingTight}>
@@ -274,6 +286,7 @@ export function InspectorPanel({ track, startBeat, endBeat }: {
 }): JSX.Element {
   const bands: SectionBand[] = track.sections.map((s) => ({ start: s.startBeat, end: s.endBeat, label: s.kind }));
   const marks: LaneMark[] = track.musicalEvents.map((e) => ({ at: e.beat, label: e.type, kind: "event" }));
+
   return (
     <section aria-label="Track inspector" className={tokens.panel}>
       <header className={tokens.space.paddingTight}>
@@ -295,6 +308,7 @@ export function InspectorPanel({ track, startBeat, endBeat }: {
 // TimelineCursor: a playhead over a measured timeline; position is a prop.
 export function TimelineCursor({ at, end }: { at: number; end: number }): JSX.Element {
   const left = end > 0 ? `${Math.min(100, Math.max(0, (at / end) * 100))}%` : "0%";
+
   return <span role="img" aria-label="Playhead" aria-hidden className="absolute top-0 bottom-0 w-px bg-primary" style={{ left }} />;
 }
 
@@ -307,6 +321,7 @@ export interface CueRow {
 
 export function cueRelative(cue: ShowCue, now: number): string {
   const delta = Math.max(0, Math.round(cue.startBeat - now));
+
   return delta === 0 ? "in now" : `in ${delta} beats`;
 }
 
@@ -372,8 +387,11 @@ export interface ConfigValue {
 
 export function receiptLabel(receipt: string): "spec" | "measured" | "unmeasured" | "other" {
   if (receipt.startsWith("spec")) return "spec";
+
   if (receipt.startsWith("measured")) return "measured";
+
   if (receipt.startsWith("unmeasured")) return "unmeasured";
+
   return "other";
 }
 
@@ -383,6 +401,7 @@ export function receiptLabel(receipt: string): "spec" | "measured" | "unmeasured
 export function ConfigField({ def }: { def: ConfigValue }): JSX.Element {
   const receipt = receiptLabel(def.receipt);
   const receiptTone: StatusTone = receipt === "unmeasured" ? "warn" : receipt === "measured" ? "ok" : "neutral";
+
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-0.5">
       <code className={tokens.type.body}>{def.key}</code>
@@ -399,6 +418,7 @@ export function ConfigField({ def }: { def: ConfigValue }): JSX.Element {
 
 // ---------------------------------------------------------------- decision switch
 export type DecisionMode = { id: string; label: string; measurement: string };
+
 export interface Decision {
   id: string;
   current: string;
@@ -414,6 +434,7 @@ export function DecisionSwitch({ decision, onPick }: {
     <div role="radiogroup" aria-label={decision.id} className={tokens.space.gap}>
       {decision.modes.map((mode) => {
         const current = mode.id === decision.current;
+
         return (
           <label key={mode.id} className={tokens.panel + " " + tokens.space.paddingTight}>
             <input type="radio" name={decision.id} checked={current} onChange={() => onPick && onPick(mode.id)} disabled={onPick === undefined} />
@@ -431,12 +452,14 @@ export function DecisionSwitch({ decision, onPick }: {
 // The capability status vocabulary (00-agent-briefing 5.1a): only truthful
 // states pass in; the badge never invents a status.
 export type CapabilityStatus = "PASS" | "IMPLEMENTED_UNQUALIFIED" | "PARTIAL" | "FAIL" | "UNAVAILABLE_ON_THIS_DEVICE" | "MISSING";
+
 export const CAPABILITY_STATUSES: readonly CapabilityStatus[] = [
   "PASS", "IMPLEMENTED_UNQUALIFIED", "PARTIAL", "FAIL", "UNAVAILABLE_ON_THIS_DEVICE", "MISSING",
 ];
 
 export function CapabilityBadge({ capability, status }: { capability: string; status: CapabilityStatus }): JSX.Element {
   const tone: StatusTone = status === "PASS" ? "ok" : status === "PARTIAL" || status === "IMPLEMENTED_UNQUALIFIED" ? "warn" : "bad";
+
   return <BadgeSpan label={`${capability}: ${status}`} tone={tone} />;
 }
 
@@ -451,6 +474,7 @@ export interface SourceInfo {
 // is exactly the spec 145 banner wording.
 export function SourceBadge({ info }: { info: SourceInfo }): JSX.Element {
   const quality = info.verified ? "verified" : UNVERIFIED_REKORDBOX_COPY;
+
   return (
     <BadgeSpan label={`${info.source} ${info.provider} ${quality}`} tone={info.verified ? "ok" : "warn"} />
   );

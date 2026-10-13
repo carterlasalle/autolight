@@ -6,7 +6,9 @@
 // node: imports (T-TRU-04 spine fix); this re-export keeps existing
 // main-process imports resolving.
 export { CC, NOTE } from "./consts.js";
+
 import { CC as CC_VAL, type NOTE as NOTE_TYPE } from "./consts.js";
+
 export type Flx4Hint =
   | { kind: "fader-rise"; channel: 1 | 2; value: number }
   | { kind: "filter-sweep"; channel: 1 | 2; value: number }
@@ -18,10 +20,15 @@ export function sevenBit(v: number): number {
 
 export function classifyCC(cc: number, value: number): Flx4Hint | null {
   const normalized = sevenBit(value);
+
   if (cc === CC_VAL.CHANNEL_FADER_1) return { kind: "fader-rise", channel: 1, value: normalized };
+
   if (cc === CC_VAL.CHANNEL_FADER_2) return { kind: "fader-rise", channel: 2, value: normalized };
+
   if (cc === CC_VAL.FILTER_1) return { kind: "filter-sweep", channel: 1, value: normalized };
+
   if (cc === CC_VAL.FILTER_2) return { kind: "filter-sweep", channel: 2, value: normalized };
+
   return null;
 }
 
@@ -61,6 +68,7 @@ export function compositeDeckState(input: CompositeDeckInput): {
 // but never create audibility alone; both sources must agree the deck is live.
 export function confirmAudible(midiFader: number | null, djWeight: number): boolean {
   if (midiFader === null) return djWeight > 0;
+
   return midiFader > 0.02 && djWeight > 0;
 }
 
@@ -68,7 +76,11 @@ export function confirmAudible(midiFader: number | null, djWeight: number): bool
 // runtime signals (T-FLX-04), MIDI backends (T-FLX-01) and the composite
 // feed/wiring seam (T-FLX-06).
 export * from "./map.js";
+
 export * from "./state.js";
+
 export * from "./signals.js";
+
 export * from "./backend.js";
+
 export * from "./integration.js";

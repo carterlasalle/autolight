@@ -42,6 +42,7 @@ export interface FixtureCalibrationInput {
 
 export function oklchToOklab(lch: Oklch): Oklab {
   const h = (lch.h * Math.PI) / 180;
+
   return { L: lch.L, a: lch.C * Math.cos(h), b: lch.C * Math.sin(h) };
 }
 
@@ -56,6 +57,7 @@ export function oklabToLinear(lab: Oklab): LinearRgb {
   const l3 = l * l * l;
   const m3 = m * m * m;
   const s3 = s * s * s;
+
   return [
     4.0767416621 * l3 - 3.3077115913 * m3 + 0.2309699292 * s3,
     -1.2684380046 * l3 + 2.6097574011 * m3 - 0.3413193965 * s3,
@@ -70,6 +72,7 @@ export function linearToOklab(linear: LinearRgb): Oklab {
   const l1 = Math.cbrt(Math.max(0, l));
   const m1 = Math.cbrt(Math.max(0, m));
   const s1 = Math.cbrt(Math.max(0, s));
+
   return {
     L: 0.2104542553 * l1 + 0.793617785 * m1 - 0.0040720468 * s1,
     a: 1.9779984951 * l1 - 2.428592205 * m1 + 0.4505937099 * s1,
@@ -85,12 +88,14 @@ export function oklchToLinear(lch: Oklch): LinearRgb {
 /** Intensity in linear light: scales every channel together, so hue survives. */
 export function applyIntensityLinear(linear: LinearRgb, intensity: number): LinearRgb {
   const f = Math.min(1, Math.max(0, intensity));
+
   return [linear[0] * f, linear[1] * f, linear[2] * f];
 }
 
 /** White balance matrix (row-major); identity when the fixture has none. */
 export function applyWhiteBalance(linear: LinearRgb, matrix: readonly number[] | undefined): LinearRgb {
   if (matrix === undefined || matrix.length < 9) return linear;
+
   return [
     matrix[0]! * linear[0] + matrix[1]! * linear[1] + matrix[2]! * linear[2],
     matrix[3]! * linear[0] + matrix[4]! * linear[1] + matrix[5]! * linear[2],
@@ -101,11 +106,15 @@ export function applyWhiteBalance(linear: LinearRgb, matrix: readonly number[] |
 /** Exact sRGB transfer at the transport boundary (spec 49, 76). */
 export function linearToSrgbByte(value: number, gamma = "srgb"): number {
   const v = Math.min(1, Math.max(0, value));
+
   if (gamma !== "srgb") {
     const g = typeof gamma === "number" && gamma > 0 ? gamma : DEFAULT_GAMMA;
+
     return Math.round(Math.pow(v, 1 / g) * 255);
   }
+
   const s = v <= 0.0031308 ? v * 12.92 : 1.055 * Math.pow(v, 1 / 2.4) - 0.055;
+
   return Math.round(Math.min(1, Math.max(0, s)) * 255);
 }
 
@@ -116,14 +125,18 @@ export function fixtureBytes(
 ): [number, number, number] {
   const balanced = applyWhiteBalance(linear, calibration.whiteBalance);
   const ceiling = calibration.brightnessCeiling ?? 1;
+
   const capped: LinearRgb = [
     Math.min(ceiling, Math.max(0, balanced[0])),
     Math.min(ceiling, Math.max(0, balanced[1])),
     Math.min(ceiling, Math.max(0, balanced[2])),
   ];
+
   const gamma = calibration.gamma ?? "srgb";
+
   const transfer = (v: number): number =>
     gamma === "srgb" ? linearToSrgbByte(v) : Math.round(Math.pow(Math.min(1, Math.max(0, v)), 1 / gamma) * 255);
+
   return [transfer(capped[0]), transfer(capped[1]), transfer(capped[2])];
 }
 

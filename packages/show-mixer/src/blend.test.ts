@@ -13,7 +13,9 @@ import {
 // weights are never normalized to one, so a lone quiet deck stays quiet.
 
 const CYAN: Rgb = { r: 0, g: 255, b: 255 };
+
 const MAGENTA: Rgb = { r: 255, g: 0, b: 255 };
+
 const WHITE: Rgb = { r: 255, g: 255, b: 255 };
 
 describe("blend space (P-64)", () => {
@@ -60,6 +62,7 @@ describe("blend space (P-64)", () => {
     for (let value = 0; value <= 255; value += 1) {
       expect(Math.abs(linearToSrgb(srgbToLinear(value)) - value)).toBeLessThanOrEqual(1);
     }
+
     expect(srgbToLinear(0)).toBe(0);
     expect(linearToSrgb(1)).toBe(255);
   });
@@ -67,6 +70,7 @@ describe("blend space (P-64)", () => {
   it("never returns a channel above 255 or below 0", () => {
     for (const space of ["oklab", "linear-rgb", "srgb-legacy", "oklab-hue-linear-intensity"] as BlendSpace[]) {
       const out = blendColors([{ rgb: MAGENTA, weight: 1 }, { rgb: CYAN, weight: 1 }, { rgb: WHITE, weight: 1 }], space);
+
       for (const channel of [out.rgb.r, out.rgb.g, out.rgb.b]) {
         expect(channel).toBeGreaterThanOrEqual(0);
         expect(channel).toBeLessThanOrEqual(255);

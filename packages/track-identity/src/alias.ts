@@ -34,10 +34,12 @@ export class MemoryAliasStore implements TrackAliasStore {
 
   insert(record: AliasRecord): void {
     const existing = this.byTrack.get(record.trackId) ?? [];
+
     if (!existing.some((r) => r.aliasId === record.aliasId)) {
       existing.push(record);
       this.byTrack.set(record.trackId, existing);
       const owner = this.byAlias.get(record.aliasId);
+
       if (owner === undefined || owner === record.trackId) this.byAlias.set(record.aliasId, record.trackId);
     }
   }
@@ -73,11 +75,17 @@ export function normalizePath(path: string): string {
 /** Every alias string this identity answers to. */
 export function aliasesFor(parts: IdentityParts): { aliasId: string; source: AliasSource }[] {
   const out: { aliasId: string; source: AliasSource }[] = [];
+
   if (parts.rekordboxId !== undefined && parts.rekordboxId !== "") out.push({ aliasId: `rb:${parts.rekordboxId}`, source: "rekordbox-id" });
+
   if (parts.seratoPath !== undefined && parts.seratoPath !== "") out.push({ aliasId: `path:${normalizePath(parts.seratoPath)}`, source: "serato-path" });
+
   if (parts.canonicalPath !== undefined && parts.canonicalPath !== "") out.push({ aliasId: `path:${normalizePath(parts.canonicalPath)}`, source: "canonical-path" });
+
   if (parts.fileHash !== undefined && parts.fileHash !== "") out.push({ aliasId: `hash:${parts.fileHash}`, source: "file-hash" });
+
   if (parts.pcmFingerprint !== undefined && parts.pcmFingerprint !== "") out.push({ aliasId: `pcm:${parts.pcmFingerprint}`, source: "pcm-hash" });
+
   return out;
 }
 
@@ -90,20 +98,27 @@ export function aliasesFor(parts: IdentityParts): { aliasId: string; source: Ali
 export function resolveTrackId(store: TrackAliasStore, parts: IdentityParts, makeId: () => string): { trackId: string; attached: boolean } {
   const aliases = aliasesFor(parts);
   const strong = aliases.filter((a) => a.source === "pcm-hash" || a.source === "file-hash");
+
   for (const alias of [...strong, ...aliases]) {
     const owner = store.trackIdForAlias(alias.aliasId);
+
     if (owner !== null) {
       const now = new Date().toISOString();
+
       for (const missing of aliases) {
         if (store.trackIdForAlias(missing.aliasId) === null) {
           store.insert({ trackId: owner, aliasId: missing.aliasId, source: missing.source, createdAt: now });
         }
       }
+
       return { trackId: owner, attached: aliases.some((a) => store.trackIdForAlias(a.aliasId) === owner && a.aliasId !== alias.aliasId) || store.aliasesOf(owner).length > 1 };
     }
   }
+
   const trackId = makeId();
   const now = new Date().toISOString();
+
   for (const alias of aliases) store.insert({ trackId, aliasId: alias.aliasId, source: alias.source, createdAt: now });
+
   return { trackId, attached: false };
 }

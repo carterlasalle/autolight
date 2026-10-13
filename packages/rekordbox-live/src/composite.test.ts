@@ -12,9 +12,12 @@ import {
   type CompositeTrackResolution,
 } from "./composite.js";
 import { runProviderContractSuite, virtualClock, type ProviderContractSubject } from "./contract-suite.js";
+
 function grid120(): { sourceTimeMs: number }[] {
   const out: { sourceTimeMs: number }[] = [];
+
   for (let i = 0; i < 64; i++) out.push({ sourceTimeMs: i * 500 });
+
   return out;
 }
 
@@ -22,13 +25,17 @@ function resolution(id: string, withEnvelope: boolean): CompositeTrackResolution
   // Deterministic pseudo-random envelope: unique alignment, so correlation
   // peaks at zero lag only when the loopback is aligned.
   let seed = 1234567;
+
   const next = (): number => {
     seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+
     return (seed % 1000) / 1000;
   };
+
   const envelope = withEnvelope
     ? Array.from({ length: 512 }, () => (next() > 0.7 ? 1 : 0.05 + next() * 0.2))
     : null;
+
   return {
     id,
     title: "Track",
@@ -39,6 +46,7 @@ function resolution(id: string, withEnvelope: boolean): CompositeTrackResolution
     onsetEnvelope: envelope,
   };
 }
+
 describe("composite-flx4 provider (T-LIVE-07)", () => {
   it("is selectable under the fusion authority id", () => {
     const provider = new CompositeProvider({ now: () => 0n });
@@ -48,12 +56,14 @@ describe("composite-flx4 provider (T-LIVE-07)", () => {
 
   it("estimates playhead from play plus tempo fader", () => {
     let now = 1_000_000_000_000n;
+
     const provider = new CompositeProvider({
       now: () => now,
       resolveTrack: () => resolution("rb:1", false),
       listOpenFiles: () => ["/music/a.mp3"],
       libraryRoots: ["/music"],
     });
+
     provider.ingestControllerEvent({ deck: 1, control: "load", value: 1, pad: null, atNs: now });
     now += 10_000_000n;
     provider.pollOpenFiles(now);
@@ -74,12 +84,14 @@ describe("composite-flx4 provider (T-LIVE-07)", () => {
   it("resolves the loaded track from LOAD plus open files with a new generation", () => {
     let now = 2_000_000_000_000n;
     let resolveId = "rb:first";
+
     const provider = new CompositeProvider({
       now: () => now,
       resolveTrack: () => resolution(resolveId, false),
       listOpenFiles: () => ["/music/first.mp3"],
       libraryRoots: ["/music"],
     });
+
     provider.ingestControllerEvent({ deck: 1, control: "load", value: 1, pad: null, atNs: now });
     now += 5_000_000n;
     provider.pollOpenFiles(now);
@@ -98,6 +110,7 @@ describe("composite-flx4 provider (T-LIVE-07)", () => {
 
   it("locks correlation below the 15 ms target on synthetic loopback audio", () => {
     let now = 3_000_000_000_000n;
+
     const provider = new CompositeProvider({
       now: () => now,
       resolveTrack: () => resolution("rb:lock", true),
@@ -109,6 +122,7 @@ describe("composite-flx4 provider (T-LIVE-07)", () => {
       minLockConfidence: 0.3,
       maxCorrectionMsPerTick: 50,
     });
+
     provider.ingestControllerEvent({ deck: 1, control: "load", value: 1, pad: null, atNs: now });
     now += 5_000_000n;
     provider.pollOpenFiles(now);
@@ -118,26 +132,31 @@ describe("composite-flx4 provider (T-LIVE-07)", () => {
     const envelope = resolution("rb:lock", true).onsetEnvelope ?? [];
     now += 3_000_000_000n;
     provider.tick(now);
+
     for (let i = 0; i < 10; i++) {
       now += 100_000_000n;
       const end = Math.max(0, Math.round((deck()?.playheadSeconds ?? 0) * 50));
       provider.pushAudio(envelope.slice(Math.max(0, end - 128), end));
       provider.tick(now);
     }
+
     expect(deck()?.quality.playheadSeconds).toBe("derived");
   });
 
   it("resolves master to the louder deck and keeps faders exact", () => {
     let now = 4_000_000_000_000n;
+
     const provider = new CompositeProvider({
       now: () => now,
       resolveTrack: (deck) => resolution(deck === 1 ? "rb:a" : "rb:b", false),
       listOpenFiles: () => ["/music/a.mp3", "/music/b.mp3"],
       libraryRoots: ["/music"],
     });
+
     for (const deck of [1, 2] as const) {
       provider.ingestControllerEvent({ deck, control: "load", value: 1, pad: null, atNs: now });
     }
+
     now += 5_000_000n;
     provider.pollOpenFiles(now);
     now += 5_000_000n;
@@ -158,6 +177,7 @@ describe("composite-flx4 provider (T-LIVE-07)", () => {
   it("passes the shared contract suite with a virtual MIDI timeline", async () => {
     const clock = virtualClock();
     let pendingTitle: { id: string; title: string } | null = null;
+
     const provider = new CompositeProvider({
       now: () => clock.nowNs(),
       resolveTrack: () =>
@@ -175,6 +195,7 @@ describe("composite-flx4 provider (T-LIVE-07)", () => {
       listOpenFiles: () => ["/music/suite.mp3"],
       libraryRoots: ["/music"],
     });
+
     const subject: ProviderContractSubject = {
       provider,
       reportsTrackText: true,
@@ -195,6 +216,7 @@ describe("composite-flx4 provider (T-LIVE-07)", () => {
       malformed: async () => provider.ingestMalformed(),
       cleanup: async () => {},
     };
+
     const failures = await runProviderContractSuite(subject);
     expect(failures).toHaveLength(0);
   });
@@ -217,6 +239,7 @@ describe("composite-flx4 provider (T-LIVE-07)", () => {
       "/tmp/stray.wav",
       "/music/set/closer.FLAC",
     ];
+
     expect(matchLibraryAudio(files, ["/music"])).toEqual([
       "/music/set/opener.mp3",
       "/music/set/closer.FLAC",
@@ -253,17 +276,20 @@ describe("composite-flx4 provider (T-LIVE-07)", () => {
       { fader: 0.25, pitchFraction: -0.05 },
       { fader: 0.5, pitchFraction: 0 },
     ];
+
     expect(estimateTempoRangePercent(samples)).toBeCloseTo(10, 6);
     expect(estimateTempoRangePercent([{ fader: 0.5, pitchFraction: 0 }])).toBeNull();
   });
   it("fuses a fresh AX playhead without overriding and ignores stale input", () => {
     let now = 6_000_000_000_000n;
+
     const provider = new CompositeProvider({
       now: () => now,
       resolveTrack: () => resolution("rb:fuse", false),
       listOpenFiles: () => ["/music/fuse.mp3"],
       libraryRoots: ["/music"],
     });
+
     provider.ingestControllerEvent({ deck: 1, control: "load", value: 1, pad: null, atNs: now });
     now += 5_000_000n;
     provider.pollOpenFiles(now);

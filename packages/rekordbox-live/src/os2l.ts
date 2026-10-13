@@ -47,10 +47,15 @@ import {
 } from "./providers.js";
 
 export const OS2L_PROVIDER_ID = "os2l" as const satisfies ProviderId;
+
 export const OS2L_SERVICE_TYPE = "_os2l._tcp";
+
 export const OS2L_PORT_MIN = 8010;
+
 export const OS2L_PORT_MAX = 8060;
+
 export const OS2L_MAX_BUFFER = 1024 * 1024;
+
 const os2lBeatSchema = z.object({
   evt: z.literal("beat"),
   pos: z.number(),
@@ -84,8 +89,11 @@ const os2lFeedbackSchema = z.object({
 const os2lMessageSchema = z.union([os2lBeatSchema, os2lButtonSchema, os2lCommandSchema, os2lFeedbackSchema]);
 
 export type Os2lBeat = z.infer<typeof os2lBeatSchema>;
+
 export type Os2lButton = z.infer<typeof os2lButtonSchema>;
+
 export type Os2lCommand = z.infer<typeof os2lCommandSchema>;
+
 export type Os2lMessage = z.infer<typeof os2lMessageSchema>;
 
 export interface Os2lDecodeResult {
@@ -102,6 +110,7 @@ export function splitOs2lMessages(chunk: string): { texts: string[]; tail: strin
   const texts: string[] = [];
   const garbage: string[] = [];
   let tail = "";
+
   for (const line of chunk.split("\n")) {
     const part = tail + line;
     tail = "";
@@ -110,32 +119,39 @@ export function splitOs2lMessages(chunk: string): { texts: string[]; tail: strin
     let escaped = false;
     let start = -1;
     let outside = "";
+
     for (let i = 0; i < part.length; i++) {
       const ch = part[i];
+
       if (inString) {
         if (escaped) escaped = false;
         else if (ch === "\\") escaped = true;
         else if (ch === '"') inString = false;
         continue;
       }
+
       if (ch === '"') inString = true;
       else if (ch === "{") {
         if (depth === 0) start = i;
         depth += 1;
       } else if (ch === "}") {
         depth -= 1;
+
         if (depth === 0 && start >= 0) {
           texts.push(part.slice(start, i + 1));
           start = -1;
         }
+
         if (depth < 0) depth = 0;
       } else if (depth === 0 && start < 0 && ch !== " " && ch !== "\r" && ch !== "\t") {
         outside += ch;
       }
     }
+
     if (start >= 0) tail = part.slice(start);
     else if (outside.trim().length > 0) garbage.push(outside.trim());
   }
+
   return { texts, tail, garbage };
 }
 
@@ -143,18 +159,23 @@ export function decodeOs2lText(text: string): Os2lDecodeResult {
   const split = splitOs2lMessages(text);
   const messages: Os2lMessage[] = [];
   const malformed: string[] = split.garbage.map((g) => `bad OS2L input ${g.slice(0, 80)}`);
+
   for (const item of split.texts) {
     let parsed: unknown = null;
+
     try {
       parsed = JSON.parse(item);
     } catch {
       malformed.push(`bad OS2L message ${item.slice(0, 80)}: not JSON`);
       continue;
     }
+
     const result = os2lMessageSchema.safeParse(parsed);
+
     if (result.success) messages.push(result.data);
     else malformed.push(`bad OS2L message ${item.slice(0, 80)}: ${result.error.message}`);
   }
+
   return { messages, malformed };
 }
 
@@ -166,6 +187,7 @@ export function formatOs2lFeedback(name: string, state: "on" | "off", page?: str
 
 function beatInBarOf(pos: number): 1 | 2 | 3 | 4 | null {
   const slot = ((Math.floor(pos) % 4) + 4) % 4 + 1;
+
   return slot === 1 || slot === 2 || slot === 3 || slot === 4 ? slot : null;
 }
 
@@ -191,6 +213,7 @@ function emptyOs2lBuffer(): Os2lDeckBuffer {
 }
 
 const BUTTON_PLAY = ["play", "pause", "cue-play", "start", "stop"];
+
 const BUTTON_LOOP = ["loop", "autoloop", "loop-roll", "roll"];
 
 export class Os2lProvider extends ProviderBase {
@@ -208,6 +231,7 @@ export class Os2lProvider extends ProviderBase {
 
   constructor(opts: Os2lProviderOptions = {}) {
     super(OS2L_PROVIDER_ID, "rekordbox", opts.now);
+
     if (opts.bind === undefined || opts.bind === null) {
       this.bindHost = null;
       this.bindPort = 0;
@@ -221,8 +245,10 @@ export class Os2lProvider extends ProviderBase {
   protected async onStart(): Promise<void> {
     if (this.bindHost === null) {
       this.setStatus({ state: "starting" });
+
       return;
     }
+
     const server = createServer((socket) => {
       this.sockets.add(socket);
       socket.setEncoding("utf8");
@@ -230,6 +256,7 @@ export class Os2lProvider extends ProviderBase {
       socket.on("close", () => this.sockets.delete(socket));
       socket.on("error", () => this.sockets.delete(socket));
     });
+
     this.server = server;
     server.on("error", (err: Error) => {
       this.setStatus({ state: "failed", error: `os2l socket: ${err.message}` });
@@ -252,6 +279,7 @@ export class Os2lProvider extends ProviderBase {
     this.sockets.clear();
     const server = this.server;
     this.server = null;
+
     if (!server) return;
     const { promise, resolve } = Promise.withResolvers<void>();
     server.close(() => resolve());
@@ -260,6 +288,7 @@ export class Os2lProvider extends ProviderBase {
 
   get boundPort(): number | null {
     const address = this.server?.address();
+
     return address && typeof address === "object" ? address.port : null;
   }
 
@@ -269,11 +298,13 @@ export class Os2lProvider extends ProviderBase {
 
   getDecks(): readonly ProviderDeckState[] {
     if (this.buffer.beat === null && this.buffer.bpm === null) return [];
+
     return [this.stateFor(1)];
   }
 
   sendFeedback(name: string, state: "on" | "off", page?: string): void {
     const line = formatOs2lFeedback(name, state, page) + "\n";
+
     for (const socket of this.sockets) socket.write(line);
   }
 
@@ -284,15 +315,19 @@ export class Os2lProvider extends ProviderBase {
   private ingestChunk(chunk: string, atNs?: bigint): Os2lDecodeResult {
     const at = atNs ?? this.now();
     const combined = this.tail + chunk;
+
     if (combined.length > OS2L_MAX_BUFFER) {
       this.tail = "";
       this.markRejected("os2l buffer over 1 MiB, dropped");
+
       return { messages: [], malformed: ["buffer over 1 MiB"] };
     }
+
     const split = splitOs2lMessages(combined);
     this.tail = split.tail;
     const messages: Os2lMessage[] = [];
     const malformed: string[] = split.garbage.map((g) => `bad OS2L input ${g.slice(0, 80)}`);
+
     for (const item of split.texts) {
       try {
         const message = os2lMessageSchema.parse(JSON.parse(item));
@@ -302,40 +337,52 @@ export class Os2lProvider extends ProviderBase {
         malformed.push(`bad OS2L message ${item.slice(0, 80)}: ${err instanceof Error ? err.message : String(err)}`);
       }
     }
+
     if (malformed.length > 0) this.markRejected(malformed[0] ?? "malformed OS2L input");
     else if (messages.length > 0) this.setStatus({ state: "live", updateHz: 0, ageMs: 0 });
+
     if (messages.length > 0) this.emit(this.stateFor(1, at));
+
     return { messages, malformed };
   }
 
   private applyMessage(message: Os2lMessage, atNs: bigint): void {
     if (message.evt === "beat") {
       const previous = this.buffer.lastPos;
+
       if (previous !== null && message.pos < previous) {
         this.buffer.epoch += 1;
       }
+
       this.buffer.lastPos = message.pos;
       this.buffer.bpm = message.bpm;
       this.buffer.beat = message.pos;
       this.buffer.beatInBar = beatInBarOf(message.pos);
       this.lastBeatAtNs = atNs;
+
       return;
     }
+
     if (message.evt === "btn") {
       const name = message.name.toLowerCase();
       const on = message.state === "on";
+
       if (BUTTON_PLAY.includes(name)) this.buffer.playing = on;
       else if (BUTTON_LOOP.includes(name)) this.buffer.loopActive = on;
       else if (name.startsWith("hotcue") || name.startsWith("hot cue")) {
         const number = Number(name.replace(/[^0-9]/g, ""));
+
         if (on && Number.isInteger(number)) this.buffer.lastHotCue = number;
       } else if (name === "cue" && on) {
         this.buffer.lastHotCue = 0;
       }
+
       return;
     }
+
     if (message.evt === "cmd") {
       this.buffer.commands.push({ id: message.id, param: message.param });
+
       if (this.buffer.commands.length > 32) this.buffer.commands.shift();
     }
   }
@@ -343,15 +390,18 @@ export class Os2lProvider extends ProviderBase {
   private estimatePlayhead(atNs: bigint): number {
     if (this.buffer.beat === null || this.buffer.bpm === null || this.lastBeatAtNs === null) return 0;
     const elapsedBeats = (Number(atNs - this.lastBeatAtNs) / 1e9) * (this.buffer.bpm / 60);
+
     return Math.max(0, (this.buffer.beat + elapsedBeats) * 60 / this.buffer.bpm);
   }
 
   private stateFor(deckId: number, atNs?: bigint): ProviderDeckState {
     const at = atNs ?? this.now();
+
     const raw: Record<string, unknown> = {
       provider: OS2L_PROVIDER_ID,
       commands: [...this.buffer.commands],
     };
+
     const state = this.mapper.update(this.id, {
       deckId,
       atNs: at,
@@ -367,6 +417,7 @@ export class Os2lProvider extends ProviderBase {
       hotCue: this.buffer.lastHotCue === null ? null : { number: this.buffer.lastHotCue, atNs: at },
       quality: this.qualityFor(),
     });
+
     return { ...state, raw };
   }
 

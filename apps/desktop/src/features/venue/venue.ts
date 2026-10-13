@@ -22,6 +22,7 @@ export const SETUP_STEPS = [
   "dj", "controller", "library", "lights", "identify",
   "placement", "orientation", "qualification", "analysis", "preview",
 ] as const;
+
 export type SetupStep = (typeof SETUP_STEPS)[number];
 
 export function nextSetupStep(done: SetupStep[]): SetupStep | "ready" {

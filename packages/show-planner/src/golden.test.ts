@@ -6,6 +6,7 @@ import { planShow, PLANNER_VERSION } from "./index.js";
 import type { TrackModel } from "@autolight/contracts";
 
 const dir = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "test-fixtures", "analysis");
+
 const goldenPath = join(dir, "planner-golden.json");
 
 // Planner regression: same track + version + style gives stable ShowPlan.
@@ -19,6 +20,7 @@ describe("planner golden", () => {
     const plan = planShow(track, style);
     expect(plan.plannerVersion).toBe(PLANNER_VERSION);
     let golden: unknown;
+
     try {
       golden = JSON.parse(readFileSync(goldenPath, "utf8"));
     } catch {
@@ -26,6 +28,7 @@ describe("planner golden", () => {
         `missing golden ${goldenPath}: run \`yarn golden:update --reason "<why the plan changed>"\` to record it deliberately`,
       );
     }
+
     expect(plan).toEqual(golden);
   });
 });

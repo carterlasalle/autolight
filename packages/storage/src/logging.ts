@@ -50,11 +50,14 @@ export class Logger {
     const windowMs = this.options.windowMs ?? 1000;
     const key = `${severity}:${message}`;
     const state = this.repeat;
+
     if (state.key === key && monoMs - state.windowStart < windowMs) {
       state.count += 1;
+
       if (state.count > maxRepeated) {
         state.suppressed += 1;
         this.options.onSuppressed?.(1);
+
         return;
       }
     } else {
@@ -62,6 +65,7 @@ export class Logger {
       state.count = 1;
       state.windowStart = monoMs;
     }
+
     const fields: LogFields = {
       timestamp: new Date(monoMs).toISOString(),
       monoMs,
@@ -71,9 +75,11 @@ export class Logger {
       ...this.sessionFields(),
       ...extra,
     };
+
     if (fields.rawProtocol !== undefined && !(this.options.diagnosticMode ?? false)) {
       delete fields.rawProtocol;
     }
+
     (this.options.sink ?? (() => {}))(JSON.stringify(fields));
   }
 
@@ -112,38 +118,48 @@ const LOG_SCHEMA_KEYS = [
 export function validateLogLine(line: string, diagnosticMode = false): string[] {
   const problems: string[] = [];
   let row: unknown;
+
   try {
     row = JSON.parse(line);
   } catch {
     return ["line is not JSON"];
   }
+
   if (typeof row !== "object" || row === null || Array.isArray(row)) {
     return ["line must be a JSON object"];
   }
+
   if (!("timestamp" in row) || typeof row.timestamp !== "string" || Number.isNaN(Date.parse(row.timestamp))) {
     problems.push("timestamp: missing or not an ISO date");
   }
+
   if (!("monoMs" in row) || typeof row.monoMs !== "number" || !Number.isFinite(row.monoMs)) {
     problems.push("monoMs: missing or not a finite number");
   }
+
   if (!("module" in row) || typeof row.module !== "string" || row.module.length === 0) {
     problems.push("module: missing or empty");
   }
+
   if (
     !("severity" in row) ||
     (row.severity !== "debug" && row.severity !== "info" && row.severity !== "warn" && row.severity !== "error")
   ) {
     problems.push("severity: must be debug, info, warn or error");
   }
+
   if (!("message" in row) || typeof row.message !== "string") {
     problems.push("message: missing or not a string");
   }
+
   if (!diagnosticMode && "rawProtocol" in row) {
     problems.push("rawProtocol: only allowed in diagnostic mode");
   }
+
   for (const key of LOG_SCHEMA_KEYS) {
     if (!(key in row)) problems.push(`${key}: missing`);
   }
+
   return problems;
 }
 
@@ -151,7 +167,9 @@ export function validateLog(lines: readonly string[], diagnosticMode = false): {
   const out: { line: number; problems: string[] }[] = [];
   lines.forEach((text, i) => {
     const problems = validateLogLine(text, diagnosticMode);
+
     if (problems.length > 0) out.push({ line: i + 1, problems });
   });
+
   return out;
 }

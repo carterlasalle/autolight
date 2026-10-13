@@ -6,6 +6,7 @@ const cuesA = [
   { type: "section-look", startBeat: 0, durationBeats: 32, intensity: 0.8, target: "PRIMARY", priority: 10 },
   { type: "white-hit", startBeat: 32, durationBeats: 0.25, intensity: 1, target: "ALL", priority: 100 },
 ];
+
 const cuesB = [
   { type: "section-look", startBeat: 0, durationBeats: 32, intensity: 0.6, target: "SECONDARY", priority: 10 },
 ];
@@ -27,6 +28,7 @@ describe("live view-model", () => {
       fixtures: [{ ...makeFixture("f", 4), groups: ["PRIMARY", "SECONDARY"] }],
       track: null, reactiveEnergy: 0.1, reactiveAmount: 0.15,
     });
+
     expect(vm.weights.a).toBeGreaterThan(vm.weights.b);
     expect(vm.upcoming.length).toBeGreaterThan(0);
     expect(vm.cells).toHaveLength(4);
@@ -41,6 +43,7 @@ describe("live view-model", () => {
       fixtures: [{ ...makeFixture("f", 2), groups: [] }],
       track: null, reactiveEnergy: 0, reactiveAmount: 0,
     });
+
     expect(vm.owner).toBeNull();
     expect(vm.cells.every((c) => c.color === "rgb(0,0,0)")).toBe(true);
   });

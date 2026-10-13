@@ -6,6 +6,7 @@ const plan = { schemaVersion: 1, plannerVersion: "x", trackId: "t", styleId: "s"
   { type: "impact", startBeat: 257, durationBeats: 2, intensity: 1, target: "ALL", priority: 90 },
   { type: "blackout", startBeat: 256, durationBeats: 1, intensity: 0, target: "ALL", priority: 100 },
 ]} as ShowPlan;
+
 const mkFixture = (id: string, latencyMs: number | null, x = 0, groups: string[] = []): Fixture => ({
   id, adapter: "govee", sku: "H6076", hardwareId: id, groups,
   cells: [{ index: 0, position: { x, y: 0 }, order: 0, tags: [] }],
@@ -40,6 +41,7 @@ describe("renderer", () => {
     const p: ShowPlan = { ...plan, cues: [
       { type: "section-look", startBeat: 0, durationBeats: 8, intensity: 1, target: "PRIMARY", priority: 10 },
     ] };
+
     const out = renderFrame(p, 1, [mkFixture("a", null, 0, ["PRIMARY"]), mkFixture("b", null, 1, ["SECONDARY"])]);
     expect([...out.get("a")!].some((v) => v > 0)).toBe(true);
     expect([...out.get("b")!]).toEqual([0, 0, 0]);
@@ -48,13 +50,16 @@ describe("renderer", () => {
     const ramp: ShowPlan = { ...plan, cues: [
       { type: "build-ramp", startBeat: 0, durationBeats: 8, intensity: 1, target: "ALL", priority: 50 },
     ] };
+
     const early = renderFrame(ramp, 0.5, [mkFixture("f1", null)]);
     const late = renderFrame(ramp, 7.5, [mkFixture("f1", null)]);
     const sum = (m: Map<string, Uint8Array>): number => [...m.get("f1")!].reduce((a, b) => a + b, 0);
     expect(sum(late)).toBeGreaterThan(sum(early));
+
     const down: ShowPlan = { ...plan, cues: [
       { type: "breakdown-look", startBeat: 0, durationBeats: 8, intensity: 1, target: "ALL", priority: 40 },
     ] };
+
     expect(sum(renderFrame(down, 1, [mkFixture("f1", null)]))).toBeLessThan(sum(late));
   });
 });

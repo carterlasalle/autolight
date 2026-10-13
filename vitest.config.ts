@@ -4,12 +4,15 @@ import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
 const root = dirname(fileURLToPath(import.meta.url));
+
 const workspaceSrc = join(root, "packages");
+
 const workspaceAlias = Object.fromEntries(
   readdirSync(workspaceSrc, { withFileTypes: true })
     .filter((e) => e.isDirectory())
     .map((e) => [`@autolight/${e.name}`, join(workspaceSrc, e.name, "src", "index.ts")]),
 );
+
 // Browser-safe subpaths mirror vite.config.ts (T-TRU-04 spine fix): regex
 // first so barrels never swallow `/follow`, `/registry`, `/setup-assistant`.
 const subpathAlias = [

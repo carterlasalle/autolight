@@ -31,13 +31,16 @@ export type RkbxPlatform = "macos" | "windows";
 // sections for 7.2.8, 7.2.17 and 7.2.18 only, so 7.2.19 reports
 // unsupported-version and 7.2.18 stays supported.
 export const RKBX_MACOS_VERSIONS: readonly string[] = ["7.2.8", "7.2.17", "7.2.18"];
+
 export const RKBX_WINDOWS_VERSIONS: readonly string[] = ["7.2.10"];
 
 // Prefix match so build tags like 7.2.10.0333 match their 7.2.10 entry.
 export function isRKBXVersionSupported(version: string, platform: RkbxPlatform): boolean {
   const trimmed = version.trim();
+
   if (trimmed.length === 0) return false;
   const supported = platform === "windows" ? RKBX_WINDOWS_VERSIONS : RKBX_MACOS_VERSIONS;
+
   return supported.some((prefix) => trimmed.startsWith(prefix));
 }
 
@@ -92,7 +95,9 @@ export interface RkbxAssistantSnapshot {
 
 export function assistantCapability(report: RkbxSetupReport): RkbxAssistantCapability {
   if (report.state === "receiving") return "PASS";
+
   if (report.state === "unsupported-version") return "UNAVAILABLE_ON_THIS_DEVICE";
+
   return "MISSING";
 }
 
@@ -104,6 +109,7 @@ export function summarizeRKBXAssistant(input: RkbxAssistantInput): RkbxAssistant
   const supportedVersions = input.platform === "windows" ? RKBX_WINDOWS_VERSIONS : RKBX_MACOS_VERSIONS;
   const installed = input.installedVersion.trim();
   const prefix = supportedVersions.find((entry) => installed.startsWith(entry));
+
   const report = checkRkbxSetup({
     configFound,
     config: probe,
@@ -113,6 +119,7 @@ export function summarizeRKBXAssistant(input: RkbxAssistantInput): RkbxAssistant
     packetsReceived: input.packets.received,
     lastAddress: input.packets.lastAddress,
   });
+
   return {
     configPath,
     configFound,

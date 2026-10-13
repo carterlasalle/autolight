@@ -27,15 +27,18 @@ function ringFields(n: number): VenueFields {
   const maxDist = Math.hypot(5, 5);
   const dj = { x: 0, y: -2 };
   const djS = 0.875;
+
   const corners = [
     { x: -2.5, y: -2.5 }, { x: -2.5, y: 2.5 }, { x: 2.5, y: 2.5 }, { x: 2.5, y: -2.5 },
   ];
+
   const walls = [
     { ax: -2.5, ay: -2.5, bx: -2.5, by: 2.5 },
     { ax: -2.5, ay: 2.5, bx: 2.5, by: 2.5 },
     { ax: 2.5, ay: 2.5, bx: 2.5, by: -2.5 },
     { ax: 2.5, ay: -2.5, bx: -2.5, by: -2.5 },
   ];
+
   for (let i = 0; i < n; i++) {
     const d = ((i + 0.5) / n) * 20;
     const w = Math.min(3, Math.floor(d / 5));
@@ -76,7 +79,9 @@ function ringFields(n: number): VenueFields {
     tangent[i * 2 + 1] = ty;
     signedSplit[i] = x / maxDist;
   }
+
   void corners;
+
   return {
     version: 1, count: n, keys, pos, extent, uv, h, s, theta, dCenter, dDj, gDj,
     wall, wallPos, corner, side, frontBack, chain, physical, logical, tangent,
@@ -90,15 +95,20 @@ describe("T-REND-02 primitive renderers with envelopes", () => {
     const params = parsePrimitiveParams("Orbit", {});
     const at = (beat: number, i: number): number => sampleSpatial("Orbit", params, beat, i, fields).level;
     expect(at(0, 0)).toBeGreaterThan(at(0, 15));
+
     const headAt = (beat: number): number => {
       let best = 0;
       let bestV = -1;
+
       for (let i = 0; i < fields.count; i++) {
         const v = at(beat, i);
+
         if (v > bestV) { bestV = v; best = i; }
       }
+
       return best;
     };
+
     const h0 = headAt(0);
     const h1 = headAt(1);
     const jump = Math.min(Math.abs(h1 - h0), fields.count - Math.abs(h1 - h0));
@@ -119,6 +129,7 @@ describe("T-REND-02 primitive renderers with envelopes", () => {
     const params = parsePrimitiveParams("SplitAlternate", { rateBeats: 0.5 });
     let left = 0;
     let right = 0;
+
     for (let i = 0; i < fields.count; i++) {
       if (fields.signedSplit[i]! >= 0) {
         left++;
@@ -130,6 +141,7 @@ describe("T-REND-02 primitive renderers with envelopes", () => {
         expect(sampleSpatial("SplitAlternate", params, 0.5, i, fields).level).toBe(1);
       }
     }
+
     expect(left).toBeGreaterThan(0);
     expect(right).toBeGreaterThan(0);
   });
@@ -138,9 +150,11 @@ describe("T-REND-02 primitive renderers with envelopes", () => {
     const fields = ringFields(30);
     const params = parsePrimitiveParams("Ripple", {});
     let peak = 0;
+
     for (let i = 0; i < fields.count; i++) {
       peak = Math.max(peak, sampleSpatial("Ripple", params, 0.5, i, fields).level);
     }
+
     expect(peak).toBeGreaterThan(0.5);
     expect(sampleSpatial("Ripple", params, 0, 0, fields).level).toBeGreaterThanOrEqual(0);
   });

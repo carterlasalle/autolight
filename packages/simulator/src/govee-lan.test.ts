@@ -16,9 +16,11 @@ function sendTo(port: number, text: string): Promise<void> {
   });
   sock.send(text, port, "127.0.0.1", (err) => {
     sock.close();
+
     if (err) reject(err);
     else resolve();
   });
+
   return promise;
 }
 
@@ -39,6 +41,7 @@ describe("govee-lan simulator", () => {
     const sim = new GoveeLanSim(PROFILE, { armSettle: false, rateCeiling: false });
     const port = await sim.start();
     const listener = createSocket("udp4");
+
     try {
       const { promise, resolve, reject } = Promise.withResolvers<string>();
       const timer = setTimeout(() => reject(new Error("no scan reply")), 500);
@@ -70,6 +73,7 @@ describe("govee-lan simulator", () => {
   it("arms, paints B0 zones, and reports B2 armed in status", async () => {
     const sim = new GoveeLanSim(PROFILE, { armSettle: false, rateCeiling: false });
     const port = await sim.start();
+
     try {
       await armedSim(port, sim);
       const colors = new Uint8Array(14 * 3);
@@ -84,9 +88,11 @@ describe("govee-lan simulator", () => {
       await new Promise((r) => setTimeout(r, 30));
       expect(sim.metrics.statusQueries).toBe(1);
       const armedFrame = new Uint8Array([0xbb, 0, 1, OPCODE.ARM_STATUS, 1, 0xbb ^ 0 ^ 1 ^ OPCODE.ARM_STATUS ^ 1]);
+
       const parsed = parseStatus({
         msg: { cmd: "status", data: { onOff: 1, brightness: 100, pt: Buffer.from(armedFrame).toString("base64") } },
       });
+
       expect(parsed?.armed).toBe(true);
     } finally {
       await sim.stop();
@@ -96,6 +102,7 @@ describe("govee-lan simulator", () => {
   it("paints B4 zoned entries", async () => {
     const sim = new GoveeLanSim(PROFILE, { armSettle: false, rateCeiling: false });
     const port = await sim.start();
+
     try {
       await armedSim(port, sim);
       await sendTo(port, envelope(paintZoned([{ r: 9, g: 8, b: 7, zone: 5 }], 1)));
@@ -109,6 +116,7 @@ describe("govee-lan simulator", () => {
   it("drops the third back-to-back command", async () => {
     const sim = new GoveeLanSim(PROFILE, { armSettle: false, rateCeiling: false });
     const port = await sim.start();
+
     try {
       await sendTo(port, turnCommand(true));
       await sendTo(port, brightnessCommand(40));
@@ -123,6 +131,7 @@ describe("govee-lan simulator", () => {
   it("turn ends the channel and white kelvin ends the channel", async () => {
     const sim = new GoveeLanSim(PROFILE, { armSettle: false, rateCeiling: false });
     const port = await sim.start();
+
     try {
       await armedSim(port, sim);
       await sendTo(port, turnCommand(true));
@@ -143,6 +152,7 @@ describe("govee-lan simulator", () => {
   it("stays silent on status while armed", async () => {
     const sim = new GoveeLanSim(PROFILE, { armSettle: false, rateCeiling: false });
     const port = await sim.start();
+
     try {
       await armedSim(port, sim);
       await sendTo(port, JSON.stringify({ msg: { cmd: "status", data: {} } }));
@@ -157,6 +167,7 @@ describe("govee-lan simulator", () => {
   it("loses paints during arm settle and stutters past the rate ceiling", async () => {
     const sim = new GoveeLanSim({ ...PROFILE, armSettleMs: 200 });
     const port = await sim.start();
+
     try {
       await sendTo(port, JSON.stringify({ msg: { cmd: "turn", data: { value: 1 } } }));
       await sendTo(port, envelope(arm(true)));
@@ -165,9 +176,11 @@ describe("govee-lan simulator", () => {
       expect(sim.metrics.paintsApplied).toBe(0);
       await new Promise((r) => setTimeout(r, 220));
       const colors = new Uint8Array(14 * 3).fill(9);
+
       for (let i = 0; i < 6; i++) {
         await sendTo(port, envelope(paint(colors, 0)));
       }
+
       await new Promise((r) => setTimeout(r, 40));
       expect(sim.metrics.paintsStuttered).toBeGreaterThan(0);
     } finally {
@@ -179,11 +192,14 @@ describe("govee-lan simulator", () => {
     const sim = new GoveeLanSim(PROFILE, {
       armSettle: false, rateCeiling: false, lossEvery: 2, disappearAt: 3, reappearAt: 6, changedIp: "127.0.0.2",
     });
+
     const port = await sim.start();
+
     try {
       for (let i = 0; i < 7; i++) {
         await sendTo(port, devStatusCommand());
       }
+
       await new Promise((r) => setTimeout(r, 40));
       expect(sim.metrics.droppedLoss).toBeGreaterThan(0);
       expect(sim.replyIp()).toBe("127.0.0.2");

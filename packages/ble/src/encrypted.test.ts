@@ -27,6 +27,7 @@ import {
 import { SimPeripheral } from "./sim.js";
 
 let dirs: string[] = [];
+
 afterEach(() => {
   for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
   dirs = [];
@@ -35,6 +36,7 @@ afterEach(() => {
 const tmp = (): string => {
   const dir = mkdtempSync(join(tmpdir(), "ble-keys-"));
   dirs.push(dir);
+
   return dir;
 };
 
@@ -44,7 +46,7 @@ describe("ble encrypted link (T-BLE-07)", () => {
     const frames = bleHandshakeSeedFrames(seed);
     expect(frames.e701[0]).toBe(0xe7);
     expect(frames.e701[1]).toBe(0x01);
-    expect([...frames.e701.slice(2, 6)]).toEqual([1, 2, 3, 4]);
+    expect(Array.from(frames.e701.slice(2, 6))).toEqual([1, 2, 3, 4]);
     expect(frames.e701).toHaveLength(20);
     expect(frames.e702[0]).toBe(0xe7);
     expect(frames.e702[1]).toBe(0x02);
@@ -53,7 +55,7 @@ describe("ble encrypted link (T-BLE-07)", () => {
     expect(v2[0]).toBe(0xe7);
     expect(v2[1]).toBe(0x11);
     expect(v2[2]).toBe(0x01);
-    expect([...v2.slice(3, 6)]).toEqual([9, 9, 9]);
+    expect(Array.from(v2.slice(3, 6))).toEqual([9, 9, 9]);
     expect(() => bleHandshakeV2(new Uint8Array(0))).toThrow(/1 to 16/);
   });
 
@@ -110,6 +112,7 @@ describe("ble encrypted link (T-BLE-07)", () => {
     const seedAcks: number[] = [];
     seedSim.subscribe((notify) => {
       if (notify[0] === 0x33 && notify[1] === 0x01) seedAcks.push(1);
+
       if (notify[0] === 0x33 && notify[1] === 0x02) seedAcks.push(2);
     });
     seedSim.handleWrite(seed.e701, 1000);
@@ -125,6 +128,7 @@ describe("ble encrypted link (T-BLE-07)", () => {
       wifiMac: "aa:bb:cc:dd:ee:72",
       v2Key: { key: randomBytes(16) },
     });
+
     v2Sim.handleWrite(bleHandshakeV2(new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])), 3000);
     expect(v2Sim.handshakeDone).toBe(true);
     const replyText = v2Sim.readV2ReplyText() ?? "";

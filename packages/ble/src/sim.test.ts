@@ -27,6 +27,7 @@ describe("ble simulator (T-BLE-09)", () => {
     const peripherals = simFamilyPeripherals();
     expect(peripherals).toHaveLength(SIM_NAME_FAMILIES.length);
     const adapter = new SimBleAdapter({ kind: "noble" });
+
     for (const p of peripherals) adapter.add(p);
     const found = await adapter.scan(10);
     expect(found.map((f) => f.family).sort()).toEqual([...SIM_NAME_FAMILIES].sort());

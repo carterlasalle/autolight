@@ -36,6 +36,7 @@ function scriptedHarness(): ContractHarness {
     create: async (): Promise<ProviderContractSubject> => {
       const clock = virtualClock();
       const provider = new ScriptedProvider({ id: "scripted", now: () => clock.nowNs() });
+
       return {
         provider,
         reportsTrackText: true,
@@ -60,9 +61,11 @@ function rkbxHarness(): ContractHarness {
     create: async (): Promise<ProviderContractSubject> => {
       const clock = virtualClock();
       const provider = new RkbxOscProvider({ now: () => clock.nowNs(), bind: null });
+
       const send = (address: string, value: number | string, atNs: bigint): void => {
         provider.ingestDatagram(encodeOscMessage({ address, args: [value] }), atNs);
       };
+
       return {
         provider,
         reportsTrackText: true,
@@ -91,6 +94,7 @@ function prolinkHarness(): ContractHarness {
       const clock = virtualClock();
       const provider = new ProlinkProvider({ now: () => clock.nowNs(), bind: null });
       let trackCounter = 0;
+
       return {
         provider,
         reportsTrackText: false,
@@ -124,6 +128,7 @@ function axHarness(): ContractHarness {
     create: async (): Promise<ProviderContractSubject> => {
       const clock = virtualClock();
       const provider = new AxProvider({ now: () => clock.nowNs(), intervalMs: 0 });
+
       return {
         provider,
         reportsTrackText: true,
@@ -156,11 +161,13 @@ describe("provider contract suite (T-LIVE-01)", () => {
 
   it("fails for a provider that leaks the previous generation (red run)", async () => {
     let loads = 0;
+
     const harness: ContractHarness = {
       name: "leaky",
       create: async (): Promise<ProviderContractSubject> => {
         const clock = virtualClock();
         const provider = new LeakyProvider({ id: "leaky", now: () => clock.nowNs() });
+
         return {
           provider,
           reportsTrackText: true,
@@ -171,10 +178,13 @@ describe("provider contract suite (T-LIVE-01)", () => {
           loadTrack: async (deckId: number, track: ContractTrack) => {
             loads += 1;
             clock.advance(10);
+
             if (loads === 2) {
               provider.leakPreviousTitle({ deckId, track, staleTitle: "Generation A", atNs: clock.nowNs() });
+
               return;
             }
+
             provider.update({ deckId, track, playing: true, atNs: clock.nowNs() });
           },
           malformed: async () => provider.ingestMalformed(),
@@ -182,6 +192,7 @@ describe("provider contract suite (T-LIVE-01)", () => {
         };
       },
     };
+
     const subject = await harness.create();
     const failures = await runProviderContractSuite(subject);
     expect(failures.length).toBeGreaterThan(0);
@@ -199,6 +210,7 @@ describe("provider contract suite (T-LIVE-01)", () => {
     provider.onDeckState((state) => {
       if (state.playheadSeconds === 1.5) received.resolve();
     });
+
     const sent = await sendUdpDatagrams(
       [
         { atMs: 0, bytes: encodeOscMessage({ address: "/1/time", args: [1.5] }) },
@@ -206,6 +218,7 @@ describe("provider contract suite (T-LIVE-01)", () => {
       ],
       `127.0.0.1:${port ?? 0}`,
     );
+
     expect(sent).toBe(2);
     await received.promise;
     expect(provider.getDecks()[0]?.playheadSeconds).toBe(1.5);

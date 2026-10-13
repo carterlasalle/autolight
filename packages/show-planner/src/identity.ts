@@ -31,7 +31,9 @@ export function vocabularyForEnergy(mean: number, movementDensity: number): stri
   const ranked = [...MOVEMENT_FAMILIES];
   const start = Math.floor(Math.min(1, Math.max(0, mean)) * ranked.length) % ranked.length;
   const out: string[] = [];
+
   for (let i = 0; i < count; i++) out.push(ranked[(start + i * 3) % ranked.length]!);
+
   return out;
 }
 
@@ -52,10 +54,12 @@ export function planIdentity(
   const energies = sectionEnergies(track, config.sectionEnergy);
   const mean = energies.length ? energies.reduce((a, b) => a + b, 0) / energies.length : 0.5;
   const third = rand() < 0.4 + style.colorSaturation * 0.3;
+
   const core = ensureMinDistance(
     generateCorePalette(rand, style.colorSaturation, mean, third),
     config.paletteMinDistance,
   );
+
   const accent = neutralWhite();
   const heads = 1 + Math.floor(rand() * 3);
   const direction = rand() < 0.5 ? "clockwise" : "counterclockwise";
@@ -63,6 +67,7 @@ export function planIdentity(
   const contrast = Math.min(1, Math.max(0, 0.4 + mean * 0.5));
   const budget = Math.max(2, Math.round(config.trackImpactMax * style.impactAggression));
   const darkBeats = Math.round(style.darknessPreference * 16);
+
   return {
     design: {
       primary: core.slice(0, 2),

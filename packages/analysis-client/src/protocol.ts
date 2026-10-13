@@ -64,19 +64,23 @@ export interface ProtocolFrame {
 
 export function parseFrame(line: string): ProtocolFrame {
   let msg: unknown;
+
   try {
     msg = JSON.parse(line);
   } catch {
     throw new Error(`malformed-frame: ${line.slice(0, 120)}`);
   }
+
   if (typeof msg !== "object" || msg === null) {
     throw new Error(`non-object-frame: ${line.slice(0, 120)}`);
   }
+
   return msg as ProtocolFrame;
 }
 
 export function frameId(msg: ProtocolFrame): string | undefined {
   const id = msg.id ?? msg.trackId;
+
   return id === undefined ? undefined : String(id);
 }
 
@@ -93,14 +97,19 @@ export function toJob(req: AnalyzeRequest): AnalysisJob {
     state: "Queued",
     attempts: 0,
   };
+
   if (req.nativeMetadataPath !== undefined) job.nativeMetadataPath = req.nativeMetadataPath;
+
   return job;
 }
 
 /** Classify a worker typed failure into an AnalyzeErrorCode (T-ANA-02). */
 export function classifyError(text: string): AnalyzeErrorCode {
   if (text.startsWith("audio-missing")) return "audio-missing";
+
   if (text.startsWith("native-unreadable")) return "native-unreadable";
+
   if (text.startsWith("dsp-fallback")) return "dsp-fallback";
+
   return "worker-exited";
 }

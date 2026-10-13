@@ -11,6 +11,7 @@ import { describe, expect, it } from "vitest";
 import { highPhraseLabel, loadPssiLabels, normalizeSection, phraseLabel, type PssiLabelTable } from "./pssi.js";
 
 const repoRoot = fileURLToPath(new URL("../../..", import.meta.url));
+
 const labelsPath = join(repoRoot, "analysis", "tests", "fixtures", "pssi-labels.json");
 
 const PYTHON_PROBE = String.raw`import json, sys
@@ -48,6 +49,7 @@ function runPythonProbe(): PythonProbe | undefined {
       stdio: ["ignore", "pipe", "ignore"],
       timeout: 120_000,
     });
+
     return JSON.parse(stdout.trim().split("\n").pop() as string) as PythonProbe;
   } catch {
     return undefined;
@@ -55,6 +57,7 @@ function runPythonProbe(): PythonProbe | undefined {
 }
 
 const probe = runPythonProbe();
+
 const table: PssiLabelTable = loadPssiLabels(labelsPath);
 
 describe("pssi label table", () => {
@@ -101,6 +104,7 @@ describe("pssi label table", () => {
     if (probe === undefined) {
       throw new Error("uv with the analysis project is required for the Python parity check");
     }
+
     expect(probe.high).toEqual(table.high);
     expect(probe.mid).toEqual(table.mid);
     expect(probe.low).toEqual(table.low);

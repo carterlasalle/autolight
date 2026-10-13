@@ -62,6 +62,7 @@ export interface PrimitiveParams {
   VocalFocus: { level: number };
   OutroRelease: { decayBeats: number };
 }
+
 export type PrimitiveName = keyof PrimitiveParams;
 
 export const PRIMITIVE_DEFAULTS: { [K in PrimitiveName]: PrimitiveParams[K] } = {
@@ -118,6 +119,7 @@ export const PRIMITIVE_DEFAULTS: { [K in PrimitiveName]: PrimitiveParams[K] } = 
 };
 
 interface NumSpec { min?: number; max?: number; int?: boolean; positive?: boolean }
+
 type FieldSpec = NumSpec | { options: readonly string[] };
 
 const PARAM_SPECS: Record<PrimitiveName, Record<string, FieldSpec>> = {
@@ -176,15 +178,19 @@ const PARAM_SPECS: Record<PrimitiveName, Record<string, FieldSpec>> = {
 export function parsePrimitiveParams<T extends PrimitiveName>(name: T, params: unknown): PrimitiveParams[T] {
   const defaults = PRIMITIVE_DEFAULTS[name] as Record<string, unknown>;
   const input = (params ?? {}) as Record<string, unknown>;
+
   if (typeof input !== "object" || input === null || Array.isArray(input)) {
     throw new Error(`invalid params for ${name}: expected an object`);
   }
+
   const specs = PARAM_SPECS[name] ?? {};
   const out: Record<string, unknown> = { ...defaults };
+
   for (const [key, value] of Object.entries(input)) {
     if (!(key in defaults)) throw new Error(`unknown param ${key} for ${name}`);
     const spec = specs[key];
     const def = defaults[key];
+
     if (spec !== undefined && "options" in spec) {
       if (typeof value !== "string" || !spec.options.includes(value)) {
         throw new Error(`invalid ${name}.${key}: expected one of ${spec.options.join("|")}`);
@@ -192,17 +198,23 @@ export function parsePrimitiveParams<T extends PrimitiveName>(name: T, params: u
     } else if (typeof def === "number") {
       if (typeof value !== "number" || !Number.isFinite(value)) throw new Error(`invalid ${name}.${key}: expected a number`);
       const s = spec as NumSpec | undefined;
+
       if (s?.int === true && !Number.isInteger(value)) throw new Error(`invalid ${name}.${key}: expected an integer`);
+
       if (s?.positive === true && !(value > 0)) throw new Error(`invalid ${name}.${key}: expected positive`);
+
       if (s?.min !== undefined && value < s.min) throw new Error(`invalid ${name}.${key}: below minimum ${s.min}`);
+
       if (s?.max !== undefined && value > s.max) throw new Error(`invalid ${name}.${key}: above maximum ${s.max}`);
     } else if (typeof def === "boolean") {
       if (typeof value !== "boolean") throw new Error(`invalid ${name}.${key}: expected a boolean`);
     } else if (typeof def === "string") {
       if (typeof value !== "string" || value.length < 1) throw new Error(`invalid ${name}.${key}: expected a non-empty string`);
     }
+
     out[key] = value;
   }
+
   return out as PrimitiveParams[T];
 }
 
@@ -306,6 +318,7 @@ const ALIAS_TO_CANONICAL: Record<string, PrimitiveName> = Object.fromEntries([
 
 export function resolvePrimitiveName(value: string): PrimitiveName | null {
   if (value in PRIMITIVE_REGISTRY) return value as PrimitiveName;
+
   return ALIAS_TO_CANONICAL[value] ?? null;
 }
 
@@ -322,22 +335,28 @@ export class UnknownPrimitiveError extends Error {
 
 export function requirePrimitive(name: string): PrimitiveMeta {
   const canonical = resolvePrimitiveName(name);
+
   if (!canonical) throw new UnknownPrimitiveError(name);
+
   return PRIMITIVE_REGISTRY[canonical]!;
 }
 
 export function checkTopology(name: PrimitiveName, topology: string): string | null {
   const meta = PRIMITIVE_REGISTRY[name]!;
+
   if (meta.needsClosedOrIndependent && (topology === "split-mirrored" || topology === "point" || topology === "vertical-line")) {
     return `${name} needs a closed loop or independent split; ${topology} cannot carry a true orbit`;
   }
+
   return null;
 }
 
 export function checkFixtureRate(name: PrimitiveName, rateHz: number | null): string | null {
   const meta = PRIMITIVE_REGISTRY[name]!;
+
   if (meta.needsFixtureRateHz !== null && rateHz !== null && rateHz < meta.needsFixtureRateHz) {
     return `${name} needs fixture rate at least ${meta.needsFixtureRateHz} Hz, have ${rateHz}`;
   }
+
   return null;
 }

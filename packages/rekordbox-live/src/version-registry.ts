@@ -59,6 +59,7 @@ const registrySchema = z.object({
 
 export function parseRegistry(raw: unknown): ProtocolDefinitionEntry[] {
   const parsed = registrySchema.parse(raw);
+
   return parsed.definitions.map((def) => ({
     provider: def.provider as ProviderId,
     versionRange: def.versionRange,
@@ -88,6 +89,7 @@ export function versionInRange(version: string, range: string): boolean {
   if (range.endsWith(".x")) {
     return version === range.slice(0, -2) || version.startsWith(range.slice(0, -1));
   }
+
   return version === range || version.startsWith(range + ".");
 }
 
@@ -99,8 +101,10 @@ export function qualifyProvider(
 ): { status: ProviderQualification; reason: string } {
   const candidates = definitions.filter((def) => def.provider === provider && def.platform === platform);
   const matching = candidates.find((def) => versionInRange(version, def.versionRange));
+
   if (!matching) {
     const known = candidates.map((def) => def.versionRange).join(", ");
+
     return {
       status: "unsupported",
       reason: known
@@ -108,12 +112,14 @@ export function qualifyProvider(
         : `${provider} has no entries on ${platform} at all`,
     };
   }
+
   if (matching.qualification && matching.qualification.result === "pass") {
     return {
       status: "qualified",
       reason: `${provider} ${matching.versionRange} qualified ${matching.qualification.date} via ${matching.qualification.runbook}`,
     };
   }
+
   return {
     status: "unverified",
     reason: `UNVERIFIED REKORDBOX VERSION ${version}: ${provider} ${matching.versionRange} probed but not qualified`,
@@ -132,6 +138,7 @@ export function registryStatus(
   platform: "macos" | "windows",
 ): RegistryStatus[] {
   const providers = [...new Set(definitions.map((def) => def.provider))];
+
   return providers.map((provider) => ({ provider, ...qualifyProvider(definitions, provider, version, platform) }));
 }
 
@@ -144,7 +151,9 @@ export function unverifiedBanner(
   platform: "macos" | "windows",
 ): string | null {
   const pending = registryStatus(definitions, version, platform).filter((entry) => entry.status === "unverified");
+
   if (pending.length === 0) return null;
+
   return `UNVERIFIED REKORDBOX VERSION ${version} (${pending.map((entry) => entry.provider).join(", ")})`;
 }
 
@@ -154,11 +163,13 @@ export function unverifiedBanner(
 export function detectMacosVersion(plist: string): string | null {
   const match = /<key>CFBundleShortVersionString<\/key>\s*<string>([^<]+)<\/string>/.exec(plist);
   const value = match?.[1]?.trim() ?? "";
+
   return value.length > 0 ? value : null;
 }
 
 export function detectWindowsVersion(fileVersion: string): string | null {
   const value = fileVersion.trim();
+
   return value.length > 0 ? value : null;
 }
 
@@ -174,7 +185,9 @@ export function recordQualification(
 ): ProtocolDefinitionEntry[] {
   return definitions.map((def) => {
     if (def.provider !== provider || def.versionRange !== versionRange || def.platform !== platform) return def;
+
     if (!replayPassed) return { ...def, qualification: { ...record, result: "fail" as const } };
+
     return { ...def, qualification: { ...record, result: "pass" as const } };
   });
 }

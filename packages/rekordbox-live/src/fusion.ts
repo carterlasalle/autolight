@@ -65,17 +65,21 @@ interface Holder {
 
 function supplied(state: ProviderDeckState, field: FusionField): boolean {
   const value = state[field];
+
   if (value === null || value === undefined) return false;
+
   return true;
 }
 
 function isFresh(state: ProviderDeckState, field: FusionField, atNs: bigint, staleMs: number): boolean {
   if (state.quality[field] === "stale") return false;
+
   return Number(atNs - state.receivedAtNs) / 1e6 <= staleMs;
 }
 
 function beatsBetween(a: ProviderDeckState, b: ProviderDeckState): number {
   const bpm = a.effectiveBpm ?? b.effectiveBpm ?? 120;
+
   return Math.abs(a.playheadSeconds - b.playheadSeconds) * (bpm / 60);
 }
 
@@ -84,8 +88,10 @@ function beatsBetween(a: ProviderDeckState, b: ProviderDeckState): number {
 function bpmBeatsBetween(a: ProviderDeckState, b: ProviderDeckState): number {
   const bpmA = a.effectiveBpm;
   const bpmB = b.effectiveBpm;
+
   if (bpmA === null || bpmB === null) return 0;
   const max = Math.max(bpmA, bpmB, 1);
+
   return (Math.abs(bpmA - bpmB) / max) * 4;
 }
 
@@ -110,11 +116,14 @@ export class FusionEngine {
 
   ingest(providerId: string, state: ProviderDeckState): void {
     let decks = this.latest.get(providerId);
+
     if (!decks) {
       decks = new Map();
       this.latest.set(providerId, decks);
     }
+
     const previous = decks.get(state.deckId);
+
     if (previous && state.receivedAtNs < previous.receivedAtNs) return;
     decks.set(state.deckId, state);
     this.recompute(state.deckId);
@@ -149,28 +158,35 @@ export class FusionEngine {
 
   private rank(providerId: string): number {
     const index = this.options.authority.indexOf(providerId);
+
     return index === -1 ? this.options.authority.length : index;
   }
 
   private recompute(deckId: number): void {
     const atNs = this.now();
     const perProvider: { provider: string; state: ProviderDeckState }[] = [];
+
     for (const [provider, decks] of this.latest) {
       const state = decks.get(deckId);
+
       if (state) perProvider.push({ provider, state });
     }
+
     perProvider.sort((a, b) => this.rank(a.provider) - this.rank(b.provider));
 
     const sources: Partial<Record<keyof ProviderDeckState, string>> = {};
     const quality: Partial<Record<keyof ProviderDeckState, QualityLabel>> = {};
     const winners = new Map<FusionField, ProviderDeckState>();
+
     for (const field of FUSION_FIELDS) {
       const candidates = perProvider.filter((c) => supplied(c.state, field) && isFresh(c.state, field, atNs, this.options.staleMs));
       const key = `${deckId}:${field}`;
       const holder = this.holders.get(key);
       const winner = this.pick(key, field, holder, candidates, atNs, deckId);
+
       if (winner !== null) {
         const found = perProvider.find((c) => c.provider === winner);
+
         if (found) {
           winners.set(field, found.state);
           sources[field] = winner;
@@ -183,6 +199,7 @@ export class FusionEngine {
 
     const generation = perProvider.reduce((max, c) => Math.max(max, c.state.generation), 0);
     const master = winners.get("master")?.master ?? null;
+
     const fused: ProviderDeckState = {
       source: perProvider[0]?.state.source ?? "rekordbox",
       deckId,
@@ -207,6 +224,7 @@ export class FusionEngine {
       fieldSources: sources,
       quality,
     };
+
     this.fusedByDeck.set(deckId, fused);
     this.checkDisagreement(deckId, atNs, perProvider);
   }
@@ -222,34 +240,47 @@ export class FusionEngine {
     deckId: number,
   ): string | null {
     const holdNs = BigInt(Math.round(this.options.switchHoldMs)) * 1_000_000n;
+
     if (!holder) {
       const first = candidates[0];
+
       if (!first) return null;
       this.holders.set(key, { provider: first.provider, pending: null });
       this.emitSwitch(deckId, field, null, first.provider, "acquired", atNs);
+
       return first.provider;
     }
+
     const currentFresh = candidates.find((c) => c.provider === holder.provider);
+
     const better = currentFresh
       ? candidates.find((c) => this.rank(c.provider) < this.rank(holder.provider))
       : candidates[0];
+
     if (!better || better.provider === holder.provider) {
       // Nothing outranks the holder: clear any pending challenger and keep
       // the holder, which stays labelled stale while it is not fresh.
       this.holders.set(key, { provider: holder.provider, pending: null });
+
       return holder.provider;
     }
+
     const pending = holder.pending;
+
     if (pending?.provider === better.provider && atNs - pending.sinceNs >= holdNs) {
       this.holders.set(key, { provider: better.provider, pending: null });
       this.emitSwitch(
         deckId, field, holder.provider, better.provider,
         currentFresh ? "higher-authority" : "stale-takeover", atNs,
       );
+
       return better.provider;
     }
+
     this.holders.set(key, { provider: holder.provider, pending: otherPending(holder, better.provider, atNs) });
+
     if (currentFresh) return holder.provider;
+
     // Holder is stale and the takeover hold has not elapsed: keep the holder
     // value but label it stale so consumers can see it is not fresh.
     return holder.provider;
@@ -273,26 +304,33 @@ export class FusionEngine {
     perProvider: readonly { provider: string; state: ProviderDeckState }[],
   ): void {
     const fresh = perProvider.filter((c) => isFresh(c.state, "playheadSeconds", atNs, this.options.staleMs));
+
     if (fresh.length < 2) return;
+
     const groups: { field: FusionDiagnostic["field"]; measure: (a: ProviderDeckState, b: ProviderDeckState) => number }[] = [
       { field: "playheadSeconds", measure: beatsBetween },
       { field: "effectiveBpm", measure: bpmBeatsBetween },
     ];
+
     for (const group of groups) {
       let spread = 0;
       let pair: [string, string] | null = null;
+
       for (let i = 0; i < fresh.length; i++) {
         for (let j = i + 1; j < fresh.length; j++) {
           const a = fresh[i]!;
           const b = fresh[j]!;
+
           if (group.field === "effectiveBpm" && (a.state.effectiveBpm === null || b.state.effectiveBpm === null)) continue;
           const d = group.measure(a.state, b.state);
+
           if (d > spread) {
             spread = d;
             pair = [a.provider, b.provider];
           }
         }
       }
+
       if (pair && spread > this.options.disagreeBeats) {
         this.diagnostics.push({
           atNs,
@@ -309,6 +347,7 @@ export class FusionEngine {
 
 function otherPending(holder: Holder | undefined, provider: string, atNs: bigint): Holder["pending"] {
   if (holder?.pending?.provider === provider) return holder.pending;
+
   return { provider, sinceNs: atNs };
 }
 
@@ -329,11 +368,13 @@ export class LatestWinsPort implements DeckStatePort {
   drainPending(): ProviderDeckState[] {
     const out = [...this.latest.values()];
     this.latest.clear();
+
     return out;
   }
 
   onDeckState(listener: (state: ProviderDeckState) => void): () => void {
     this.listeners.add(listener);
+
     return () => this.listeners.delete(listener);
   }
 
@@ -391,16 +432,20 @@ export class ProviderManager {
   async start(): Promise<void> {
     if (this.started) return;
     this.started = true;
+
     for (const provider of this.providers) {
       this.unsubscribes.push(provider.onDeckState((state) => {
         this.fusion.ingest(provider.id, state);
         const fused = this.fusion.fused(state.deckId);
+
         if (fused) this.port.push(fused);
       }));
       this.unsubscribes.push(provider.onConnection((status) => {
         this.statuses.set(provider.id, status);
+
         if (status.state === "failed") this.restart(provider);
       }));
+
       try {
         await provider.start();
         this.statuses.set(provider.id, provider.getStatus());
@@ -414,17 +459,19 @@ export class ProviderManager {
   async stop(): Promise<void> {
     if (!this.started) return;
     this.started = false;
+
     for (const off of this.unsubscribes.splice(0)) off();
+
     for (const provider of this.providers) await provider.stop();
   }
 
   // Restart supervision is asynchronous; tests and shutdown await it here.
   async settleRestarts(): Promise<void> {
-    await Promise.all([...this.restartsInFlight]);
+    await Promise.all(this.restartsInFlight);
   }
 
   statusesByName(): Record<string, ProviderStatus> {
-    return Object.fromEntries([...this.statuses.entries()]);
+    return Object.fromEntries(this.statuses.entries());
   }
 
   describe(): string[] {
@@ -449,19 +496,23 @@ export class ProviderManager {
 
   flush(): void {
     this.fusion.refresh();
+
     for (const state of this.fusion.fusedDecks()) this.port.push(state);
     this.port.flush();
   }
 
   private restart(provider: DJLiveProvider): void {
     const attempts = this.restarts.get(provider.id) ?? 0;
+
     if (attempts >= this.maxRestarts) {
       this.statuses.set(provider.id, {
         state: "failed",
         error: `provider ${provider.id} failed ${attempts} times; restart budget exhausted`,
       });
+
       return;
     }
+
     this.restarts.set(provider.id, attempts + 1);
     const attempt = Promise.withResolvers<void>();
     this.restartsInFlight.add(attempt.promise);

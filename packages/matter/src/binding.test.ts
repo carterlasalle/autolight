@@ -5,6 +5,7 @@ import { InMemoryAdapter } from "./controller.js";
 async function commissioned() {
   const adapter = new InMemoryAdapter("bind-store", { vendorId: 0x1234, productId: 0x5678 });
   const node = await adapter.commission("1234-567-8901", { source: "manual", provenance: "direct" });
+
   return { adapter, nodeId: node.nodeId };
 }
 
@@ -13,13 +14,17 @@ describe("bindNode", () => {
     const { adapter, nodeId } = await commissioned();
     const store = new Map<string, DeviceRecord>();
     let flashed = 0;
+
     const record = await bindNode(adapter, store, {
       fixtureId: "strip-1",
       nodeId,
       multiAdmin: false,
       allowRebind: false,
-      confirmIdentify: async () => { flashed += 1; return true; },
+      confirmIdentify: async () => { flashed += 1;
+
+ return true; },
     });
+
     expect(record).toMatchObject({ fixtureId: "strip-1", matterNodeId: nodeId, vendorId: 0x1234, productId: 0x5678 });
     expect(flashed).toBe(1);
     expect(adapter.commands.map((c) => `${c.cluster}/${c.command}`)).toContain("identify/identify");

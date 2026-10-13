@@ -46,7 +46,9 @@ export interface Harness {
 }
 
 const here = dirname(fileURLToPath(import.meta.url));
+
 const desktopRoot = resolve(here, "..");
+
 const mainEntry = join(desktopRoot, "dist", "electron", "main.cjs");
 
 // Linux CI boots the app under xvfb-run (F-X-16); macOS and Windows run natively.
@@ -58,6 +60,7 @@ export async function launchAutolight(): Promise<Harness> {
   mkdirSync(shotsDir, { recursive: true });
   // Chromium switches precede the app path on the Electron command line.
   const launchArgs = [`--user-data-dir=${userDataDir}`, mainEntry];
+
   const app = await electron.launch({
     args: launchArgs,
     cwd: desktopRoot,
@@ -69,6 +72,7 @@ export async function launchAutolight(): Promise<Harness> {
       ...(underXvfb ? { XVFB_RUN: "1" } : {}),
     } as Record<string, string>,
   });
+
   const t0 = Date.now();
   const monotonicMs = (): number => Date.now() - t0;
 
@@ -78,9 +82,12 @@ export async function launchAutolight(): Promise<Harness> {
         // Main-process internal: the test build registers __autolightTestApi on globalThis.
         const holder = globalThis as unknown as TestApiHolder;
         const api = holder.__autolightTestApi;
+
         if (!api) throw new Error(`test channel unavailable (ipcMain handlers: ${ipcMain ? "open" : "closed"})`);
         const fn = api[payload.method];
+
         if (!fn) throw new Error(`unknown test method: ${payload.method}`);
+
         return fn(payload.arg);
       },
       { method, arg },
@@ -93,12 +100,15 @@ export async function launchAutolight(): Promise<Harness> {
       () => document.querySelector("#root")?.children.length !== 0,
       { timeout: timeoutMs },
     );
+
     return window;
   };
 
   const harnessWindow = async (): Promise<Page> => {
     const first = app.windows()[0];
+
     if (first) return first;
+
     return app.firstWindow();
   };
 
@@ -111,6 +121,7 @@ export async function launchAutolight(): Promise<Harness> {
     // the same key into the TestChannel loop so the recorded frames reflect
     // the keypress even if the window lacks focus in CI.
     await invokeTestChannel("key", { key });
+
     return { key, wallMs, monotonicMs: mono };
   };
 
@@ -126,6 +137,7 @@ export async function launchAutolight(): Promise<Harness> {
         return f;
       }
     }
+
     return null;
   };
 
@@ -133,6 +145,7 @@ export async function launchAutolight(): Promise<Harness> {
     const window = await harnessWindow();
     const path = join(shotsDir, `${name}.png`);
     await window.screenshot({ path });
+
     return path;
   };
 
@@ -145,6 +158,7 @@ export async function launchAutolight(): Promise<Harness> {
   // fixtures, ...) land with T-ARC-01/T-GOV-14; until then each
   // invokeTestChannel call fails and the journeys stay red by design.
   const window = await waitForReady();
+
   return {
     app,
     window,

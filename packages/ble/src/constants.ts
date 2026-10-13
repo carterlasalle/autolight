@@ -7,12 +7,16 @@
 // here measures the owner's units.
 
 export const BLE_SERVICE_UUID = "00010203-0405-0607-0809-0a0b0c0d1910";
+
 export const BLE_WRITE_UUID = "00010203-0405-0607-0809-0a0b0c0d2b11";
+
 export const BLE_NOTIFY_UUID = "00010203-0405-0607-0809-0a0b0c0d2b10";
+
 export const BLE_VERSION_UUID = "00010203-0405-0607-0809-0a0b0c0d2b12";
 
 /** 20-byte GATT frame length for 0x33/0xAA/0xA1/0xA3 (WP04). */
 export const BLE_FRAME_LEN = 20;
+
 /** Payload bytes available between the two header bytes and the XOR byte. */
 export const BLE_PAYLOAD_LEN = 17;
 

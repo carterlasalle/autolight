@@ -18,6 +18,7 @@ import {
 
 function tempDb(): { dir: string; file: string } {
   const dir = mkdtempSync(join(tmpdir(), "autolight-migrate-"));
+
   return { dir, file: join(dir, "autolight.db") };
 }
 
@@ -25,11 +26,13 @@ function tempDb(): { dir: string; file: string } {
 // migrations cannot drift apart unnoticed.
 function schemaShape(db: SqlExec): Record<string, string[]> {
   const shape: Record<string, string[]> = {};
+
   for (const table of tableNames(db)) {
     shape[table] = columnsOf(db, table)
       .map((column) => `${column.name}:${column.type}:${column.notnull}:${column.dflt_value ?? ""}:${column.pk}`)
       .sort();
   }
+
   return shape;
 }
 
@@ -55,10 +58,12 @@ function seedPreviousVersion(db: SqlExec): void {
 describe("schema migrations (T-DATA-02, spec 81)", () => {
   it("creates every spec 81 table plus this plan's tables on a fresh database (P-81)", () => {
     const store = new Store();
+
     try {
       expect(SPEC81_TABLES.length).toBe(17);
       expect(PLAN_TABLES.length).toBe(7);
       const tables = store.tables;
+
       for (const table of REQUIRED_TABLES) expect(tables, `missing table ${table}`).toContain(table);
       expect(tables.length).toBeGreaterThanOrEqual(REQUIRED_TABLES.length + 1);
       expect(store.version).toBe(SCHEMA_VERSION);
@@ -75,6 +80,7 @@ describe("schema migrations (T-DATA-02, spec 81)", () => {
   it("migrates a database at the previous version with data, keeping the rows (P-81)", () => {
     const { dir, file } = tempDb();
     const opened = openDatabase({ path: file });
+
     try {
       const first = migrate(opened.driver, { target: 1 });
       expect(first).toMatchObject({ from: 0, to: 1, applied: [1] });
@@ -87,12 +93,14 @@ describe("schema migrations (T-DATA-02, spec 81)", () => {
         "SELECT artifact_path, schema_version, config_hash FROM analysis_artifacts WHERE track_id = ?",
         ["t1"],
       );
+
       expect(artifact).toMatchObject({ artifact_path: "/cache/t1.json", schema_version: "1", config_hash: "" });
 
       const plan = opened.driver.get<{ plan_json: string; schema_version: string; style_hash: string }>(
         "SELECT plan_json, schema_version, style_hash FROM show_plans WHERE track_id = ?",
         ["t1"],
       );
+
       expect(plan?.plan_json).toBe('{"trackId":"t1","cues":[]}');
       expect(plan?.schema_version).toBe("1");
       expect(plan?.style_hash).toBe("");
@@ -116,6 +124,7 @@ describe("schema migrations (T-DATA-02, spec 81)", () => {
   it("adopts a database written before migrations existed", () => {
     const { dir, file } = tempDb();
     const opened = openDatabase({ path: file });
+
     try {
       opened.driver.exec(MIGRATIONS[0]?.sql ?? "");
       seedPreviousVersion(opened.driver);
@@ -132,6 +141,7 @@ describe("schema migrations (T-DATA-02, spec 81)", () => {
 
   it("is idempotent", () => {
     const store = new Store();
+
     try {
       const again = migrate(store);
       expect(again.applied).toEqual([]);
@@ -143,6 +153,7 @@ describe("schema migrations (T-DATA-02, spec 81)", () => {
 
   it("refuses a downgrade with a clear message", () => {
     const store = new Store();
+
     try {
       expect(() => migrate(store, { target: 1 })).toThrow(/downgrade refused/);
       expect(() => migrate(store, { target: 1 })).toThrow(
@@ -157,6 +168,7 @@ describe("schema migrations (T-DATA-02, spec 81)", () => {
   it("rolls a failed migration back instead of leaving a half schema", () => {
     const { dir, file } = tempDb();
     const opened = openDatabase({ path: file });
+
     try {
       migrate(opened.driver, { target: 1 });
       opened.driver.exec("CREATE TABLE analysis_artifacts_v2 (track_id TEXT)");
@@ -172,6 +184,7 @@ describe("schema migrations (T-DATA-02, spec 81)", () => {
   it("keeps schema.sql equal to what the migrations build", () => {
     const migrated = openDatabase({ path: ":memory:" });
     const snapshot = openDatabase({ path: ":memory:" });
+
     try {
       migrate(migrated.driver);
       snapshot.driver.exec(loadSchema());

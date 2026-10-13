@@ -41,10 +41,12 @@ export class ServiceTracker {
   set(state: ServiceState, detail?: string): void {
     this.state = state;
     this.detail = detail;
+
     if (state === "running" || state === "degraded") {
       this.startedAtMs ??= Date.now();
       this.stoppedAtMs = undefined;
     }
+
     if (state === "stopped" || state === "failed") {
       this.stoppedAtMs = Date.now();
     }
@@ -68,9 +70,13 @@ export class ServiceTracker {
       state: this.state,
       counters: { ...this.counters },
     };
+
     if (this.detail !== undefined) out.detail = this.detail;
+
     if (this.startedAtMs !== undefined) out.startedAtMs = this.startedAtMs;
+
     if (this.stoppedAtMs !== undefined) out.stoppedAtMs = this.stoppedAtMs;
+
     return out;
   }
 }
@@ -91,8 +97,10 @@ export function messageOf(err: unknown): string {
 // import would fail at module load in the test runner.
 export async function resolveUserDataDir(explicit?: string): Promise<string | undefined> {
   if (explicit !== undefined) return explicit;
+
   try {
     const { app } = await import("electron");
+
     return app.getPath("userData");
   } catch {
     return undefined;

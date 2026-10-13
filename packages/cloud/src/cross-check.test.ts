@@ -29,6 +29,7 @@ describe("cloud cross-check in qualification", () => {
       measuredSegmentCount: 14,
       cloud: cloudDevice(20),
     });
+
     expect(out.comparison).toBe("disagree");
     expect(out.mismatchRecorded).toBe(true);
     expect(out.measuredSegmentCount).toBe(14);
@@ -44,6 +45,7 @@ describe("cloud cross-check in qualification", () => {
       measuredSegmentCount: 14,
       cloud: cloudDevice(14),
     });
+
     expect(out.comparison).toBe("agree");
     expect(out.mismatchRecorded).toBe(false);
     expect(out.measuredSegmentCount).toBe(14);
@@ -58,12 +60,14 @@ describe("cloud cross-check in qualification", () => {
       retrievable: true,
       supportCmds: [],
     });
+
     const out = crossCheckQualification({
       hardwareId: "d",
       model: "H1A45",
       measuredSegmentCount: 8,
       cloud: parsed,
     });
+
     expect(out.comparison).toBe("cloud-silent");
     expect(out.mismatchRecorded).toBe(false);
     expect(out.measuredSegmentCount).toBe(8);
@@ -77,6 +81,7 @@ describe("cloud cross-check in qualification", () => {
       measuredSegmentCount: 8,
       cloud: null,
     });
+
     expect(out.comparison).toBe("cloud-silent");
     expect(out.mismatchRecorded).toBe(false);
   });

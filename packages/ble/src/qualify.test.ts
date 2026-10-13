@@ -18,6 +18,7 @@ import { SimPeripheral, simContractChecks, simFamilyPeripherals } from "./sim.js
 const scriptedUser = (latency: number | null) => ({
   confirmMaskedWrite: async (_pattern: "masked-stripe"): Promise<boolean> => {
     void _pattern;
+
     return true;
   },
   readLatencyMs: async (): Promise<number | null> => latency,
@@ -34,6 +35,7 @@ describe("ble qualification (T-BLE-06)", () => {
 
   it("runs every wizard step in order and stores a ble device_calibrations row", async () => {
     let now = 500000;
+
     const peripheral = new SimPeripheral({
       address: "AA:BB:CC:DD:EE:62",
       name: "GBK_H6076_62",
@@ -45,11 +47,13 @@ describe("ble qualification (T-BLE-06)", () => {
       sku: "H6076",
       renderHoldMs: 2000,
     });
+
     const { record, steps } = await runBleQualification({
       peripheral,
       now: () => now,
       user: scriptedUser(25),
     });
+
     now += 3000;
     expect(steps.map((s) => s.step)).toEqual([...BLE_WIZARD_STEPS]);
     expect(steps.every((s) => s.ok)).toBe(true);
@@ -79,10 +83,12 @@ describe("ble qualification (T-BLE-06)", () => {
       budgetHz: null,
       sku: "H6076",
     });
+
     const denied = {
       confirmMaskedWrite: async (): Promise<boolean> => false,
       readLatencyMs: async (): Promise<number | null> => null,
     };
+
     const { record } = await runBleQualification({ peripheral: v2, now: () => 1, user: denied });
     expect(record.encryptedHandshake).toBe("v2");
     expect(record.maskedWriteVerified).toBe(false);
@@ -103,6 +109,7 @@ describe("ble qualification (T-BLE-06)", () => {
       budgetHz: 10,
       sku: "H6076",
     });
+
     const seeded = await runBleQualification({ peripheral: seed, now: () => 1, user: scriptedUser(null) });
     expect(seeded.record.encryptedHandshake).toBe("seed");
     expect(seeded.record.writeBudgetHz).toBe(10);

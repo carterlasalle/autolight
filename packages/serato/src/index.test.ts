@@ -3,6 +3,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { parseCrate, parseBeatGrid, remoteToDeckState, tempoRegionsToBeats } from "./index.js";
 
 const home = `${process.env.HOME}/Music/_Serato_`;
+
 const hasLibrary = existsSync(`${home}/Subcrates/Recorded.crate`);
 
 const remoteBase = {
@@ -47,6 +48,7 @@ describe("serato", () => {
     expect(b4).toHaveLength(1);
     expect(b4[0]!.bpm).toBeCloseTo(85);
     expect(b4[0]!.startSeconds).toBeCloseTo(0.046, 2);
+
     if (!hasLibrary) return;
     const buf = readFileSync(`${home}/Imported/Scratch Beats_/ScratchBeat5.mp3`);
     const at = buf.indexOf("Serato BeatGrid");

@@ -37,11 +37,13 @@ const SRGB_LINEAR_CUT = 0.04045;
 
 export function srgbToLinear(value: number): number {
   const s = value / 255;
+
   return s <= SRGB_LINEAR_CUT ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
 }
 
 export function linearToSrgb(value: number): number {
   const v = Math.min(1, Math.max(0, value));
+
   return Math.round((v <= 0.0031308 ? v * 12.92 : 1.055 * Math.pow(v, 1 / 2.4) - 0.055) * 255);
 }
 
@@ -62,6 +64,7 @@ export function linearToOklab(linear: [number, number, number]): Lab {
   const l_ = Math.cbrt(Math.max(0, l));
   const m_ = Math.cbrt(Math.max(0, m));
   const s_ = Math.cbrt(Math.max(0, s));
+
   return {
     L: 0.2104542553 * l_ + 0.793617785 * m_ - 0.0040720468 * s_,
     a: 1.9779984951 * l_ - 2.428592205 * m_ + 0.4505937099 * s_,
@@ -76,6 +79,7 @@ export function oklabToLinear(lab: Lab): [number, number, number] {
   const l = l_ * l_ * l_;
   const m = m_ * m_ * m_;
   const s = s_ * s_ * s_;
+
   return [
     Math.min(1, Math.max(0, 4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s)),
     Math.min(1, Math.max(0, -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s)),
@@ -86,6 +90,7 @@ export function oklabToLinear(lab: Lab): [number, number, number] {
 export function oklabToOklch(lab: Lab): Lch {
   const C = Math.sqrt(lab.a * lab.a + lab.b * lab.b);
   const h = ((Math.atan2(lab.b, lab.a) * 180) / Math.PI + 360) % 360;
+
   return { L: lab.L, C, h };
 }
 
@@ -107,15 +112,20 @@ export interface BlendResult {
 
 export function blendColors(entries: ColourEntry[], space: BlendSpace = DEFAULT_BLEND_SPACE): BlendResult {
   const audible = entries.filter((e) => e.weight > 0);
+
   if (audible.length === 0) return { rgb: { r: 0, g: 0, b: 0 }, intensity: 0 };
   const total = audible.reduce((sum, e) => sum + e.weight, 0);
   const intensity = Math.min(1, total);
+
   if (space === "srgb-legacy") {
     return { rgb: linearToRgb(rgbToLinear(scale(mixSrgb(audible, total), intensity))), intensity };
   }
+
   const colour =
     space === "linear-rgb" ? mixLinearRgb(audible, total) : oklabToLinear(mixOklab(audible, total));
+
   const scaled: [number, number, number] = [colour[0] * intensity, colour[1] * intensity, colour[2] * intensity];
+
   return { rgb: linearToRgb(scaled), intensity };
 }
 
@@ -123,17 +133,20 @@ function mixSrgb(entries: ColourEntry[], total: number): Rgb {
   let r = 0;
   let g = 0;
   let b = 0;
+
   for (const e of entries) {
     const w = e.weight / total;
     r += e.rgb.r * w;
     g += e.rgb.g * w;
     b += e.rgb.b * w;
   }
+
   return { r, g, b };
 }
 
 function mixLinearRgb(entries: ColourEntry[], total: number): [number, number, number] {
   const out: [number, number, number] = [0, 0, 0];
+
   for (const e of entries) {
     const linear = rgbToLinear(e.rgb);
     const w = e.weight / total;
@@ -141,11 +154,13 @@ function mixLinearRgb(entries: ColourEntry[], total: number): [number, number, n
     out[1] += linear[1] * w;
     out[2] += linear[2] * w;
   }
+
   return out;
 }
 
 function mixOklab(entries: ColourEntry[], total: number): Lab {
   const out: Lab = { L: 0, a: 0, b: 0 };
+
   for (const e of entries) {
     const lab = linearToOklab(rgbToLinear(e.rgb));
     const w = e.weight / total;
@@ -153,6 +168,7 @@ function mixOklab(entries: ColourEntry[], total: number): Lab {
     out.a += lab.a * w;
     out.b += lab.b * w;
   }
+
   return out;
 }
 

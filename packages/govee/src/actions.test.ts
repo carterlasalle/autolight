@@ -9,8 +9,11 @@ import type { LanExchange } from "./probe.js";
 import { FakeLamp, armLamp, goldenHex } from "./lan-fake.test-support.js";
 
 const MAC_A = "AA:BB:CC:DD:EE:01";
+
 const MAC_B = "AA:BB:CC:DD:EE:02";
+
 const OPCODE_B0 = 0xb0;
+
 const DEV_STATUS_COMMAND = JSON.stringify({ msg: { cmd: "devStatus", data: {} } });
 
 function colorwc(r: number, g: number, b: number): string {
@@ -24,15 +27,19 @@ function brightness(value: number): string {
 /** One zone lit white, the rest black: the travel frame of TEST CHASE. */
 function travelPayload(zones: number, lit: number): number[] {
   const payload = [0, zones];
+
   for (let zone = 0; zone < zones; zone++) {
     payload.push(...(zone === lit ? [255, 255, 255] : [0, 0, 0]));
   }
+
   return payload;
 }
 
 function whitePayload(zones: number): number[] {
   const payload = [0, zones];
+
   for (let zone = 0; zone < zones; zone++) payload.push(255, 255, 255);
+
   return payload;
 }
 
@@ -51,7 +58,9 @@ class LampRouter implements LanExchange {
 
   reply(deviceId: string, timeoutMs: number): Promise<string | null> {
     const lamp = this.lamps.get(deviceId);
+
     if (lamp === undefined) return Promise.resolve(null);
+
     return lamp.reply(deviceId, timeoutMs);
   }
 }
@@ -68,8 +77,10 @@ describe("govee device actions", () => {
       armSettleMs: 0,
       answersStatusWhileArmed: false,
     });
+
     const showFrame = new Uint8Array([10, 0, 0, 20, 0, 0, 30, 0, 0, 40, 0, 0]);
     armLamp(lamp);
+
     const result = await identify(
       lamp,
       { hardwareId: MAC_A, zones: 4, capability: "segmented", orientation: "forward", armed: true, currentFrame: showFrame },
@@ -102,23 +113,28 @@ describe("govee device actions", () => {
       armSettleMs: 0,
       answersStatusWhileArmed: false,
     });
+
     const showFrame = new Uint8Array([10, 0, 0, 20, 0, 0, 30, 0, 0, 40, 0, 0]);
     armLamp(lamp);
+
     const identified = await identify(
       lamp,
       { hardwareId: MAC_A, zones: 4, capability: "segmented", orientation: "forward", armed: true, currentFrame: showFrame },
       { flashMs: 5, minSpacingMs: 0, captureTimeoutMs: 5 },
     );
+
     const chased = await testChase(
       lamp,
       { hardwareId: MAC_A, zones: 4, capability: "segmented", orientation: "forward", armed: true },
       { stepMs: 1, minSpacingMs: 0 },
     );
+
     // Hardware receipt 2026-10-12: colorwc eases between colors, so any
     // colorwc here would render a fade, not the snap the caller asked for.
     for (const sent of [...identified.commandsSent, ...chased.commandsSent]) {
       expect(sent).not.toContain('"colorwc"');
     }
+
     expect(identified.framesSentHex.length).toBeGreaterThan(0);
     expect(chased.framesSentHex.length).toBeGreaterThan(0);
   });
@@ -133,6 +149,7 @@ describe("govee device actions", () => {
       brightness: 42,
       color: [7, 8, 9],
     });
+
     const result = await identify(
       lamp,
       { hardwareId: MAC_A, zones: 4, capability: "segmented", orientation: "forward", armed: false },
@@ -164,7 +181,9 @@ describe("govee device actions", () => {
       behaviour: "segmented",
       armSettleMs: 0,
     });
+
     armLamp(lamp);
+
     const result = await testChase(
       lamp,
       { hardwareId: MAC_A, zones: 4, capability: "segmented", orientation: "forward", armed: true },
@@ -199,6 +218,7 @@ describe("govee device actions", () => {
       zones: 1,
       behaviour: "segmented",
     });
+
     const result = await testChase(
       lamp,
       { hardwareId: MAC_A, zones: 1, capability: "single-zone", orientation: "forward", armed: false },
@@ -223,7 +243,9 @@ describe("govee device actions", () => {
       behaviour: "segmented",
       armSettleMs: 0,
     });
+
     armLamp(lamp);
+
     const result = await testChase(
       lamp,
       { hardwareId: MAC_A, zones: 1, capability: "single-zone", orientation: "forward", armed: true },
@@ -250,7 +272,9 @@ describe("govee device actions", () => {
       zones: 4,
       behaviour: "segmented",
     });
+
     const store = new MemoryCalibrationStore();
+
     const session = QualificationSession.open({
       exchange: lamp,
       discovery: lamp.scanReply(),
@@ -283,6 +307,7 @@ describe("govee device actions", () => {
       brightness: 30,
       color: [1, 2, 3],
     });
+
     const lampB = new FakeLamp({
       device: MAC_B,
       ip: "10.0.0.42",
@@ -293,11 +318,14 @@ describe("govee device actions", () => {
       brightness: 60,
       color: [4, 5, 6],
     });
+
     const router = new LampRouter(new Map([
       [MAC_A, lampA],
       [MAC_B, lampB],
     ]));
+
     const paused: string[] = [];
+
     const result = await identifyWalk(
       router,
       [
@@ -310,6 +338,7 @@ describe("govee device actions", () => {
         captureTimeoutMs: 20,
         pause: (index, hardwareId) => {
           paused.push(`${index}:${hardwareId}`);
+
           return Promise.resolve();
         },
       },

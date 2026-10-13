@@ -41,6 +41,7 @@ class FakePlatform {
 
   async requestPermission(): Promise<CapturePermission> {
     this.permissionRequests += 1;
+
     return this.permission;
   }
 
@@ -53,6 +54,7 @@ class FakePlatform {
     this.starts.push(constraints);
     const id = `ctx-${this.nextId}`;
     this.nextId += 1;
+
     return { id, stop: () => { this.stops += 1; } };
   }
 }
@@ -161,6 +163,7 @@ describe("audio capture host (T-AUD-01)", () => {
       { deviceId: "mic-1", label: "Built-in Mic", loopback: false },
       { deviceId: "loop-1", label: "DJ Mix Loopback", loopback: true },
     ];
+
     expect(recommendLoopbackDevice(devices)?.deviceId).toBe("loop-1");
     expect(recommendLoopbackDevice([devices[0]!])).toBeNull();
   });

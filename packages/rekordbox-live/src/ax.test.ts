@@ -12,9 +12,12 @@ interface TreeFixture {
 }
 
 const fixtureDir = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "protocol-fixtures", "rekordbox", "ax");
+
 // Reason for the casts: these are our own committed fixtures, shaped below.
 const macos = JSON.parse(readFileSync(join(fixtureDir, "macos-tree.json"), "utf8")) as TreeFixture;
+
 const windows = JSON.parse(readFileSync(join(fixtureDir, "windows-tree.json"), "utf8")) as TreeFixture;
+
 const noDecks = JSON.parse(readFileSync(join(fixtureDir, "no-decks-tree.json"), "utf8")) as TreeFixture;
 
 function tree(deckOneElapsed: string, deckOneRemaining: string, deckTwoElapsed: string): AxNode[] {
@@ -131,10 +134,12 @@ describe("AX provider (T-LIVE-06)", () => {
     provider.onDeckState((state) => emitted.push(state.deckId));
     const status = provider.getStatus();
     expect(status.state).toBe("unavailable");
+
     if (status.state === "unavailable") {
       expect(status.reason).toBe("Accessibility permission not granted");
       expect(status.remedy).toContain("Accessibility");
     }
+
     expect(provider.ingestTree(macos.root, 0n)).toEqual([]);
     expect(emitted).toEqual([]);
     expect(provider.getStatus().state).toBe("unavailable");

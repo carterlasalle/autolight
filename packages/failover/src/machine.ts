@@ -97,9 +97,11 @@ export class FailoverMachine {
     const cfg = this.readConfig();
     const sel = selectFrameTransport(cfg);
     this.lastSelection = sel;
+
     if (this.current === null && sel.transport !== null) {
       this.current = sel.transport;
     }
+
     return sel;
   }
 
@@ -114,30 +116,39 @@ export class FailoverMachine {
     const cfg = this.readConfig();
     const atMs = this.now();
     const preferred = cfg.order.find((t) => t !== "cloud-metadata") ?? null;
+
     const lanDown =
       signal === "lan-silent" && atMs - this.lastLanReplyAtMs >= this.thresholds.lanLossMs;
+
     const streamDown = signal === "stream-fault";
 
     if (this.state === "on-preferred") {
       const down = new Set<TransportId>();
+
       if (lanDown) {
         down.add("lan-razer");
         down.add("lan-json");
       }
+
       if (streamDown && this.current !== null) down.add(this.current);
       const sel = selectFrameTransport(withUnreachable(cfg, down));
       this.lastSelection = sel;
+
       if (this.current === null) {
         this.current = sel.transport;
+
         return sel;
       }
+
       if (sel.transport !== this.current) {
         const cause =
           lanDown || streamDown
             ? `LAN path lost for ${cfg.fixtureId}`
             : `Policy selected ${sel.transport ?? "nothing"} for ${cfg.fixtureId}`;
+
         this.moveTo(sel.transport, cause, atMs, false);
       }
+
       return sel;
     }
 
@@ -147,49 +158,64 @@ export class FailoverMachine {
       cfg.status[preferred]?.reachable === true &&
       !lanDown &&
       !streamDown;
+
     if (preferredUp && preferred !== null) {
       if (this.state === "failed-over" && atMs - this.lastProbeAtMs >= this.thresholds.probeIntervalMs) {
         this.lastProbeAtMs = atMs;
         this.state = "probing-preferred";
       }
+
       if (this.state === "probing-preferred" && atBarBoundary) {
         const sel = selectFrameTransport(cfg);
         this.lastSelection = sel;
         this.moveTo(sel.transport, `Preferred transport ${preferred} recovered`, atMs, true);
         this.state = "on-preferred";
+
         return sel;
       }
     }
 
     const down = new Set<TransportId>();
+
     if (lanDown) {
       down.add("lan-razer");
       down.add("lan-json");
     }
+
     if (streamDown && this.current !== null) down.add(this.current);
+
     if (preferred !== null) down.add(preferred);
     const held = selectFrameTransport(withUnreachable(cfg, down));
+
     if (held.transport === null) {
       const open = selectFrameTransport(withUnreachable(cfg, lanDown ? new Set<TransportId>(["lan-razer", "lan-json"]) : new Set<TransportId>()));
+
       if (open.transport !== null && open.transport !== this.current) {
         this.lastSelection = open;
         this.moveTo(open.transport, "No fallback left; reclaimed the reachable path", atMs, false);
+
         if (this.state === "probing-preferred") this.state = "failed-over";
+
         return open;
       }
     }
+
     this.lastSelection = held;
+
     if (held.transport !== this.current) {
       this.moveTo(held.transport, "Fallback transport changed", atMs, false);
     }
+
     return held;
   }
 
   private moveTo(to: TransportId | null, cause: string, atMs: number, switchBackAtBar: boolean): void {
     const from = this.current;
+
     if (from === to) return;
     this.current = to;
     this.switchCount += 1;
+
     if (this.state === "on-preferred") this.state = "failed-over";
     this.onSwitch?.({
       atMs,
@@ -211,9 +237,11 @@ function withUnreachable(
 ): FixtureTransportConfig {
   if (down.size === 0) return cfg;
   const status = { ...cfg.status };
+
   for (const t of down) {
     status[t] = { verified: status[t]?.verified ?? false, reachable: false };
   }
+
   return { ...cfg, status };
 }
 

@@ -64,11 +64,14 @@ export function writeFixtureDb(options: FixtureOptions): FixtureSummary {
   const db = new DatabaseSync(options.dbPath);
   const anlzFiles: Record<string, string[]> = {};
   const audioFiles: Record<string, string> = {};
+
   try {
     db.exec(SCHEMA);
+
     const write = (sql: string, params: Record<string, string | number | null>): void => {
       db.prepare(sql).run(params);
     };
+
     write("INSERT INTO djmdProperty VALUES ('1', '6000')", {});
     write("INSERT INTO djmdArtist VALUES ('a1', 'Nova')", {});
     write("INSERT INTO djmdArtist VALUES ('a2', 'Kestrel')", {});
@@ -86,18 +89,23 @@ export function writeFixtureDb(options: FixtureOptions): FixtureSummary {
       writeFileSync(audioPath, `audio-${track.ID}`);
       audioFiles[track.ID] = audioPath;
       let analysisDataPath: string | null = null;
+
       if (track.anlz !== false) {
         const relative = `/PIONEER/USBANLZ/${track.ID}/${track.ID}/ANLZ0000`;
         const suffixes = ANLZ_SUFFIXES[track.anlz];
         analysisDataPath = `${relative}.DAT`;
+
         if (track.anlz !== "missing") {
           mkdirSync(join(options.sharePath, `PIONEER/USBANLZ/${track.ID}/${track.ID}`), { recursive: true });
+
           for (const suffix of suffixes) {
             writeFileSync(join(options.sharePath, `${relative.replace(/^\//, "")}${suffix}`), `anlz-${track.ID}${suffix}`);
           }
+
           anlzFiles[track.ID] = suffixes.map((suffix) => `${relative}.${suffix.slice(1)}`);
         }
       }
+
       write(
         `INSERT INTO djmdContent (ID, FolderPath, Title, ArtistID, AlbumID, GenreID, KeyID, ColorID, BPM, Length, Rating, Commnt, DateCreated, FileSize, SampleRate, BitRate, AnalysisDataPath)
          VALUES (:ID, :FolderPath, :Title, :ArtistID, :AlbumID, :GenreID, :KeyID, :ColorID, :BPM, :Length, :Rating, :Commnt, :DateCreated, :FileSize, :SampleRate, :BitRate, :AnalysisDataPath)`,
@@ -122,18 +130,21 @@ export function writeFixtureDb(options: FixtureOptions): FixtureSummary {
         },
       );
     }
+
     // Missing audio: one row points at a file that is not there.
     write("UPDATE djmdContent SET FolderPath = :path WHERE ID = '104'", { path: join(options.audioDir, "gone.mp3") });
 
     write("INSERT INTO djmdPlaylist VALUES ('p1', 1, 'Pregame', 0, NULL, '2026-01-05 10:00:00.000 +00:00')", {});
     write("INSERT INTO djmdPlaylist VALUES ('f1', 2, 'Sets', 1, NULL, NULL)", {});
     write("INSERT INTO djmdPlaylist VALUES ('p2', 3, 'Peak', 0, 'f1', NULL)", {});
+
     const membership: [string, string, number][] = [
       ["s1", "p1", 101],
       ["s2", "p1", 102],
       ["s3", "p2", 103],
       ["s4", "p2", 101],
     ];
+
     for (const [id, playlistId, contentId] of membership) {
       write("INSERT INTO djmdSongPlaylist VALUES (:ID, :PlaylistID, :ContentID, :TrackNo)", {
         ID: id,
@@ -142,7 +153,9 @@ export function writeFixtureDb(options: FixtureOptions): FixtureSummary {
         TrackNo: 1,
       });
     }
+
     write("INSERT INTO djmdHistory VALUES ('h1', 1, '2026-09-29', 0, '2026-09-29 22:00:00.000 +00:00')", {});
+
     for (const [index, contentId] of ["101", "103", "101"].entries()) {
       write("INSERT INTO djmdSongHistory VALUES (:ID, 'h1', :ContentID, :TrackNo)", {
         ID: `sh${index}`,
@@ -153,6 +166,7 @@ export function writeFixtureDb(options: FixtureOptions): FixtureSummary {
   } finally {
     db.close();
   }
+
   return {
     trackIds: TRACKS.map((track) => track.ID),
     playlistIds: ["p1", "f1", "p2"],
@@ -169,9 +183,11 @@ export function writeFixtureDb(options: FixtureOptions): FixtureSummary {
  */
 export function readFixturePayload(dbPath: string, limit = 5000): SidecarPayload {
   const db = new DatabaseSync(dbPath, { readOnly: true });
+
   try {
     const rows = (sql: string, params: Record<string, string | number> = {}): SqlRow[] =>
       db.prepare(sql).all(params) as SqlRow[];
+
     return {
       ok: true,
       counts: {

@@ -51,6 +51,7 @@ function layer(name: RenderLayer, cells: Record<string, Contribution>): LayerCon
 }
 
 const GREY = 128;
+
 const fixtures: Fixture[] = [makeFixture("left", 2, 0, 0.4), makeFixture("right", 2, 0.6, 1)];
 
 describe("darkness and the layer stack (P-2.5, P-33)", () => {
@@ -63,8 +64,10 @@ describe("darkness and the layer stack (P-2.5, P-33)", () => {
       1,
       fixtures,
     );
+
     expect([...frames.get("left")!]).toEqual(new Array(6).fill(0));
     expect([...frames.get("right")!].some((v) => v > 0)).toBe(true);
+
     // The inverse target darkens the other side, never the whole room.
     const mirrored = renderFrame(
       plan([
@@ -74,6 +77,7 @@ describe("darkness and the layer stack (P-2.5, P-33)", () => {
       1,
       fixtures,
     );
+
     expect([...mirrored.get("left")!].some((v) => v > 0)).toBe(true);
     expect([...mirrored.get("right")!]).toEqual(new Array(6).fill(0));
   });
@@ -82,6 +86,7 @@ describe("darkness and the layer stack (P-2.5, P-33)", () => {
     // One cell keeps the pre-T-REND-03 hue heuristic identical across frames.
     const single: Fixture[] = [makeFixture("solo", 1, 0, 0)];
     const lit = renderFrame(plan([cue({ type: "section-look", intensity: 1 })]), 1, single);
+
     const dipped = renderFrame(
       plan([
         cue({ type: "section-look", intensity: 1 }),
@@ -90,6 +95,7 @@ describe("darkness and the layer stack (P-2.5, P-33)", () => {
       1,
       single,
     );
+
     const litBytes = [...lit.get("solo")!];
     const dippedBytes = [...dipped.get("solo")!];
     expect(litBytes.some((v) => v > 0)).toBe(true);
@@ -139,6 +145,7 @@ describe("darkness and the layer stack (P-2.5, P-33)", () => {
       manual: { color: [255, 255, 255], intensity: 1 },
       masterIntensity: 0.5,
     });
+
     const byte = half.get("left")![0]!;
     expect(byte).toBeGreaterThan(180);
     expect(byte).toBeLessThan(192);
@@ -167,16 +174,19 @@ describe("darkness and the layer stack (P-2.5, P-33)", () => {
         expected: 230,
       },
     ];
+
     for (const testCase of cases) {
       const composed = compositeLayers(testCase.layers);
       const byte = linearToSrgbByte(composed.get("c")![0]);
       expect(Math.abs(byte - testCase.expected), testCase.mode).toBeLessThanOrEqual(1);
     }
+
     // add never exceeds its ceiling.
     const ceiling = compositeLayers([
       layer("base", { c: contribution([255, 255, 255], 1, "replace") }),
       layer("exclusive", { c: contribution([255, 255, 255], 1, "add") }),
     ]);
+
     expect(ceiling.get("c")![0]).toBeLessThanOrEqual(ADD_CEILING);
     expect(LAYER_ORDER).toEqual(["base", "spatial", "rhythm", "accents", "exclusive", "reactive", "manual", "master"]);
     expect(layerForCue(cue({ type: "white-hit" }))).toBe("exclusive");
@@ -189,6 +199,7 @@ describe("darkness and the layer stack (P-2.5, P-33)", () => {
       1,
       fixtures,
     );
+
     expect([...frames.get("left")!]).toEqual(new Array(6).fill(0));
     expect([...frames.get("right")!]).toEqual(new Array(6).fill(0));
   });

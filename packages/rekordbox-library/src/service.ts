@@ -412,6 +412,6 @@ async function openSidecar(config: ResolvedConfig): Promise<SidecarReader> {
     encrypted: config.encrypted ?? true,
     ...(config.key === undefined ? {} : { key: config.key }),
     limit: SNAPSHOT_LIMIT,
-    ...(config.sidecar ?? {}),
+    ...config.sidecar,
   });
 }

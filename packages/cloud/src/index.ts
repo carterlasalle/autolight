@@ -14,6 +14,7 @@ export {
   parseDeviceEntry,
   parseRateHeaders,
 } from "./client.js";
+
 export type {
   CloudAccounting,
   CloudClientOptions,
@@ -26,10 +27,12 @@ export type {
   DeclaredCapabilities,
   RawDeviceEntry,
 } from "./client.js";
+
 export {
   compareDeclaredSegments,
   crossCheckQualification,
 } from "./cross-check.js";
+
 export type {
   CrossCheckInput,
   CrossCheckOutcome,

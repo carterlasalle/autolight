@@ -11,11 +11,14 @@ test("4h performance rehearsal stays live", () => {
   let n = 0;
   let lit = 0;
   const decks = new Set<number>();
+
   for (const d of performanceScenario({ fps: 60, hours: 4 })) {
     n++;
     decks.add(d.deckId);
     const gate = gateFrame(n, { dropEvery: 997 });
+
     if (gate === "offline") continue;
+
     const vm = liveViewModel({
       deckA: d, deckB: makeDeck({ deckId: 2, playing: false, track: null }),
       mixA: { state: d, beat: 0, cues, impactStrength: 0.5 },
@@ -23,9 +26,12 @@ test("4h performance rehearsal stays live", () => {
       beatA: 0, beatB: 0, fixtures: fx, track: null,
       reactiveEnergy: 0, reactiveAmount: 0,
     });
+
     if (vm.cells.some((c) => c.color !== "rgb(0,0,0)")) lit++;
+
     if (n % 50000 === 0) expect(vm.cells.length).toBe(8);
   }
+
   expect(n).toBe(864000);
   expect(decks).toEqual(new Set([1, 2]));
   expect(lit).toBeGreaterThan(n * 0.9);

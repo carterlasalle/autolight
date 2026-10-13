@@ -28,6 +28,7 @@ describe("room field properties", () => {
       expect(fromMeters(toMeters(v, "ft"), "ft")).toBeCloseTo(v, 9);
       expect(fromMeters(toMeters(v, "m"), "m")).toBe(v);
     }
+
     expect(toMeters(1, "ft")).toBeCloseTo(0.3048, 9);
   });
 

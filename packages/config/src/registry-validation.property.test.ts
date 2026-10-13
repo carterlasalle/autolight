@@ -10,12 +10,14 @@ describe("config registry properties", () => {
   it("has unique keys in dotted sections", () => {
     const keys = KEYS.map((k) => k.key);
     expect(new Set(keys).size).toBe(keys.length);
+
     for (const k of keys) expect(k).toMatch(/^[a-z0-9]+(\.[A-Za-z0-9*<>]+)+$/);
   });
 
   it("parses every default to its declared type", () => {
     for (const k of KEYS) {
       const v = defaultFor(k.key);
+
       if (k.type === "boolean") expect(typeof v).toBe("boolean");
       else if (k.type === "number") {
         expect(typeof v).toBe("number");

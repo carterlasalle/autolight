@@ -197,9 +197,11 @@ export interface QualificationOptions {
  *  calibration key then records that the firmware could not be read. */
 export function firmwareFromScan(scan: ScanReply): string {
   const candidates = [scan.wifiVersionSoft, scan.wifiVersionHard, scan.bleVersionSoft, scan.bleVersionHard];
+
   for (const value of candidates) {
     if (typeof value === "string" && value.length > 0) return value;
   }
+
   return "unmeasured";
 }
 
@@ -208,12 +210,14 @@ export function firmwareFromScan(scan: ScanReply): string {
 export function stripeFrame(zones: number): Uint8Array {
   const n = Math.max(1, Math.floor(zones));
   const frame = new Uint8Array(n * 3);
+
   for (let zone = 0; zone < n; zone++) {
     const even = zone % 2 === 0;
     frame[zone * 3] = even ? 255 : 0;
     frame[zone * 3 + 1] = 0;
     frame[zone * 3 + 2] = even ? 0 : 255;
   }
+
   return frame;
 }
 
@@ -246,6 +250,7 @@ export class QualificationSession {
         ...(options.clock !== undefined ? { clock: options.clock } : {}),
       }),
     );
+
     if (note !== null) this.stateValue.loadNote = note;
     this.applyDiscovery();
   }
@@ -253,11 +258,13 @@ export class QualificationSession {
   static open(options: QualificationOptions): QualificationSession {
     const hardwareId = options.discovery.device;
     const saved = options.store.load(hardwareId);
+
     if (saved?.calibrationJson) {
       try {
         // The blob this class wrote. Validate the two things a corrupted or
         // older record would get wrong before trusting the rest.
         const parsed = JSON.parse(saved.calibrationJson) as QualificationState;
+
         if (parsed.hardwareId !== hardwareId || !Array.isArray(parsed.steps) || parsed.steps.length !== QUALIFICATION_STEP_COUNT) {
           return new QualificationSession(
             options,
@@ -265,9 +272,11 @@ export class QualificationSession {
             "the stored record does not match this wizard's shape (hardware id or step table); the wizard restarted at step 1",
           );
         }
+
         return new QualificationSession(options, parsed, null);
       } catch (error) {
         const detail = error instanceof Error ? error.message : String(error);
+
         return new QualificationSession(
           options,
           freshState(hardwareId, options.discovery.sku, firmwareFromScan(options.discovery)),
@@ -275,6 +284,7 @@ export class QualificationSession {
         );
       }
     }
+
     return new QualificationSession(
       options,
       freshState(hardwareId, options.discovery.sku, firmwareFromScan(options.discovery)),
@@ -307,20 +317,25 @@ export class QualificationSession {
    */
   enterAt(step: number): { step: number; stepId: QualificationStepId } {
     const target = Math.min(Math.max(1, Math.floor(step)), QUALIFICATION_STEP_COUNT);
+
     for (const attempt of this.stateValue.steps) {
       if (attempt.step < target) continue;
+
       if (Object.keys(attempt.evidence).length > 0) {
         attempt.priorEvidence = [...attempt.priorEvidence, JSON.stringify(attempt.evidence)].slice(-4);
       }
+
       attempt.status = "pending";
       attempt.evidence = {};
       attempt.atMs = null;
     }
+
     this.stateValue.status = "in-progress";
     this.stateValue.currentStep = target;
     // The last saved calibration stays in place for the UI while the user
     // re-runs steps; step 16 replaces it with the freshly measured record.
     this.persist();
+
     return { step: target, stepId: stepIdAt(target) };
   }
 
@@ -335,17 +350,21 @@ export class QualificationSession {
     state: QualificationState;
   } {
     const changed = firmware !== this.stateValue.firmwareVersion;
+
     if (!changed) return { changed: false, required: [], state: this.stateValue };
     this.stateValue.firmwareVersion = firmware;
     this.stateValue.key = `${this.stateValue.hardwareId}+${this.stateValue.sku}+${firmware}`;
     this.stateValue.status = "requalification-required";
     this.stateValue.requiredAfterFirmwareChange = REQUIRED_AFTER_FIRMWARE_CHANGE;
+
     for (const id of REQUIRED_AFTER_FIRMWARE_CHANGE) {
       this.resetStep(id);
     }
+
     const first = this.record(REQUIRED_AFTER_FIRMWARE_CHANGE[0] ?? "verify-stream");
     this.stateValue.currentStep = first?.step ?? this.stateValue.currentStep;
     this.persist();
+
     return { changed: true, required: REQUIRED_AFTER_FIRMWARE_CHANGE, state: this.stateValue };
   }
 
@@ -354,6 +373,7 @@ export class QualificationSession {
    *  again. */
   segmentedResumeAllowed(): boolean {
     if (this.stateValue.status === "complete") return true;
+
     return REQUIRED_AFTER_FIRMWARE_CHANGE.every((id) => this.record(id)?.status === "pass");
   }
 
@@ -363,22 +383,28 @@ export class QualificationSession {
     const def = stepAt(step);
     const outcome = await this.execute(def.id, user);
     const attempt = this.record(def.id);
+
     if (attempt === undefined) throw new Error(`qualification step ${def.id} is not in the record`);
     attempt.attempts += 1;
     attempt.status = outcome.status;
     attempt.evidence = outcome.evidence;
     attempt.atMs = this.now();
+
     if (outcome.status === "pass") {
       this.stateValue.currentStep = Math.min(def.spec + 1, QUALIFICATION_STEP_COUNT);
     }
+
     if (def.id === "save" && this.stateValue.calibration !== null) {
       // The saved record carries the step table as it stands, step 16 included.
       this.stateValue.calibration.steps = this.stateValue.steps;
     }
+
     if (this.stateValue.steps.every((entry) => entry.status === "pass")) {
       this.stateValue.status = "complete";
     }
+
     this.persist();
+
     return attempt;
   }
 
@@ -387,11 +413,14 @@ export class QualificationSession {
   async runAll(user: QualificationUser): Promise<QualificationState> {
     let guard = 0;
     const limit = QUALIFICATION_STEP_COUNT * 2;
+
     while (this.stateValue.status !== "complete" && guard < limit) {
       guard += 1;
       const attempt = await this.runStep(user);
+
       if (attempt.status === "fail") break;
     }
+
     return this.stateValue;
   }
 
@@ -411,10 +440,13 @@ export class QualificationSession {
 
   private resetStep(id: QualificationStepId): void {
     const attempt = this.record(id);
+
     if (attempt === undefined) return;
+
     if (Object.keys(attempt.evidence).length > 0) {
       attempt.priorEvidence = [...attempt.priorEvidence, JSON.stringify(attempt.evidence)].slice(-4);
     }
+
     attempt.status = "pending";
     attempt.evidence = {};
     attempt.atMs = null;
@@ -425,7 +457,9 @@ export class QualificationSession {
       this.stateValue.sku = this.options.discovery.sku;
       this.stateValue.key = `${this.stateValue.hardwareId}+${this.stateValue.sku}+${this.stateValue.firmwareVersion}`;
     }
+
     const firmware = firmwareFromScan(this.options.discovery);
+
     // A stored record for another firmware is a firmware change: REQUALIFY.
     if (firmware !== this.stateValue.firmwareVersion && this.stateValue.steps.some((step) => step.status === "pass")) {
       this.noteFirmware(firmware);
@@ -434,11 +468,13 @@ export class QualificationSession {
 
   private numberFrom(id: QualificationStepId, key: string): number | null {
     const value = this.record(id)?.evidence[key];
+
     return typeof value === "number" ? value : null;
   }
 
   private stringFrom(id: QualificationStepId, key: string): string | null {
     const value = this.record(id)?.evidence[key];
+
     return typeof value === "string" ? value : null;
   }
 
@@ -457,6 +493,7 @@ export class QualificationSession {
   /** The qualified zone count: step 9's answer, else the candidate. */
   private zones(): number {
     const counted = this.numberFrom("segment-count", "logicalSegmentCount");
+
     return Math.max(1, Math.floor(counted ?? this.options.zones ?? 8));
   }
 
@@ -499,6 +536,7 @@ export class QualificationSession {
 
   private async stepDiscover(): Promise<StepOutcome> {
     const scan = this.options.discovery;
+
     const evidence: Record<string, unknown> = {
       device: scan.device,
       ip: scan.ip,
@@ -509,7 +547,9 @@ export class QualificationSession {
       bleVersionSoft: scan.bleVersionSoft,
       rung: "caller-provided (T-GOV-05 owns the discovery ladder)",
     };
+
     const ok = scan.device.length > 0 && scan.sku.length > 0;
+
     return { status: ok ? "pass" : "fail", evidence: { ...evidence, reason: ok ? null : "the scan reply has no device id or SKU" } };
   }
 
@@ -521,13 +561,16 @@ export class QualificationSession {
       orientation: "forward",
       armed: false,
     };
+
     const options = {
       flashMs: this.options.identifyFlashMs ?? 1000,
       minSpacingMs: this.options.minSpacingMs ?? PROBE_DEFAULTS.minSpacingMs,
       ...(this.options.wait !== undefined ? { wait: this.options.wait } : {}),
     };
+
     const result = await identify(this.options.exchange, fixture, options);
     const confirmed = await user.confirmIdentify();
+
     return {
       status: confirmed ? "pass" : "fail",
       evidence: {
@@ -544,6 +587,7 @@ export class QualificationSession {
   private async stepReadSku(): Promise<StepOutcome> {
     const sku = this.options.discovery.sku;
     const ok = sku.length > 0;
+
     return {
       status: ok ? "pass" : "fail",
       evidence: { sku, source: "scan reply field", reason: ok ? null : "the scan reply carries no SKU" },
@@ -554,6 +598,7 @@ export class QualificationSession {
     const scan = this.options.discovery;
     const firmware = firmwareFromScan(scan);
     const measured = firmware !== "unmeasured";
+
     return {
       status: "pass",
       evidence: {
@@ -573,6 +618,7 @@ export class QualificationSession {
     const read = await readDevStatus(this.link, this.readbackOpts());
     const observed = read.status?.onOff ?? null;
     const ok = observed === true;
+
     return {
       status: ok ? "pass" : "fail",
       evidence: {
@@ -591,6 +637,7 @@ export class QualificationSession {
     const read = await readDevStatus(this.link, this.readbackOpts());
     const observed = read.status?.brightness ?? null;
     const ok = observed === requested;
+
     return {
       status: ok ? "pass" : "fail",
       evidence: { requested, observed, answered: read.answered, rttMs: read.rttMs, reason: ok ? null : "brightness read-back does not match the request" },
@@ -602,8 +649,10 @@ export class QualificationSession {
     await this.link.sendJson(colorCommand(requested.r, requested.g, requested.b));
     const read = await readDevStatus(this.link, this.readbackOpts());
     const observed = read.status ?? null;
+
     const ok = observed !== null && observed.color.r === requested.r && observed.color.g === requested.g
       && observed.color.b === requested.b && observed.colorTemInKelvin === 0;
+
     return {
       status: ok ? "pass" : "fail",
       evidence: {
@@ -625,6 +674,7 @@ export class QualificationSession {
       ...(this.options.wait !== undefined ? { wait: this.options.wait } : {}),
       ...(this.options.clock !== undefined ? { clock: this.options.clock } : {}),
     };
+
     const probe = await probeSegmentedCapability(
       this.options.exchange,
       {
@@ -636,7 +686,9 @@ export class QualificationSession {
       user,
       probeOptions,
     );
+
     const ok = probe.verdict.kind === "segmented";
+
     return {
       status: ok ? "pass" : "fail",
       evidence: {
@@ -652,16 +704,20 @@ export class QualificationSession {
     await this.wait(this.armSettle());
     const sweep: { candidate: number; confirmed: boolean }[] = [];
     let logical = 0;
+
     for (const candidate of candidates) {
       await this.link.sendRaw(paint(stripeFrame(candidate)));
       const confirmed = await user.seesDistinctBands(candidate);
       sweep.push({ candidate, confirmed });
+
       if (!confirmed) break;
       logical = candidate;
     }
+
     await this.link.sendRaw(arm(false));
     const firstMiss = sweep.find((entry) => !entry.confirmed);
     const ok = logical > 0;
+
     return {
       status: ok ? "pass" : "fail",
       evidence: {
@@ -689,6 +745,7 @@ export class QualificationSession {
     const answer = await user.whichEndFirst();
     await this.link.sendRaw(arm(false));
     const ok = answer !== "unclear";
+
     return {
       status: ok ? "pass" : "fail",
       evidence: {
@@ -703,6 +760,7 @@ export class QualificationSession {
 
   private async stepOrientation(user: QualificationUser): Promise<StepOutcome> {
     const orientation = await user.chooseOrientation();
+
     return { status: "pass", evidence: { orientation, method: "user choice after the single moving zone" } };
   }
 
@@ -712,6 +770,7 @@ export class QualificationSession {
     const stepDelay = Math.max(1, this.options.armSettleSweepStepMs ?? 20);
     const attempts: { delayMs: number; landed: boolean }[] = [];
     let settle: number | null = null;
+
     for (let delay = 0; delay <= maxDelay; delay += stepDelay) {
       await this.link.sendRaw(arm(false));
       await this.wait(stepDelay);
@@ -720,13 +779,16 @@ export class QualificationSession {
       await this.link.sendRaw(paint(whiteHitPayload(zones, 1)));
       const landed = await user.confirmPaintLanded(delay);
       attempts.push({ delayMs: delay, landed });
+
       if (landed) {
         settle = delay;
         break;
       }
     }
+
     await this.link.sendRaw(arm(false));
     const ok = settle !== null;
+
     return {
       status: ok ? "pass" : "fail",
       evidence: {
@@ -745,6 +807,7 @@ export class QualificationSession {
     const ticks = Math.max(1, this.options.rateSweepTicks ?? 4);
     const scheduler = this.options.scheduler ?? WALL_SCHEDULER;
     const settle = this.numberFrom("arm-settle", "settleMs") ?? this.armSettle();
+
     const sweep: {
       rateHz: number;
       framesSent: number;
@@ -752,25 +815,32 @@ export class QualificationSession {
       missedTicks: number;
       stutter: boolean;
     }[] = [];
+
     let stable: number | null = null;
+
     for (const rate of rates) {
       await this.link.sendRaw(arm(false));
       await this.wait(settle);
       await this.link.sendRaw(arm(true));
       await this.wait(settle);
+
       const stream = new PacingStream(
         this.stateValue.hardwareId,
         { resolution: zones, rateHz: rate, gradient: 0, armSettleMs: 0 },
         this.options.exchange,
         scheduler,
       );
+
       const frames = chaseFrames(zones, "forward");
       const interval = 1000 / Math.max(1, rate);
+
       for (let tick = 0; tick < ticks; tick++) {
         const frame = frames[tick % frames.length];
+
         if (frame !== undefined) stream.setAll(frame);
         await this.wait(interval);
       }
+
       const stutter = await user.markStutter(rate);
       sweep.push({
         rateHz: rate,
@@ -780,13 +850,16 @@ export class QualificationSession {
         stutter,
       });
       stream.close();
+
       if (!stutter) {
         stable = rate;
         break;
       }
     }
+
     await this.link.sendRaw(arm(false));
     const ok = stable !== null;
+
     return {
       status: ok ? "pass" : "fail",
       evidence: {
@@ -802,6 +875,7 @@ export class QualificationSession {
   private async stepVisualLatency(user: QualificationUser): Promise<StepOutcome> {
     const measured = await user.measureLatencyMs();
     const method = measured?.method ?? "unmeasured";
+
     return {
       status: "pass",
       evidence: {
@@ -821,25 +895,30 @@ export class QualificationSession {
     const startedAt = this.now();
     let rearmMs: number | null = null;
     let attempts = 0;
+
     while (this.now() - startedAt <= deadlineMs) {
       attempts += 1;
       const read = await readDevStatus(this.link, { retryMs, deadlineMs: retryMs, wait: this.wait });
+
       if (read.answered) {
         rearmMs = this.now() - startedAt;
         break;
       }
     }
+
     if (rearmMs === null) {
       return {
         status: "fail",
         evidence: { attempts, deadlineMs, reason: "the unit did not answer after the power cycle within govee.lan.reconnect.maxMs" },
       };
     }
+
     // Reconnect re-arms and sends the current frame only (spec 106).
     await this.link.sendRaw(arm(true));
     await this.wait(this.numberFrom("arm-settle", "settleMs") ?? this.armSettle());
     await this.link.sendRaw(paint(whiteHitPayload(zones, 1)));
     const firstFrameMs = this.now() - startedAt;
+
     return {
       status: "pass",
       evidence: { rearmMs, firstFrameMs, attempts, deadlineMs, note: "reconnect re-arms and sends the current frame only (spec 106)" },
@@ -848,23 +927,33 @@ export class QualificationSession {
 
   private async stepSave(): Promise<StepOutcome> {
     const missing = this.stateValue.steps.filter((step) => step.id !== "save" && step.status !== "pass").map((step) => step.id);
+
     if (missing.length > 0) {
       return { status: "fail", evidence: { missing, reason: "calibration is only saved after every earlier step passes" } };
     }
+
     const capability = this.record("verify-stream")?.evidence["verdict"];
+
     if (!isProbeVerdict(capability)) {
       return { status: "fail", evidence: { reason: "step 8 recorded no capability verdict, so the calibration cannot say what was verified" } };
     }
+
     const segmentCount = this.numberFrom("segment-count", "logicalSegmentCount") ?? 0;
     const methodValue = this.stringFrom("visual-latency", "method");
+
     const latencyMethod: CalibrationRecord["latencyMethod"] =
       methodValue === "camera" || methodValue === "tap" ? methodValue : "unmeasured";
+
     const orientationValue = this.stringFrom("orientation", "orientation");
     const firmwareMeasured = this.record("read-firmware")?.evidence["measured"] === true;
     const unmeasured: string[] = [];
+
     if (!firmwareMeasured) unmeasured.push("firmwareVersion");
+
     if (latencyMethod === "unmeasured") unmeasured.push("visualLatency");
+
     if (this.record("verify-stream")?.evidence["b4Confirmed"] !== true) unmeasured.push("b4Zoned");
+
     const calibration: CalibrationRecord = {
       key: this.stateValue.key,
       hardwareId: this.stateValue.hardwareId,
@@ -886,8 +975,10 @@ export class QualificationSession {
       steps: this.stateValue.steps,
       savedAtMs: this.now(),
     };
+
     this.stateValue.calibration = calibration;
     this.stateValue.status = "complete";
+
     // A summary, not the record itself: the record carries the step table, and
     // putting it back into this step's evidence would make the blob circular.
     return {
@@ -911,6 +1002,7 @@ export class QualificationSession {
 function isProbeVerdict(value: unknown): value is CapabilityProbe["verdict"] {
   if (typeof value !== "object" || value === null || !("kind" in value)) return false;
   const kind = value.kind;
+
   return kind === "segmented" || kind === "single-zone-fallback" || kind === "lan-unavailable";
 }
 
@@ -922,13 +1014,16 @@ function oneZoneFrame(zones: number, lit: number): Uint8Array {
   frame[zone * 3] = 255;
   frame[zone * 3 + 1] = 255;
   frame[zone * 3 + 2] = 255;
+
   return frame;
 }
 
 function stepAt(step: number): (typeof QUALIFICATION_STEPS)[number] {
   const index = Math.min(Math.max(1, Math.floor(step)), QUALIFICATION_STEP_COUNT) - 1;
   const def = QUALIFICATION_STEPS[index];
+
   if (def === undefined) throw new RangeError(`no qualification step at ${step}`);
+
   return def;
 }
 

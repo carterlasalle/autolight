@@ -18,6 +18,7 @@ import {
 import { closeStorageService, openStorageService } from "./services/storage-service.js";
 import { getConfigService } from "./services/config-service.js";
 import { audit, initAuditLog } from "./services/audit-log.js";
+
 // Startup sequence (§132): DB → show worker → Govee → DJ adapter →
 // library watcher → analysis worker → venue → tracks → plans → arm → READY.
 export type StartupStage =
@@ -28,6 +29,7 @@ export const STARTUP_ORDER: StartupStage[] = [
   "db", "show-worker", "govee", "dj-adapter", "library",
   "analysis", "venue", "tracks", "plans", "arm", "ready",
 ];
+
 // TEST-BUILD ONLY (T-QA-02 harness contract): methods the journeys call
 // through `__autolightTestApi` on globalThis. Boot records real stage
 // timings; the simulator show loop below backs every other method with the
@@ -37,10 +39,13 @@ export const STARTUP_ORDER: StartupStage[] = [
 // when AUTOLIGHT_TEST_BUILD=1; the release bundle scan greps for
 // `qa/recording-frames` and `__autolightTestApi` and rejects any hit.
 const __testStageAt = new Map<string, number>();
+
 function __testMarkStage(name: string): void {
   if (!__testStageAt.has(name)) __testStageAt.set(name, Date.now());
 }
+
 let __testShow: import("./services/simulator-show.js").SimulatorShow | null = null;
+
 async function __testShowLoop(): Promise<import("./services/simulator-show.js").SimulatorShow> {
   if (!__testShow) {
     const { SimulatorShow } = await import("./services/simulator-show.js");
@@ -49,26 +54,34 @@ async function __testShowLoop(): Promise<import("./services/simulator-show.js").
     // Mark in STARTUP_ORDER: the journey asserts non-decreasing atMs.
     __testMarkStage("show-worker");
     __testShow.loadTrack();
+
     for (const name of ["govee", "dj-adapter", "library", "analysis", "venue", "tracks", "plans"] as const) __testMarkStage(name);
     await __testShow.start();
+
     for (const name of ["arm", "ready"] as const) __testMarkStage(name);
   }
+
   return __testShow;
 }
+
 function registerTestApi(): void {
   const t0 = Date.now();
   const at = (name: string): number => __testStageAt.get(name) ?? t0;
+
   const stages = (): { name: string; atMs: number }[] =>
     (["db", "show-worker", "govee", "dj-adapter", "library", "analysis", "venue", "tracks", "plans", "arm", "ready"] as const).map((name) => ({ name, atMs: at(name) - t0 }));
+
   // The loop starts lazily on first use so a stages-only probe never pays
   // for UDP sockets; every method below awaits the same singleton.
   const api: Record<string, (arg: unknown) => Promise<unknown> | unknown> = {
     stages: async () => {
       await __testShowLoop();
+
       return stages();
     },
     library: async () => {
       const show = await __testShowLoop();
+
       return { tracks: [{ id: show.trackId(), readiness: "READY" }] };
     },
     fixtures: async () => (await __testShowLoop()).fixtureInfo(),
@@ -80,14 +93,17 @@ function registerTestApi(): void {
     "resume-status": async () => (await __testShowLoop()).resumeStatus(),
     "freeze-renderer": async (arg) => {
       const ms = (arg as { ms?: unknown } | undefined)?.ms;
+
       return (await __testShowLoop()).freezeRenderer(typeof ms === "number" ? ms : 5000);
     },
     key: async (arg) => {
       const key = (arg as { key?: unknown } | undefined)?.key;
+
       return (await __testShowLoop()).key(typeof key === "string" ? key : "");
     },
     shutdown: async () => (await __testShowLoop()).shutdown(),
   };
+
   (globalThis as unknown as { __autolightTestApi?: unknown }).__autolightTestApi = api;
   __testMarkStage("db");
 }
@@ -170,9 +186,11 @@ function applySessionHardening(): void {
   ses.webRequest.onHeadersReceived((details, callback) => {
     if (details.resourceType !== "mainFrame" && details.resourceType !== "subFrame") {
       callback({});
+
       return;
     }
-    const headers = { ...(details.responseHeaders ?? {}) };
+
+    const headers = { ...details.responseHeaders };
     headers["Content-Security-Policy"] = [settings.csp];
     callback({ responseHeaders: headers });
   });
@@ -186,18 +204,25 @@ function applySessionHardening(): void {
         details.url.startsWith("file://") ||
         details.url.startsWith("http://localhost:5173") ||
         details.url.startsWith("devtools://");
+
       callback(allowed ? {} : { cancel: true });
+
       return;
     }
+
     if (details.resourceType === "script") {
       const local =
         details.url.startsWith("file://") ||
         details.url.startsWith("http://localhost:5173");
+
       callback(local ? {} : { cancel: true });
+
       return;
     }
+
     callback({});
   });
+
   // setPermissionRequestHandler + setPermissionCheckHandler: media device
   // enumeration consults the check handler, not only the request handler,
   // so both are installed. Grant media ("media" + "audio-capture") only to
@@ -208,17 +233,23 @@ function applySessionHardening(): void {
     permission: string,
   ): boolean => {
     const url = webContents?.getURL() ?? "";
+
     const local =
       url.startsWith("file://") || url.startsWith("http://localhost:5173");
+
     if (!local) return false;
+
     if (permission === "media") {
       return isAudioWindow(url);
     }
+
     if (permission === "midi" || permission === "midiSysex") {
       return true;
     }
+
     return false;
   };
+
   ses.setPermissionRequestHandler(
     (webContents, permission, callback) => {
       callback(decidePermission(webContents, permission));
@@ -247,15 +278,18 @@ export async function boot(): Promise<void> {
   // T-ARC-02: handlers register before the window exists so the renderer's
   // first requests never race registration.
   createIpc();
+
   // TEST-BUILD ONLY: registered only when AUTOLIGHT_TEST_BUILD=1.
   if (process.env["AUTOLIGHT_TEST_BUILD"] === "1") {
     registerTestApi();
   }
+
   applySessionHardening();
   // §132 stage 2: the application database opens before anything reads it,
   // and its driver, pragmas and schema version are logged as they are found.
   console.info(`[storage] ${openStorageService().statusLine()}`);
   const settings = securitySettings(join(__dirname, "preload.cjs"));
+
   const win = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -274,6 +308,7 @@ export async function boot(): Promise<void> {
       webSecurity: settings.webPreferences.webSecurity,
     },
   });
+
   // New-window guard: deny every popup; external links must go through an
   // explicit shell.openExternal intent (none exists yet, so deny all).
   win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
@@ -281,6 +316,7 @@ export async function boot(): Promise<void> {
   // off the event object; positional args after details are deprecated.
   win.webContents.on("will-navigate", (nav) => {
     const url = nav.url;
+
     if (
       !settings.allowedNavigation.some((prefix) => url.startsWith(prefix)) &&
       !url.startsWith("devtools://")
@@ -288,6 +324,7 @@ export async function boot(): Promise<void> {
       nav.preventDefault();
     }
   });
+
   // Dev: Vite server; prod: Vite build output (scripts/build-main.mjs builds
   // main/preload only — renderer is Vite's dist/renderer).
   if (process.env["AUTOLIGHT_RENDERER_URL"]) {
@@ -295,13 +332,16 @@ export async function boot(): Promise<void> {
   } else {
     await win.loadFile(join(__dirname, "..", "renderer", "index.html"));
   }
+
   createShowService();
+
   // Audit sink first: everything below (config adoption, analysis start,
   // every IPC call) lands in userData/audit-*.ndjson so a later silent
   // exit can be traced from disk.
   try {
     initAuditLog(join(app.getPath("userData"), "audit"));
   } catch { /* audit stays best-effort */ }
+
   audit("boot", { stage: "show-service-created" });
   // One config file, one store: the ConfigService adopts show-service's
   // file-backed store instead of opening a second instance that would
@@ -310,15 +350,18 @@ export async function boot(): Promise<void> {
   startAnalysis();
   startProlink();
   startCompositeFlx4();
+
   // Graceful shutdown (§133): before-quit and window close both run the
   // SHUTDOWN_ORDER steps with per-step timeouts, then quitApp exits.
   const runGracefulShutdown = (): Promise<void> => {
     markShuttingDown();
+
     return runShutdown({
       timeoutMs: 2000,
       onStep: (step, ms) => recordShutdownStep(step, ms),
     });
   };
+
   app.on("before-quit", () => {
     audit("lifecycle", { event: "before-quit" });
     void runGracefulShutdown();
@@ -349,6 +392,7 @@ export async function boot(): Promise<void> {
   // sends the safe look, and restarts the show host.
   process.on("uncaughtException", (err) => {
     const record = crashRecordPath();
+
     try {
       writeFileSync(record, JSON.stringify({
         at: new Date().toISOString(),
@@ -357,6 +401,7 @@ export async function boot(): Promise<void> {
         error: String(err?.stack ?? err),
       }));
     } catch { /* crash path must never throw */ }
+
     audit("lifecycle", { event: "uncaught-exception", error: String(err?.stack ?? err).slice(0, 500) });
     applyCrashPolicy({ holdMs: 2000 });
     restartShowHost();
@@ -364,6 +409,7 @@ export async function boot(): Promise<void> {
 }
 
 let shuttingDownNow = false;
+
 function shuttingDown(): boolean {
   return shuttingDownNow;
 }
@@ -373,6 +419,7 @@ function recordShutdownStep(step: string, ms: number): void {
     getShowService().recorder.record("shutdown/step", { step, ms });
   } catch { /* never block teardown on logging */ }
 }
+
 export function markShuttingDown(): void {
   shuttingDownNow = true;
   setShowAcceptingUi(false);

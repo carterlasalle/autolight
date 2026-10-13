@@ -9,9 +9,13 @@ import { axFractionalBeat } from "./ax.js";
 // bundle). The canonical resolver lives in @autolight/track-identity.
 function rowToIdentity(row: { rekordboxId: string; canonicalPath?: string; title?: string; artist?: string }): { rekordboxId: string; canonicalPath?: string; title?: string; artist?: string } {
   const out: { rekordboxId: string; canonicalPath?: string; title?: string; artist?: string } = { rekordboxId: row.rekordboxId };
+
   if (row.canonicalPath !== undefined && row.canonicalPath !== "") out.canonicalPath = row.canonicalPath;
+
   if (row.title !== undefined && row.title !== "") out.title = row.title;
+
   if (row.artist !== undefined && row.artist !== "") out.artist = row.artist;
+
   return out;
 }
 
@@ -28,6 +32,7 @@ const fixtureSchema = z.object({
   expectedEvents: z.array(deckStateSchema.omit({ receivedAtNs: true })),
   expectedBy: z.string().min(1).optional(),
 });
+
 export type ProtocolFixture = z.infer<typeof fixtureSchema>;
 
 export function parseFixture(raw: unknown): ProtocolFixture {
@@ -38,6 +43,7 @@ export function parseFixture(raw: unknown): ProtocolFixture {
 // clock so CI needs no DJ software. Returns full DeckState incl. receivedAtNs.
 export function replayFixture(fixture: ProtocolFixture, rate = 1, stepMs = 100): DeckState[] {
   const baseNs = 1_000_000_000n;
+
   return fixture.expectedEvents.map((e, i) => ({
     ...e,
     receivedAtNs: baseNs + BigInt(Math.round((i * stepMs * 1_000_000) / rate)),
@@ -101,6 +107,7 @@ export interface CompositeSnapshot {
 
 export function compositeToDeckState(snap: CompositeSnapshot): DecodedMessage {
   const id = rowToIdentity(snap.row);
+
   return {
     state: {
       source: "rekordbox",
@@ -143,15 +150,27 @@ export {
 // verification, the PRO DJ LINK decoder and provider, the AX tree reader and
 // provider, and the Rekordbox agent API client.
 export * from "./providers.js";
+
 export * from "./contract-suite.js";
+
 export * from "./fusion.js";
+
 export * from "./osc.js";
+
 export * from "./rkbx-osc.js";
+
 export * from "./setup-assistant.js";
+
 export * from "./prolink.js";
+
 export * from "./prolink-provider.js";
+
 export * from "./ax.js";
+
 export * from "./ax-provider.js";
+
 export * from "./agent-api.js";
+
 export * from "./composite.js";
+
 export * from "./composite-boot.js";

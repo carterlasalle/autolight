@@ -21,6 +21,7 @@ describe("serato definition of done (T-SER-06, spec 121)", () => {
           },
           1n,
         );
+
         expect(state.source).toBe("serato");
         expect(state.deckId).toBe(2);
       },
@@ -37,6 +38,7 @@ describe("serato definition of done (T-SER-06, spec 121)", () => {
           },
           1n,
         );
+
         expect(state.track?.sourceIds.seratoPath).toBe("/m/a.mp3");
       },
     },
@@ -52,6 +54,7 @@ describe("serato definition of done (T-SER-06, spec 121)", () => {
           },
           1n,
         );
+
         expect(state.playheadSeconds).toBe(12.5);
         expect(state.playing).toBe(true);
       },
@@ -68,6 +71,7 @@ describe("serato definition of done (T-SER-06, spec 121)", () => {
           },
           1n,
         );
+
         expect(state.effectiveBpm).toBe(126);
         expect(state.playRate).toBe(1.05);
       },
@@ -85,6 +89,7 @@ describe("serato definition of done (T-SER-06, spec 121)", () => {
             },
             1n,
           );
+
           expect(state.playing).toBe(playing);
         }
       },
@@ -101,6 +106,7 @@ describe("serato definition of done (T-SER-06, spec 121)", () => {
           },
           1n,
         );
+
         expect(state.loop).toEqual({ active: true, startSeconds: 30, endSeconds: 32, beatLength: 4 });
       },
     },
@@ -120,6 +126,7 @@ describe("serato definition of done (T-SER-06, spec 121)", () => {
           },
           1n,
         );
+
         expect(state.loop.active).toBe(false);
       },
     },
@@ -135,6 +142,7 @@ describe("serato definition of done (T-SER-06, spec 121)", () => {
           },
           1n,
         );
+
         expect(state.channelFader).toBe(0.75);
       },
     },
@@ -150,6 +158,7 @@ describe("serato definition of done (T-SER-06, spec 121)", () => {
           },
           1n,
         );
+
         expect(state.crossfader).toBe(0.4);
       },
     },
@@ -187,6 +196,7 @@ describe("serato definition of done (T-SER-06, spec 121)", () => {
           },
           1n,
         ).state;
+
         const b = remoteToDeckState(
           {
             deckId: 2, filepath: "/m/b.mp3", playing: true, playheadSeconds: 20, playRate: 1,
@@ -195,6 +205,7 @@ describe("serato definition of done (T-SER-06, spec 121)", () => {
           },
           1n,
         ).state;
+
         expect(a.deckId).not.toBe(b.deckId);
         expect(a.track?.id).not.toBe(b.track?.id);
       },
@@ -211,6 +222,7 @@ describe("serato definition of done (T-SER-06, spec 121)", () => {
           },
           1n,
         ).state;
+
         const after = remoteToDeckState(
           {
             deckId: 1, filepath: "/m/a.mp3", playing: true, playheadSeconds: 90, playRate: 1,
@@ -219,6 +231,7 @@ describe("serato definition of done (T-SER-06, spec 121)", () => {
           },
           2n,
         ).state;
+
         expect(after.playheadSeconds - before.playheadSeconds).toBeCloseTo(80);
       },
     },

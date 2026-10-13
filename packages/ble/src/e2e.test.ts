@@ -16,21 +16,26 @@ class FakeClock implements BleClock {
   setTimeout(fn: () => void, ms: number): number {
     const handle = this.next++;
     this.tasks.set(handle, { at: this.current + Math.max(0, ms), fn });
+
     return handle;
   }
   clearTimeout(handle: number): void { this.tasks.delete(handle); }
   advance(ms: number): void {
     const target = this.current + ms;
+
     for (;;) {
       let earliest: [number, { at: number; fn: () => void }] | null = null;
+
       for (const entry of this.tasks) {
         if (entry[1].at <= target && (earliest === null || entry[1].at < earliest[1].at)) earliest = entry;
       }
+
       if (earliest === null) break;
       this.tasks.delete(earliest[0]);
       this.current = Math.max(this.current, earliest[1].at);
       earliest[1].fn();
     }
+
     this.current = Math.max(this.current, target);
   }
 }
@@ -40,6 +45,7 @@ describe("ble end to end on the sim", () => {
     const clock = new FakeClock();
     const toolkitSim = new SimBleAdapter({ kind: "toolkit-ble", clock: () => clock.now() });
     const nobleSim = new SimBleAdapter({ kind: "noble", clock: () => clock.now() });
+
     const peripheral = new SimPeripheral({
       address: "AA:BB:CC:DD:EE:11",
       name: "GBK_H6076_AB12",
@@ -49,6 +55,7 @@ describe("ble end to end on the sim", () => {
       segmentCount: 8,
       budgetHz: null,
     });
+
     nobleSim.add(peripheral);
     const selector = await createBackendSelector({ mode: "auto", toolkit: toolkitSim, noble: nobleSim });
     expect(selector.currentKind()).toBe("toolkit-ble");
@@ -66,6 +73,7 @@ describe("ble end to end on the sim", () => {
       lanWifiMac: "AA:BB:CC:DD:EE:FF",
       identifyConfirmed: false,
     });
+
     expect(binding.basis).toBe("wifi-mac-match");
 
     const link = new BleLink(binding.bleAddress, nobleSim, { writeBudgetHz: 20, writeDrainMs: 0 }, clock);
@@ -77,8 +85,10 @@ describe("ble end to end on the sim", () => {
     const red: [number, number, number] = [255, 0, 0];
     const blue: [number, number, number] = [0, 0, 255];
     clock.advance(50);
+
     for (let frame = 0; frame < 40; frame++) {
       const bytes = new Uint8Array(8 * 3);
+
       for (let z = 0; z < 8; z++) {
         const on = (z + frame) % 2 === 0;
         const color = on ? red : blue;
@@ -86,15 +96,19 @@ describe("ble end to end on the sim", () => {
         bytes[z * 3 + 1] = color[1];
         bytes[z * 3 + 2] = color[2];
       }
+
       const writes = encodeBleStreamFrame(bytes, { zoneCount: 8, budgetHz: 20 });
       expect(writes.length).toBe(2);
+
       for (const write of writes) {
         link.send(write);
         clock.advance(50);
         link.tick();
       }
+
       await Promise.resolve();
     }
+
     expect(peripheral.metrics.stalled).toBe(0);
     expect(link.status().writesSent).toBe(80);
     const power = blePower(true);

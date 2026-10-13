@@ -46,6 +46,7 @@ const track = {
   beatFeatures: [],
   phrases: [],
 } as unknown as TrackModel;
+
 const style = { id: "club", intensityRange: [0.2, 1], darknessPreference: 0.3, reactiveAmount: 0.15, whiteHitFrequency: 1, strobeFrequency: 0.2 } as ShowStyle;
 
 describe("planner", () => {

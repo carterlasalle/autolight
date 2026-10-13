@@ -124,6 +124,7 @@ export class RkbxOscProvider extends ProviderBase {
 
   protected async onStart(): Promise<void> {
     this.setStatus({ state: "starting" });
+
     if (this.options.bind === null) return;
     const [host, port] = splitHostPort(this.options.bind);
     const socket = createSocket({ type: "udp4", reuseAddr: true });
@@ -150,6 +151,7 @@ export class RkbxOscProvider extends ProviderBase {
   protected async onStop(): Promise<void> {
     const socket = this.socket;
     this.socket = null;
+
     if (!socket) return;
     const { promise, resolve } = Promise.withResolvers<void>();
     socket.close(() => resolve());
@@ -169,6 +171,7 @@ export class RkbxOscProvider extends ProviderBase {
 
   get boundPort(): number | null {
     const address = this.socket?.address();
+
     return address && typeof address === "object" ? address.port : null;
   }
 
@@ -191,95 +194,129 @@ export class RkbxOscProvider extends ProviderBase {
   ingestDatagram(bytes: Uint8Array, atNs?: bigint): void {
     const at = atNs ?? this.now();
     const decoded = decodeOscDatagram(bytes);
+
     if (decoded.malformed.length > 0) {
       this.markRejected(`malformed OSC datagram: ${decoded.malformed[0] ?? "unknown"}`);
+
       return;
     }
+
     this.messageTimes.push(Number(at / 1_000_000n));
+
     if (this.messageTimes.length > 128) this.messageTimes.splice(0, this.messageTimes.length - 128);
     const touched = new Set<number>();
+
     for (const message of decoded.messages) {
       const deck = this.applyMessage(message, at);
+
       if (typeof deck === "number") touched.add(deck);
     }
+
     this.setStatus({ state: "live", updateHz: this.updateHz(), ageMs: 0 });
+
     for (const deck of touched) this.emit(this.stateFor(deck));
   }
 
   private updateHz(): number {
     const times = this.messageTimes;
+
     if (times.length < 2) return 0;
     const spanMs = (times.at(-1) ?? 0) - (times[0] ?? 0);
+
     if (spanMs <= 0) return 0;
+
     return ((times.length - 1) * 1000) / spanMs;
   }
 
   private bufferFor(deck: number | "master"): DeckBuffer {
     let buffer = this.buffers.get(deck);
+
     if (!buffer) {
       buffer = emptyBuffer();
       this.buffers.set(deck, buffer);
     }
+
     return buffer;
   }
 
   private applyMessage(message: OscMessage, atNs: bigint): number | "master" | null {
     const parsed = parseRkbxAddress(message.address);
+
     if (!parsed) return null;
     this.lastAddress = message.address;
     const buffer = this.bufferFor(parsed.deck);
     const value = message.args[0];
+
     if (parsed.subdiv !== null) {
       buffer.beatSubdiv = parsed.subdiv;
       buffer.lastBeatAtNs = atNs;
+
       return parsed.deck;
     }
+
     switch (parsed.path) {
       case "time": {
         const seconds = asNumber(value);
+
         if (seconds === null) return this.rejectValue(message.address);
         this.applyTime(buffer, seconds, atNs);
+
         if (parsed.deck === "master") this.resolveMaster();
+
         return parsed.deck;
       }
+
       case "bpm/current":
         buffer.bpmCurrent = asNumber(value);
+
         return parsed.deck;
       case "bpm/original":
         buffer.bpmOriginal = asNumber(value);
+
         return parsed.deck;
       case "track/title":
         buffer.title = asText(value);
         this.requestResolution(parsed.deck, atNs);
+
         return parsed.deck;
       case "track/artist":
         buffer.artist = asText(value);
+
         return parsed.deck;
       case "track/album":
         buffer.album = asText(value);
+
         return parsed.deck;
       case "track/duration":
         buffer.durationSeconds = asNumber(value);
+
         return parsed.deck;
       case "phrase/current":
         buffer.phrase = { ...buffer.phrase, current: asText(value) };
+
         return parsed.deck;
       case "phrase/next":
         buffer.phrase = { ...buffer.phrase, next: asText(value) };
+
         return parsed.deck;
       case "phrase/countin":
         buffer.phrase = { ...buffer.phrase, countInBeats: asNumber(value) };
+
         return parsed.deck;
       case "beat":
         buffer.lastBeatAtNs = atNs;
+
         return parsed.deck;
       case "playing":
       case "play":
         buffer.playing = typeof value === "number" ? value !== 0 : value === "true";
+
         return parsed.deck;
       default: {
         buffer.unknownAddresses.push(message.address);
+
         if (buffer.unknownAddresses.length > 32) buffer.unknownAddresses.shift();
+
         return parsed.deck;
       }
     }
@@ -287,6 +324,7 @@ export class RkbxOscProvider extends ProviderBase {
 
   private rejectValue(address: string): null {
     this.markRejected(`non-numeric value for ${address}`);
+
     return null;
   }
 
@@ -296,9 +334,11 @@ export class RkbxOscProvider extends ProviderBase {
   private applyTime(buffer: DeckBuffer, seconds: number, atNs: bigint): void {
     const previous = buffer.playheadSeconds;
     const previousAt = buffer.previousAtNs;
+
     if (previousAt !== null) {
       const deltaMs = Math.abs(seconds - previous) * 1000;
       const forward = seconds > previous;
+
       if (forward && deltaMs >= this.options.playingEpsilonMs) {
         buffer.playing = true;
         buffer.pauseSinceNs = null;
@@ -310,14 +350,17 @@ export class RkbxOscProvider extends ProviderBase {
       } else if (Number(atNs - buffer.pauseSinceNs) / 1e6 >= this.options.pauseHoldMs) {
         buffer.playing = false;
       }
+
       const wallMs = Number(atNs - previousAt) / 1e6;
       const explainedMs = wallMs * this.playRate(buffer);
+
       // A pause (unchanged playhead) moves far less than the wall clock; only
       // an actual jump counts as a seek.
       if (deltaMs > this.options.seekThresholdMs && Math.abs(deltaMs - explainedMs) > this.options.seekThresholdMs) {
         this.seekEvents.push({ deckId: this.deckIdOf(buffer), fromSeconds: previous, toSeconds: seconds, atNs });
       }
     }
+
     buffer.previousAtNs = atNs;
     buffer.playheadSeconds = seconds;
   }
@@ -326,11 +369,13 @@ export class RkbxOscProvider extends ProviderBase {
     for (const [deck, value] of this.buffers) {
       if (value === buffer && typeof deck === "number") return deck;
     }
+
     return 0;
   }
 
   private requestResolution(deck: number | "master", atNs: bigint): void {
     const buffer = this.bufferFor(deck);
+
     if (buffer.title === null) return;
     this.resolutionRequests.push({
       deckId: deck === "master" ? (this.masterDeckId ?? 0) : deck,
@@ -348,14 +393,19 @@ export class RkbxOscProvider extends ProviderBase {
   // rather than being invented.
   private resolveMaster(): void {
     const master = this.buffers.get("master");
+
     if (!master) return;
     let best: { deck: number; deltaMs: number } | null = null;
+
     for (const [deck, buffer] of this.buffers) {
       if (typeof deck !== "number") continue;
       const deltaMs = Math.abs(buffer.playheadSeconds - master.playheadSeconds) * 1000;
+
       if (best === null || deltaMs < best.deltaMs) best = { deck, deltaMs };
     }
+
     this.masterDeckId = best && best.deltaMs <= 250 ? best.deck : null;
+
     for (const deck of this.buffers.keys()) {
       if (typeof deck !== "number") continue;
       const buffer = this.bufferFor(deck);
@@ -366,6 +416,7 @@ export class RkbxOscProvider extends ProviderBase {
 
   private stateFor(deck: number): ProviderDeckState {
     const buffer = this.bufferFor(deck);
+
     const state = this.mapper.update(this.id, {
       deckId: deck,
       atNs: this.now(),
@@ -385,6 +436,7 @@ export class RkbxOscProvider extends ProviderBase {
       beat: this.beatFor(deck, buffer),
       quality: this.qualityFor(buffer),
     });
+
     return {
       ...state,
       raw: { provider: "rkbx-osc", unknownAddresses: [...buffer.unknownAddresses] },
@@ -404,12 +456,15 @@ export class RkbxOscProvider extends ProviderBase {
 
   private playRate(buffer: DeckBuffer): number {
     if (buffer.bpmCurrent === null || buffer.bpmOriginal === null || buffer.bpmOriginal === 0) return 1;
+
     return buffer.bpmCurrent / buffer.bpmOriginal;
   }
 
   private beatFor(deck: number, buffer: DeckBuffer): number | null {
     const grid = this.options.grids[deck];
+
     if (!grid || grid.length === 0) return null;
+
     return axFractionalBeat(buffer.playheadSeconds, grid);
   }
 }
@@ -418,21 +473,27 @@ function splitHostPort(bind: string): [string, number] {
   const at = bind.lastIndexOf(":");
   const host = at === -1 ? "127.0.0.1" : bind.slice(0, at);
   const port = at === -1 ? Number(bind) : Number(bind.slice(at + 1));
+
   return [host.length > 0 ? host : "127.0.0.1", Number.isFinite(port) ? port : 0];
 }
 
 function asNumber(value: OscArgument | undefined): number | null {
   if (typeof value === "number" && Number.isFinite(value)) return value;
+
   if (typeof value === "string") {
     const parsed = Number(value);
+
     return Number.isFinite(parsed) ? parsed : null;
   }
+
   return null;
 }
 
 function asText(value: OscArgument | undefined): string | null {
   if (typeof value === "string") return value;
+
   if (typeof value === "number") return String(value);
+
   return null;
 }
 
@@ -471,39 +532,52 @@ export function buildRkbxDatagrams(timeline: RkbxTimeline): RkbxDatagram[] {
   let bpm = timeline.bpm;
   let playing = false;
   let playRate = 1;
+
   const emit = (atMs: number, address: string, ...args: OscArgument[]): void => {
     out.push({ atMs, bytes: encodeOscMessage({ address, args }) });
   };
+
   emit(0, `/${timeline.deck}/bpm/original`, timeline.bpm);
+
   for (let atMs = 0; atMs <= timeline.durationMs; atMs += period) {
     for (const step of timeline.steps) {
       if (step.atMs > atMs || step.atMs < atMs - period) continue;
+
       if (step.action === "play") playing = true;
+
       if (step.action === "pause") playing = false;
+
       if (step.action === "seek" && step.seekToSeconds !== undefined) {
         seconds = step.seekToSeconds;
         emit(atMs, `/${timeline.deck}/time`, seconds);
       }
+
       if (step.action === "loop") {
         emit(atMs, `/${timeline.deck}/beat/subdiv/1`, 4);
       }
+
       if (step.action === "pitch" && step.bpm !== undefined) {
         playRate = step.bpm / timeline.bpm;
         bpm = step.bpm;
         emit(atMs, `/${timeline.deck}/bpm/current`, bpm);
       }
+
       if (step.action === "track") {
         if (step.title) emit(atMs, `/${timeline.deck}/track/title`, step.title);
+
         if (step.artist) emit(atMs, `/${timeline.deck}/track/artist`, step.artist);
       }
+
       if (step.action === "master") {
         emit(atMs, `/master/bpm/current`, bpm);
         emit(atMs, `/master/time`, seconds);
       }
     }
+
     if (playing) seconds += (period / 1000) * playRate;
     emit(atMs, `/${timeline.deck}/time`, Number(seconds.toFixed(4)));
   }
+
   return out;
 }
 
@@ -512,8 +586,10 @@ export function buildRkbxDatagrams(timeline: RkbxTimeline): RkbxDatagram[] {
 export async function sendUdpDatagrams(datagrams: readonly RkbxDatagram[], target: string, onSent?: (index: number) => void): Promise<number> {
   const [host, port] = splitHostPort(target);
   const socket = createSocket("udp4");
+
   try {
     let sent = 0;
+
     for (const datagram of datagrams) {
       const { promise, resolve, reject } = Promise.withResolvers<void>();
       socket.send(Buffer.from(datagram.bytes), port, host, (err) => (err ? reject(err) : resolve()));
@@ -521,6 +597,7 @@ export async function sendUdpDatagrams(datagrams: readonly RkbxDatagram[], targe
       onSent?.(sent);
       sent += 1;
     }
+
     return sent;
   } finally {
     const { promise: closed, resolve: onClosed } = Promise.withResolvers<void>();

@@ -33,8 +33,10 @@ describe("T-ROOM-01 room and anchor model", () => {
   it("measures spline arc length close to the analytic circle", () => {
     const pts = Array.from({ length: 12 }, (_, i) => {
       const a = (i / 12) * Math.PI * 2;
+
       return { x: Math.cos(a), y: Math.sin(a), z: 2.5 };
     });
+
     const len = polylineLength(pts, { kind: "catmull-rom" }, 0.001, true);
     expect(Math.abs(len - Math.PI * 2)).toBeLessThan(0.15);
   });

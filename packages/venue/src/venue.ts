@@ -34,11 +34,13 @@ export function importVenue(file: VenueFile): Venue {
     const seen = "version" in file && typeof file.version === "number" ? file.version : "missing";
     throw new Error(`unsupported venue file version ${String(seen)}`);
   }
+
   return structuredClone(file.venue);
 }
 
 export function setLogicalZero(venue: Venue, s: number): Venue {
   const zero = ((s % 1) + 1) % 1;
+
   return {
     ...venue,
     logicalZeroS: zero,
@@ -62,6 +64,7 @@ export const VENUE_TEMPLATES: VenueTemplate[] = [
 export function outlineRuns(room: Room, z: number): Run[] {
   const outline = normalizeOutline(room.outline);
   const pts = outline.map((p) => ({ x: p.x, y: p.y, z }));
+
   return [{ id: "ceiling-loop", polyline: pts, closed: true, mirroredOf: null }];
 }
 

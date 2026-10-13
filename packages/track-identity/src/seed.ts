@@ -36,21 +36,25 @@ export function derivePlannerSeed(input: SeedInput, plannerVersion: string, styl
       : input.fileHash !== undefined && input.fileHash !== ""
         ? { value: `hash:${input.fileHash}`, source: "file-hash", weak: false }
         : { value: `id:${input.nativeId ?? "unknown"}`, source: "native-id-weak", weak: true };
+
   const seed = createHash("sha256")
     .update(`${pick.value}|${plannerVersion}|${styleId}`)
     .digest("hex")
     .slice(0, 16);
+
   return { seed, seedSource: pick.source, weak: pick.weak };
 }
 
 /** Mulberry32 stream for the planner; kept here so the seed has one consumer. */
 export function seedStream(seedHex: string): () => number {
   let a = parseInt(seedHex.slice(0, 8), 16) >>> 0;
+
   return () => {
     a |= 0;
     a = (a + 0x6d2b79f5) | 0;
     let t = Math.imul(a ^ (a >>> 15), 1 | a);
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }

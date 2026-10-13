@@ -115,6 +115,7 @@ function statusOf(cfg: FixtureTransportConfig, transport: TransportId): Transpor
 
 function usable(cfg: FixtureTransportConfig, transport: TransportId): boolean {
   const s = statusOf(cfg, transport);
+
   return s.verified && s.reachable;
 }
 
@@ -127,20 +128,26 @@ export function modeAvailability(
     const anyFrame = TRANSPORTS.some(
       (t) => FRAME_CLASS[t] !== "never" && (status[t]?.verified ?? false),
     );
+
     return anyFrame
       ? { enabled: true, reason: "Qualified frame transport present." }
       : { enabled: false, reason: "No frame transport qualified on this unit." };
   }
+
   const pinned = MODE_PINNED[mode];
+
   if (mode === "cloud-basic") {
     return {
       enabled: true,
       reason: "Cloud setup looks only; never frames, never during Live.",
     };
   }
+
   const s = status[pinned];
+
   if (s?.verified === true) return { enabled: true, reason: "Qualified on this unit." };
   const label = pinned === "ble-segmented" || pinned === "ble-single" ? "BLE" : pinned;
+
   return { enabled: false, reason: `${label} not qualified on this unit.` };
 }
 
@@ -156,12 +163,14 @@ export function authorizeCloudBasic(opts: {
       reason: "Cloud call from the show tick is rejected: cloud never carries frames (spec 148).",
     };
   }
+
   if (!opts.cloudAllowed) {
     return {
       allowed: false,
       reason: "Cloud is disabled (security.cloudAllowed false).",
     };
   }
+
   return { allowed: true, reason: "Setup and idle looks only; never frames." };
 }
 
@@ -169,15 +178,20 @@ export function authorizeCloudBasic(opts: {
  *  and the tests drive it with the current reachability. */
 export function selectFrameTransport(cfg: FixtureTransportConfig): Selection {
   const pinned = cfg.mode === "auto" || cfg.mode === "hybrid" ? null : MODE_PINNED[cfg.mode];
+
   if (pinned !== null) return selectPinned(cfg, pinned);
+
   if (cfg.policy === "strict") return selectStrict(cfg);
+
   if (cfg.policy === "auto") return selectAuto(cfg);
+
   return selectHybrid(cfg);
 }
 
 function selectPinned(cfg: FixtureTransportConfig, pinned: TransportId): Selection {
   if (pinned === "cloud-metadata") {
     const auth = authorizeCloudBasic({ fromShowTick: cfg.fromShowTick, cloudAllowed: cfg.cloudAllowed });
+
     return {
       transport: auth.allowed ? pinned : null,
       frameClass: auth.allowed ? "never" : null,
@@ -187,9 +201,12 @@ function selectPinned(cfg: FixtureTransportConfig, pinned: TransportId): Selecti
       reason: auth.reason,
     };
   }
+
   const s = statusOf(cfg, pinned);
+
   if (!s.verified) {
     const avail = modeAvailability(cfg.mode, cfg.status);
+
     return {
       transport: pinned,
       frameClass: FRAME_CLASS[pinned],
@@ -199,6 +216,7 @@ function selectPinned(cfg: FixtureTransportConfig, pinned: TransportId): Selecti
       reason: `Pinned to ${pinned} without qualification; fixture holds instead of switching.`,
     };
   }
+
   if (!s.reachable) {
     return {
       transport: pinned,
@@ -209,6 +227,7 @@ function selectPinned(cfg: FixtureTransportConfig, pinned: TransportId): Selecti
       reason: `Pinned to ${pinned} which is down; fixture stays dark on this transport.`,
     };
   }
+
   return {
     transport: pinned,
     frameClass: FRAME_CLASS[pinned],
@@ -221,6 +240,7 @@ function selectPinned(cfg: FixtureTransportConfig, pinned: TransportId): Selecti
 
 function selectStrict(cfg: FixtureTransportConfig): Selection {
   const first = cfg.order[0] ?? null;
+
   if (first === null || first === "cloud-metadata") {
     return {
       transport: null,
@@ -231,6 +251,7 @@ function selectStrict(cfg: FixtureTransportConfig): Selection {
       reason: "Strict policy with no usable first transport.",
     };
   }
+
   if (!usable(cfg, first)) {
     return {
       transport: first,
@@ -241,6 +262,7 @@ function selectStrict(cfg: FixtureTransportConfig): Selection {
       reason: `Strict policy holds ${first} while it is down.`,
     };
   }
+
   return {
     transport: first,
     frameClass: FRAME_CLASS[first],
@@ -254,14 +276,18 @@ function selectStrict(cfg: FixtureTransportConfig): Selection {
 function firstUsable(cfg: FixtureTransportConfig, only: FrameClass | null): TransportId | null {
   for (const t of cfg.order) {
     if (t === "cloud-metadata") continue;
+
     if (only !== null && FRAME_CLASS[t] !== only) continue;
+
     if (usable(cfg, t)) return t;
   }
+
   return null;
 }
 
 function selectAuto(cfg: FixtureTransportConfig): Selection {
   const best = firstUsable(cfg, null);
+
   if (best === null) {
     return {
       transport: null,
@@ -272,7 +298,9 @@ function selectAuto(cfg: FixtureTransportConfig): Selection {
       reason: "Auto policy found no verified reachable frame transport.",
     };
   }
+
   const degraded = FRAME_CLASS[best] === "whole";
+
   return {
     transport: best,
     frameClass: FRAME_CLASS[best],
@@ -285,8 +313,10 @@ function selectAuto(cfg: FixtureTransportConfig): Selection {
 
 function selectHybrid(cfg: FixtureTransportConfig): Selection {
   const segmented = firstUsable(cfg, "segments");
+
   if (segmented !== null) {
     const degraded = segmented !== "lan-razer";
+
     return {
       transport: segmented,
       frameClass: "segments",
@@ -296,7 +326,9 @@ function selectHybrid(cfg: FixtureTransportConfig): Selection {
       reason: `Hybrid policy holds segment frames on ${segmented}.`,
     };
   }
+
   const whole = firstUsable(cfg, "whole");
+
   if (whole === null) {
     return {
       transport: null,
@@ -307,6 +339,7 @@ function selectHybrid(cfg: FixtureTransportConfig): Selection {
       reason: "Hybrid policy found no verified reachable frame transport.",
     };
   }
+
   return {
     transport: whole,
     frameClass: "whole",
@@ -327,7 +360,9 @@ export interface FrameSink {
 export function routeFrame(sel: Selection, frame: Uint8Array, sinks: FrameSink[]): TransportId {
   if (sel.transport === null) throw new Error(`No transport selected: ${sel.reason}`);
   const sink = sinks.find((s) => s.transport === sel.transport);
+
   if (sink === undefined) throw new Error(`No sink recorded transport ${sel.transport}`);
   sink.send(frame);
+
   return sink.transport;
 }

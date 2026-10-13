@@ -1,4 +1,5 @@
 import type { DeckState } from "@autolight/contracts";
+
 export type { DeckState };
 
 // ---------------------------------------------------------------------------
@@ -57,6 +58,7 @@ export interface EstimateResult {
 }
 
 const MS_PER_SECOND = 1000;
+
 const NS_PER_SECOND = 1e9;
 
 // The phase correction is applied as a rate adjustment, not a step: while
@@ -84,52 +86,66 @@ export class BeatEstimator {
   advance(nowNs: bigint): number {
     const dt = this.lastNs === null ? 0 : Math.max(0, Number(nowNs - this.lastNs) / NS_PER_SECOND);
     this.lastNs = nowNs;
+
     if (this.playing && dt > 0) this.beat += dt * this.rate;
+
     return this.beat;
   }
 
   /** Hard reset: a seek is random access, never a correction (T-RUN-03). */
   reset(beat: number, nowNs: bigint | null = null): void {
     this.beat = beat;
+
     if (nowNs !== null) this.lastNs = nowNs;
   }
 
   observe(obs: BeatObservation): EstimateResult {
     const previousNs = this.lastNs;
+
     if (previousNs === null) {
       // Cold start is random access: adopt the first observation outright.
       this.beat = obs.beat;
       this.lastNs = obs.nowNs;
       this.rate = obs.beatsPerSecond;
       this.playing = obs.playing;
+
       return { beat: this.beat, seeked: false, corrected: 0, errorMs: 0 };
     }
+
     const before = this.advance(obs.nowNs);
     const interval = Math.max(0, Number(obs.nowNs - previousNs) / NS_PER_SECOND);
     const errorBeats = obs.beat - before;
+
     const errorMs = obs.beatsPerSecond > 0
       ? (Math.abs(errorBeats) / obs.beatsPerSecond) * MS_PER_SECOND
       : Number.POSITIVE_INFINITY;
+
     const seek =
       Math.abs(errorBeats) > this.opts.seekThresholdBeats || errorMs > this.opts.seekThresholdMs;
+
     if (seek) {
       this.beat = obs.beat;
       this.rate = obs.beatsPerSecond;
       this.playing = obs.playing;
+
       return { beat: this.beat, seeked: true, corrected: obs.beat - before, errorMs };
     }
+
     const weight = QUALITY_WEIGHT[obs.quality];
     const slewCap = this.opts.maxSlewBeatsPerSec * interval;
     // advance() already moved the beat by the previous rate; the correction is
     // a phase term on top of that, never a second advance.
     let correction = interval === 0 ? 0 : errorBeats * this.opts.correctionGain * weight;
+
     if (slewCap > 0 && Math.abs(correction) > slewCap) correction = Math.sign(correction) * slewCap;
+
     // While playing forward the net movement stays non-negative as long as the
     // correction never exceeds the advance it is correcting.
     if (obs.playing && this.rate >= 0) correction = Math.max(correction, -this.rate * interval);
     this.beat = before + correction;
     this.rate = obs.beatsPerSecond;
     this.playing = obs.playing;
+
     return { beat: this.beat, seeked: false, corrected: correction, errorMs };
   }
 }
@@ -138,6 +154,7 @@ export class BeatEstimator {
 export function estimatePosition(obs: DeckState, nowNs: bigint): number {
   if (!obs.playing) return obs.playheadSeconds;
   const dt = Number(nowNs - obs.receivedAtNs) / NS_PER_SECOND;
+
   return obs.playheadSeconds + Math.max(0, dt) * obs.playRate;
 }
 
@@ -158,8 +175,11 @@ export function exceedsSeekThreshold(
   },
 ): boolean {
   const errorBeats = Math.abs(observedBeat - predictedBeat);
+
   if (errorBeats > thresholds.beats * (1 + 1e-9)) return true;
+
   if (!(beatsPerSecond > 0)) return false;
+
   // Float arithmetic can push an exact-boundary value (0.3 beats at 2 beats/s
   // is exactly 150 ms) a few ulps over the threshold, which would flip a
   // smooth correction into a hard seek reset. The epsilon keeps the boundary
@@ -169,13 +189,16 @@ export function exceedsSeekThreshold(
 
 // Provider priority (§7): Lighting → Composite FLX4 → adaptive fallback.
 export const PROVIDER_ORDER = ["lighting", "composite-flx4", "adaptive"] as const;
+
 export type ProviderId = (typeof PROVIDER_ORDER)[number];
 
 // ---------------------------------------------------------------------------
 // Audible weight (§63, T-MIX-01)
 
 export type CrossfaderSide = "A" | "B" | "THRU";
+
 export type CrossfaderCurve = "source" | "linear" | "constant-power" | "sharp-cut";
+
 /** DS-26: where the crossfader curve and position come from. */
 export type CrossfaderSource = "software" | "controller" | "configured";
 
@@ -205,11 +228,15 @@ export function sideOf(deckId: number, assignment: Record<string, CrossfaderSide
 export function crossfaderGain(position: number, side: CrossfaderSide, curve: CrossfaderCurve = "linear"): number {
   if (side === "THRU") return 1;
   const p = Math.min(1, Math.max(0, position));
+
   if (curve === "sharp-cut") return side === "A" ? (p < 0.5 ? 1 : 0) : (p >= 0.5 ? 1 : 0);
+
   if (curve === "constant-power") {
     const angle = (p * Math.PI) / 2;
+
     return side === "A" ? Math.cos(angle) : Math.sin(angle);
   }
+
   return side === "A" ? 1 - p : p;
 }
 
@@ -234,6 +261,7 @@ export function deckWeight(state: DeckState, position: number, opts: WeightOptio
   const channel = state.channelFader ?? 1;
   const bonus = opts.masterBonus ?? DEFAULT_MASTER_BONUS;
   const masterFactor = state.master === true ? 1 + bonus : 1;
+
   return Math.min(1, Math.max(0, channel * gain * masterFactor));
 }
 
@@ -242,11 +270,13 @@ export function deckWeight(state: DeckState, position: number, opts: WeightOptio
 // so both decks stay audible at centre.
 export function audibleWeight(state: DeckState, opts: WeightOptions = {}): number {
   if (opts.position !== undefined) return deckWeight(state, opts.position, opts);
+
   if (!state.playing || !state.track) return 0;
   const channel = state.channelFader ?? 1;
   const crossfader = state.crossfader ?? 1;
   const bonus = opts.masterBonus ?? DEFAULT_MASTER_BONUS;
   const masterFactor = state.master === true ? 1 + bonus : 1;
+
   return Math.min(1, Math.max(0, channel * crossfader * masterFactor));
 }
 
@@ -273,17 +303,23 @@ export function resolveCrossfader(
   fallbackPosition = 0.5,
 ): ResolvedCrossfader {
   const provided: number[] = [];
+
   for (const value of [readings.software, readings.controller, readings.configured]) {
     if (typeof value === "number" && Number.isFinite(value)) provided.push(value);
   }
+
   const spread = provided.length > 1 ? Math.max(...provided) - Math.min(...provided) : null;
   const order: CrossfaderSource[] = mode === "auto" ? ["software", "controller", "configured"] : [mode];
+
   for (const source of order) {
     const value = readings[source];
+
     if (typeof value === "number" && Number.isFinite(value)) {
       return { position: Math.min(1, Math.max(0, value)), source, fellBack: false, spread };
     }
   }
+
   const first = order[0]!;
+
   return { position: fallbackPosition, source: first, fellBack: true, spread };
 }

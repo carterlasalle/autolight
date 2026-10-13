@@ -30,6 +30,7 @@ import { seratoFrameDelimiter } from "./emulator.js";
 
 /** Field messages of one track load land within a few microseconds of each other. */
 export const SERATO_BURST_GAP_MS = 50;
+
 const VIRTUAL_EPOCH_NS = 1_000_000_000n;
 
 export const seratoFixtureSchema = z.object({
@@ -57,7 +58,9 @@ export const SERATO_REPLAY_SPEEDS: readonly SeratoReplaySpeed[] = ["1x", "2x", "
 
 export function seratoSpeedFactor(speed: SeratoReplaySpeed): number {
   if (speed === "2x") return 2;
+
   if (speed === "10x") return 10;
+
   return 1;
 }
 
@@ -69,9 +72,11 @@ export function parseSeratoFixture(raw: unknown): SeratoFixture {
 export function framesFromFixture(fixture: SeratoFixture): SeratoFrameBytes[] {
   const stream = Buffer.from(fixture.capture, "base64");
   const frames = splitFrames(stream);
+
   if (frames.length !== fixture.frameTimesMs.length) {
     throw new Error(`capture holds ${frames.length} frame(s) but frameTimesMs has ${fixture.frameTimesMs.length}`);
   }
+
   return frames.map((bytes, index) => ({ atMs: fixture.frameTimesMs[index] ?? 0, bytes }));
 }
 
@@ -79,13 +84,17 @@ export function splitFrames(stream: Buffer): Buffer[] {
   const delimiter = seratoFrameDelimiter();
   const frames: Buffer[] = [];
   let offset = 0;
+
   for (;;) {
     const end = stream.indexOf(delimiter, offset);
+
     if (end === -1) break;
     frames.push(stream.subarray(offset, end + delimiter.length));
     offset = end + delimiter.length;
   }
+
   if (offset !== stream.length) throw new Error(`capture has ${stream.length - offset} trailing byte(s) without a frame delimiter`);
+
   return frames;
 }
 
@@ -94,15 +103,19 @@ export function seratoBursts(frames: readonly SeratoFrameBytes[], gapMs = SERATO
   const bursts: SeratoFrameBytes[][] = [];
   let current: SeratoFrameBytes[] = [];
   let previousAt = -Infinity;
+
   for (const frame of frames) {
     if (current.length > 0 && frame.atMs - previousAt >= gapMs) {
       bursts.push(current);
       current = [];
     }
+
     current.push(frame);
     previousAt = frame.atMs;
   }
+
   if (current.length > 0) bursts.push(current);
+
   return bursts;
 }
 
@@ -110,12 +123,14 @@ function replayOnVirtualClock(frames: readonly SeratoFrameBytes[], factor: numbe
   let nowNs = VIRTUAL_EPOCH_NS;
   const provider = new SeratoRemoteProvider({ now: () => nowNs });
   const emitted: DeckState[][] = [];
+
   for (const burst of seratoBursts(frames)) {
     const atMs = burst.at(-1)?.atMs ?? 0;
     nowNs = VIRTUAL_EPOCH_NS + BigInt(Math.round((atMs * 1_000_000) / factor));
     const stream = Buffer.concat(burst.map((frame) => frame.bytes));
     emitted.push(provider.ingestFrame(stream, nowNs).map((state) => ({ ...state })));
   }
+
   return emitted;
 }
 
@@ -132,6 +147,7 @@ export function replaySeratoFixture(fixture: SeratoFixture, speed: SeratoReplayS
 /** Step mode: the same states, one burst per call. */
 export function* replaySeratoFixtureStep(fixture: SeratoFixture): Generator<DeckState[]> {
   const frames = framesFromFixture(fixture);
+
   for (const states of replayOnVirtualClock(frames, 1)) yield states;
 }
 
@@ -160,5 +176,6 @@ export function buildSeratoFixture(opts: {
 /** The DeckState snapshot the emitter produced, minus the replay-stamped clock. */
 export function withoutStamp(state: DeckState): Omit<DeckState, "receivedAtNs"> {
   const { receivedAtNs: _stamp, ...rest } = state;
+
   return rest;
 }

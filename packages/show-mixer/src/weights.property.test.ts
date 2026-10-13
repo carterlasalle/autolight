@@ -15,6 +15,7 @@ import {
 // deck that scores, or an ownership flip without a score win fails below.
 
 const track = { id: "t", sourceIds: {} };
+
 const deck = (over: Partial<DeckState> = {}): DeckState =>
   makeDeck({ channelFader: 1, crossfader: 1, master: false, track, ...over });
 

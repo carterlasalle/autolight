@@ -25,6 +25,7 @@ export function measureLatency(opts: {
   const latencyMs = Math.max(0, opts.detectedAtMs - opts.emittedAtMs);
   const spreadMs = opts.spreadMs ?? 0;
   const confidence = spreadMs <= 0 ? 1 : Math.max(0, 1 - spreadMs / Math.max(1, latencyMs));
+
   return { latencyMs, confidence, method: opts.method ?? "impulse" };
 }
 
@@ -66,6 +67,7 @@ export class LatencyCalibration {
 
   align(captureTimeNs: bigint): { showTimeNs: bigint; measured: boolean } {
     if (this.measurement === null) return { showTimeNs: captureTimeNs, measured: false };
+
     return { showTimeNs: alignedShowTimeNs(captureTimeNs, this.measurement.latencyMs), measured: true };
   }
 }

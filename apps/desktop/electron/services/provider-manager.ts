@@ -24,6 +24,7 @@ function runOsascript(args: string[]): Promise<string> {
   execFile("osascript", args, { timeout: 8000 }, (err, stdout) => {
     resolve(err ? "" : stdout.trim());
   });
+
   return promise;
 }
 
@@ -37,17 +38,23 @@ function pollHelper(port = 45994, timeoutMs = 3000): Promise<HelperDeck[] | null
   const { promise, resolve } = Promise.withResolvers<HelperDeck[] | null>();
   const sock = connect(port, "127.0.0.1", () => { sock.write("poll\n"); });
   let buf = "";
+
   const done = (v: HelperDeck[] | null): void => {
     try { sock.destroy(); } catch { /* already closed */ }
+
     resolve(v);
   };
+
   const timer = setTimeout(() => done(null), timeoutMs);
   sock.on("data", (d) => {
     buf += d.toString();
+
     if (!buf.includes("\n")) return;
     clearTimeout(timer);
+
     try {
       const parsed = JSON.parse(buf.trim()) as unknown;
+
       if (!Array.isArray(parsed)) return done(null);
       done((parsed as Record<string, unknown>[]).map((r) => ({
         deckId: typeof r["deckId"] === "number" ? r["deckId"] as number : 0,
@@ -57,21 +64,26 @@ function pollHelper(port = 45994, timeoutMs = 3000): Promise<HelperDeck[] | null
     } catch { done(null); }
   });
   sock.on("error", () => { clearTimeout(timer); done(null); });
+
   return promise;
 }
+
 export async function pollAxDecks(): Promise<AxDeckReading[]> {
   // Helper first: the signed ax-decks-helper serves decks the dev binary
   // can never read itself. osascript stays as the fallback for packaged
   // builds where the app itself carries the Automation approval.
   const helped = await pollHelper();
+
   if (helped !== null && helped.length > 0) {
     return [1, 2].map((deckId) => {
       const deck = helped.find((d) => d.deckId === deckId);
       const elapsedSeconds = deck?.elapsed ?? null;
       const loaded = elapsedSeconds !== null && !(elapsedSeconds === 0 && (deck?.remaining ?? 0) === 0);
+
       return { deckId, elapsedSeconds: loaded ? elapsedSeconds : null, playing: null, readable: loaded };
     });
   }
+
   // osascript fallback for packaged builds carrying their own approval.
   const script = [
     'tell application "System Events"',
@@ -88,18 +100,23 @@ export async function pollAxDecks(): Promise<AxDeckReading[]> {
     '  return o',
     'end tell',
   ].join("\n");
+
   const out = (await runOsascript(["-e", script])).replace(/\|/g, ",");
+
   const decks = [...out.matchAll(/(-?\d+:\d{2}),\s*\.(\d)\s*,\s*(\d+:\d{2}),\s*\.(\d)/g)].map(
     (m) => ({ remaining: clockToSeconds(m[1] ?? ""), elapsed: clockToSeconds(m[3] ?? "") }),
   );
+
   return [1, 2].map((deckId) => {
     const deck = decks[deckId - 1];
     const elapsedSeconds = deck?.elapsed ?? null;
+
     // Both clocks at zero is the "Not Loaded" idle state, not a track at
     // 0:00 (a loaded deck at cue shows remaining=-duration). Report it
     // unreadable so callers hold preview instead of beat-matching zero.
     const loaded =
       elapsedSeconds !== null && !(elapsedSeconds === 0 && (deck?.remaining ?? 0) === 0);
+
     return {
       deckId,
       elapsedSeconds: loaded ? elapsedSeconds : null,
@@ -112,8 +129,10 @@ export async function pollAxDecks(): Promise<AxDeckReading[]> {
 
 function clockToSeconds(text: string): number | null {
   const m = /(-?)(\d+):(\d{2})/.exec(text);
+
   if (!m) return null;
   const seconds = Number(m[2]) * 60 + Number(m[3]);
+
   return m[1] === "-" ? -seconds : seconds;
 }
 
@@ -131,6 +150,7 @@ export interface ProlinkObservation {
 
 export function startProlinkWatch(onBeat: (beat: number, bpm: number | null) => void): () => void {
   let socket: Socket | null = null;
+
   try {
     socket = createSocket({ type: "udp4", reusePort: true });
     socket.on("message", (msg) => {
@@ -140,6 +160,7 @@ export function startProlinkWatch(onBeat: (beat: number, bpm: number | null) => 
       const nextBeat = msg.readUInt32BE(32);
       const bpmRaw = msg.readUInt16BE(46);
       const bpm = bpmRaw > 0 ? bpmRaw / 100 : null;
+
       if (Number.isFinite(nextBeat) && nextBeat > 0 && nextBeat < 100000) {
         onBeat(nextBeat, bpm);
       }
@@ -154,6 +175,7 @@ export function startProlinkWatch(onBeat: (beat: number, bpm: number | null) => 
     socket?.close();
     socket = null;
   }
+
   return () => {
     try {
       socket?.close();
@@ -212,18 +234,22 @@ export class ProviderManager implements Service {
   start(): ServiceStatus {
     if (this.axTimer === null) {
       const poll = this.opts.readDecks ?? pollAxDecks;
+
       const tick = async (): Promise<void> => {
         try {
           this.readings = await poll();
           this.tracker.count("axTicks");
+
           if (this.readings.some((r) => r.readable)) this.tracker.count("axReadable");
         } catch {
           // AX denied: readable:false already reported per deck.
         }
       };
+
       void tick();
       this.axTimer = setInterval(() => { void tick(); }, this.opts.pollMs ?? 1000);
     }
+
     if (this.stopProlink === null) {
       const watch = this.opts.watchProlink ?? startProlinkWatch;
       this.stopProlink = watch((beat, bpm) => {
@@ -231,6 +257,7 @@ export class ProviderManager implements Service {
         this.tracker.count("prolinkBeats");
       });
     }
+
     if (!this.compositeStarted && this.opts.bootComposite !== undefined) {
       this.compositeStarted = true;
       const boot = this.opts.bootComposite;
@@ -244,7 +271,9 @@ export class ProviderManager implements Service {
           this.compositeStarted = false;
         });
     }
+
     this.tracker.set("running", "AX poll at 1 Hz, ProLink observer on :50001 (observe only)");
+
     return this.status();
   }
 
@@ -253,13 +282,16 @@ export class ProviderManager implements Service {
     this.axTimer = null;
     this.stopProlink?.();
     this.stopProlink = null;
+
     if (this.opts.stopComposite !== undefined) {
       const stopComposite = this.opts.stopComposite;
       void stopComposite().catch(() => undefined);
     }
+
     this.composite = null;
     this.compositeStarted = false;
     this.tracker.set("stopped");
+
     return this.status();
   }
 
@@ -268,6 +300,7 @@ export class ProviderManager implements Service {
     this.tracker.setCounter("prolinkRunning", this.stopProlink === null ? 0 : 1);
     this.tracker.setCounter("readableDecks", this.readings.filter((r) => r.readable).length);
     this.tracker.setCounter("peerPresent", this.observation.peerPresent ? 1 : 0);
+
     return this.tracker.status();
   }
 
@@ -304,6 +337,7 @@ export class ProviderManager implements Service {
     const poll = this.opts.readDecks ?? pollAxDecks;
     this.readings = await poll();
     this.tracker.count("axTicks");
+
     return this.latest().ax;
   }
 }
@@ -312,6 +346,7 @@ let instance: ProviderManager | null = null;
 
 export function getProviderManager(opts: ProviderManagerOptions = {}): ProviderManager {
   instance ??= new ProviderManager(opts);
+
   return instance;
 }
 

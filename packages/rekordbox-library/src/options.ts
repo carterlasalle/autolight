@@ -23,17 +23,22 @@ export interface PlatformPaths {
 
 // XOR key for the obfuscated database key blob (pyrekordbox utils.BLOB_KEY).
 const BLOB_XOR_KEY = "657f48f84c437cc1";
+
 // Obfuscated key blob published by pyrekordbox (db6.database.BLOB).
 const OBFUSCATED_KEY_BLOB =
   "PN_Pq^*N>(JYe*u^8;Yg76HuZ<mR13S?=>)b9;DpoTXV(6ItkU`}8*m6tx_I{Solh_N#dfe{v=";
 
 // Python's base64.b85 alphabet (RFC 1924), the encoding pyrekordbox uses.
 const BASE85_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&()*+-;<=>?@^_`{|}~";
+
 // CPython pads a partial trailing group with the last alphabet digit and drops
 // the same number of bytes from the end of the decoded output.
 const BASE85_PAD = "~";
+
 const BASE85_GROUP = 5;
+
 const BASE85_RADIX = 85n;
+
 const BYTE_SHIFTS = [24n, 16n, 8n, 0n] as const;
 
 export function platformPaths(platform: Platform = process.platform as Platform, home = homedir()): PlatformPaths {
@@ -44,14 +49,17 @@ export function platformPaths(platform: Platform = process.platform as Platform,
       sharePath: join(home, "Library", "Pioneer", "rekordbox", "share"),
     };
   }
+
   if (platform === "win32") {
     const appData = process.env["APPDATA"] ?? join(home, "AppData", "Roaming");
+
     return {
       optionsPath: join(appData, "Pioneer", "rekordboxAgent", "storage", "options.json"),
       dbDir: join(appData, "Pioneer", "rekordbox"),
       sharePath: join(appData, "Pioneer", "rekordbox", "share"),
     };
   }
+
   return {
     optionsPath: join(home, ".Pioneer", "rekordboxAgent", "storage", "options.json"),
     dbDir: join(home, ".Pioneer", "rekordbox"),
@@ -64,15 +72,20 @@ export function base85Decode(text: string): Buffer {
   const padding = (BASE85_GROUP - (text.length % BASE85_GROUP)) % BASE85_GROUP;
   const padded = text + BASE85_PAD.repeat(padding);
   const out: number[] = [];
+
   for (let i = 0; i < padded.length; i += BASE85_GROUP) {
     let value = 0n;
+
     for (const ch of padded.slice(i, i + BASE85_GROUP)) {
       const digit = BASE85_ALPHABET.indexOf(ch);
+
       if (digit < 0) throw new TypeError(`invalid base85 character ${JSON.stringify(ch)} at ${i}`);
       value = value * BASE85_RADIX + BigInt(digit);
     }
+
     for (const shift of BYTE_SHIFTS) out.push(Number((value >> shift) & 0xffn));
   }
+
   return Buffer.from(padding === 0 ? out : out.slice(0, out.length - padding));
 }
 
@@ -81,6 +94,7 @@ export function deobfuscateKey(blob = OBFUSCATED_KEY_BLOB): string {
   const raw = base85Decode(blob);
   const key = Buffer.from(BLOB_XOR_KEY, "utf8");
   const xored = Buffer.from(raw.map((byte, i) => byte ^ key[i % key.length]!));
+
   return inflateSync(xored).toString("utf8");
 }
 
@@ -90,9 +104,11 @@ export interface RekordboxOptions {
 
 export function readOptionsFile(path: string): RekordboxOptions {
   const parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
+
   if (typeof parsed !== "object" || parsed === null || !Array.isArray((parsed as RekordboxOptions).options)) {
     throw new TypeError(`options.json has no options array: ${path}`);
   }
+
   return parsed as RekordboxOptions;
 }
 
@@ -135,23 +151,29 @@ export async function resolveLibraryConfig(overrides: LibraryConfigOverrides = {
   if (existsSync(optionsPath)) {
     const options = readOptionsFile(optionsPath);
     const optionDbPath = optionValue(options, "db-path");
+
     if (dbPath === undefined && optionDbPath !== undefined && existsSync(optionDbPath)) {
       dbPath = optionDbPath;
       detected = true;
     }
+
     // rekordbox-connect's route: options.json holds the Blowfish-encrypted
     // password under "dp". Its decryptor is used when the dependency is
     // installed; otherwise the published blob derivation below applies.
     const dp = key === undefined ? optionValue(options, "dp") : undefined;
+
     if (dp !== undefined) {
       const decrypt = await rekordboxConnectPassword(overrides, optionsPath);
+
       if (decrypt !== undefined) {
         key = decrypt;
         keySource = "options-dp";
       }
     }
   }
+
   key ??= deobfuscateKey();
+
   return {
     dbPath: dbPath ?? join(paths.dbDir, "master.db"),
     optionsPath,
@@ -169,12 +191,15 @@ export async function resolveLibraryConfig(overrides: LibraryConfigOverrides = {
 // or to the pyrekordbox sidecar reader.
 async function rekordboxConnectPassword(overrides: LibraryConfigOverrides, optionsPath: string): Promise<string | undefined> {
   const specifier = "rekordbox-connect";
+
   try {
     const mod = (await import(/* @vite-ignore */ specifier)) as {
       getRekordboxConfig?: (dbPath?: string, password?: string) => { dbPath: string; password: string };
     };
+
     if (typeof mod.getRekordboxConfig !== "function") return undefined;
     process.env["REKORDBOX_OPTIONS_PATH"] ??= optionsPath;
+
     return mod.getRekordboxConfig(overrides.dbPath, overrides.key)?.password;
   } catch {
     return undefined;

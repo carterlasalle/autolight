@@ -92,12 +92,14 @@ describe("T-PLAN-07 event consumption", () => {
   it("gives a low-confidence drop a reveal, never a white hit and never nothing", () => {
     const soft = planEvent("drop", 64, undefined, 0.3, 0.9, style, DEFAULT_CONFIG, false);
     expect(soft?.cueType).toBe("reveal");
+
     const { plan } = compileShow({
       track: trackWith("drop", 0.3, 0.9),
       venue: DEFAULT_VENUE_CLASS,
       style,
       config: DEFAULT_CONFIG,
     });
+
     expect(plan.cues.some((c) => c.type === "reveal")).toBe(true);
     expect(plan.cues.some((c) => c.type === "white-hit")).toBe(false);
   });

@@ -22,11 +22,13 @@ import { writeCrate, writeDatabaseV2, writeScrate } from "./test-fixtures.js";
 import type { SeratoSmartCrate, SeratoTrackRow } from "./library.js";
 
 const created: string[] = [];
+
 const runningWatchers: { stop(): Promise<void> }[] = [];
 
 function tempDir(prefix: string): string {
   const dir = mkdtempSync(join(tmpdir(), prefix));
   created.push(dir);
+
   return dir;
 }
 
@@ -46,6 +48,7 @@ function fixtureLibrary(): string {
   writeFileSync(join(root, "Subcrates", "Morning.crate"), writeCrate(["/music/hiphop-c.mp3"]));
   writeFileSync(join(root, "SmartCrates", "Smart House.scrate"), writeScrate({ name: "Smart House", trackPaths: [], textRule: "genre is House" }));
   writeFileSync(join(root, "SmartCrates", "Unknown Layout.scrate"), writeScrate({ name: "Unknown Layout", trackPaths: ["/music/house-a.mp3"] }));
+
   return root;
 }
 
@@ -53,10 +56,12 @@ function fixtureLibrary(): string {
 function utf16be(text: string): Buffer {
   const le = Buffer.from(text, "utf16le");
   const out = Buffer.alloc(le.length);
+
   for (let i = 0; i + 1 < le.length; i += 2) {
     out[i] = le[i + 1] as number;
     out[i + 1] = le[i] as number;
   }
+
   return out;
 }
 
@@ -132,15 +137,19 @@ describe("serato library (T-SER-04)", () => {
     expect(roots.map((root) => root.path)).toEqual([defaultSeratoRoot(home), externalRoot]);
     expect(roots[0]?.external).toBe(false);
     expect(roots[1]?.external).toBe(true);
+
     const merged = mergeSeratoRows([
       readSeratoDatabase(internal).rows,
       readSeratoDatabase(externalRoot).rows,
     ]);
+
     expect(merged.map((row) => row.title)).toEqual(["Internal", "External"]);
+
     const deduped = mergeSeratoRows([
       readSeratoDatabase(internal).rows,
       readSeratoDatabase(internal).rows,
     ]);
+
     expect(deduped).toHaveLength(1);
   });
 
@@ -160,10 +169,12 @@ describe("serato library (T-SER-04)", () => {
     const audioB = join(root, "house-b.mp3");
     writeFileSync(audioA, "a");
     writeFileSync(audioB, "b");
+
     const localRows: SeratoTrackRow[] = [
       { ...(rows[0] as SeratoTrackRow), filePath: audioA },
       { ...(rows[1] as SeratoTrackRow), filePath: audioB },
     ];
+
     const watched = seratoWatchFiles(root, localRows);
     expect(watched.some((file) => file.path === join(root, "database V2") && file.kind === "db")).toBe(true);
     expect(watched.filter((file) => file.kind === "audio").map((file) => file.trackId)).toEqual([audioA, audioB]);

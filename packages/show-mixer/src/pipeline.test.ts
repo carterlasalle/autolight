@@ -14,6 +14,7 @@ const dir = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "tes
 
 function groupedFixture(id: string, x: number, groups: string[]): Fixture {
   const f = makeFixture(id, 14, x, x);
+
   return { ...f, groups };
 }
 
@@ -58,10 +59,12 @@ describe("pipeline", () => {
     const planB = planShow(track, style);
     const planA = { ...planB, trackId: "old", cues: planB.cues.map((c) => ({ ...c, startBeat: c.startBeat })) };
     const beat = 120;
+
     const at = (xa: number, xb: number): MixResult => mixDown(
       { state: makeDeck({ deckId: 1, channelFader: 1, crossfader: xa, track: { id: "old", sourceIds: {} } }), beat, cues: planA.cues.filter((c) => beat >= c.startBeat && beat < c.startBeat + c.durationBeats), impactStrength: 0.5 },
       { state: makeDeck({ deckId: 2, channelFader: 1, crossfader: xb, track: { id: "real-track-1", sourceIds: {} } }), beat, cues: planB.cues.filter((c) => beat >= c.startBeat && beat < c.startBeat + c.durationBeats), impactStrength: 0.9 },
     );
+
     // A full left: A owns, B silent. Full right: B owns with scaled cues.
     expect(at(1, 0).owner).toBe("a");
     const right = at(0, 1);

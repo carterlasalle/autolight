@@ -26,6 +26,7 @@ export function breakdownCues(
   core: readonly Oklch[],
 ): ContrastCue[] {
   const narrow = core[0] ?? { l: 0.5, c: 0.08, h: 220 };
+
   return [
     {
       type: "breakdown-look",
@@ -70,14 +71,17 @@ export function dropProgram(
   const want = config.dropStages.length;
   const stages = Math.max(2, Math.min(want, Math.floor(span / 4)));
   const stageLen = span / stages;
+
   for (let i = 0; i < stages; i++) {
     const start = buildStart + i * stageLen;
     const t = (i + 1) / stages;
+
     const desat: Oklch = {
       l: 0.55 + t * 0.3,
       c: Math.max(0.02, (core[0]?.c ?? 0.12) * (1 - t * 0.8)),
       h: core[0]?.h ?? 200,
     };
+
     cues.push({
       type: "build-ramp",
       startBeat: start,
@@ -89,6 +93,7 @@ export function dropProgram(
       reason: `staged ramp ${i + 1}/${stages}, desaturating toward white`,
     });
   }
+
   const preDark = config.dropPreDarknessBeats;
   cues.push({
     type: "blackout",
@@ -100,11 +105,13 @@ export function dropProgram(
     reason: "pre-drop darkness ending exactly at the impact",
   });
   const impactBeats = envelopeToBeats({ kind: "ms", ms: config.impactDefaultMs }, bpm);
+
   const saturated: Oklch = {
     l: 0.65,
     c: Math.min(0.25, 0.12 + strength * 0.1 + style.colorSaturation * 0.05),
     h: occurrence % 2 === 1 ? (core[1]?.h ?? ((core[0]?.h ?? 200) + 120) % 360) : (core[0]?.h ?? 200),
   };
+
   cues.push({
     type: "white-hit",
     startBeat: impactBeat,
@@ -135,6 +142,7 @@ export function dropProgram(
     color: saturated,
     reason: occurrence % 2 === 1 ? "second drop varies the target" : "saturated drop body",
   });
+
   return { cues, staged: stages };
 }
 
@@ -143,6 +151,7 @@ export function fakeDropHold(
   actualBeat: number,
 ): ContrastCue[] {
   const span = Math.max(1, actualBeat - fakeBeat);
+
   return [
     {
       type: "blackout",

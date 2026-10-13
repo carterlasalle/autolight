@@ -50,10 +50,13 @@ describe("audio timing alignment (T-AUD-04)", () => {
     const signal = new Float64Array(total);
     signal[captureSample] = 1;
     let onsetHop: number | null = null;
+
     for (let offset = 0; offset + hop <= total; offset += hop) {
       const features = extractor.push(signal.subarray(offset, offset + hop));
+
       if (features.onset && onsetHop === null) onsetHop = offset / hop;
     }
+
     expect(onsetHop).not.toBeNull();
     const captureWindowEndMs = (((onsetHop! + 1) * hop) / sampleRate) * 1000;
     const alignedMs = captureWindowEndMs - latencyMs;

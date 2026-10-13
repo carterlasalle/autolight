@@ -57,6 +57,7 @@ describe("T-PLAN-05 restraint (P-34, P-78)", () => {
     expect(first.verdict.decision).toBe("accept");
     const second = restrain(s, "white-hit", 68, 0.25, style, DEFAULT_CONFIG, { impact: true });
     expect(second.verdict.decision).toBe("substitute");
+
     if (second.verdict.decision === "substitute") {
       expect(second.verdict.substitute).toBe("impact");
       expect(second.verdict.reason).toContain("beats after the last one");
@@ -80,13 +81,17 @@ describe("T-PLAN-05 restraint (P-34, P-78)", () => {
       expect(a.verdict.decision).toBe("accept");
       const b = restrain(s, "white-hit", 100 + gap, 0.25, style, DEFAULT_CONFIG, { impact: true });
       expect(b.verdict.decision).toBe("substitute");
+
       if (b.verdict.decision === "substitute") expect(b.verdict.reason.length).toBeGreaterThan(0);
     }
+
     const s = freshRestraint();
     restrain(s, "white-hit", 100, 0.25, style, DEFAULT_CONFIG, { impact: true });
+
     const far = restrain(s, "white-hit", 100 + DEFAULT_CONFIG.whiteHitMinBeats, 0.25, style, DEFAULT_CONFIG, {
       impact: true,
     });
+
     expect(far.verdict.decision).toBe("accept");
   });
 
@@ -97,9 +102,11 @@ describe("T-PLAN-05 restraint (P-34, P-78)", () => {
       style: BUILT_IN_STYLES["festival"]!,
       config: DEFAULT_CONFIG,
     });
+
     const whites = plan.cues.filter((c) => c.type === "white-hit");
     const starts = whites.map((c) => c.startBeat).sort((a, b) => a - b);
     const gaps = starts.slice(1).map((b, i) => b - starts[i]!);
+
     for (const g of gaps) expect(g).toBeGreaterThanOrEqual(DEFAULT_CONFIG.whiteHitMinBeats);
     // Diagnostics name the restraint: substituted cues carry the reason.
     const substituted = plan.cues.filter((c) => c.reason.includes("after the last one") || c.reason.includes("budget"));
@@ -113,6 +120,7 @@ describe("T-PLAN-05 restraint (P-34, P-78)", () => {
       style: BUILT_IN_STYLES["festival"]!,
       config: { ...DEFAULT_CONFIG, strobeMaxDuty: 0.5 },
     });
+
     const strobes = plan.cues.filter((c) => c.type === "strobe-burst");
     expect(strobes.length).toBeGreaterThan(0);
     const duty = strobes.reduce((n, c) => n + c.durationBeats, 0) / 256;

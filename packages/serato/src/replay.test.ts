@@ -22,22 +22,29 @@ import {
 } from "./replay.js";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
+
 const fixtureRoot = join(repoRoot, "protocol-fixtures", "serato");
+
 const DECODER_ID = "serato-remote";
+
 const TOLERANCE_MS = 5;
 
 function fixtureFiles(): { action: string; raw: unknown; fixture: SeratoFixture }[] {
   const files: { action: string; raw: unknown; fixture: SeratoFixture }[] = [];
+
   for (const version of readdirSync(fixtureRoot)) {
     const versionDir = join(fixtureRoot, version);
+
     for (const platform of readdirSync(versionDir)) {
       const platformDir = join(versionDir, platform);
+
       for (const action of readdirSync(platformDir)) {
         const raw = JSON.parse(readFileSync(join(platformDir, action, "capture.json"), "utf8")) as unknown;
         files.push({ action, raw, fixture: parseSeratoFixture(raw) });
       }
     }
   }
+
   return files;
 }
 
@@ -49,17 +56,21 @@ function burstEvents(fixture: SeratoFixture): CaptureEvent[] {
   const events: CaptureEvent[] = [];
   let pending: Buffer[] = [];
   let previousAt = -Infinity;
+
   const flush = (atMs: number): void => {
     if (pending.length === 0) return;
     events.push({ atMs, kind: "serato-remote-burst", payload: Buffer.concat(pending).toString("base64") });
     pending = [];
   };
+
   for (const frame of frames) {
     if (pending.length > 0 && frame.atMs - previousAt >= 50) flush(previousAt);
     pending.push(frame.bytes);
     previousAt = frame.atMs;
   }
+
   flush(previousAt);
+
   return events;
 }
 
@@ -68,8 +79,10 @@ function sharedHarnessDecode(event: CaptureEvent, clock: VirtualClock): DeckStat
   const provider = harnessProviders.get(clock) ?? (() => {
     const created = new SeratoRemoteProvider({ now: () => BigInt(Math.round(clock.nowMs())) * 1_000_000n });
     harnessProviders.set(clock, created);
+
     return created;
   })();
+
   return provider.ingestFrame(Buffer.from(String(event.payload), "base64"), BigInt(Math.round(clock.nowMs())) * 1_000_000n);
 }
 
@@ -83,21 +96,26 @@ const harnessProviders = new Map<VirtualClock, SeratoRemoteProvider>();
  */
 function froundNumbers(value: unknown): unknown {
   if (typeof value === "number") return Math.fround(value);
+
   if (Array.isArray(value)) return value.map(froundNumbers);
+
   if (value !== null && typeof value === "object") {
     return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, entry]) => [key, froundNumbers(entry)]));
   }
+
   return value;
 }
 
 function withoutStamp(state: DeckState): Omit<DeckState, "receivedAtNs"> {
   const { receivedAtNs: _stamp, ...rest } = state;
+
   return rest;
 }
 
 describe("serato protocol fixtures and replay (T-SER-05)", () => {
   it("has a non-empty, lint-clean fixture for every Remote-expressible action", () => {
     expect(FIXTURES.length).toBe(SERATO_ACTIONS.length);
+
     for (const { action, raw, fixture } of FIXTURES) {
       expect(fixture.action).toBe(action);
       expect(fixture.seratoVersion).toBe("3.3.5");
@@ -117,6 +135,7 @@ describe("serato protocol fixtures and replay (T-SER-05)", () => {
         const states = speed === "step"
           ? [...replaySeratoFixtureStep(fixture)].flat()
           : replaySeratoFixture(fixture, speed);
+
         const problems = compareSequences(fixture.expectedEvents.map(froundNumbers), states, { toleranceMs: TOLERANCE_MS });
         expect(problems, `${action} at ${speed}: ${JSON.stringify(problems)}`).toEqual([]);
       }
@@ -131,11 +150,13 @@ describe("serato protocol fixtures and replay (T-SER-05)", () => {
     expect(at2x).toHaveLength(at1x.length);
     expect(at10x).toHaveLength(at1x.length);
     const epoch = 1_000_000_000n;
+
     for (const [index, state] of at1x.entries()) {
       const offset = state.receivedAtNs - epoch;
       expect(at2x[index]?.receivedAtNs).toBe(epoch + offset / 2n);
       expect(at10x[index]?.receivedAtNs).toBe(epoch + offset / 10n);
     }
+
     const stepped = [...replaySeratoFixtureStep(fixture)].flat();
     expect(stepped).toEqual(at1x);
     expect(seratoSpeedFactor("step")).toBe(1);
@@ -144,12 +165,15 @@ describe("serato protocol fixtures and replay (T-SER-05)", () => {
   it("agrees with the shared T-QA-03 harness at every speed", () => {
     for (const { action, fixture } of FIXTURES) {
       const events = burstEvents(fixture);
+
       for (const speed of SERATO_REPLAY_SPEEDS) {
         harnessProviders.clear();
         const shared = runReplay<DeckState[]>(events, sharedHarnessDecode, { speed, tickHz: 1000 }).states.flat();
+
         const states = speed === "step"
           ? [...replaySeratoFixtureStep(fixture)].flat()
           : replaySeratoFixture(fixture, speed);
+
         const problems = compareSequences(shared.map(withoutStamp), states.map(withoutStamp), { toleranceMs: TOLERANCE_MS });
         expect(problems, `${action} at ${speed}: ${JSON.stringify(problems)}`).toEqual([]);
       }
@@ -172,11 +196,13 @@ describe("serato protocol fixtures and replay (T-SER-05)", () => {
     corrupted[3] = corrupted[3] === 0x2f ? 0x2e : 0x2f;
     const mutated = { ...fixture, capture: Buffer.concat([...frames.slice(0, -1).map((f) => f.bytes), corrupted]).toString("base64") };
     let states: DeckState[] = [];
+
     try {
       states = replaySeratoFixture(mutated, "1x");
     } catch {
       states = [];
     }
+
     const problems = compareSequences(fixture.expectedEvents, states, { toleranceMs: TOLERANCE_MS });
     expect(problems.length).toBeGreaterThan(0);
   });

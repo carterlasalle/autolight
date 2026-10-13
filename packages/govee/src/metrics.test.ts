@@ -8,10 +8,12 @@ describe("DeviceMetrics", () => {
   it("accumulates frame counters and replaces gauges", () => {
     const metrics = new DeviceMetrics();
     metrics.record("aa", { framesRequested: 10, framesSent: 8, framesSuperseded: 2, effectiveFps: 30 });
+
     const row = metrics.record("aa", {
       framesRequested: 5, framesSent: 5, framesSuperseded: 1, effectiveFps: 25,
       transport: "lan", engine: "native-ts", health: "degraded",
     });
+
     expect(row.framesRequested).toBe(15);
     expect(row.framesSent).toBe(13);
     expect(row.framesSuperseded).toBe(3);
@@ -40,6 +42,7 @@ describe("DeviceMetrics", () => {
     expect(again?.reconnects).toBe(2);
     expect(metrics.snapshot("bb")?.health).toBe("offline");
     expect(metrics.snapshot("missing")).toBeNull();
+
     if (again) again.framesSent = 999;
     expect(metrics.snapshot("aa")?.framesSent).toBe(1);
     expect(metrics.snapshotAll().map((row) => row.hardwareId).sort()).toEqual(["aa", "bb"]);

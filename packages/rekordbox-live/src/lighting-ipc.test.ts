@@ -38,6 +38,7 @@ describe("lighting IPC codec (T-LIVE-09)", () => {
       { deck: 1, playing: true, playheadSeconds: 12.5, effectiveBpm: 128 },
       { deck: 2, playing: false, playheadSeconds: 0, channelFader: 0.8 },
     ]);
+
     const decoded = decodeLightingCapture(bytes);
     expect(decoded.malformed).toEqual([]);
     expect(decoded.frames).toHaveLength(2);
@@ -72,6 +73,7 @@ describe("lighting IPC codec (T-LIVE-09)", () => {
       { deck: 1, playing: true, playheadSeconds: 10, effectiveBpm: 128 },
       { deck: 1, playing: true, playheadSeconds: 11, effectiveBpm: 128 },
     ]);
+
     const at1 = replayLightingCapture(f, new DeckGenerationMapper(), { rate: 1, stepMs: 100 });
     const at2 = replayLightingCapture(f, new DeckGenerationMapper(), { rate: 2, stepMs: 100 });
     const at10 = replayLightingCapture(f, new DeckGenerationMapper(), { rate: 10, stepMs: 100 });
@@ -98,6 +100,7 @@ describe("lighting IPC codec (T-LIVE-09)", () => {
       loopActive: true, loopBeatLength: 4, pitchPercent: 1.5, sync: true,
       hotCue: 2, rollActive: true, rollBeats: 0.5, trackId: "rb:1", title: "Track",
     }], "loop-roll");
+
     const { states } = replayLightingCapture(f, new DeckGenerationMapper());
     const state = states[0];
     expect(state?.master).toBe(true);
@@ -143,6 +146,7 @@ describe("lighting IPC codec (T-LIVE-09)", () => {
   it("passes the shared contract suite on event ingest", async () => {
     const clock = virtualClock();
     const provider = new LightingIpcProvider({ now: () => clock.nowNs(), fixtures: [] });
+
     const failures = await runProviderContractSuite({
       provider,
       reportsTrackText: true,
@@ -162,6 +166,7 @@ describe("lighting IPC codec (T-LIVE-09)", () => {
       },
       cleanup: async () => {},
     });
+
     expect(failures).toEqual([]);
   });
 });

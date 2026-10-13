@@ -25,8 +25,11 @@ import type { ShowPlan, TrackModel } from "@autolight/contracts";
 
 // runtime.snapshot defaults from docs/finish/03-config-and-decisions.md.
 export const SNAPSHOT_VERSION = 1;
+
 export const SNAPSHOT_MAX_BYTES = 262144;
+
 export const SNAPSHOT_UI_RATE_HZ = 30;
+
 export const UPCOMING_CUE_LIMIT = 8;
 
 export const snapshotCursorSchema = z.object({
@@ -34,6 +37,7 @@ export const snapshotCursorSchema = z.object({
   loopPass: z.number().int(),
   scratchHold: z.boolean(),
 });
+
 export type SnapshotCursor = z.infer<typeof snapshotCursorSchema>;
 
 export const snapshotSectionSchema = z.object({
@@ -42,6 +46,7 @@ export const snapshotSectionSchema = z.object({
   startBeat: z.number(),
   endBeat: z.number(),
 });
+
 export type SnapshotSection = z.infer<typeof snapshotSectionSchema>;
 
 export const upcomingCueSchema = z.object({
@@ -53,6 +58,7 @@ export const upcomingCueSchema = z.object({
   target: z.string().min(1),
   priority: z.number(),
 });
+
 export type UpcomingCue = z.infer<typeof upcomingCueSchema>;
 
 export const snapshotDeckSchema = deckSnapshotSchema.extend({
@@ -60,6 +66,7 @@ export const snapshotDeckSchema = deckSnapshotSchema.extend({
   section: snapshotSectionSchema.nullable(),
   upcomingCues: z.array(upcomingCueSchema),
 });
+
 export type SnapshotDeck = z.infer<typeof snapshotDeckSchema>;
 
 export const deviceHealthSchema = z.object({
@@ -67,6 +74,7 @@ export const deviceHealthSchema = z.object({
   health: z.enum(["online", "degraded", "offline"]),
   fps: z.number(),
 });
+
 export type DeviceHealth = z.infer<typeof deviceHealthSchema>;
 
 export const uiSnapshotSchema = hostSnapshotSchema.extend({
@@ -75,6 +83,7 @@ export const uiSnapshotSchema = hostSnapshotSchema.extend({
   deviceHealth: z.array(deviceHealthSchema),
   metrics: hostMetricsSchema.nullable(),
 });
+
 export type UiSnapshot = z.infer<typeof uiSnapshotSchema>;
 
 export interface UiSnapshotContext {
@@ -88,7 +97,9 @@ export interface UiSnapshotContext {
 export function currentSection(model: TrackModel | null | undefined, beat: number): SnapshotSection | null {
   if (!model) return null;
   const found = model.sections.find((s) => beat >= s.startBeat && beat < s.endBeat);
+
   if (!found) return null;
+
   return {
     kind: found.kind,
     ...(found.rawLabel !== undefined ? { rawLabel: found.rawLabel } : {}),
@@ -114,6 +125,7 @@ export function selectUpcomingCues(
   const limit = opts.limit ?? UPCOMING_CUE_LIMIT;
   const bpm = opts.effectiveBpm ?? null;
   const rate = opts.playRate ?? 1;
+
   return plan.cues
     .filter((c) => c.startBeat > beat)
     .sort((a, b) => a.startBeat - b.startBeat || b.priority - a.priority)
@@ -121,6 +133,7 @@ export function selectUpcomingCues(
     .map((c) => {
       const beatsUntil = c.startBeat - beat;
       const secondsUntil = bpm !== null && bpm > 0 && rate > 0 ? beatsUntil / (bpm / 60) / rate : null;
+
       return {
         type: c.type,
         startBeat: c.startBeat,
@@ -136,9 +149,11 @@ export function selectUpcomingCues(
 export function latestPublishedSnapshot(snapshots: readonly HostSnapshot[]): HostSnapshot | null {
   if (snapshots.length === 0) return null;
   let latest = snapshots[0]!;
+
   for (const snapshot of snapshots) {
     if (snapshot.tick > latest.tick) latest = snapshot;
   }
+
   return latest;
 }
 
@@ -146,6 +161,7 @@ export function buildUiSnapshot(host: HostSnapshot, ctx: UiSnapshotContext = {})
   const decks: SnapshotDeck[] = host.decks.map((deck) => {
     const plan = ctx.plans?.get(deck.deckId) ?? null;
     const model = ctx.models?.get(deck.deckId) ?? null;
+
     return {
       ...deck,
       cursor: { beat: deck.beat, loopPass: deck.loopPass, scratchHold: false },
@@ -156,6 +172,7 @@ export function buildUiSnapshot(host: HostSnapshot, ctx: UiSnapshotContext = {})
       }),
     };
   });
+
   return {
     ...host,
     version: SNAPSHOT_VERSION,
@@ -176,6 +193,7 @@ export function serializeSnapshot(snapshot: UiSnapshot): SerializedSnapshot {
   const start = hasPerf ? performance.now() : Date.now();
   const json = JSON.stringify(snapshot);
   const end = hasPerf ? performance.now() : Date.now();
+
   return { json, bytes: Buffer.byteLength(json, "utf8"), elapsedMs: end - start };
 }
 
@@ -188,6 +206,7 @@ export interface SnapshotBudget {
 
 export function measureSnapshot(snapshot: UiSnapshot, maxBytes: number = SNAPSHOT_MAX_BYTES): SnapshotBudget {
   const serialized = serializeSnapshot(snapshot);
+
   return {
     bytes: serialized.bytes,
     elapsedMs: serialized.elapsedMs,
@@ -200,14 +219,18 @@ export function measureSnapshot(snapshot: UiSnapshot, maxBytes: number = SNAPSHO
 // resubscribe trigger, never as a renderable frame.
 export function parseSnapshot(json: string): UiSnapshot {
   let raw: unknown;
+
   try {
     raw = JSON.parse(json) as unknown;
   } catch (err) {
     throw new Error(`snapshot parse: invalid JSON (${err instanceof Error ? err.message : String(err)})`);
   }
+
   const parsed = uiSnapshotSchema.safeParse(raw);
+
   if (!parsed.success) {
     throw new Error(`snapshot parse: ${parsed.error.message}`);
   }
+
   return parsed.data;
 }

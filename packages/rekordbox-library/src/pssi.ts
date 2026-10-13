@@ -56,13 +56,16 @@ const DEFAULT_LABELS_PATH = fileURLToPath(
 
 export function loadPssiLabels(path: string = process.env["AUTOLIGHT_PSSI_LABELS"] ?? DEFAULT_LABELS_PATH): PssiLabelTable {
   const parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
+
   if (!isLabelTable(parsed)) throw new TypeError(`pssi-labels.json is not a label table: ${path}`);
+
   return parsed;
 }
 
 function isLabelTable(value: unknown): value is PssiLabelTable {
   if (typeof value !== "object" || value === null) return false;
   const t = value as Partial<PssiLabelTable>;
+
   return (
     typeof t.schema === "string" &&
     typeof t.high === "object" && t.high !== null &&
@@ -76,8 +79,10 @@ function isLabelTable(value: unknown): value is PssiLabelTable {
 
 // Committed table, read once per process (labels never change at runtime).
 let cached: PssiLabelTable | undefined;
+
 function table(): PssiLabelTable {
   cached ??= loadPssiLabels();
+
   return cached;
 }
 
@@ -90,24 +95,33 @@ function labelOrUnknown(map: Record<string, string>, kind: number): string {
 export function highPhraseLabel(kind: number, k1 = 0, k2 = 0, k3 = 0): string {
   const t = table();
   const variant = t.highVariants[String(kind)];
+
   if (variant === undefined) return labelOrUnknown(t.high, kind);
   const flags: Record<string, number> = { k1, k2, k3 };
+
   if ("template" in variant) {
     const n = flags[variant.flag] ? variant.nWhenSet : variant.nWhenClear;
+
     return variant.template.replace("{n}", String(n));
   }
+
   for (const rule of variant.rules) {
     if ((["k1", "k2", "k3"] as const).every((f) => rule[f] === undefined || rule[f] === flags[f])) return rule.label;
   }
+
   return variant.fallback;
 }
 
 export function phraseLabel(mood: number, kind: number, k1 = 0, k2 = 0, k3 = 0): string {
   const t = table();
   const moodName = t.moods[String(mood)];
+
   if (moodName === "high") return highPhraseLabel(kind, k1, k2, k3);
+
   if (moodName === "mid") return labelOrUnknown(t.mid, kind);
+
   if (moodName === "low") return labelOrUnknown(t.low, kind);
+
   return labelOrUnknown({}, kind);
 }
 
@@ -115,5 +129,6 @@ export function phraseLabel(mood: number, kind: number, k1 = 0, k2 = 0, k3 = 0):
 export function normalizeSection(rawLabel: string): string {
   const t = table();
   const first = rawLabel.split(" ")[0] ?? "";
+
   return t.sections[first.toLowerCase()] ?? t.unknownSection;
 }

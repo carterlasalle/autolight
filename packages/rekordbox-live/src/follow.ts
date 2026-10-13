@@ -24,6 +24,7 @@ export interface AxBeatSample {
 
 export function axBeatToPlayhead(sample: AxBeatSample, grid: { sourceTimeMs: number }[]): number | null {
   if (!sample.readable || sample.elapsedSeconds === null) return null;
+
   return axFractionalBeat(sample.elapsedSeconds, grid);
 }
 
@@ -48,9 +49,11 @@ export function combineTransport(opts: {
   if (opts.prolink.peerPresent && opts.prolink.beat !== null) {
     return { source: "prolink", beat: opts.prolink.beat, playing: opts.prolink.playing, bpm: opts.prolink.bpm ?? opts.estimatedBpm };
   }
+
   if (opts.ax.beat !== null) {
     return { source: "ax-beat", beat: opts.ax.beat, playing: opts.ax.playing, bpm: opts.estimatedBpm };
   }
+
   return { source: "preview", beat: opts.estimatedBeat, playing: null, bpm: opts.estimatedBpm };
 }
 
@@ -67,11 +70,14 @@ export interface RkbxAddress {
 export function parseRkbxAddress(address: string): RkbxAddress | null {
   const parts = address.split("/").filter((p) => p.length > 0);
   const deckToken = parts[0];
+
   if (deckToken === undefined) return null;
   const deck = deckToken === "master" ? "master" : /^[1-4]$/.test(deckToken) ? Number(deckToken) : null;
+
   if (deck === null) return null;
   const rest = parts.slice(1).join("/");
   const subdiv = /^beat\/subdiv\/(\d+)$/.exec(rest);
+
   return { deck, path: rest, subdiv: subdiv ? Number(subdiv[1]) : null };
 }
 
@@ -87,15 +93,20 @@ export function parseRkbxOscConfig(text: string): RkbxConfigProbe {
   const lines: string[] = [];
   let oscEnabled: boolean | null = null;
   let destination: string | null = null;
+
   for (const raw of text.split(/\r?\n/)) {
     const line = raw.trim();
+
     if (!/osc/i.test(line)) continue;
     lines.push(line);
     const enabled = /osc[a-z_-]*\s*[:=]\s*(true|false|1|0|yes|no|on|off)\b/i.exec(line);
+
     if (enabled) oscEnabled = /true|1|yes|on/i.test(enabled[1] ?? "");
     const dest = /((?:\d{1,3}\.){3}\d{1,3}:\d{2,5})/.exec(line);
+
     if (dest) destination = dest[1] ?? null;
   }
+
   return { lines, oscEnabled, destination };
 }
 
@@ -169,12 +180,15 @@ export function checkRkbxSetup(input: RkbxSetupInput): RkbxSetupReport {
       : "no OSC packets received yet on the bound port",
   });
   const failed = steps.find((s) => !s.ok);
+
   if (!failed) return { state: "receiving", steps, remedy: "" };
+
   const state: RkbxSetupReport["state"] =
     failed.id === "installed" ? "not-installed"
     : failed.id === "osc-enabled" ? "osc-disabled"
     : failed.id === "destination" ? "wrong-destination"
     : failed.id === "version" ? "unsupported-version"
     : "no-packets";
+
   return { state, steps, remedy: failed.detail };
 }

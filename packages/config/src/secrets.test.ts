@@ -7,8 +7,10 @@ import {
   SecretVault,
 } from "./secrets.js";
 import type { SafeStoragePort, SecretBlobStore } from "./secrets.js";
+
 function fakeCrypto(): { port: SafeStoragePort; calls: string[] } {
   const calls: string[] = [];
+
   return {
     calls,
     port: {
@@ -16,12 +18,15 @@ function fakeCrypto(): { port: SafeStoragePort; calls: string[] } {
         calls.push(`encrypt:${plain.length}`);
         // Offset every byte so the blob never contains the plain text.
         const bytes = new TextEncoder().encode(plain);
+
         return bytes.map((b) => (b + 1) % 256);
       },
       decryptString: (encrypted: Uint8Array): string => {
         const shifted = encrypted.map((b) => (b + 255) % 256);
         const raw = new TextDecoder().decode(shifted);
+
         if (!raw.startsWith("{")) throw new Error("not our envelope");
+
         return raw;
       },
       isEncryptionAvailable: () => true,
@@ -32,6 +37,7 @@ function fakeCrypto(): { port: SafeStoragePort; calls: string[] } {
 function memoryBlobs(): SecretBlobStore & { saved: string[] } {
   const saved: string[] = [];
   let current: string | null = null;
+
   return {
     saved,
     saveBlob: (base64: string) => { current = base64; saved.push(base64); },
@@ -88,6 +94,7 @@ describe("secrets boundary", () => {
 
   it("refuses to write when the OS keychain is unavailable", () => {
     const blobs = memoryBlobs();
+
     const vault = new SecretVault(
       {
         encryptString: () => { throw new Error("no keychain"); },
@@ -96,6 +103,7 @@ describe("secrets boundary", () => {
       },
       blobs,
     );
+
     expect(() => vault.set("govee.cloud.apiKey", "GOVEE-SECRET-1")).toThrow(/refusing plain-text/);
     expect(blobs.loadBlob()).toBeNull();
   });

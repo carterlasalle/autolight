@@ -30,7 +30,9 @@ import {
 } from "./index.js";
 
 const BPM = 120; // 2 beats per second
+
 const NS_PER_SECOND = 1_000_000_000n;
+
 const NS_PER_MS = 1_000_000n;
 
 const plan: ShowPlan = {
@@ -47,6 +49,7 @@ const plan: ShowPlan = {
 function deckWorld(adaptiveMode?: AdaptiveClockMode) {
   const world = createDeckWorld(1, adaptiveMode === undefined ? {} : { adaptiveMode });
   installPlan(world, 1, plan);
+
   return world;
 }
 
@@ -56,6 +59,7 @@ function observe(world: DeckWorld, playheadSeconds: number, nowNs: bigint) {
     makeDeck({ deckId: 1, effectiveBpm: BPM, playheadSeconds, receivedAtNs: nowNs, channelFader: 1, crossfader: 1 }),
     "exact",
   );
+
   return tickWorld(world, nowNs);
 }
 
@@ -144,6 +148,7 @@ describe("source loss and the adaptive clock (T-RUN-06)", () => {
 
   it("adaptive clock: dj-bpm phase, audio-onset tempo, confidence-weighted blend", () => {
     const now = 10n * NS_PER_SECOND;
+
     const inputs: AdaptiveClockInputs = {
       djBpm: 120,
       djBeat: 64,
@@ -153,6 +158,7 @@ describe("source loss and the adaptive clock (T-RUN-06)", () => {
       audioAnchorNs: 0n,
       audioConfidence: 1,
     };
+
     const dj = adaptiveBeat(inputs, now, "dj-bpm")!;
     expect(dj.bpm).toBe(120);
     expect(dj.beat).toBeCloseTo(84, 9);
@@ -173,16 +179,19 @@ describe("source loss and the adaptive clock (T-RUN-06)", () => {
     const now = 10n * NS_PER_SECOND;
     const truthBpm = 128;
     const truthBeat = 64 + (10 * truthBpm) / 60;
+
     const djOnly = adaptiveBeat(
       { ...EMPTY_INPUTS, djBpm: 120, djBeat: 64, djAnchorNs: 0n },
       now,
       "blend",
     )!;
+
     const blended = adaptiveBeat(
       { ...EMPTY_INPUTS, djBpm: 120, djBeat: 64, djAnchorNs: 0n, audioBpm: 128, audioConfidence: 1 },
       now,
       "blend",
     )!;
+
     expect(Math.abs(djOnly.beat - truthBeat)).toBeGreaterThan(Math.abs(blended.beat - truthBeat));
     expect(Math.abs(blended.beat - truthBeat)).toBeLessThan(1);
   });
@@ -206,11 +215,13 @@ describe("device faults (T-RUN-06, spec 107)", () => {
 
   it("keeps the logical 60 Hz for healthy devices while faulted ones drop out", () => {
     const counts: Record<string, number> = {};
+
     for (let tick = 0; tick < LOGICAL_TICK_HZ; tick += 1) {
       for (const device of dueDevicesOnTick(devices, tick)) {
         counts[device.deviceId] = (counts[device.deviceId] ?? 0) + 1;
       }
     }
+
     expect(counts["lamp-a"]).toBe(60);
     expect(counts["lamp-b"]).toBe(20);
     expect(counts["strip"]).toBeUndefined();
@@ -220,16 +231,20 @@ describe("device faults (T-RUN-06, spec 107)", () => {
   it("isolates a fault: another device's rate never changes", () => {
     const healthy: DeviceRuntimeState = { deviceId: "lamp-a", capability: "segmented", fps: 60, online: true };
     let due = 0;
+
     for (let tick = 0; tick < LOGICAL_TICK_HZ; tick += 1) {
       if (deviceFrameDue(healthy, tick)) due += 1;
     }
+
     expect(due).toBe(60);
     // The same device while a neighbour is offline: still every logical tick.
     const faulted: DeviceRuntimeState = { deviceId: "lamp-b", capability: "single-zone", fps: 20, online: false };
     let dueWithFault = 0;
+
     for (let tick = 0; tick < LOGICAL_TICK_HZ; tick += 1) {
       if (dueDevicesOnTick([healthy, faulted], tick).some((d) => d.deviceId === "lamp-a")) dueWithFault += 1;
     }
+
     expect(dueWithFault).toBe(60);
     expect(deviceFrameDue(healthy, -1)).toBe(false);
     expect(deviceFrameDue(faulted, 0)).toBe(false);

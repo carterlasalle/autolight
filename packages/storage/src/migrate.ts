@@ -304,6 +304,7 @@ export function tableNames(db: SqlExec): string[] {
 
 export function hasTable(db: SqlExec, name: string): boolean {
   const row = db.get<{ name: string }>("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?", [name]);
+
   return row !== undefined;
 }
 
@@ -334,6 +335,7 @@ function appliedRows(db: SqlExec): { version: number; name: string; applied_at: 
 export function schemaVersion(db: SqlExec): number {
   ensureBookkeeping(db);
   const rows = appliedRows(db);
+
   return rows.reduce((max, row) => Math.max(max, Number(row.version)), 0);
 }
 
@@ -347,6 +349,7 @@ export function migratorStatus(db: SqlExec): MigratorStatus {
   ensureBookkeeping(db);
   const applied = appliedRows(db);
   const version = applied.reduce((max, row) => Math.max(max, Number(row.version)), 0);
+
   return {
     version,
     applied,
@@ -365,13 +368,16 @@ export interface MigrateResult {
 // bookkeeping: adopt it at version 1 rather than replaying migration 1.
 function adoptLegacyBaseline(db: SqlExec): boolean {
   ensureBookkeeping(db);
+
   if (appliedRows(db).length > 0) return false;
+
   if (!hasTable(db, "tracks")) return false;
   db.run("INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)", [
     1,
     "baseline",
     new Date().toISOString(),
   ]);
+
   return true;
 }
 
@@ -380,16 +386,20 @@ export function migrate(db: SqlExec, options: { target?: number } = {}): Migrate
   const from = schemaVersion(db);
   const head = MIGRATIONS.reduce((max, m) => Math.max(max, m.version), 0);
   const target = options.target ?? head;
+
   if (target < from) {
     throw new Error(
       `downgrade refused: database is at schema version ${from} and target is ${target}; ` +
         "restore a backup instead of migrating backwards",
     );
   }
+
   const applied: number[] = [];
+
   for (const migration of MIGRATIONS) {
     if (migration.version <= from || migration.version > target) continue;
     db.exec("BEGIN");
+
     try {
       db.exec(migration.sql);
       db.run("INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)", [
@@ -402,7 +412,9 @@ export function migrate(db: SqlExec, options: { target?: number } = {}): Migrate
       db.exec("ROLLBACK");
       throw new Error(`migration ${migration.version} (${migration.name}) failed: ${(error as Error).message}`);
     }
+
     applied.push(migration.version);
   }
+
   return { from, to: schemaVersion(db), applied, adoptedBaseline };
 }

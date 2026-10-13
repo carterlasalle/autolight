@@ -15,7 +15,9 @@ import {
 } from "./validation.js";
 
 const fixtureDir = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "test-fixtures", "analysis");
+
 const goodModel = JSON.parse(readFileSync(join(fixtureDir, "live-deck1.trackmodel.json"), "utf8")) as unknown;
+
 const goodPlan = JSON.parse(readFileSync(join(fixtureDir, "live-deck1.showplan.json"), "utf8")) as unknown;
 
 function beats(n: number): unknown {
@@ -40,6 +42,7 @@ describe("semantic validation of contracts (T-DATA-05, F-DATA-05)", () => {
       ],
       version: 1,
     };
+
     const issues = validateBeats(grid);
     expect(issues.some((i) => i.path === "beatGrid.beats[1].index")).toBe(true);
     expect(issues.some((i) => i.path === "beatGrid.beats[2].sourceTimeMs")).toBe(true);
@@ -85,6 +88,7 @@ describe("semantic validation of contracts (T-DATA-05, F-DATA-05)", () => {
       { index: 0, position: { x: 0, y: 0 }, order: 0, tags: [] },
       { index: 0, position: { x: 1, y: 0 }, order: 1, tags: [] },
     ];
+
     const issues = validateFixtureCells(cells, 5, 5);
     expect(issues.some((i) => i.message.includes("duplicate cell index 0"))).toBe(true);
     expect(issues.some((i) => i.path === "calibration.segmentCount")).toBe(true);

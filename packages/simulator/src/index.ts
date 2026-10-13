@@ -35,7 +35,9 @@ export interface FaultSpec { dropEvery?: number; disconnectAt?: number; reconnec
 export function gateFrame(frameIndex: number, spec: FaultSpec): "send" | "drop" | "offline" {
   if (spec.disconnectAt !== undefined && frameIndex >= spec.disconnectAt &&
       (spec.reconnectAt === undefined || frameIndex < spec.reconnectAt)) return "offline";
+
   if (spec.dropEvery !== undefined && spec.dropEvery > 0 && frameIndex % spec.dropEvery === 0) return "drop";
+
   return "send";
 }
 
@@ -48,14 +50,17 @@ export function soak(frames: number, gate: (i: number) => "send" | "drop" | "off
   let sent = 0;
   let dropped = 0;
   let offline = 0;
+
   for (let i = 0; i < frames; i++) {
     pending += 1; // show loop produced one frame
     maxPending = Math.max(maxPending, pending);
     const action = gate(i);
+
     if (action === "send") { sent += 1; pending = 0; }
     else if (action === "drop") { dropped += 1; pending = 0; }
     else { offline += 1; pending = 0; } // reconnect sends current frame only (§106)
   }
+
   return { sent, dropped, offline, maxPending };
 }
 
@@ -64,6 +69,7 @@ export function soak(frames: number, gate: (i: number) => "send" | "drop" | "off
 export function* performanceScenario(opts: { fps?: number; hours?: number } = {}): Generator<DeckState> {
   const fps = opts.fps ?? 60;
   const total = Math.floor(fps * 3600 * (opts.hours ?? 4));
+
   for (let i = 0; i < total; i++) {
     const t = i / fps;
     const half = Math.floor(t / 60) % 2; // swap lead deck every minute
@@ -84,7 +90,11 @@ export function* performanceScenario(opts: { fps?: number; hours?: number } = {}
     });
   }
 }
+
 export { RecordingTransport } from "./recording.js";
+
 export type { DatagramSender, RecordedDatagram, TransportFaults } from "./recording.js";
+
 export { GoveeLanSim } from "./govee-lan.js";
+
 export type { SimDeviceProfile, SimFaults, SimMetrics } from "./govee-lan.js";

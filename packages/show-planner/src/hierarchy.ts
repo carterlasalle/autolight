@@ -77,8 +77,11 @@ export interface HierarchyCue {
 export function trackArcPosition(beat: number, firstBeat: number, lastBeat: number): number {
   const span = Math.max(1, lastBeat - firstBeat);
   const t = Math.min(1, Math.max(0, (beat - firstBeat) / span));
+
   if (t < 0.7) return 0.4 + (t / 0.7) * 0.6;
+
   if (t < 0.85) return 1;
+
   return 1 - ((t - 0.85) / 0.15) * 0.5;
 }
 
@@ -89,20 +92,24 @@ export interface DropPlan {
 
 export function findDropPlans(track: TrackModel, minConfidence: number): DropPlan[] {
   const out: DropPlan[] = [];
+
   for (const ev of track.musicalEvents) {
     if (ev.type !== "drop" || ev.confidence < minConfidence) continue;
+
     const build = track.musicalEvents.find(
       (b) =>
         (b.type === "build-start" || b.type === "predrop" || b.type === "build-intensification") &&
         b.beat <= ev.beat &&
         (b.endBeat ?? b.beat + 8) >= ev.beat - 4,
     );
+
     const predrop = track.musicalEvents.find((b) => b.type === "predrop" && b.beat <= ev.beat && b.beat >= ev.beat - 4);
     out.push({
       impactBeat: ev.beat,
       buildStart: build?.beat ?? predrop?.beat ?? ev.beat - 32,
     });
   }
+
   return out;
 }
 
@@ -118,6 +125,7 @@ export function stagedBuild(
   const span = Math.max(4, impactBeat - buildStart);
   const stages = Math.max(2, Math.min(8, Math.floor(span / 4)));
   const stageLen = span / stages;
+
   for (let i = 0; i < stages; i++) {
     const start = buildStart + i * stageLen;
     const t = (i + 1) / stages;
@@ -133,6 +141,7 @@ export function stagedBuild(
       reason: `build stage ${i + 1} of ${stages} toward impact at ${impactBeat}`,
     });
   }
+
   return cues;
 }
 
@@ -142,7 +151,9 @@ export function phraseStartsIn(
   phraseBeats = 8,
 ): number[] {
   const out: number[] = [];
+
   for (let b = sectionStart + phraseBeats; b < sectionEnd; b += phraseBeats) out.push(b);
+
   return out;
 }
 
@@ -156,6 +167,7 @@ export function phraseCues(
   _core: readonly Oklch[],
 ): HierarchyCue[] {
   const starts = phraseStartsIn(sectionStart, sectionEnd);
+
   return starts.map((b, i) => ({
     type: "phrase-turn",
     startBeat: b,
@@ -177,6 +189,7 @@ export function barCues(
   energy: number,
 ): HierarchyCue[] {
   const cues: HierarchyCue[] = [];
+
   for (let b = sectionStart + periodBeats; b < sectionEnd; b += periodBeats) {
     cues.push({
       type: "chase",
@@ -190,6 +203,7 @@ export function barCues(
       reason: "bar alternation",
     });
   }
+
   return cues;
 }
 
@@ -202,6 +216,7 @@ export function beatCues(
 ): HierarchyCue[] {
   if (energy < 0.75 || movementDensity < 0.4) return [];
   const cues: HierarchyCue[] = [];
+
   for (let b = sectionStart; b < sectionEnd; b += 2) {
     cues.push({
       type: "pulse",
@@ -214,6 +229,7 @@ export function beatCues(
       reason: "beat pulse",
     });
   }
+
   return cues;
 }
 
@@ -225,6 +241,7 @@ export function subBeatCues(
   rand: () => number,
 ): HierarchyCue[] {
   if (strobeFrequency <= 0 || rand() >= strobeFrequency * 0.5) return [];
+
   return [
     {
       type: "strobe-burst",
@@ -240,4 +257,5 @@ export function subBeatCues(
 }
 
 export { envelopeToBeats };
+
 export type { Oklch };

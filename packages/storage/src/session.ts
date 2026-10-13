@@ -75,6 +75,7 @@ export class SessionRecorder {
     if (!this.enabled) return;
     const entry: SessionRecord = { seq: this.seq++, tMs, kind, payload };
     const size = JSON.stringify(entry).length;
+
     while (this.len > 0 && this.bytes + size > this.maxBytes) {
       const oldest = this.slots[this.head];
       this.slots[this.head] = undefined;
@@ -83,10 +84,13 @@ export class SessionRecorder {
       this.bytes -= oldest === undefined ? 0 : JSON.stringify(oldest).length;
       this.dropped += 1;
     }
+
     if (size > this.maxBytes) {
       this.dropped += 1;
+
       return;
     }
+
     if (this.len === this.slots.length) {
       const oldest = this.slots[this.head];
       this.slots[this.head] = undefined;
@@ -95,6 +99,7 @@ export class SessionRecorder {
       this.bytes -= oldest === undefined ? 0 : JSON.stringify(oldest).length;
       this.dropped += 1;
     }
+
     this.slots[(this.head + this.len) % this.slots.length] = entry;
     this.len += 1;
     this.bytes += size;
@@ -102,10 +107,13 @@ export class SessionRecorder {
 
   entries(): SessionRecord[] {
     const out: SessionRecord[] = [];
+
     for (let i = 0; i < this.len; i++) {
       const entry = this.slots[(this.head + i) % this.slots.length];
+
       if (entry !== undefined) out.push(entry);
     }
+
     return out;
   }
 
@@ -115,6 +123,7 @@ export class SessionRecorder {
       .join("\n");
   }
 }
+
 export interface SessionReplayResult {
   ticks: number;
   matched: number;
@@ -124,19 +133,24 @@ export interface SessionReplayResult {
 
 export function parseSessionNdjson(ndjson: string): SessionRecord[] {
   if (ndjson.trim() === "") return [];
+
   return ndjson.split("\n").map((line, i) => {
     let row: unknown;
+
     try {
       row = JSON.parse(line);
     } catch {
       throw new Error(`session line ${i + 1}: invalid JSON`);
     }
+
     if (typeof row !== "object" || row === null || Array.isArray(row)) {
       throw new Error(`session line ${i + 1}: entry must be an object`);
     }
+
     if (!("seq" in row && "tMs" in row && "kind" in row && "payload" in row)) {
       throw new Error(`session line ${i + 1}: entry needs seq, tMs, kind, payload`);
     }
+
     if (
       typeof row.seq !== "number" ||
       typeof row.tMs !== "number" ||
@@ -147,9 +161,11 @@ export function parseSessionNdjson(ndjson: string): SessionRecord[] {
     ) {
       throw new Error(`session line ${i + 1}: bad entry shape`);
     }
+
     return { seq: row.seq, tMs: row.tMs, kind: row.kind as SessionKind, payload: row.payload as Record<string, unknown> };
   });
 }
+
 // Replay: for every recorded frame hash, find the tick input with the same
 // tick, re-render with the same config snapshot, and compare. 100 percent
 // equality means the session replays exactly.
@@ -159,22 +175,28 @@ export function replaySession(
   render: (tick: number, inputs: unknown, configSnapshot: Record<string, unknown>) => string,
 ): SessionReplayResult {
   const inputs = new Map<number, unknown>();
+
   for (const r of records) {
     if (r.kind === "tick-input" && "tick" in r.payload && typeof r.payload.tick === "number") {
       inputs.set(r.payload.tick, "inputs" in r.payload ? r.payload.inputs : undefined);
     }
   }
+
   let matched = 0;
   const mismatchedTicks: number[] = [];
   let ticks = 0;
+
   for (const r of records) {
     if (r.kind !== "frame-hash" || !("tick" in r.payload) || !("hash" in r.payload)) continue;
+
     if (typeof r.payload.tick !== "number" || typeof r.payload.hash !== "string") continue;
     const tick = r.payload.tick;
     ticks += 1;
     const again = render(tick, inputs.get(tick), configSnapshot);
+
     if (again === r.payload.hash) matched += 1;
     else mismatchedTicks.push(tick);
   }
+
   return { ticks, matched, mismatched: mismatchedTicks.length, mismatchedTicks };
 }

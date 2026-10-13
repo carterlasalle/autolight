@@ -13,9 +13,11 @@ import type { DatabaseSync as NodeSqliteDatabase } from "node:sqlite";
 // Electron main process leaves it empty, so read the field defensively.
 export function esmModuleUrl(): string | null {
   const meta: unknown = import.meta;
+
   if (meta !== null && typeof meta === "object" && "url" in meta && typeof meta.url === "string" && meta.url.length > 0) {
     return meta.url;
   }
+
   return null;
 }
 
@@ -27,14 +29,18 @@ function loadModule(id: string): unknown {
   if (id.startsWith("node:") && typeof process.getBuiltinModule === "function") {
     return process.getBuiltinModule(id);
   }
+
   if (typeof require === "function") return require(id);
   const metaUrl = esmModuleUrl();
+
   if (metaUrl !== null) return createRequire(metaUrl)(id);
   throw new Error(`storage cannot load ${id}: this runtime exposes no module loader`);
 }
 
 export type DriverName = "better-sqlite3" | "node-sqlite";
+
 export type DriverPreference = "auto" | DriverName;
+
 export type SqlParam = string | number | bigint | Uint8Array | null;
 
 export interface SqlExec {
@@ -71,8 +77,10 @@ const probeCache = new Map<string, ModuleStatus>();
 // Load probe: requiring the module is the test (a native ABI mismatch throws).
 export function moduleStatus(module: string): ModuleStatus {
   const cached = probeCache.get(module);
+
   if (cached) return cached;
   let status: ModuleStatus;
+
   try {
     loadModule(module);
     status = { module, available: true, detail: "loads in this runtime" };
@@ -82,7 +90,9 @@ export function moduleStatus(module: string): ModuleStatus {
     const detail = ((error as Error).message.split("\n")[0] ?? "").trim() || "module did not load";
     status = { module, available: false, detail };
   }
+
   probeCache.set(module, status);
+
   return status;
 }
 
@@ -110,6 +120,7 @@ function openBetterSqlite3(path: string): DbDriver {
   // Shape of better-sqlite3's public constructor (spec 80 driver).
   const Ctor = loadModule("better-sqlite3") as BetterCtor;
   const db = new Ctor(path);
+
   return {
     name: "better-sqlite3",
     exec: (sql) => {
@@ -130,6 +141,7 @@ function openNodeSqlite(path: string): DbDriver {
   // Shape of node:sqlite's DatabaseSync (built-in fallback driver).
   const mod = loadModule("node:sqlite") as NodeSqliteModule;
   const db = new mod.DatabaseSync(path);
+
   return {
     name: "node-sqlite",
     exec: (sql) => {
@@ -168,19 +180,24 @@ export interface OpenResult {
 }
 
 const SYNC_MODES: Record<string, true> = { OFF: true, NORMAL: true, FULL: true, EXTRA: true };
+
 const SYNC_NAMES = ["OFF", "NORMAL", "FULL", "EXTRA"] as const;
 
 function pragmaValue(driver: SqlExec, name: string): string {
   const row = driver.get<Record<string, unknown>>(`PRAGMA ${name}`);
+
   if (!row) return "";
   const first = Object.values(row)[0];
+
   return first === undefined || first === null ? "" : String(first);
 }
 
 // `PRAGMA synchronous` reads back the numeric level, not the name.
 function syncName(readBack: string): string {
   const level = Number(readBack);
+
   if (!Number.isInteger(level)) return readBack.toUpperCase();
+
   return SYNC_NAMES[level] ?? readBack;
 }
 
@@ -192,6 +209,7 @@ export function openDatabase(options: OpenOptions): OpenResult {
   const better = moduleStatus("better-sqlite3");
   let fallbackReason: string | null = null;
   let driver: DbDriver;
+
   if (requested === "better-sqlite3" || (requested === "auto" && better.available)) {
     try {
       driver = openBetterSqlite3(path);
@@ -201,6 +219,7 @@ export function openDatabase(options: OpenOptions): OpenResult {
           `storage driver better-sqlite3 was requested but failed to open "${path}": ${(error as Error).message}`,
         );
       }
+
       fallbackReason = `better-sqlite3 open failed: ${(error as Error).message}`;
       driver = openNodeSqlite(path);
     }
@@ -211,35 +230,44 @@ export function openDatabase(options: OpenOptions): OpenResult {
 
   try {
     const syncRaw = String(options.synchronous ?? "NORMAL").toUpperCase();
+
     if (SYNC_MODES[syncRaw] !== true) {
       throw new Error(
         `invalid storage.sqlite.synchronous "${options.synchronous}": use one of ${Object.keys(SYNC_MODES).join(", ")}`,
       );
     }
+
     const busyRaw = options.busyTimeoutMs ?? 5000;
+
     if (!Number.isInteger(busyRaw) || busyRaw < 0) {
       throw new Error(`invalid storage.sqlite.busyTimeoutMs "${options.busyTimeoutMs}": use a whole number of milliseconds`);
     }
+
     const wantForeignKeys = options.foreignKeys ?? true;
 
     if (requireWal) driver.exec("PRAGMA journal_mode = WAL");
     const journalMode = pragmaValue(driver, "journal_mode") || "unknown";
+
     if (requireWal && journalMode.toLowerCase() !== "wal") {
       throw new Error(
         `WAL mode was not enabled for "${path}": PRAGMA journal_mode reads back "${journalMode}"`,
       );
     }
+
     driver.exec(`PRAGMA synchronous = ${syncRaw}`);
     const synchronous = syncName(pragmaValue(driver, "synchronous") || syncRaw);
     driver.exec(`PRAGMA busy_timeout = ${busyRaw}`);
     const busyTimeoutMs = Number(pragmaValue(driver, "busy_timeout") || busyRaw);
+
     if (wantForeignKeys) {
       driver.exec("PRAGMA foreign_keys = ON");
       const enabled = pragmaValue(driver, "foreign_keys");
+
       if (enabled !== "1") {
         throw new Error(`foreign keys were not enabled for "${path}": PRAGMA foreign_keys reads back "${enabled}"`);
       }
     }
+
     const foreignKeys = pragmaValue(driver, "foreign_keys") === "1";
 
     const status: DriverStatus = {
@@ -252,6 +280,7 @@ export function openDatabase(options: OpenOptions): OpenResult {
       nodeVersion: process.versions.node,
       electronVersion: process.versions.electron ?? null,
     };
+
     return { driver, status, journalMode, synchronous, busyTimeoutMs, foreignKeys };
   } catch (error) {
     driver.close();
@@ -265,5 +294,6 @@ export function describeDriver(status: DriverStatus): string {
   const fallback = status.fellBack
     ? `, fell back from better-sqlite3 (${status.fallbackReason ?? "unknown reason"})`
     : "";
+
   return `driver ${status.chosen}${fallback}, node ${status.nodeVersion}, electron ${status.electronVersion ?? "none"}`;
 }

@@ -26,8 +26,11 @@ export function bleProvisionChunk(chunk: Uint8Array): Uint8Array {
 export function bleProvisionChunks(payload: Uint8Array, chunkLen = 17): Uint8Array[] {
   if (chunkLen <= 0 || chunkLen > 17) throw new RangeError(`provision chunks are 1 to 17 bytes, got ${chunkLen}`);
   const out: Uint8Array[] = [];
+
   for (let i = 0; i < payload.length; i += chunkLen) out.push(payload.slice(i, i + chunkLen));
+
   if (out.length === 0) out.push(new Uint8Array(0));
+
   return out;
 }
 
@@ -72,6 +75,7 @@ export interface BleProvisionResult {
 
 /** Wait after 33 17 01 before the chunked transfer (toolkit provision_wifi). */
 export const BLE_PROVISION_START_WAIT_MS = 3000;
+
 /** Pacing between A1 11 chunks (toolkit provision_wifi). */
 export const BLE_PROVISION_CHUNK_PACING_MS = 300;
 
@@ -85,6 +89,7 @@ export function bleProvisionPayload(creds: BleProvisionCredentials): Uint8Array 
   out.set(ssid, 0);
   out[ssid.length] = 0x00;
   out.set(password, ssid.length + 1);
+
   return out;
 }
 
@@ -101,24 +106,32 @@ export async function provisionBleWifi(
 ): Promise<BleProvisionResult> {
   const pacing = opts.chunkPacingMs ?? BLE_PROVISION_CHUNK_PACING_MS;
   const startWait = opts.startWaitMs ?? BLE_PROVISION_START_WAIT_MS;
+
   if (!(pacing > 0)) throw new RangeError(`provision chunk pacing needs a positive ms value, got ${pacing}`);
+
   if (!(startWait >= 0)) throw new RangeError(`provision start wait needs a non-negative ms value, got ${startWait}`);
   let password = creds.password;
   const payload = bleProvisionPayload({ ssid: creds.ssid, password });
   const chunks = bleProvisionChunks(payload);
   await transport.write(bleProvisionStart());
   await transport.sleep(startWait);
+
   for (let i = 0; i < chunks.length; i++) {
     await transport.write(bleProvisionChunk(chunks[i] ?? new Uint8Array(0)));
+
     if (i < chunks.length - 1) await transport.sleep(pacing);
   }
+
   await transport.write(bleProvisionStop());
   let passwordStored = false;
+
   if (opts.onPasswordSaved !== undefined) {
     await opts.onPasswordSaved(password);
     passwordStored = true;
   }
+
   password = "";
+
   return {
     ssid: creds.ssid,
     chunksSent: chunks.length,

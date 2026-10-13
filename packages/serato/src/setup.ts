@@ -101,10 +101,13 @@ export function checkSeratoSetup(input: SeratoSetupInput): SeratoSetupReport {
       : "no deck updates yet; load a track on a deck in Serato DJ Pro",
   });
   const failed = steps.find((step) => !step.ok);
+
   if (!failed) {
     const rejected = input.rejectedFrames === 0 ? "" : `, ${input.rejectedFrames} malformed frame(s) rejected`;
+
     return { state: "receiving", steps, remedy: `Remote state is flowing${rejected}` };
   }
+
   const state: SeratoSetupState =
     failed.id === "remote-enabled" ? "remote-disabled"
     : failed.id === "serato-installed" ? "not-installed"
@@ -112,5 +115,6 @@ export function checkSeratoSetup(input: SeratoSetupInput): SeratoSetupReport {
     : failed.id === "connection" ? "no-connection"
     : failed.id === "authentication" ? "unauthenticated"
     : "no-deck-data";
+
   return { state, steps, remedy: failed.detail };
 }

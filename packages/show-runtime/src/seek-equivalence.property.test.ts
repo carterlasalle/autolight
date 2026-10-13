@@ -32,6 +32,7 @@ describe("seek reconstruction equivalence", () => {
   it("keeps looped beats inside the window and counts passes", () => {
     for (let beat = 0; beat < 200; beat += 0.5) {
       const { beat: back, pass } = loopBeat(beat, 32, 48);
+
       if (beat >= 32) {
         expect(back).toBeGreaterThanOrEqual(32);
         expect(back).toBeLessThan(48);
@@ -40,6 +41,7 @@ describe("seek reconstruction equivalence", () => {
         expect(back).toBe(beat);
         expect(pass).toBe(0);
       }
+
       expect(loopPassVariant(pass, "alternate-ab")).toBe(pass % 2);
       expect(loopPassVariant(pass, "rotate-3")).toBe(pass % 3);
       expect(loopPassVariant(pass, "none")).toBe(0);
@@ -60,6 +62,7 @@ describe("seek reconstruction equivalence", () => {
       // past the last phrase, so it only asserts monotonicity here.
       const byPhrase = quantizeResume(beat, "phrase", grid);
       expect(byPhrase).toBeGreaterThanOrEqual(beat);
+
       if (beat <= 192) expect(grid.phraseBeats).toContain(byPhrase);
     }
   });
@@ -68,6 +71,7 @@ describe("seek reconstruction equivalence", () => {
     expect(quantizeResume(5.5, "bar", null)).toBe(8);
     expect(quantizeResume(5.5, "beat", null)).toBe(6);
     expect(resumeGridFromModel(null)).toEqual({ beats: [], barBeats: [], phraseBeats: [] });
+
     const model = {
       beatGrid: {
         version: 1,
@@ -75,6 +79,7 @@ describe("seek reconstruction equivalence", () => {
       },
       sections: [{ startBeat: 0 }, { startBeat: 4 }],
     } as unknown as TrackModel;
+
     const g = resumeGridFromModel(model);
     expect(g.barBeats).toEqual([0, 4]);
     expect(g.phraseBeats).toEqual([0, 4]);

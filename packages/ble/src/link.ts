@@ -110,6 +110,7 @@ export class BleLink {
 
   private attachNotify(): void {
     const handler = this.notifyHandler;
+
     if (handler === null) return;
     this.connection?.subscribe((notify) => {
       this.lastSeenAt = this.clock.now();
@@ -127,19 +128,23 @@ export class BleLink {
     const waiting = this.queue.length > 0;
     const now = this.clock.now();
     const spacing = 1000 / Math.max(1, this.budgetHz);
+
     if (!waiting && now - this.lastFlushAt >= spacing) {
       this.lastFlushAt = now;
       this.lastWriteAt = now;
       this.lastSeenAt = now;
       const connection = this.connection;
       this.writesSent += 1;
+
       if (connection !== null) {
         void connection.write(frame.slice()).catch(() => {
           this.onDrop();
         });
       }
+
       return;
     }
+
     if (waiting) this.superseded += 1;
     this.queue = [{ frame: frame.slice(), at: now }];
     this.pump();
@@ -151,7 +156,9 @@ export class BleLink {
     const spacing = 1000 / Math.max(1, this.budgetHz);
     const now = this.clock.now();
     const head = this.queue[0];
+
     if (head === undefined) return;
+
     if (now - this.lastFlushAt < spacing) return;
     this.lastFlushAt = now;
     this.lastWriteAt = now;
@@ -168,6 +175,7 @@ export class BleLink {
   /** Test and scheduler tick: flush a due write, or start a reconnect past the gap. */
   tick(): void {
     this.pump();
+
     if (this.state === "connected" && this.connection !== null && this.clock.now() - this.lastSeenAt > this.gapMs) {
       void this.reconnect();
     }
@@ -182,11 +190,14 @@ export class BleLink {
   async close(): Promise<void> {
     this.closed = true;
     this.cancelReconnect();
+
     if (this.drainTimer !== null) {
       this.clock.clearTimeout(this.drainTimer);
       this.drainTimer = null;
     }
+
     const wait = Math.max(0, this.lastWriteAt + this.drainMs - this.clock.now());
+
     if (wait > 0 && this.connection !== null) {
       await new Promise<void>((resolve) => {
         this.drainTimer = this.clock.setTimeout(() => {
@@ -195,16 +206,19 @@ export class BleLink {
         }, wait);
       });
     }
+
     this.queue = [];
     const connection = this.connection;
     this.connection = null;
     this.state = "closed";
+
     if (connection !== null) await connection.disconnect();
   }
 
   private onDrop(): void {
     this.dropped += 1;
     this.connection = null;
+
     if (!this.closed) void this.reconnect();
   }
 
@@ -213,11 +227,14 @@ export class BleLink {
     this.state = "reconnecting";
     const stale = this.connection;
     this.connection = null;
+
     if (stale !== null) await stale.disconnect().catch(() => undefined);
+
     if (this.closed) return;
     this.reconnects += 1;
     const delay = this.backoff[Math.min(this.backoffIndex, this.backoff.length - 1)] ?? 1000;
     this.backoffIndex += 1;
+
     try {
       await new Promise<void>((resolve) => {
         this.reconnectTimer = this.clock.setTimeout(() => {
@@ -228,6 +245,7 @@ export class BleLink {
     } catch {
       return;
     }
+
     if (this.closed) return;
     await this.finishReconnect();
   }
@@ -243,10 +261,13 @@ export class BleLink {
       this.pump();
     } catch {
       if (this.closed) return;
+
       if (this.state !== "reconnecting") {
         void this.reconnect();
+
         return;
       }
+
       this.state = "connected";
       void this.reconnect();
     }

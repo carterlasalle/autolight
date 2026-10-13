@@ -35,9 +35,11 @@ export function deckFields(
   const grid = track?.beatGrid.beats ?? [];
   const whole = Math.max(0, Math.floor(beat));
   const section = track?.sections.find((s) => beat >= s.startBeat && beat < s.endBeat) ?? null;
+
   const upcoming = (plan?.cues ?? [])
     .filter((c) => c.startBeat > beat)
     .sort((a, b) => a.startBeat - b.startBeat);
+
   return {
     title: track?.identity.title ?? state.track?.id ?? "No track",
     artist: track?.identity.artist ?? null,
@@ -65,15 +67,21 @@ export function predictiveLabel(cues: ShowCue[], beat: number, horizonBeats = 64
   const after = cues.filter((c) => c.startBeat > beat).sort((a, b) => a.startBeat - b.startBeat);
   const at = (t: string): ShowCue | undefined => after.find((c) => c.type === t);
   const drop = at("white-hit") ?? at("impact") ?? after.find((c) => c.type === "drop");
+
   if (drop && drop.startBeat - beat <= horizonBeats) {
     return `DROP IN ${Math.max(1, Math.round(drop.startBeat - beat))}`;
   }
+
   const breakdown = at("breakdown-look") ?? at("breakdown");
+
   if (breakdown && breakdown.startBeat - beat <= horizonBeats) {
     return `BREAKDOWN IN ${Math.max(1, Math.round(breakdown.startBeat - beat))}`;
   }
+
   const build = after.find((c) => c.type === "build-ramp");
+
   if (build && beat >= build.startBeat && beat < build.startBeat + build.durationBeats) return "BUILD";
+
   return null;
 }
 

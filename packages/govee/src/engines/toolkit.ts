@@ -106,9 +106,11 @@ export const defaultToolkitLoader: ToolkitLoader = async () => {
   const dynamicImport = new Function("s", "return import(s)") as (s: string) => Promise<unknown>;
   const mod = await dynamicImport(specifier);
   const shaped = asBindingModule(mod);
+
   if (shaped === null) {
     throw unavailable("load", `module "${specifier}" does not expose Govee.start()`);
   }
+
   return shaped;
 };
 
@@ -117,11 +119,15 @@ export const defaultToolkitLoader: ToolkitLoader = async () => {
 function asBindingModule(value: unknown): BindingModule | null {
   if (typeof value !== "object" || value === null) return null;
   const direct = resolveStart(value);
+
   if (direct !== null) return direct;
+
   if ("default" in value) {
     const wrapped = resolveStart(value.default);
+
     if (wrapped !== null) return wrapped;
   }
+
   return null;
 }
 
@@ -129,23 +135,32 @@ function resolveStart(candidate: unknown): BindingModule | null {
   if (typeof candidate !== "object" || candidate === null) return null;
   const version = "VERSION" in candidate && typeof candidate.VERSION === "string" ? candidate.VERSION : undefined;
   const core = "CORE_VERSION" in candidate && typeof candidate.CORE_VERSION === "string" ? candidate.CORE_VERSION : undefined;
+
   const target = "__napiBindingTarget" in candidate && typeof candidate.__napiBindingTarget === "string"
     ? candidate.__napiBindingTarget
     : undefined;
+
   const startFn = "start" in candidate ? candidate.start : undefined;
+
   if (typeof startFn === "function") {
     // Checked as a function; the generated loader's call signature is known.
     const call = startFn as () => Promise<BindingSdk>;
+
     return withStatics({ start: () => call() }, version, core, target);
   }
+
   const govee = "Govee" in candidate ? candidate.Govee : undefined;
+
   if (typeof govee === "function") {
     const staticStart = "start" in govee ? govee.start : undefined;
+
     if (typeof staticStart === "function") {
       const call = staticStart as () => Promise<BindingSdk>;
+
       return withStatics({ start: () => call.call(govee) }, version, core, target);
     }
   }
+
   return null;
 }
 
@@ -234,15 +249,18 @@ export class ToolkitEngine implements LanStreamEngine {
         this.target = typeof mod.__napiBindingTarget === "string" ? mod.__napiBindingTarget : "unknown";
         const sdk = await mod.start();
         this.loadMs = Date.now() - started;
+
         return sdk;
       }).catch((err: unknown) => {
         const failure = isUnavailableError(err)
           ? err
           : unavailable("load", err instanceof Error ? err.message : String(err));
+
         this.loadFailure = failure;
         throw failure;
       });
     }
+
     return this.sdkPromise;
   }
 
@@ -250,6 +268,7 @@ export class ToolkitEngine implements LanStreamEngine {
     if (this.loadFailure !== null) {
       return { kind: "toolkit", available: false, reason: this.loadFailure.message };
     }
+
     return { kind: "toolkit", available: this.sdkPromise !== null };
   }
 
@@ -258,11 +277,13 @@ export class ToolkitEngine implements LanStreamEngine {
   async ensureLoad(): Promise<ToolkitLoadResult> {
     try {
       await this.sdk();
+
       return { ok: true };
     } catch (err) {
       if (isUnavailableError(err)) {
         return { ok: false, reasonClass: err.reasonClass, detail: err.message };
       }
+
       return { ok: false, reasonClass: "load", detail: err instanceof Error ? err.message : String(err) };
     }
   }
@@ -281,22 +302,26 @@ export class ToolkitEngine implements LanStreamEngine {
 
   private async handleFor(deviceId: string): Promise<BindingDeviceHandle> {
     const existing = this.handles.get(deviceId);
+
     if (existing) return existing;
     const sdk = await this.sdk();
     const handle = sdk.device(deviceId);
     this.handles.set(deviceId, handle);
+
     return handle;
   }
 
   async discover(): Promise<string[]> {
     const sdk = await this.sdk();
     await sdk.scan();
+
     return sdk.devices().map((d) => d.id);
   }
 
   async status(deviceId: string): Promise<{ onOff: boolean; brightness: number; armed: boolean } | null> {
     const handle = await this.handleFor(deviceId);
     const status = await handle.status();
+
     return {
       onOff: status.on === true,
       brightness: typeof status.brightness === "number" ? status.brightness : 0,
@@ -309,14 +334,17 @@ export class ToolkitEngine implements LanStreamEngine {
   async openStream(deviceId: string, opts: StreamOptions): Promise<SegmentStreamLike> {
     const handle = await this.handleFor(deviceId);
     const health = handle.health("lan");
+
     if (health !== null && !health.available) {
       throw unavailable("context", `device ${deviceId} lan transport is not available (${health.state})`);
     }
+
     const started = Date.now();
     const bindingStream = await handle.openStream(resolutionFor(opts), opts.rateHz, opts.gradient !== 0);
     this.openMs = Date.now() - started;
     const stream = new ToolkitStream(bindingStream, opts.resolution ?? this.zones, opts.rateHz);
     this.streams.set(deviceId, stream);
+
     return stream;
   }
 
@@ -335,14 +363,18 @@ export class ToolkitEngine implements LanStreamEngine {
   async health(deviceId: string): Promise<EngineHealth | null> {
     const handle = await this.handleFor(deviceId);
     const health = handle.health("lan");
+
     if (health === null) return null;
+
     return { state: health.state, failures: health.failures, available: health.available };
   }
 
   metrics(deviceId?: string): EngineMetrics[] {
     const ids = deviceId !== undefined ? [deviceId] : [...this.streams.keys()];
+
     return ids.map((id) => {
       const stream = this.streams.get(id);
+
       return {
         engine: "toolkit",
         framesRequested: stream?.framesRequested ?? 0,
@@ -359,6 +391,7 @@ export class ToolkitEngine implements LanStreamEngine {
   async close(): Promise<void> {
     for (const stream of this.streams.values()) stream.close();
     this.streams.clear();
+
     if (this.sdkPromise !== null) {
       try {
         const sdk = await this.sdkPromise;

@@ -22,8 +22,10 @@ export class PlanCache<T> {
 
   get(key: PlanCacheKey): T | undefined {
     const v = this.store.get(cacheKeyFor(key));
+
     if (v === undefined) this.misses++;
     else this.hits++;
+
     return v;
   }
 
@@ -57,5 +59,6 @@ export function spliceSection<T extends SpliceableCue>(
   const kept = cues.filter((c) => c.startBeat + 0 < start || c.startBeat >= end);
   void kept;
   const outside = cues.filter((c) => c.startBeat < start || c.startBeat >= end);
+
   return [...outside, ...fresh].sort((a, b) => a.startBeat - b.startBeat);
 }

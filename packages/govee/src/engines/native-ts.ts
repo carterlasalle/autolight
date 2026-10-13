@@ -53,12 +53,14 @@ export class SocketTransport implements StreamTransport {
 
   private socketFor(deviceId: string): Socket {
     const existing = this.sockets.get(deviceId);
+
     if (existing) return existing;
     const sock = createSocket("udp4");
     // A send error must not kill the process; it is recorded per device and
     // surfaced through health() instead.
     sock.on("error", (err: Error) => { this.errors.set(deviceId, err); });
     this.sockets.set(deviceId, sock);
+
     return sock;
   }
 
@@ -96,6 +98,7 @@ export class SocketTransport implements StreamTransport {
         // Already released by the socket layer; nothing left to close.
       }
     }
+
     this.sockets.clear();
   }
 }
@@ -120,8 +123,11 @@ export interface NativeEngineOptions {
 // Measured fallback when the frame-rate table has no row for a zone count:
 // unmeasured units run at 10 Hz (lan.md 2.3), never at the renderer's 60.
 const FALLBACK_HZ = 10;
+
 const DEFAULT_ARM_SETTLE_MS = 50;
+
 const IDENTIFY_FLASH_MS = 600;
+
 const SEGMENT_HOLD_MS = 400;
 
 export class NativeStreamEngine implements LanStreamEngine {
@@ -158,6 +164,7 @@ export class NativeStreamEngine implements LanStreamEngine {
 
   async discover(): Promise<string[]> {
     if (hasDiscover(this.transport)) return this.transport.discover();
+
     // The discovery ladder is T-GOV-05; until it is injected this engine
     // reports the devices it was told about, never an invented scan result.
     return [...this.known];
@@ -165,6 +172,7 @@ export class NativeStreamEngine implements LanStreamEngine {
 
   async status(deviceId: string): Promise<EngineStatus | null> {
     if (hasStatus(this.transport)) return this.transport.status(deviceId, this.replyTimeoutMs);
+
     // Silence while armed is not a failure (lan.md: a unit may not answer
     // status or devStatus while armed). With no reply socket there is no
     // answer to report, so the caller shows "unknown", not "off".
@@ -173,16 +181,19 @@ export class NativeStreamEngine implements LanStreamEngine {
 
   async openStream(deviceId: string, opts: StreamOptions): Promise<SegmentStreamLike> {
     const existing = this.streams.get(deviceId);
+
     if (existing) this.snapshot(deviceId, existing);
     // PacingStream arms (B1) itself, then waits the settle before the first
     // paint, exactly as the toolkit binding's openStream does (parity).
     const stream = new PacingStream(deviceId, opts, this.transport, this.clock);
     this.streams.set(deviceId, stream);
+
     return stream;
   }
 
   async identify(deviceId: string): Promise<void> {
     const stream = this.streams.get(deviceId);
+
     if (stream) {
       // Through the stream if armed: white in the channel, then the show
       // frame back (T-GOV-12). With no frame yet, black keeps it quiet (§47).
@@ -192,8 +203,10 @@ export class NativeStreamEngine implements LanStreamEngine {
       this.clock.setTimeout(() => {
         stream.setAll(restore ?? new Uint8Array(stream.zones * 3));
       }, this.identifyFlashMs);
+
       return;
     }
+
     // Not armed: the official commands, RGB white with kelvin 0 (§48).
     this.transport.sendJson(deviceId, turnCommand(true));
     this.transport.sendJson(deviceId, colorCommand(255, 255, 255));
@@ -208,6 +221,7 @@ export class NativeStreamEngine implements LanStreamEngine {
       gradient: 0,
       armSettleMs: this.armSettleMs,
     };
+
     const oneShot = new PacingStream(deviceId, opts, this.transport, this.clock);
     oneShot.setAll(frame);
     this.clock.setTimeout(() => { oneShot.close(); }, this.armSettleMs + this.segmentHoldMs);
@@ -216,7 +230,9 @@ export class NativeStreamEngine implements LanStreamEngine {
   async health(deviceId: string): Promise<EngineHealth | null> {
     // Send-side health only; read-back health is T-GOV-06/07.
     const err = this.owned?.errorFor(deviceId) ?? null;
+
     if (err === null && !this.streams.has(deviceId) && !this.known.includes(deviceId)) return null;
+
     return { state: err === null ? "ok" : "degraded", failures: err === null ? 0 : 1, available: true };
   }
 
@@ -224,9 +240,12 @@ export class NativeStreamEngine implements LanStreamEngine {
     const ids = deviceId !== undefined
       ? [deviceId]
       : [...new Set([...this.streams.keys(), ...this.snapshots.keys()])];
+
     return ids.map((id) => {
       const stream = this.streams.get(id);
+
       if (stream !== undefined) return this.fromStream(stream);
+
       return this.snapshots.get(id) ?? {
         engine: "native-ts", framesRequested: 0, framesSent: 0,
         framesSuperseded: 0, missedTicks: 0, effectiveHz: 0,
@@ -262,6 +281,7 @@ export class NativeStreamEngine implements LanStreamEngine {
       this.snapshot(id, stream);
       stream.close();
     }
+
     this.streams.clear();
     this.owned?.close();
   }

@@ -21,6 +21,7 @@
 import { Flx4Decoder, type Flx4Event } from "./map.js";
 
 export type Flx4BackendName = "native" | "windows-midi-services" | "webmidi";
+
 export type Flx4BackendMode = "auto" | Flx4BackendName;
 
 /** DS-13 order for auto. */
@@ -104,6 +105,7 @@ export class Flx4MessageRing {
 
   push(message: Flx4TimedMessage): void {
     this.items.push(message);
+
     if (this.items.length > this.capacity) {
       this.items.shift();
       this.droppedCount += 1;
@@ -153,6 +155,7 @@ export interface Flx4ServiceOptions {
 }
 
 export const DEFAULT_PORT_MATCH = "DDJ-FLX4";
+
 export const DEFAULT_HOTPLUG_POLL_MS = 2000;
 
 const WINDOWS_HELD_REMEDY =
@@ -197,11 +200,13 @@ export class Flx4ControllerService {
   /** Probes the backends in DS-13 order, opens the first matching port, arms the hotplug poll. */
   async start(): Promise<Flx4ControllerStatus> {
     await this.selectAndOpen();
+
     if (this.timer === null) {
       this.timer = this.scheduler.setInterval(() => {
         void this.poll();
       }, this.hotplugPollMs);
     }
+
     return this.status();
   }
 
@@ -210,6 +215,7 @@ export class Flx4ControllerService {
       this.scheduler.clearInterval(this.timer);
       this.timer = null;
     }
+
     this.closeInput();
     this.connection = "searching";
     this.reason = null;
@@ -220,14 +226,17 @@ export class Flx4ControllerService {
   async poll(): Promise<void> {
     if (this.driver !== null && this.input !== null) {
       const ports = await this.driver.listPorts().catch(() => [] as Flx4PortInfo[]);
+
       if (ports.some((port) => port.id === this.input?.port.id)) return;
       this.closeInput();
       this.connection = "lost";
       this.reason = "the controller port disappeared";
       this.remedy = "reconnect the DDJ-FLX4; AutoLight reopens it automatically";
       this.notifyStatus();
+
       return;
     }
+
     await this.selectAndOpen();
   }
 
@@ -260,6 +269,7 @@ export class Flx4ControllerService {
 
   onEvent(listener: (event: Flx4Event) => void): () => void {
     this.eventListeners.add(listener);
+
     return () => {
       this.eventListeners.delete(listener);
     };
@@ -267,6 +277,7 @@ export class Flx4ControllerService {
 
   onStatusChange(listener: (status: Flx4ControllerStatus) => void): () => void {
     this.statusListeners.add(listener);
+
     return () => {
       this.statusListeners.delete(listener);
     };
@@ -274,19 +285,25 @@ export class Flx4ControllerService {
 
   private driverFor(name: Flx4BackendName): Flx4MidiDriver {
     const injected = this.drivers[name];
+
     if (injected !== undefined) return injected;
+
     if (name === "native") return createNativeDriver();
+
     if (name === "webmidi") return createWebMidiDriver();
+
     return createWindowsMidiServicesDriver();
   }
 
   private matchPort(ports: Flx4PortInfo[]): Flx4PortInfo | null {
     let pattern: RegExp;
+
     try {
       pattern = new RegExp(this.portMatch, "i");
     } catch {
       pattern = new RegExp(this.portMatch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
     }
+
     return ports.find((port) => pattern.test(port.name)) ?? null;
   }
 
@@ -296,28 +313,36 @@ export class Flx4ControllerService {
     const attempts: Flx4BackendAttempt[] = [];
     let lastUnavailable: { reason: string; remedy: string } | null = null;
     let sawPort = false;
+
     for (const name of candidates) {
       const driver = this.driverFor(name);
+
       const probe = await driver.probe().catch((error: unknown) => ({
         ok: false,
         reason: error instanceof Error ? error.message : String(error),
       }));
+
       if (!probe.ok) {
         attempts.push({ backend: name, ok: false, reason: probe.reason });
         lastUnavailable = { reason: probe.reason, remedy: remedyFor(name) };
         continue;
       }
+
       const ports = await driver.listPorts().catch(() => [] as Flx4PortInfo[]);
       const port = this.matchPort(ports);
+
       if (port === null) {
         attempts.push({ backend: name, ok: false, reason: `no input port matches ${this.portMatch}` });
         continue;
       }
+
       sawPort = true;
+
       try {
         const input = await driver.open(port, (bytes) => {
           this.acceptBytes(bytes);
         });
+
         this.driver = driver;
         this.input = input;
         this.attempts = attempts;
@@ -325,6 +350,7 @@ export class Flx4ControllerService {
         this.reason = null;
         this.remedy = null;
         this.notifyStatus();
+
         return;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -333,7 +359,9 @@ export class Flx4ControllerService {
         lastUnavailable = { reason: message, remedy: heldSingleClient ? WINDOWS_HELD_REMEDY : remedyFor(name) };
       }
     }
+
     this.attempts = attempts;
+
     if (lastUnavailable !== null) {
       this.connection = "unavailable-on-this-device";
       this.reason = lastUnavailable.reason;
@@ -347,6 +375,7 @@ export class Flx4ControllerService {
       this.reason = `no controller matching ${this.portMatch} is connected yet`;
       this.remedy = "connect the DDJ-FLX4 over USB; AutoLight detects it by port name";
     }
+
     this.notifyStatus();
   }
 
@@ -360,7 +389,9 @@ export class Flx4ControllerService {
     this.ring.push({ bytes: [status, data1, data2], receivedAtNs });
     const event = this.decoder.decodeBytes([status, data1, data2], receivedAtNs);
     this.events.push(event);
+
     if (this.events.length > this.eventCapacity) this.events.shift();
+
     for (const listener of this.eventListeners) listener(event);
   }
 
@@ -370,19 +401,23 @@ export class Flx4ControllerService {
     } catch {
       // Teardown never throws; the port is gone or the backend is already down.
     }
+
     this.input = null;
     this.driver = null;
   }
 
   private notifyStatus(): void {
     const status = this.status();
+
     for (const listener of this.statusListeners) listener(status);
   }
 }
 
 function remedyFor(name: Flx4BackendName): string {
   if (name === "native") return "install the @julusian/midi addon for this platform and rebuild it for Electron (T-OPS-05)";
+
   if (name === "windows-midi-services") return "install Windows MIDI Services and its Node binding on this machine";
+
   return "start the hidden audio window so Web MIDI is available (T-AUD-01)";
 }
 
@@ -407,6 +442,7 @@ export type RtMidiLoader = () => Promise<unknown> | unknown;
 // here. The addon specifier is a literal at the point of use.
 const defaultRtMidiLoader: RtMidiLoader = async () => {
   const { createRequire } = await import("node:module");
+
   return createRequire(import.meta.url)("@julusian/midi");
 };
 
@@ -415,10 +451,13 @@ function asRtMidiModule(value: unknown): RtMidiModule {
   if (value === null || typeof value !== "object" || !("Input" in value)) {
     throw new Error("@julusian/midi did not export an Input class");
   }
+
   const Input: unknown = value.Input;
+
   if (typeof Input !== "function") throw new Error("@julusian/midi did not export an Input class");
   // Structural constructor: the addon's class satisfies the RtMidiInput surface.
   const constructor = Input as new () => RtMidiInput;
+
   return { Input: constructor };
 }
 
@@ -430,6 +469,7 @@ export function createNativeDriver(load: RtMidiLoader = defaultRtMidiLoader, pla
     async probe() {
       try {
         asRtMidiModule(await load());
+
         return { ok: true, reason: "" };
       } catch (error) {
         return { ok: false, reason: `@julusian/midi is not loadable: ${error instanceof Error ? error.message : String(error)}` };
@@ -437,11 +477,14 @@ export function createNativeDriver(load: RtMidiLoader = defaultRtMidiLoader, pla
     },
     async listPorts() {
       const input = new (asRtMidiModule(await load()).Input)();
+
       try {
         const ports: Flx4PortInfo[] = [];
+
         for (let index = 0; index < input.getPortCount(); index += 1) {
           ports.push({ id: String(index), name: input.getPortName(index) });
         }
+
         return ports;
       } finally {
         input.closePort();
@@ -453,6 +496,7 @@ export function createNativeDriver(load: RtMidiLoader = defaultRtMidiLoader, pla
       input.on("message", (_deltaTime, message) => {
         onMessage(message);
       });
+
       return {
         port,
         close() {
@@ -476,6 +520,7 @@ export type WindowsMidiServicesLoader = () => Promise<unknown> | unknown;
 // imported by the renderer, where node:module does not exist.
 const defaultWindowsMidiServicesLoader: WindowsMidiServicesLoader = async () => {
   const { createRequire } = await import("node:module");
+
   return createRequire(import.meta.url)("windows-midi-services");
 };
 
@@ -484,19 +529,24 @@ function asWindowsMidiServicesBinding(value: unknown): WindowsMidiServicesBindin
   if (value === null || typeof value !== "object") throw new Error("the Windows MIDI Services binding did not load");
   const listInputPorts: unknown = "listInputPorts" in value ? value.listInputPorts : undefined;
   const openInput: unknown = "openInput" in value ? value.openInput : undefined;
+
   if (typeof listInputPorts !== "function" || typeof openInput !== "function") {
     throw new Error("the Windows MIDI Services binding did not expose listInputPorts/openInput");
   }
+
   // Structural binding: the loaded addon satisfies the documented surface.
   const list = listInputPorts as () => string[];
   const open = openInput as (name: string, listener: (bytes: readonly number[]) => void) => unknown;
+
   return {
     listInputPorts: () => list.call(value),
     openInput: (portName, onMessage) => {
       const handle: unknown = open.call(value, portName, onMessage);
       const close: unknown = handle !== null && typeof handle === "object" && "close" in handle ? handle.close : undefined;
+
       if (typeof close !== "function") throw new Error("the Windows MIDI Services binding returned no closable input");
       const closeFn = close as () => void;
+
       return {
         close() {
           closeFn.call(handle);
@@ -512,8 +562,10 @@ export function createWindowsMidiServicesDriver(load: WindowsMidiServicesLoader 
     sharing: "shared",
     async probe() {
       if (platform !== "win32") return { ok: false, reason: "Windows MIDI Services is Windows only" };
+
       try {
         asWindowsMidiServicesBinding(await load());
+
         return { ok: true, reason: "" };
       } catch (error) {
         return { ok: false, reason: `the Windows MIDI Services binding is not loadable: ${error instanceof Error ? error.message : String(error)}` };
@@ -526,6 +578,7 @@ export function createWindowsMidiServicesDriver(load: WindowsMidiServicesLoader 
       const handle = asWindowsMidiServicesBinding(await load()).openInput(port.name, (bytes) => {
         onMessage(bytes);
       });
+
       return {
         port,
         close() {
@@ -557,11 +610,14 @@ export type WebMidiAccessFactory = () => Promise<WebMidiAccessLike>;
 /** The Web MIDI API is not in the base DOM typings; the shape is checked with `in` before use. */
 function webMidiAccessFromNavigator(): Promise<WebMidiAccessLike> | null {
   const nav: unknown = globalThis.navigator;
+
   if (nav === null || typeof nav !== "object" || !("requestMIDIAccess" in nav)) return null;
   const request: unknown = nav.requestMIDIAccess;
+
   if (typeof request !== "function") return null;
   // The access object is a platform boundary; the caller probes it by use.
   const call = request as (this: unknown) => Promise<WebMidiAccessLike>;
+
   return call.call(nav);
 }
 
@@ -576,6 +632,7 @@ export function createWebMidiDriver(requestAccess: WebMidiAccessFactory = defaul
     async probe() {
       try {
         await requestAccess();
+
         return { ok: true, reason: "" };
       } catch (error) {
         return { ok: false, reason: error instanceof Error ? error.message : String(error) };
@@ -583,15 +640,18 @@ export function createWebMidiDriver(requestAccess: WebMidiAccessFactory = defaul
     },
     async listPorts() {
       const access = await requestAccess();
+
       return [...access.inputs.values()].map((input) => ({ id: input.id, name: input.name ?? input.id }));
     },
     async open(port, onMessage) {
       const access = await requestAccess();
       const input = [...access.inputs.values()].find((candidate) => candidate.id === port.id);
+
       if (input === undefined) throw new Error(`Web MIDI input ${port.id} disappeared`);
       input.onmidimessage = (event) => {
         if (event.data !== null) onMessage([...event.data]);
       };
+
       return {
         port,
         close() {

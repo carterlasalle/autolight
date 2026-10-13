@@ -13,7 +13,9 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const planDir = join(dirname(fileURLToPath(import.meta.url)), "..");
+
 const statusPath = join(planDir, "STATUS.md");
+
 const read = (n) => readFileSync(join(planDir, n), "utf8");
 
 const files = readdirSync(planDir)
@@ -21,6 +23,7 @@ const files = readdirSync(planDir)
   .sort();
 
 const tasks = [];
+
 for (const file of files) {
   const text = read(file);
   const heads = [...text.matchAll(/^### (T-[A-Z]+-\d{2})\b(.*)$/gm)];
@@ -75,6 +78,7 @@ const MILESTONE_BY_ID = {
   M6: ["T-DOC-01", "T-SER-06", "T-ANA-17", "T-OPS-06",
     "T-QA-01", "T-QA-06", "T-QA-07", "T-QA-08", "T-QA-10", "T-QA-11", "T-QA-12", "T-QA-13"],
 };
+
 const MILESTONE_BY_PREFIX = {
   "T-CFG": "M0", "T-ARC": "M0", "T-TRU": "M0", "T-DOC": "M0", "T-GOV": "M1",
   "T-UI": "M5", "T-SEC": "M1", "T-OPS": "M5", "T-QA": "M6",
@@ -83,31 +87,41 @@ const MILESTONE_BY_PREFIX = {
   "T-SER": "M2", "T-AUD": "M2", "T-ID": "M3", "T-ANA": "M3", "T-PLAN": "M3",
   "T-MIX": "M5", "T-ROOM": "M4",
 };
+
 const explicit = new Map();
+
 for (const [ms, ids] of Object.entries(MILESTONE_BY_ID)) for (const id of ids) explicit.set(id, ms);
+
 function milestone(id) {
   if (explicit.has(id)) return explicit.get(id);
   const prefix = id.split("-").slice(0, 2).join("-");
+
   return MILESTONE_BY_PREFIX[prefix] ?? "M0";
 }
 
 // Preserve existing cells.
 const prev = new Map();
+
 if (existsSync(statusPath)) {
   const old = readFileSync(statusPath, "utf8");
+
   for (const m of old.matchAll(/^\| (T-[A-Z]+-\d{2}) \|(.*?)\|\s*$/gm)) {
     prev.set(m[1], m[2]);
   }
 }
 
 const register = read("01-findings-register.md");
+
 const findings = [...register.matchAll(/^\| (F-[A-Z]+-\d{2}) \|(.*)\|\s*$/gm)].map((m) => ({ id: m[1], rest: m[2] }));
 
 const wp15 = read("wp15-verification-qualification.md");
+
 const runbooks = [...wp15.matchAll(/^\| `(HW-[A-Z-]+-\d{2})` \| (.*?) \| (.*?) \|\s*$/gm)].map((m) => ({ id: m[1], purpose: m[2], tasks: m[3] }));
 
 const order = ["M0", "M1", "M2", "M3", "M4", "M5", "M6"];
+
 const byMs = new Map(order.map((m) => [m, []]));
+
 for (const t of tasks) byMs.get(milestone(t.id)).push(t);
 
 let out = `# STATUS
@@ -128,34 +142,43 @@ the decision below), \`CLOSED-OWNER-DECLINED\` (needs
 | Milestone | Tasks | TODO | IN-PROGRESS | DONE-VERIFIED | BLOCKED | CLOSED-OWNER-DECLINED |
 | --- | --- | --- | --- | --- | --- | --- |
 `;
+
 for (const ms of order) {
   const list = byMs.get(ms);
   let todo = 0, prog = 0, done = 0, blocked = 0, declined = 0;
+
   for (const t of list) {
     const cell = prev.get(t.id) ?? "";
+
     if (cell.includes("DONE-VERIFIED")) done++;
     else if (cell.includes("IN-PROGRESS")) prog++;
     else if (cell.includes("BLOCKED")) blocked++;
     else if (cell.includes("CLOSED-OWNER-DECLINED")) declined++;
     else todo++;
   }
+
   out += `| ${ms} | ${list.length} | ${todo} | ${prog} | ${done} | ${blocked} | ${declined} |\n`;
 }
+
 out += `\nMilestone contents and exit proofs are in \`README.md\`.\n`;
 
 for (const ms of order) {
   out += `\n## Tasks in ${ms}\n\n| Task | Title | File | Milestone | Status | Evidence | Notes |\n| --- | --- | --- | --- | --- | --- | --- |\n`;
+
   for (const t of byMs.get(ms)) {
     const old = prev.get(t.id);
     let status = "`TODO`", evidence = "none yet", notes = t.closes ? `Closes ${t.closes}` : "";
+
     if (old) {
       const cells = old.split("|").map((c) => c.trim());
+
       if (cells.length >= 5) {
         status = cells[3] || status;
         evidence = cells[4] || evidence;
         notes = cells[5] || notes;
       }
     }
+
     out += `| ${t.id} | ${t.title} | \`${t.file}\` | ${ms} | ${status} | ${evidence} | ${notes} |\n`;
   }
 }
@@ -164,6 +187,7 @@ out += `\n## Findings\n\nA finding is closed only when every task in "Closed by"
 (or \`BLOCKED-HARDWARE\` for a physical step with the runbook done by the owner).
 \`F-X-*\` rows are review claims verified false or unverified; they are listed
 so nobody acts on them as stated.\n\n| Finding | Verification | Closed by | State |\n| --- | --- | --- | --- |\n`;
+
 for (const f of findings) {
   const cells = f.rest.split("|").map((c) => c.trim());
   out += `| ${f.id} | ${cells[0] ?? ""} | ${cells[cells.length - 2] ?? ""} | ${cells[cells.length - 1] ?? ""} |\n`;
@@ -201,6 +225,7 @@ in the named task's evidence folder.
 | Runbook | Purpose | Tasks | Done |
 | --- | --- | --- | --- |
 `;
+
 for (const r of runbooks) out += `| ${r.id} | ${r.purpose} | ${r.tasks} | no |\n`;
 
 out += `
@@ -221,4 +246,5 @@ List anything you are unsure of here, as uncertainty, not as success.
 `;
 
 writeFileSync(statusPath, out);
+
 console.log(`STATUS.md written: ${tasks.length} tasks, ${findings.length} findings, ${runbooks.length} runbooks`);

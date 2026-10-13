@@ -24,6 +24,7 @@ export class VirtualClock {
     if (ms < this.currentMs) {
       throw new Error(`virtual clock cannot move backwards: ${ms} < ${this.currentMs}`);
     }
+
     this.currentMs = ms;
   }
 
@@ -46,7 +47,9 @@ export const REPLAY_SPEEDS: readonly ReplaySpeed[] = ["1x", "2x", "10x", "step"]
 
 export function speedFactor(speed: ReplaySpeed): number {
   if (speed === "2x") return 2;
+
   if (speed === "10x") return 10;
+
   return 1;
 }
 
@@ -96,6 +99,7 @@ export function runReplay<T>(
     const started = performance.now();
     const state = decode(event, clock);
     decodeMs += performance.now() - started;
+
     if (state !== null) {
       states.push(state);
       stampsMs.push(clock.nowMs());
@@ -109,6 +113,7 @@ export function runReplay<T>(
       clock.advanceTo(event.atMs);
       decodeAt(event);
     }
+
     return {
       speed: options.speed,
       factor,
@@ -124,12 +129,14 @@ export function runReplay<T>(
   const tickMs = 1000 / (options.tickHz ?? 60);
   let index = 0;
   let tick = 0;
+
   while (index < sorted.length) {
     tick += 1;
     // Delivery decisions use the unscaled capture timeline, so every speed
     // decodes the same event on the same tick; the clock itself is scaled.
     const captureNow = tick * tickMs;
     clock.tickTo(captureNow / factor);
+
     while (index < sorted.length && (sorted[index]?.atMs ?? 0) <= captureNow) {
       decodeAt(sorted[index] as CaptureEvent);
       index += 1;
@@ -154,6 +161,7 @@ export function runReplayAllSpeeds<T>(
   options: { tickHz?: number; toleranceMs?: number } = {},
 ): Record<ReplaySpeed, ReplayResult<T>> {
   const out = {} as Record<ReplaySpeed, ReplayResult<T>>;
+
   for (const speed of REPLAY_SPEEDS) {
     out[speed] = runReplay(events, decode, {
       speed,
@@ -161,6 +169,7 @@ export function runReplayAllSpeeds<T>(
       ...(options.toleranceMs !== undefined ? { toleranceMs: options.toleranceMs } : {}),
     });
   }
+
   return out;
 }
 
@@ -196,26 +205,37 @@ function compareValue(
     if (typeof expected === "number" && typeof actual === "number") {
       const key = path.split(".").pop() ?? "";
       const tolerance = isTimingField(key) ? toleranceFor(key, options.toleranceMs ?? 0) : 0;
+
       if (Math.abs(expected - actual) > tolerance) problems.push({ index, path, expected, actual });
+
       return;
     }
+
     if (JSON.stringify(expected) !== JSON.stringify(actual)) problems.push({ index, path, expected, actual });
+
     return;
   }
+
   if (Array.isArray(expected)) {
     if (!Array.isArray(actual) || actual.length !== expected.length) {
       problems.push({ index, path, expected: `array(${expected.length})`, actual: Array.isArray(actual) ? `array(${actual.length})` : typeof actual });
+
       return;
     }
+
     expected.forEach((item, i) => {
       compareValue(index, `${path}[${i}]`, item, actual[i], options, problems);
     });
+
     return;
   }
+
   if (actual === null || typeof actual !== "object" || Array.isArray(actual)) {
     problems.push({ index, path, expected, actual });
+
     return;
   }
+
   for (const [key, value] of Object.entries(expected as Record<string, unknown>)) {
     compareValue(index, path === "" ? key : `${path}.${key}`, value, (actual as Record<string, unknown>)[key], options, problems);
   }
@@ -230,6 +250,7 @@ export function compareSequences(
   options: CompareOptions = {},
 ): ComparisonProblem[] {
   const problems: ComparisonProblem[] = [];
+
   if (expected.length !== actual.length) {
     problems.push({
       index: -1,
@@ -237,11 +258,14 @@ export function compareSequences(
       expected: `array(${expected.length})`,
       actual: `array(${actual.length})`,
     });
+
     return problems;
   }
+
   expected.forEach((item, i) => {
     compareValue(i, "", item, actual[i], options, problems);
   });
+
   return problems;
 }
 
@@ -264,37 +288,51 @@ function text(value: unknown): string {
 // and expectedEvents authored by a human, never by the decoder itself.
 export function lintFixture(raw: unknown, options: FixtureLintOptions): LintProblem[] {
   const problems: LintProblem[] = [];
+
   const push = (problem: string): void => {
     problems.push({ fixture: options.fixture, problem });
   };
+
   if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
     push("fixture is not an object");
+
     return problems;
   }
+
   const fixture = raw as Record<string, unknown>;
+
   if (text(fixture["capture"]).length === 0) {
     push("empty capture: record the raw transport bytes");
   }
+
   const software = text(fixture["rekordboxVersion"]) || text(fixture["seratoVersion"]) || text(fixture["softwareVersion"]);
+
   if (software.length === 0) {
     push("missing software version (rekordboxVersion, seratoVersion or softwareVersion)");
   }
+
   if (text(fixture["platform"]).length === 0) {
     push("missing platform");
   }
+
   if (text(fixture["action"]).length === 0) {
     push("missing action");
   }
+
   const events = fixture["expectedEvents"];
+
   if (!Array.isArray(events) || events.length === 0) {
     push("expectedEvents is empty");
   }
+
   const expectedBy = text(fixture["expectedBy"]);
+
   if (expectedBy.length === 0) {
     push("expectedEvents has no author: expectedBy must name the human who wrote them");
   } else if (expectedBy === options.decoderId || expectedBy === text(fixture["decoder"])) {
     push(`expectedEvents were written by the decoder (${expectedBy}), not by a human`);
   }
+
   return problems;
 }
 
@@ -308,8 +346,10 @@ export function lintFixtures(
   decoderId: string,
 ): FixtureLintSummary {
   const problems: LintProblem[] = [];
+
   for (const fixture of fixtures) {
     problems.push(...lintFixture(fixture.raw, { fixture: fixture.name, decoderId }));
   }
+
   return { fixtures: fixtures.length, problems };
 }

@@ -14,13 +14,21 @@ import {
 import { FakeLamp, ScriptedUser, goldenHex } from "./lan-fake.test-support.js";
 
 const MAC = "AA:BB:CC:DD:EE:01";
+
 const SKU = "H6076";
+
 const FIRMWARE = "1.02.03";
+
 const ZONES = 4;
+
 const OPCODE_ARM = 0xb1;
+
 const OPCODE_B0 = 0xb0;
+
 const OPCODE_B4 = 0xb4;
+
 const DEV_STATUS_COMMAND = JSON.stringify({ msg: { cmd: "devStatus", data: {} } });
+
 const TURN_ON_COMMAND = JSON.stringify({ msg: { cmd: "turn", data: { value: 1 } } });
 
 function makeLamp(behaviour: "segmented" | "ignores-paints" | "lan-absent", over: Partial<{ armSettleMs: number; answersStatusWhileArmed: boolean }> = {}): FakeLamp {
@@ -48,9 +56,11 @@ function options() {
 function twoColourPayload(zones: number): number[] {
   const payload = [0, zones];
   const mid = Math.floor(zones / 2);
+
   for (let zone = 0; zone < zones; zone++) {
     payload.push(...(zone < mid ? [255, 0, 0] : [0, 0, 255]));
   }
+
   return payload;
 }
 
@@ -164,6 +174,7 @@ describe("govee segmented capability probe", () => {
       armSettleMs: 5,
       garbageReplies: true,
     });
+
     const probe = await probeSegmentedCapability(lamp, identity(), new ScriptedUser(lamp), options());
 
     // A reply that does not parse is still a LAN channel: the paints decide.

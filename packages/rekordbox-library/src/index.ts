@@ -7,14 +7,23 @@
 export const READ_ONLY = true;
 
 export * from "./anlz.js";
+
 export * from "./beat.js";
+
 export * from "./db.js";
+
 export * from "./driver.js";
+
 export * from "./options.js";
+
 export * from "./pssi.js";
+
 export * from "./service.js";
+
 export * from "./identity.js";
+
 export * from "./sidecar.js";
+
 export * from "./watch.js";
 
 // master.db row → track identity fields (§12 resolution starts at native ID +
@@ -32,8 +41,12 @@ export interface LibraryTrackRow {
 export function rowToIdentity(row: LibraryTrackRow): { rekordboxId: string; canonicalPath?: string; title?: string; artist?: string } {
   const path = row.canonicalPath ?? row.filePath;
   const out: { rekordboxId: string; canonicalPath?: string; title?: string; artist?: string } = { rekordboxId: row.rekordboxId };
+
   if (path !== undefined && path !== "") out.canonicalPath = path;
+
   if (row.title !== undefined && row.title !== "") out.title = row.title;
+
   if (row.artist !== undefined && row.artist !== "") out.artist = row.artist;
+
   return out;
 }

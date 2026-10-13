@@ -21,6 +21,7 @@ function scriptedTransport(peripheral: SimPeripheral): { transport: BleProvision
   const sleeps: number[] = [];
   const frames: Uint8Array[] = [];
   let t = 10000;
+
   return {
     sleeps,
     frames,
@@ -76,11 +77,13 @@ describe("ble wifi provisioning (T-BLE-10)", () => {
     const peripheral = new SimPeripheral({ address: "AA:BB:CC:DD:EE:A2", zones: 2, budgetHz: null });
     const scripted = scriptedTransport(peripheral);
     let saved: string | null = null;
+
     const result = await provisionBleWifi(
       scripted.transport,
       { ssid: "VenueRouter", password: "s3cret" },
       { onPasswordSaved: (password: string) => { saved = password; } },
     );
+
     expect(result.passwordStored).toBe(true);
     expect(saved).toBe("s3cret");
     await expect(provisionBleWifi(scripted.transport, { ssid: "x", password: "y" }, { chunkPacingMs: 0 })).rejects.toThrow(/pacing/);

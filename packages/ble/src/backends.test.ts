@@ -35,12 +35,16 @@ class FakeAdapter implements BleAdapter {
   ) {}
   async scan(timeoutMs: number): Promise<BleAdvertisement[]> {
     void timeoutMs;
+
     if (this.opts.scanFails === true) throw new Error(`fake ${this.kind} scan failed`);
+
     return [ad("AA:BB:CC:DD:EE:01")];
   }
   async connect(address: string): Promise<BleConnection> {
     this.seen.push(address);
+
     if ((this.opts.failFor ?? []).includes(address)) throw new Error(`fake ${this.kind} refused ${address}`);
+
     return new FakeConnection(address, this.kind);
   }
   async close(): Promise<void> {}
@@ -53,6 +57,7 @@ describe("ble backends (T-BLE-01)", () => {
       toolkit: new FakeAdapter("toolkit-ble"),
       noble: new FakeAdapter("noble"),
     });
+
     expect(selector.currentKind()).toBe("toolkit-ble");
     const connection = await selector.connect("AA:BB:CC:DD:EE:01");
     expect(connection.kind).toBe("toolkit-ble");
@@ -65,6 +70,7 @@ describe("ble backends (T-BLE-01)", () => {
       loadToolkit: async () => { throw new BleBackendUnavailableError("load", "dlopen ble addon: image not found"); },
       noble: new FakeAdapter("noble"),
     });
+
     expect(selector.currentKind()).toBe("noble");
     expect(selector.summary().reason).toContain("dlopen ble addon");
     expect(selector.report().reason).toContain("ble backend failed to load");
@@ -75,6 +81,7 @@ describe("ble backends (T-BLE-01)", () => {
       mode: "toolkit-ble",
       loadToolkit: async () => { throw new Error("no artifact for darwin-x64"); },
     });
+
     await expect(pending).rejects.toBeInstanceOf(BleBackendLoadFailure);
     await expect(pending).rejects.toThrow(/no artifact for darwin-x64/);
   });
@@ -119,6 +126,7 @@ describe("ble backends (T-BLE-01)", () => {
       primaryReason: null,
       secondary: new FakeAdapter("noble"),
     });
+
     const found = await selector.scan(100);
     expect(found).toHaveLength(1);
     expect(selector.summary().reason).toContain("fake toolkit-ble scan failed");

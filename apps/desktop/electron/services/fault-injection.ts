@@ -91,40 +91,48 @@ export function runFaultSuite(port: FramePort, opts: FaultSuiteOptions): FaultSu
   for (let frame = 0; frame < opts.frames; frame++) {
     const active = activeAt(opts.scenarios, frame);
     const sourceSilent = active.some((s) => s.kind === "dj-silence");
+
     if (active.some((s) => s.kind === "port-conflict" || s.kind === "multicast-blocked")) {
       discoveryDegradedFrames += 1;
     }
 
     for (const device of opts.devices) {
       const deviceFaults = active.filter((s) => affects(s, device));
+
       const gone = deviceFaults.some((s) =>
         s.kind === "device-disconnect" || s.kind === "worker-kill" || s.kind === "host-kill");
+
       if (gone) continue;
 
       pending.set(device, (pending.get(device) ?? 0) + 1);
       maxPending = Math.max(maxPending, pending.get(device) ?? 0);
 
       const congested = deviceFaults.some((s) => s.kind === "throttle" || s.kind === "latency" || s.kind === "loss");
+
       if (congested && frame % throttleEvery !== 0) {
         // Newest-wins: the skipped tick is superseded, never queued.
         superseded += 1;
         pending.set(device, 0);
         continue;
       }
+
       if (deviceFaults.some((s) => s.kind === "malformed")) {
         malformedDropped += 1;
         pending.set(device, 0);
         continue;
       }
+
       if (deviceFaults.some((s) => s.kind === "duplication" || s.kind === "reorder")) {
         // A duplicated or reordered arrival still resolves to one current frame.
         superseded += 1;
       }
+
       // Source loss holds the coherent current look; a renderer reload keeps
       // the show running through the same path. Neither sends all-off.
       port.deliver(device, frame, sourceSilent ? "held" : "current");
       delivered += 1;
       pending.set(device, 0);
+
       for (const s of active) {
         if (!affects(s, device)) othersSeen.set(s.id, true);
       }
@@ -158,11 +166,13 @@ export class FaultInjectionService implements Service {
 
   start(): ServiceStatus {
     this.tracker.set("running", "fault scenarios armed; idle until runSuite");
+
     return this.status();
   }
 
   stop(): ServiceStatus {
     this.tracker.set("stopped");
+
     return this.status();
   }
 
@@ -174,6 +184,7 @@ export class FaultInjectionService implements Service {
       this.tracker.setCounter("scenarios", this.last.measurements.length);
       this.tracker.setCounter("discoveryDegradedFrames", this.last.discoveryDegradedFrames);
     }
+
     return this.tracker.status();
   }
 
@@ -181,6 +192,7 @@ export class FaultInjectionService implements Service {
     const result = runFaultSuite(port, opts);
     this.last = result;
     this.tracker.count("suites");
+
     return result;
   }
 }

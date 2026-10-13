@@ -14,12 +14,14 @@ const created: string[] = [];
 function tempDir(): string {
   const root = mkdtempSync(join(tmpdir(), "autolight-rbl-options-"));
   created.push(root);
+
   return root;
 }
 
 function uvAvailable(): boolean {
   try {
     execFileSync("uv", ["--version"], { stdio: "ignore", timeout: 30_000 });
+
     return true;
   } catch {
     return false;
@@ -32,6 +34,7 @@ function pythonProbe(script: string, args: string[] = []): string | undefined {
   // Anchor to this file, not the process cwd: the root vitest run executes
   // from the repo root, which would resolve to a nonexistent analysis dir.
   const analysisDir = fileURLToPath(new URL("../../../analysis", import.meta.url));
+
   try {
     return execFileSync("uv", ["run", "--project", analysisDir, "python", "-c", script, ...args], {
       encoding: "utf8",
@@ -119,6 +122,7 @@ describe("rekordbox discovery", () => {
       "    data = bytes(range(n))",
       "    print(base64.b85encode(data).decode())",
     ].join("\n");
+
     const encoded = pythonProbe(script);
     expect(encoded).toBeDefined();
     const lines = (encoded ?? "").split("\n");

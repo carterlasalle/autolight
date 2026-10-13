@@ -64,6 +64,7 @@ function model(over: Partial<TrackModel> = {}): TrackModel {
 }
 
 const style = BUILT_IN_STYLES["club"]!;
+
 const venue = DEFAULT_VENUE_CLASS;
 
 function compile(track: TrackModel): CompiledShowPlan {
@@ -90,12 +91,14 @@ describe("T-PLAN-01 plan schema (P-26, P-27, P-32, P-72, P-75)", () => {
     const plan = compile(model());
     const ids = new Set(plan.cues.map((c) => c.id));
     expect(ids.size).toBe(plan.cues.length);
+
     for (const c of plan.cues) {
       expect(isCueLevel(c.level)).toBe(true);
       expect(isPlanLayer(c.layer)).toBe(true);
       expect(Number.isFinite(c.startBeat)).toBe(true);
       expect(c.reason.length).toBeGreaterThan(0);
     }
+
     const hitPlan = compileShow({ track: model(), venue, style: { ...style, whiteHitFrequency: 1 }, config: DEFAULT_CONFIG }).plan;
     const hit = hitPlan.cues.find((c) => c.type === "white-hit");
     expect(hit?.attack).toEqual({ kind: "ms", ms: 5 });
@@ -109,26 +112,32 @@ describe("T-PLAN-01 plan schema (P-26, P-27, P-32, P-72, P-75)", () => {
     expect(a).toBe(b);
     const otherTrack = compile(model({ identity: { id: "trk2", sourceIds: {} } })).seed;
     expect(otherTrack).not.toBe(a);
+
     const otherStyle = compileShow({
       track,
       venue,
       style: BUILT_IN_STYLES["dark"]!,
       config: DEFAULT_CONFIG,
     }).plan.seed;
+
     expect(otherStyle).not.toBe(a);
+
     const otherVenue = compileShow({
       track,
       venue: { ...venue, minFps: 30 },
       style,
       config: DEFAULT_CONFIG,
     }).plan.seed;
+
     expect(otherVenue).not.toBe(a);
+
     const otherConfig = compileShow({
       track,
       venue,
       style,
       config: { ...DEFAULT_CONFIG, whiteHitMinBeats: 24 },
     }).plan.seed;
+
     expect(otherConfig).not.toBe(a);
   });
 
@@ -143,8 +152,10 @@ describe("T-PLAN-01 plan schema (P-26, P-27, P-32, P-72, P-75)", () => {
 
   it("emits no device IDs in targets and no seconds fields in cue types", () => {
     const plan = compile(model());
+
     for (const c of plan.cues as PlanCue[]) {
       expect(stringHasDeviceRef(c.target)).toBe(false);
+
       if (c.selector) expect(selectorHasDeviceRef(c.selector)).toBe(false);
       expect("seconds" in c).toBe(false);
       expect("startSeconds" in c).toBe(false);

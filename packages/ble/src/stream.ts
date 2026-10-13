@@ -30,6 +30,7 @@ export interface BleStreamPlan {
 function keyOf(color: BleRgb, levels: number): string {
   if (levels <= 0) return `${color.r},${color.g},${color.b}`;
   const q = (v: number): number => Math.min(levels - 1, Math.floor(Math.min(255, Math.max(0, Math.round(v))) / 256 * levels));
+
   return `${q(color.r)},${q(color.g)},${q(color.b)}`;
 }
 
@@ -43,16 +44,21 @@ export function planBleFrame(
   if (frame.length !== zoneCount * 3) {
     throw new RangeError(`BLE frame needs ${zoneCount * 3} bytes for ${zoneCount} zones, got ${frame.length}`);
   }
+
   const groups = new Map<string, { color: BleRgb; zones: number[] }>();
+
   for (let z = 0; z < zoneCount; z++) {
     const color: BleRgb = { r: frame[z * 3] ?? 0, g: frame[z * 3 + 1] ?? 0, b: frame[z * 3 + 2] ?? 0 };
     const key = keyOf(color, quantizeLevels);
     const held = groups.get(key);
+
     if (held === undefined) groups.set(key, { color, zones: [z] });
     else held.zones.push(z);
   }
+
   const writes = [...groups.values()].sort((a, b) => b.zones.length - a.zones.length);
   const distinctColours = writes.length;
+
   return {
     writes,
     distinctColours,
@@ -79,12 +85,16 @@ export interface BleStreamEncodeOptions {
 /** Encodes one frame into BLE writes: fast path or one masked write per colour. */
 export function encodeBleStreamFrame(frame: Uint8Array, opts: BleStreamEncodeOptions): Uint8Array[] {
   const plan = planBleFrame(frame, opts.zoneCount, opts.budgetHz, opts.quantizeLevels ?? 0);
+
   if (plan.singleColour) {
     const first = plan.writes[0];
     const color: BleRgb = first === undefined ? { r: 0, g: 0, b: 0 } : first.color;
+
     if (opts.hostColorQualified === true) return [bleHostColorOne(color)];
+
     return [bleColorSingle(color, opts.kelvin ?? 0)];
   }
+
   return plan.writes.map((w) => bleColorMasked(w.color, w.zones, opts.zoneCount, opts.kelvin ?? 0));
 }
 
@@ -116,6 +126,7 @@ export interface BleStreamedFrame {
 export function streamBleRendererFrame(frame: Uint8Array, opts: BleStreamEncodeOptions): BleStreamedFrame {
   const writes = encodeBleStreamFrame(frame, opts);
   const plan = planBleFrame(frame, opts.zoneCount, opts.budgetHz, opts.quantizeLevels ?? 0);
+
   return {
     writes,
     feedback: {

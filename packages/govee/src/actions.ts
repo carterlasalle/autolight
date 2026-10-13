@@ -116,6 +116,7 @@ export async function identify(
   const atMs = Date.now();
 
   const capture = await readDevStatus(link, { retryMs: captureTimeoutMs, deadlineMs: captureTimeoutMs });
+
   const observed = capture.status === null
     ? null
     : {
@@ -134,6 +135,7 @@ export async function identify(
     await link.sendRaw(paint(whiteHitPayload(zones, 1)));
     await wait(options.flashMs);
     const restoreFrame = fixture.currentFrame ?? null;
+
     if (restoreFrame !== null) {
       restored = "current-frame";
       await link.sendRaw(paint(restoreFrame));
@@ -146,6 +148,7 @@ export async function identify(
     path = "colorwc";
     await link.sendJson(colorCommand(255, 255, 255));
     await wait(options.flashMs);
+
     if (observed === null) {
       restored = "no-read-back";
     } else if (!observed.onOff) {
@@ -187,6 +190,7 @@ export interface ChaseOptions extends ActionOptions {
 export function chaseFrames(zones: number, direction: "forward" | "reverse"): Uint8Array[] {
   const n = Math.max(1, Math.floor(zones));
   const frames: Uint8Array[] = [];
+
   for (let step = 0; step < n; step++) {
     const zone = direction === "forward" ? step : n - 1 - step;
     const frame = new Uint8Array(n * 3);
@@ -195,6 +199,7 @@ export function chaseFrames(zones: number, direction: "forward" | "reverse"): Ui
     frame[zone * 3 + 2] = 255;
     frames.push(frame);
   }
+
   return frames;
 }
 
@@ -234,15 +239,19 @@ export async function testChase(
     // is armed the ramp goes out as stream frames, because any colorwc while
     // armed can end the channel; unarmed it is the whole-fixture command.
     const intensities = [0.25, 0.6, 1] as const;
+
     for (const intensity of intensities) {
       const white = whiteHitPayload(1, intensity);
+
       if (fixture.armed) {
         await link.sendRaw(paint(white));
       } else {
         await link.sendJson(colorCommand(white[0] ?? 0, white[1] ?? 0, white[2] ?? 0));
       }
+
       await wait(options.stepMs);
     }
+
     return {
       action: "chase",
       hardwareId: fixture.hardwareId,
@@ -261,12 +270,16 @@ export async function testChase(
   // unit in qualification step 11); "forward" always means index 0 to N-1.
   const directions: ("forward" | "reverse")[] =
     fixture.orientation === "reverse" ? ["reverse", "forward"] : ["forward", "reverse"];
+
   const zoneOrder: number[] = [];
   let frameCount = 0;
+
   for (const direction of directions) {
     const frames = chaseFrames(zones, direction);
+
     for (let step = 0; step < frames.length; step++) {
       const frame = frames[step];
+
       if (frame === undefined) continue;
       await link.sendRaw(paint(frame));
       await wait(options.stepMs);
@@ -316,6 +329,7 @@ export interface RecalibrationResult {
  */
 export function recalibrate(target: RecalibrationTarget, step: number): RecalibrationResult {
   const opened = target.enterAt(step);
+
   return {
     ok: true,
     action: "recalibrate",
@@ -348,12 +362,16 @@ export async function identifyWalk(
   options: IdentifyOptions & { pause?: (index: number, hardwareId: string) => Promise<void> },
 ): Promise<IdentifyWalkResult> {
   const results: IdentifyResult[] = [];
+
   for (let index = 0; index < fixtures.length; index++) {
     const fixture = fixtures[index];
+
     if (fixture === undefined) continue;
     results.push(await identify(exchange, fixture, options));
+
     if (options.pause !== undefined) await options.pause(index, fixture.hardwareId);
   }
+
   return {
     action: "identify-walk",
     order: results.map((result) => result.hardwareId),

@@ -265,21 +265,29 @@ const byKey = new Map(KEYS.map((k) => [k.key, k]));
 
 export function defineKey(key: string): KeyDef {
   const def = byKey.get(key);
+
   if (!def) throw new Error(`unknown-config-key: ${key}`);
+
   return def;
 }
 
 export function defaultFor(key: string): unknown {
   const def = defineKey(key);
+
   if (def.type === "boolean") return def.defaultRaw === "true";
+
   if (def.type === "number") return Number(def.defaultRaw);
+
   if (def.type === "json") { try { return JSON.parse(def.defaultRaw); } catch { return def.defaultRaw; } }
+
   return def.defaultRaw;
 }
 
 export function defaultsObject(): Record<string, unknown> {
   const out: Record<string, unknown> = {};
+
   for (const k of KEYS) out[k.key] = defaultFor(k.key);
+
   return out;
 }
 

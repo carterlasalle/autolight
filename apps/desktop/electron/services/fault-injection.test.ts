@@ -13,6 +13,7 @@ interface Delivery {
 
 function recorder(): { port: FramePort; deliveries: Delivery[] } {
   const deliveries: Delivery[] = [];
+
   return {
     deliveries,
     port: {
@@ -26,11 +27,13 @@ function recorder(): { port: FramePort; deliveries: Delivery[] } {
 describe("fault injection suite", () => {
   it("holds the current look through DJ silence, never all-off", () => {
     const rec = recorder();
+
     const result = runFaultSuite(rec.port, {
       frames: 120,
       devices: ["a", "b"],
       scenarios: [{ id: "silence", kind: "dj-silence", startFrame: 40, endFrame: 80 }],
     });
+
     const held = rec.deliveries.filter((d) => d.frame >= 40 && d.frame < 80);
     expect(held.length).toBeGreaterThan(0);
     expect(held.every((d) => d.payload === "held")).toBe(true);
@@ -41,11 +44,13 @@ describe("fault injection suite", () => {
 
   it("isolates a device disconnect: others continue, reconnect is one frame", () => {
     const rec = recorder();
+
     const result = runFaultSuite(rec.port, {
       frames: 120,
       devices: ["a", "b", "c"],
       scenarios: [{ id: "drop-b", kind: "device-disconnect", deviceId: "b", startFrame: 40, endFrame: 80 }],
     });
+
     const during = rec.deliveries.filter((d) => d.frame >= 40 && d.frame < 80);
     expect(during.some((d) => d.device === "b")).toBe(false);
     expect(during.some((d) => d.device === "a")).toBe(true);
@@ -59,12 +64,14 @@ describe("fault injection suite", () => {
 
   it("throttles only the congested device while the show stays 60 Hz logical", () => {
     const rec = recorder();
+
     const result = runFaultSuite(rec.port, {
       frames: 120,
       devices: ["fast", "slow"],
       scenarios: [{ id: "congestion", kind: "throttle", deviceId: "slow", startFrame: 0, endFrame: 120 }],
       throttleEvery: 4,
     });
+
     const fast = rec.deliveries.filter((d) => d.device === "fast").length;
     const slow = rec.deliveries.filter((d) => d.device === "slow").length;
     expect(fast).toBe(120);
@@ -76,6 +83,7 @@ describe("fault injection suite", () => {
 
   it("drops malformed packets and resolves duplicates to one current frame", () => {
     const rec = recorder();
+
     const result = runFaultSuite(rec.port, {
       frames: 60,
       devices: ["a"],
@@ -85,6 +93,7 @@ describe("fault injection suite", () => {
         { id: "reorder", kind: "reorder", startFrame: 40, endFrame: 50 },
       ],
     });
+
     expect(result.malformedDropped).toBe(10);
     expect(result.superseded).toBe(20);
     expect(rec.deliveries.filter((d) => d.frame >= 10 && d.frame < 20)).toHaveLength(0);
@@ -93,6 +102,7 @@ describe("fault injection suite", () => {
 
   it("keeps frames flowing through port conflicts and multicast blocks", () => {
     const rec = recorder();
+
     const result = runFaultSuite(rec.port, {
       frames: 60,
       devices: ["a", "b"],
@@ -101,6 +111,7 @@ describe("fault injection suite", () => {
         { id: "isolation", kind: "multicast-blocked", startFrame: 30, endFrame: 50 },
       ],
     });
+
     expect(rec.deliveries).toHaveLength(120);
     expect(result.discoveryDegradedFrames).toBe(40);
     expect(result.staleFrames).toBe(0);
@@ -108,6 +119,7 @@ describe("fault injection suite", () => {
 
   it("has zero gap on renderer reload and one-frame recovery on host kill", () => {
     const rec = recorder();
+
     const result = runFaultSuite(rec.port, {
       frames: 100,
       devices: ["a", "b"],
@@ -117,6 +129,7 @@ describe("fault injection suite", () => {
         { id: "workerkill", kind: "worker-kill", deviceId: "b", startFrame: 70, endFrame: 80 },
       ],
     });
+
     expect(rec.deliveries.filter((d) => d.frame === 30)).toHaveLength(2);
     const reload = result.measurements.find((x) => x.scenarioId === "reload")!;
     expect(reload.recoveryFrames).toBe(0);
@@ -129,12 +142,14 @@ describe("fault injection suite", () => {
     const svc = new FaultInjectionService();
     expect(svc.start().state).toBe("running");
     const rec = recorder();
+
     const result = svc.runSuite(rec.port, {
       frames: 40,
       devices: ["a"],
       scenarios: [{ id: "lat", kind: "latency", startFrame: 10, endFrame: 30 }],
       throttleEvery: 2,
     });
+
     expect(result.delivered + result.superseded).toBe(40);
     expect(svc.status().counters["staleFrames"]).toBe(0);
     expect(svc.stop().state).toBe("stopped");

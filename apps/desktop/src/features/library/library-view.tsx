@@ -16,12 +16,15 @@ export function LibraryView(): JSX.Element {
   const selected = useShell((s) => s.selectedTrackId);
   const [query, setQuery] = useState("");
   const [queue, setQueue] = useState<QueueEntry[]>([]);
+
   const tracks = useMemo(() => (
     live ? liveDeckRows([live.deckA, live.deckB], live.bpm, query) : []
   ), [live, query]);
+
   const enqueue = (id: string): void => {
     setQueue((prev) => (prev.some((e) => e.trackId === id) ? prev : [...prev, queueEntry(id)]));
   };
+
   return (
     <div className="flex max-w-5xl flex-col gap-3">
       <section className="rounded-xl border border-border bg-card px-4 py-3">
@@ -44,6 +47,7 @@ export function LibraryView(): JSX.Element {
                   {tracks.map((t) => {
                     const key = t.id === "deck-a" || t.id === "deck-b" ? t.id : libraryRowKey({ trackId: t.id, title: t.title });
                     const ready = t.readiness === "READY";
+
                     return (
                       <tr key={key} className={selected === t.id ? "bg-muted/50" : "cursor-pointer"} onClick={() => { set({ selectedTrackId: t.id }); }}>
                         <td className="max-w-[16rem] truncate border-b py-1.5 pr-3" title={t.title || "—"}>{t.title || "—"}</td>

@@ -25,14 +25,18 @@ export const INPUT_KEYS = [
 ] as const;
 
 export type InputKey = (typeof INPUT_KEYS)[number];
+
 export type InputStatus = "present" | "absent" | "failed" | "skipped";
+
 export interface InputEntry {
   status: InputStatus;
   reason?: string;
   version?: string;
   durationMs?: number;
 }
+
 export type InputMap = Record<InputKey, InputEntry>;
+
 export type Coverage = "full" | "structured" | "adaptive";
 
 function statusOf(inputs: Partial<Record<InputKey, InputEntry>>, key: InputKey): InputStatus {
@@ -44,19 +48,25 @@ export function computeReadiness(inputs: Partial<Record<InputKey, InputEntry>>):
   const hasGrid =
     statusOf(inputs, "native.rekordbox.grid") === "present" ||
     statusOf(inputs, "native.serato.grid") === "present";
+
   const hasAudio = statusOf(inputs, "source.audio") === "present";
+
   const hasNativeStructure =
     statusOf(inputs, "native.rekordbox.pssi") === "present" ||
     statusOf(inputs, "native.serato.markers") === "present" ||
     statusOf(inputs, "fusion.structure") === "present";
+
   const hasMl = statusOf(inputs, "ml.allinone.structure") === "present";
   const hasDsp = statusOf(inputs, "dsp.features") === "present";
   const hasEvents = statusOf(inputs, "events.detectors") === "present";
   const hasPlan = statusOf(inputs, "plan.generated") === "present";
+
   if (hasGrid && hasAudio && hasNativeStructure && hasMl && hasDsp && hasEvents && hasPlan) {
     return "full";
   }
+
   if (hasGrid && hasNativeStructure) return "structured";
+
   return "adaptive";
 }
 
@@ -64,6 +74,7 @@ export function computeReadiness(inputs: Partial<Record<InputKey, InputEntry>>):
 export function describeInputs(inputs: Partial<Record<InputKey, InputEntry>>): { key: InputKey; status: InputStatus; reason?: string }[] {
   return INPUT_KEYS.map((key) => {
     const reason = inputs[key]?.reason;
+
     return reason === undefined ? { key, status: statusOf(inputs, key) } : { key, status: statusOf(inputs, key), reason };
   });
 }

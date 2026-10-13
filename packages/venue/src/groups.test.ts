@@ -8,6 +8,7 @@ function square() {
   const room = { ...ref.room, logicalZeroS: ref.zeroS, perimeterDirection: "clockwise" as const };
   const built = fieldCellsForReference(ref);
   const fields = computeFields(room, built.cells, ref.runs, { zeroS: ref.zeroS });
+
   return { ref, room, fields };
 }
 
@@ -28,6 +29,7 @@ describe("T-ROOM-06 groups and splits", () => {
   it("feathers the halves split per DS-33 with 0.5 weight on the line", () => {
     const { fields } = square();
     const w = splitWeights(fields, { id: "halves", kind: "halves" }, { featherM: 10 });
+
     for (let i = 0; i < fields.count; i++) {
       expect(w[0]![i]! + w[1]![i]!).toBeCloseTo(1, 6);
       expect(w[0]![i]).toBeGreaterThan(0.3);
@@ -41,12 +43,14 @@ describe("T-ROOM-06 groups and splits", () => {
     expect(resolveSelector(fields, { kind: "group", name: "LEFT" }, g, roles)).toEqual(g.LEFT);
     const sRange = resolveSelector(fields, { kind: "fieldRange", field: "s", min: 0.2, max: 0.4 }, g, roles);
     expect(sRange.length).toBeGreaterThan(0);
+
     const zone = resolveSelector(
       fields,
       { kind: "zone", zone: { id: "floor", name: "Dance floor", polygon: [{ x: -1, y: -1 }, { x: 1, y: -1 }, { x: 1, y: 1 }, { x: -1, y: 1 }] } },
       g,
       roles,
     );
+
     expect(Array.isArray(zone)).toBe(true);
     const zw = zoneWeights(fields, { id: "z", name: "z", polygon: [{ x: -5, y: -5 }, { x: 5, y: -5 }, { x: 5, y: 5 }, { x: -5, y: 5 }] });
     expect([...zw].every((v) => v >= 0.5)).toBe(true);

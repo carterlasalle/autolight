@@ -45,12 +45,15 @@ describe("rekordbox-live", () => {
   });
   it("replays live 7.2.10 captures (§9.4, §128)", () => {
     const dir = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "protocol-fixtures", "rekordbox", "7.2.10", "macos");
+
     for (const action of readdirSync(dir)) {
       const f = parseFixture(JSON.parse(readFileSync(join(dir, action, "capture.json"), "utf8")));
       const states = replayFixture(f, 1);
       expect(states.length).toBeGreaterThan(0);
+
       for (const s of states) expect(s.source).toBe("rekordbox");
     }
+
     const both = parseFixture(JSON.parse(readFileSync(join(dir, "both-decks-loaded", "capture.json"), "utf8")));
     expect(replayFixture(both, 10)).toHaveLength(2);
   });
@@ -74,6 +77,7 @@ describe("rekordbox-live", () => {
       playing: false, playheadSeconds: 0, playRate: 1, effectiveBpm: 173.98,
       channelFader: null, crossfader: null, receivedAtNs: 1n,
     });
+
     expect(state.source).toBe("rekordbox");
     expect(state.track?.id).toBe("rb:231828222");
     expect(state.effectiveBpm).toBe(173.98);

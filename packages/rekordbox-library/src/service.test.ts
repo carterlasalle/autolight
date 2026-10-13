@@ -26,6 +26,7 @@ function fixture(): Fixture {
   const dbPath = join(root, "master.db");
   const sharePath = join(root, "share");
   const summary = writeFixtureDb({ dbPath, sharePath, audioDir: join(root, "audio") });
+
   return { root, dbPath, sharePath, summary };
 }
 
@@ -40,6 +41,7 @@ class StubNativeWatch implements NativeWatch {
   start(files: readonly WatchedFile[], onEvent: (path: string) => void): Promise<void> {
     this.started = [...files];
     this.onEvent = onEvent;
+
     return Promise.resolve();
   }
 
@@ -60,6 +62,7 @@ describe("library service", () => {
   it("answers the typed queries over the TypeScript reader", async () => {
     const { dbPath, sharePath, summary } = fixture();
     const service = await LibraryService.open({ dbPath, sharePath, mode: "rekordbox-connect" });
+
     try {
       expect(service.reader).toBe("rekordbox-connect");
       expect(service.tracks({ limit: 2, offset: 0 }).rows.map((track) => track.rekordboxId)).toEqual(["101", "102"]);
@@ -109,12 +112,14 @@ describe("library service", () => {
   it("cross-checks counts, playlist membership and paths against the sidecar", async () => {
     const { dbPath, sharePath } = fixture();
     const payload = readFixturePayload(dbPath);
+
     const service = await LibraryService.open({
       dbPath,
       sharePath,
       encrypted: false,
       sidecar: { run: runnerReturning(payload) },
     });
+
     try {
       const agreement = await service.runCrossCheck();
       expect(agreement.status).toBe("agree");
@@ -137,6 +142,7 @@ describe("library service", () => {
           }),
         },
       });
+
       try {
         const mismatch = await disagreeing.runCrossCheck();
         expect(mismatch.status).toBe("disagree");
@@ -152,12 +158,14 @@ describe("library service", () => {
 
   it("reports an unavailable cross-check instead of failing the library", async () => {
     const { dbPath, sharePath } = fixture();
+
     const service = await LibraryService.open({
       dbPath,
       sharePath,
       encrypted: false,
       sidecar: { run: runnerReturning({ ok: false, error: "no interpreter" }, 1) },
     });
+
     try {
       const result = await service.runCrossCheck();
       expect(result.status).toBe("unavailable");
@@ -173,11 +181,13 @@ describe("library service", () => {
     const payload = readFixturePayload(join(root, "master.db"));
     const junk = join(root, "encrypted-master.db");
     writeFileSync(junk, "not a plain sqlite file");
+
     const service = await LibraryService.open({
       dbPath: junk,
       sharePath,
       sidecar: { run: runnerReturning(payload) },
     });
+
     try {
       expect(service.reader).toBe("pyrekordbox");
       expect(service.mode).toBe("auto");
@@ -205,12 +215,14 @@ describe("library service", () => {
     vi.useFakeTimers();
     const { dbPath, sharePath } = fixture();
     const native = new StubNativeWatch();
+
     const service = await LibraryService.open({
       dbPath,
       sharePath,
       mode: "rekordbox-connect",
       watch: { engine: "auto", native, debounceMs: 0, pollMs: 60_000 },
     });
+
     try {
       const files = service.watchTracks(service.tracks().rows);
       expect(files.filter((file) => file.kind === "db")).toHaveLength(1);
@@ -224,6 +236,7 @@ describe("library service", () => {
       expect(native.started).toHaveLength(files.length);
 
       const db = new DatabaseSync(dbPath);
+
       try {
         db.prepare(
           `INSERT INTO djmdContent (ID, FolderPath, Title, ArtistID, BPM, Length) VALUES ('105', '/audio/105.mp3', 'Ember', 'a1', 140, 240)`,
@@ -231,6 +244,7 @@ describe("library service", () => {
       } finally {
         db.close();
       }
+
       native.fire(dbPath);
       // The debounce edge is a timer, so the fake clock drives it.
       vi.advanceTimersByTime(1);

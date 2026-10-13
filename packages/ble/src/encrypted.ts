@@ -28,13 +28,17 @@ export function encryptedLinkNeed(
 ): BleEncryptedNeed {
   const encoded = manufacturer.length > 0 && ((manufacturer[0] ?? 0) & BLE_ENCODED_FLAG) === BLE_ENCODED_FLAG;
   const protocolV2 = versionByte === 2;
+
   if (mode === "off") {
     return { encoded, protocolV2, handshakeRequired: false, reason: "DS-05 off: plain frames only" };
   }
+
   if (mode === "on") {
     return { encoded, protocolV2, handshakeRequired: true, reason: "DS-05 on: always attempt the handshake" };
   }
+
   const handshakeRequired = encoded || protocolV2;
+
   return {
     encoded,
     protocolV2,
@@ -71,9 +75,12 @@ export const BLE_KEYS_NEEDED_COPY = "encrypted-link devices need keys (see docs/
 
 /** Header bytes of the v2 handshake payload: E7 11 01 then the nonce. */
 export const BLE_V2_HANDSHAKE_CMD = 0x11;
+
 export const BLE_V2_HANDSHAKE_MARK = 0x01;
+
 /** GCM tag length the device accepts (WP04: 16 bytes, never 12). */
 export const BLE_V2_TAG_LEN = 16;
+
 /** GCM IV length in bytes. */
 export const BLE_V2_IV_LEN = 12;
 
@@ -86,13 +93,16 @@ export function encodeBleHandshake(cmd: number, payload: Uint8Array = new Uint8A
   if (payload.length > BLE_PAYLOAD_LEN) {
     throw new RangeError(`BLE handshake payload needs at most ${BLE_PAYLOAD_LEN} bytes, got ${payload.length}`);
   }
+
   const out = new Uint8Array(BLE_FRAME_LEN);
   out[0] = BLE_PROTYPE.HANDSHAKE;
   out[1] = cmd & 0xff;
   out.set(payload, 2);
   let xor = 0;
+
   for (let i = 0; i < BLE_FRAME_LEN - 1; i++) xor ^= out[i] ?? 0;
   out[BLE_FRAME_LEN - 1] = xor & 0xff;
+
   return out;
 }
 
@@ -104,6 +114,7 @@ export function bleHandshakeSeedFrames(seed: Uint8Array): { e701: Uint8Array; e7
   if (seed.length === 0 || seed.length > 17) {
     throw new RangeError(`handshake seed needs 1 to 17 bytes, got ${seed.length}`);
   }
+
   return {
     e701: encodeBleHandshake(0x01, seed),
     e702: encodeBleHandshake(0x02, seed),
@@ -118,9 +129,11 @@ export function bleHandshakeV2(nonce: Uint8Array): Uint8Array {
   if (nonce.length === 0 || nonce.length > 16) {
     throw new RangeError(`v2 handshake nonce needs 1 to 16 bytes, got ${nonce.length}`);
   }
+
   const payload = new Uint8Array(1 + nonce.length);
   payload[0] = BLE_V2_HANDSHAKE_MARK;
   payload.set(nonce, 1);
+
   return encodeBleHandshake(BLE_V2_HANDSHAKE_CMD, payload);
 }
 
@@ -133,6 +146,7 @@ type BleGcmAlgorithm = "aes-128-gcm" | "aes-256-gcm";
 
 function v2Algorithm(key: Uint8Array): BleGcmAlgorithm {
   if (key.length === 16) return "aes-128-gcm";
+
   if (key.length === 32) return "aes-256-gcm";
   throw new RangeError(`v2 session key needs 16 or 32 bytes, got ${key.length}`);
 }
@@ -145,8 +159,10 @@ function checkV2Iv(iv: Uint8Array): void {
 export function bleV2Encrypt(key: BleV2Key, iv: Uint8Array, plaintext: Uint8Array, aad?: Uint8Array): { ciphertext: Uint8Array; tag: Uint8Array } {
   checkV2Iv(iv);
   const cipher = createCipheriv(v2Algorithm(key.key), Buffer.from(key.key), Buffer.from(iv), { authTagLength: BLE_V2_TAG_LEN });
+
   if (aad !== undefined) cipher.setAAD(Buffer.from(aad), { plaintextLength: plaintext.length });
   const body = Buffer.concat([cipher.update(Buffer.from(plaintext)), cipher.final()]);
+
   return { ciphertext: new Uint8Array(body), tag: new Uint8Array(cipher.getAuthTag()) };
 }
 
@@ -157,13 +173,17 @@ export function bleV2Encrypt(key: BleV2Key, iv: Uint8Array, plaintext: Uint8Arra
  */
 export function bleV2Decrypt(key: BleV2Key, iv: Uint8Array, ciphertext: Uint8Array, tag: Uint8Array, aad?: Uint8Array): Uint8Array {
   checkV2Iv(iv);
+
   if (tag.length !== BLE_V2_TAG_LEN) {
     throw new RangeError(`v2 GCM tag needs ${BLE_V2_TAG_LEN} bytes, got ${tag.length}`);
   }
+
   const decipher = createDecipheriv(v2Algorithm(key.key), Buffer.from(key.key), Buffer.from(iv));
+
   if (aad !== undefined) decipher.setAAD(Buffer.from(aad), { plaintextLength: ciphertext.length });
   decipher.setAuthTag(Buffer.from(tag));
   const body = Buffer.concat([decipher.update(Buffer.from(ciphertext)), decipher.final()]);
+
   return new Uint8Array(body);
 }
 
@@ -177,8 +197,11 @@ function hexToBytes(hex: string): Uint8Array {
   if (!/^[0-9a-fA-F]+$/.test(hex) || hex.length % 2 !== 0) {
     throw new Error("key file: keyHex needs even-length hex");
   }
+
   const out = new Uint8Array(hex.length / 2);
+
   for (let i = 0; i < out.length; i++) out[i] = Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+
   return out;
 }
 
@@ -188,17 +211,23 @@ function hexToBytes(hex: string): Uint8Array {
  */
 export function parseBleKeysFile(contents: string): BleV2Key {
   let parsed: unknown;
+
   try {
     parsed = JSON.parse(contents) as unknown;
   } catch {
     throw new Error("key file: needs JSON with { version: 1, keyHex }");
   }
+
   if (typeof parsed !== "object" || parsed === null) throw new Error("key file: needs JSON with { version: 1, keyHex }");
   const record = parsed as Record<string, unknown>;
+
   if (record["version"] !== 1) throw new Error("key file: version needs to be 1");
+
   if (typeof record["keyHex"] !== "string") throw new Error("key file: keyHex needs to be a hex string");
   const key = hexToBytes(record["keyHex"]);
+
   if (key.length !== 16 && key.length !== 32) throw new Error("key file: keyHex needs 32 or 64 hex chars");
+
   return { key };
 }
 
@@ -222,6 +251,7 @@ export function requireOwnerKeyDecision(decision: BleKeyDecision): string {
   if (decision.decided !== true || decision.keyFilePath === null || decision.keyFilePath.length === 0) {
     throw new Error(BLE_KEYS_NEEDED_COPY);
   }
+
   return decision.keyFilePath;
 }
 
@@ -232,6 +262,8 @@ export function requireOwnerKeyDecision(decision: BleKeyDecision): string {
 export function verifyBleV2Reply(plaintext: Uint8Array, sku: string, mac: string): boolean {
   const text = Buffer.from(plaintext).toString("utf8");
   const squashed = (s: string): string => s.toLowerCase().replace(/[^0-9a-f]/g, "");
+
   if (sku.length === 0 || mac.length === 0) return false;
+
   return text.includes(sku) && squashed(text).includes(squashed(mac));
 }

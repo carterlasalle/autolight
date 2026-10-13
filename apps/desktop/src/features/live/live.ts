@@ -32,25 +32,31 @@ export function liveViewModel(opts: {
   const wa = audibleWeight(deckA);
   const wb = audibleWeight(deckB);
   const beat = wa >= wb ? beatA : beatB;
+
   const upcoming = mixed.cues
     .filter((c: { startBeat: number; durationBeats: number }) => c.startBeat + c.durationBeats > beat)
     .sort((x: { startBeat: number }, y: { startBeat: number }) => x.startBeat - y.startBeat)
     .slice(0, 5);
+
   // Per-deck frames blended by audible weight, then reactive overlay
   // (§64, §68: subtle gain only, never structural).
   const fa = renderFrame({ schemaVersion: 1, plannerVersion: "live", trackId: "a", styleId: "live", seed: "live", cues: mixA.cues }, beatA, fixtures);
   const fb = renderFrame({ schemaVersion: 1, plannerVersion: "live", trackId: "b", styleId: "live", seed: "live", cues: mixB.cues }, beatB, fixtures);
   const total = wa + wb || 1;
   const cells: { x: number; color: string }[] = [];
+
   for (const f of fixtures) {
     const ba = fa.get(f.id);
     const bb = fb.get(f.id);
+
     if (!ba || !bb) continue;
     f.cells.forEach((c, i) => {
       const chan = (k: number): number => {
         const blended = ((ba[i * 3 + k] ?? 0) * wa + (bb[i * 3 + k] ?? 0) * wb) / total / 255;
+
         return applyOverlay(blended, opts.reactiveEnergy, opts.reactiveAmount);
       };
+
       const r = chan(0);
       const g = chan(1);
       const b = chan(2);
@@ -60,6 +66,7 @@ export function liveViewModel(opts: {
       });
     });
   }
+
   return {
     weights: { a: wa, b: wb },
     owner: mixed.owner,

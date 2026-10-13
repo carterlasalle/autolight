@@ -22,12 +22,16 @@ describe("simulator", () => {
     let n = 0;
     const decks = new Set<number>();
     let loops = 0;
+
     for (const d of performanceScenario({ fps: 60, hours: 0.05 })) {
       n++;
       decks.add(d.deckId);
+
       if (d.loop.active) loops++;
+
       if (n > 100_000) break;
     }
+
     expect(n).toBeGreaterThan(1000);
     expect(decks).toEqual(new Set([1, 2]));
     expect(loops).toBeGreaterThan(0);

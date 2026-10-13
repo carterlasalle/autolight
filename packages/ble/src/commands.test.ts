@@ -161,6 +161,7 @@ describe("ble commands (T-BLE-04)", () => {
 
   it("round trips through the sim: writes ack, reads report sim state", async () => {
     const adapter = new SimBleAdapter({ kind: "toolkit-ble", clock: () => Date.now() });
+
     const peripheral = new SimPeripheral({
       address: "AA:BB:CC:DD:EE:09",
       name: "GBK_H6076_AB12",
@@ -170,6 +171,7 @@ describe("ble commands (T-BLE-04)", () => {
       segmentCount: 2,
       budgetHz: null,
     });
+
     adapter.add(peripheral);
     const found = await adapter.scan(10);
     expect(found.map((f) => f.address)).toEqual(["AA:BB:CC:DD:EE:09"]);
@@ -177,6 +179,7 @@ describe("ble commands (T-BLE-04)", () => {
     const acks: number[] = [];
     connection.subscribe((notify) => {
       const ack = parseBleAck(notify);
+
       if (ack !== null) acks.push(ack.status);
     });
     await connection.write(blePower(true));

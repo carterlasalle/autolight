@@ -3,6 +3,7 @@ import { DEFAULT_FUSION_AUTHORITY, ScriptedProvider, describeStatus } from "./pr
 import { FusionEngine, LatestWinsPort, ProviderManager } from "./fusion.js";
 
 let now = 1_000n * 1_000_000_000n;
+
 const clock = (): bigint => now;
 
 function deckState(provider: ScriptedProvider, seconds: number, atNs: bigint, bpm = 128): void {
@@ -135,16 +136,20 @@ describe("fusion engine (T-LIVE-02, DS-01)", () => {
     const received: number[] = [];
     port.onDeckState((state) => received.push(state.playheadSeconds));
     const provider = new ScriptedProvider({ id: "rkbx-osc", now: clock });
+
     for (const seconds of [1, 2, 3]) {
       deckState(provider, seconds, now);
       engine.ingest("rkbx-osc", provider.getDecks()[0]!);
       const fused = engine.fused(1);
+
       if (fused) port.push(fused);
     }
+
     expect(port.drainPending()).toHaveLength(1);
     deckState(provider, 4, now);
     engine.ingest("rkbx-osc", provider.getDecks()[0]!);
     const latest = engine.fused(1);
+
     if (latest) port.push(latest);
     port.flush();
     expect(received).toEqual([4]);
@@ -163,6 +168,7 @@ class FailingProvider extends ScriptedProvider {
 
   override async start(): Promise<void> {
     this.attempts += 1;
+
     if (this.attempts <= this.failTimes) throw new Error(`start failure ${this.attempts}`);
     await super.start();
   }
@@ -173,10 +179,12 @@ describe("provider manager (T-LIVE-02)", () => {
     now = 1_000n * 1_000_000_000n;
     const scheduled: (() => void)[] = [];
     const flaky = new FailingProvider(1);
+
     const manager = new ProviderManager(
       { providers: [flaky], maxRestarts: 2, restartBackoffMs: 500 },
       { now: clock, schedule: (fn) => scheduled.push(fn) },
     );
+
     await manager.start();
     expect(flaky.attempts).toBe(1);
     expect(manager.statusesByName()["flaky"]?.state).toBe("failed");
@@ -192,10 +200,12 @@ describe("provider manager (T-LIVE-02)", () => {
     now = 1_000n * 1_000_000_000n;
     const scheduled: (() => void)[] = [];
     const always = new FailingProvider(Number.POSITIVE_INFINITY);
+
     const manager = new ProviderManager(
       { providers: [always], maxRestarts: 1, restartBackoffMs: 500 },
       { now: clock, schedule: (fn) => scheduled.push(fn) },
     );
+
     await manager.start();
     expect(scheduled).toHaveLength(1);
     scheduled.shift()?.();

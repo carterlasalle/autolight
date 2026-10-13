@@ -42,9 +42,11 @@ describe("rkbx_link address mapping (T-LIVE-03)", () => {
     const provider = new RkbxOscProvider({ now: () => now });
     const states: ProviderDeckState[] = [];
     provider.onDeckState((state) => states.push(state));
+
     const send = (address: string, value: number | string): void => {
       provider.ingestDatagram(encodeOscMessage({ address, args: [value] }), now);
     };
+
     send("/1/bpm/original", 128);
     send("/1/bpm/current", 134.4);
     send("/1/track/title", "Track A");
@@ -86,9 +88,11 @@ describe("rkbx_link address mapping (T-LIVE-03)", () => {
   it("infers pause after live.rkbx.pauseHoldMs and reports a seek on a jump", () => {
     let now = 1_000n * 1_000_000_000n;
     const provider = new RkbxOscProvider({ now: () => now, playingEpsilonMs: 5, pauseHoldMs: 150, seekThresholdMs: 150 });
+
     const time = (seconds: number): void => {
       provider.ingestDatagram(encodeOscMessage({ address: "/1/time", args: [seconds] }), now);
     };
+
     time(0);
     now += 8n * 1_000_000n;
     time(0.008);
@@ -110,9 +114,11 @@ describe("rkbx_link address mapping (T-LIVE-03)", () => {
   it("assigns master to the matching deck and keeps unknown addresses", () => {
     let now = 1_000n * 1_000_000_000n;
     const provider = new RkbxOscProvider({ now: () => now });
+
     const send = (address: string, value: number | string): void => {
       provider.ingestDatagram(encodeOscMessage({ address, args: [value] }), now);
     };
+
     send("/1/time", 10);
     send("/2/time", 20);
     send("/master/time", 20);
@@ -137,6 +143,7 @@ describe("rkbx_link timeline replay (T-LIVE-03)", () => {
   it("replays a scripted timeline with beat error below runtime.estimator.maxErrorMs", () => {
     let now = 1_000n * 1_000_000_000n;
     const provider = new RkbxOscProvider({ now: () => now });
+
     const datagrams = buildRkbxDatagrams({
       deck: 1,
       fromSeconds: 0,
@@ -152,16 +159,21 @@ describe("rkbx_link timeline replay (T-LIVE-03)", () => {
         { atMs: 1_600, action: "master" },
       ],
     });
+
     expect(datagrams.length).toBeGreaterThan(200);
+
     for (const datagram of datagrams) {
       provider.ingestDatagram(datagram.bytes, now);
+
       if (datagram.atMs === 500) {
         const state = provider.getDecks()[0];
         expect(state?.playing).toBe(true);
         expect(Math.abs((state?.playheadSeconds ?? 0) * 1000 - 500)).toBeLessThan(20);
       }
+
       now += 8_333_333n;
     }
+
     expect(provider.getDecks()[0]?.playRate).toBeCloseTo(1.05, 5);
     expect(provider.drainSeekEvents().some((s) => s.toSeconds === 100)).toBe(true);
     expect(provider.getMasterDeckId()).toBe(1);
@@ -174,9 +186,11 @@ describe("rkbx_link timeline replay (T-LIVE-03)", () => {
   it("builds datagrams that decode back to the documented addresses", () => {
     const datagrams = buildRkbxDatagrams({ deck: 2, fromSeconds: 0, bpm: 120, hz: 60, durationMs: 100, steps: [{ atMs: 0, action: "play" }] });
     const addresses = new Set<string>();
+
     for (const datagram of datagrams) {
       for (const message of decodeOscDatagram(datagram.bytes).messages) addresses.add(message.address);
     }
+
     expect(addresses.has("/2/time")).toBe(true);
     expect(addresses.has("/2/bpm/original")).toBe(true);
   });
@@ -210,12 +224,14 @@ describe("rkbx_link setup verification (T-LIVE-04 logic, T-LIVE-03 DoD)", () => 
   it("binds the real 127.0.0.1:4460 listener and receives synthetic packets (no sidecar)", async () => {
     const provider = new RkbxOscProvider({ bind: "127.0.0.1:4460" });
     await provider.start();
+
     try {
       expect(provider.boundPort).toBe(4460);
       const seen = Promise.withResolvers<void>();
       provider.onDeckState((state) => {
         if (state.playheadSeconds === 12.5) seen.resolve();
       });
+
       const sent = await sendUdpDatagrams(
         [
           { atMs: 0, bytes: encodeOscMessage({ address: "/1/time", args: [12.5] }) },
@@ -223,6 +239,7 @@ describe("rkbx_link setup verification (T-LIVE-04 logic, T-LIVE-03 DoD)", () => 
         ],
         EXPECTED_DESTINATION,
       );
+
       expect(sent).toBe(2);
       await seen.promise;
       expect(provider.getDecks()[0]?.playheadSeconds).toBe(12.5);

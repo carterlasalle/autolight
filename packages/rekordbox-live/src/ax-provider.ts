@@ -52,8 +52,10 @@ export class AxProvider extends ProviderBase {
     if (!this.permissionGranted) {
       const permission = axPermissionState(false);
       this.setStatus({ state: "unavailable", reason: "Accessibility permission not granted", remedy: permission.remedy });
+
       return;
     }
+
     this.setStatus({ state: "starting" });
   }
 
@@ -75,6 +77,7 @@ export class AxProvider extends ProviderBase {
 
   setPermission(granted: boolean): void {
     this.permissionGranted = granted;
+
     if (!granted) {
       const permission = axPermissionState(false);
       this.setStatus({ state: "unavailable", reason: "Accessibility permission not granted", remedy: permission.remedy });
@@ -93,37 +96,50 @@ export class AxProvider extends ProviderBase {
   // unresolved is dropped, never queued (live.ax.intervalMs / timeoutMs).
   ingestTree(root: readonly AxNode[], atNs?: bigint): AxDeckReading[] {
     const at = atNs ?? this.now();
+
     if (this.lastPollAtNs !== null && Number(at - this.lastPollAtNs) / 1e6 < this.intervalMs) {
       return [];
     }
+
     this.lastPollAtNs = at;
+
     if (!this.permissionGranted) {
       const permission = axPermissionState(false);
       this.setStatus({ state: "unavailable", reason: "Accessibility permission not granted", remedy: permission.remedy });
+
       return [];
     }
+
     const readings = readAxDecks(root);
+
     if (readings.length === 0) {
       this.markRejected("AX tree has no deck containers");
       this.setStatus({ state: "degraded", reason: "AX tree has no deck containers", updateHz: 0, ageMs: 0 });
+
       return [];
     }
+
     const emitted: AxDeckReading[] = [];
     let unreadable = 0;
+
     for (const reading of readings) {
       const refined = refineAxReading(reading, this.readings.get(reading.deckId));
       this.readings.set(refined.deckId, refined);
+
       if (!refined.readable) {
         unreadable += 1;
         continue;
       }
+
       emitted.push(refined);
       this.emit(this.stateFor(refined.deckId, at));
     }
+
     const updateHz = this.intervalMs > 0 ? 1000 / this.intervalMs : 0;
     this.setStatus(unreadable === 0
       ? { state: "live", updateHz, ageMs: 0 }
       : { state: "degraded", reason: `${unreadable} deck(s) not readable`, updateHz, ageMs: 0 });
+
     return emitted;
   }
 
@@ -132,6 +148,7 @@ export class AxProvider extends ProviderBase {
     const elapsed = reading?.elapsedSeconds ?? reading?.remainingSeconds ?? null;
     const grid = this.grids.get(deck);
     const beat = elapsed === null || !grid || grid.length === 0 ? null : axFractionalBeat(elapsed, grid);
+
     const state = this.mapper.update(this.id, {
       deckId: deck,
       atNs: atNs ?? this.now(),
@@ -144,6 +161,7 @@ export class AxProvider extends ProviderBase {
       beat,
       quality: this.qualityFor(reading),
     });
+
     return {
       ...state,
       raw: { provider: "ax", readable: reading?.readable ?? false, remainingSeconds: reading?.remainingSeconds ?? null },

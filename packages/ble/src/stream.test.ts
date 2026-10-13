@@ -27,33 +27,40 @@ class FakeClock implements BleClock {
   setTimeout(fn: () => void, ms: number): number {
     const handle = this.next++;
     this.tasks.set(handle, { at: this.current + Math.max(0, ms), fn });
+
     return handle;
   }
   clearTimeout(handle: number): void { this.tasks.delete(handle); }
   advance(ms: number): void {
     const target = this.current + ms;
+
     for (;;) {
       let earliest: [number, { at: number; fn: () => void }] | null = null;
+
       for (const entry of this.tasks) {
         if (entry[1].at <= target && (earliest === null || entry[1].at < earliest[1].at)) earliest = entry;
       }
+
       if (earliest === null) break;
       this.tasks.delete(earliest[0]);
       this.current = Math.max(this.current, earliest[1].at);
       earliest[1].fn();
     }
+
     this.current = Math.max(this.current, target);
   }
 }
 
 function twoColorFrame(zones: number, flip: boolean): Uint8Array {
   const out = new Uint8Array(zones * 3);
+
   for (let z = 0; z < zones; z++) {
     const red = (z % 2 === 0) === flip;
     out[z * 3] = red ? 255 : 0;
     out[z * 3 + 1] = 0;
     out[z * 3 + 2] = red ? 0 : 255;
   }
+
   return out;
 }
 
@@ -100,6 +107,7 @@ describe("ble segment stream (T-BLE-05)", () => {
   it("streams a two-colour chase at 20 fps through the paced link with zero stalls", async () => {
     const clock = new FakeClock();
     const adapter = new SimBleAdapter({ kind: "noble", clock: () => clock.now() });
+
     const peripheral = new SimPeripheral({
       address: "AA:BB:CC:DD:EE:51",
       name: "GBK_H6076_51",
@@ -107,23 +115,28 @@ describe("ble segment stream (T-BLE-05)", () => {
       zones: 8,
       budgetHz: null,
     });
+
     adapter.add(peripheral);
     const link = new BleLink("AA:BB:CC:DD:EE:51", adapter, { writeBudgetHz: 20, writeDrainMs: 0 }, clock);
     await link.open(() => undefined);
     clock.advance(50);
     let lastFeedback = streamBleRendererFrame(twoColorFrame(8, true), { zoneCount: 8, budgetHz: 20 }).feedback;
+
     for (let frame = 0; frame < 40; frame++) {
       const bytes = twoColorFrame(8, frame % 2 === 0);
       const streamed = streamBleRendererFrame(bytes, { zoneCount: 8, budgetHz: 20 });
       lastFeedback = streamed.feedback;
       expect(encodeBleStreamFrame(bytes, { zoneCount: 8, budgetHz: 20 })).toHaveLength(2);
+
       for (const write of streamed.writes) {
         link.send(write);
         clock.advance(50);
         link.tick();
       }
+
       await Promise.resolve();
     }
+
     expect(lastFeedback.distinctColours).toBe(2);
     expect(lastFeedback.effectiveFps).toBe(10);
     expect(peripheral.metrics.stalled).toBe(0);

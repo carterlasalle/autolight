@@ -544,13 +544,16 @@ export const DECISIONS: readonly DecisionMeta[] = [
 ];
 
 const byDs = new Map(DECISIONS.map((d) => [d.ds, d]));
+
 const byKey = new Map(
   DECISIONS.filter((d): d is DecisionMeta & { key: string } => d.key !== null).map((d) => [d.key, d]),
 );
 
 export function decisionFor(ds: string): DecisionMeta {
   const found = byDs.get(ds);
+
   if (found === undefined) throw new Error(`unknown-decision: ${ds}`);
+
   return found;
 }
 
@@ -564,5 +567,6 @@ export const DECISION_IDS: readonly string[] = DECISIONS.map((d) => d.ds);
 export function decisionModes(ds: string): string[] {
   const meta = decisionFor(ds);
   const ids = meta.options.map((o) => o.id);
+
   return meta.combined === null || ids.includes(meta.combined) ? ids : [...ids, meta.combined];
 }

@@ -19,16 +19,19 @@ export type FingerprintMode = "pcm-hash" | "acoustic" | "both";
 
 /** identity.fingerprint.mode default: the DS-34 combined mode. */
 export const DEFAULT_FINGERPRINT_MODE: FingerprintMode = "both";
+
 /** identity.fingerprint.acousticThreshold default. */
 export const DEFAULT_ACOUSTIC_THRESHOLD = 0.9;
 
 /** Canonical samples quantized to 16-bit before hashing (one channel pair). */
 export function quantize16(samples: Float32Array | readonly number[]): Int16Array {
   const out = new Int16Array(samples.length);
+
   for (let i = 0; i < samples.length; i++) {
     const v = Math.min(1, Math.max(-1, samples[i] ?? 0));
     out[i] = Math.round(v * 32767);
   }
+
   return out;
 }
 
@@ -39,6 +42,7 @@ export function quantize16(samples: Float32Array | readonly number[]): Int16Arra
 export async function pcmHashOf(quantized: Int16Array | Uint8Array): Promise<string> {
   const bytes = quantized instanceof Uint8Array ? quantized : new Uint8Array(quantized.buffer, quantized.byteOffset, quantized.byteLength);
   const digest = await crypto.subtle.digest("SHA-256", bytes as unknown as ArrayBuffer);
+
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
@@ -63,7 +67,9 @@ export function acousticSimilarity(a: readonly number[], b: readonly number[]): 
   const setA = new Set(a);
   const setB = new Set(b);
   let both = 0;
+
   for (const h of setA) if (setB.has(h)) both++;
+
   return both / (setA.size + setB.size - both);
 }
 
@@ -80,14 +86,18 @@ export function acousticProposesLink(a: readonly number[], b: readonly number[],
 export function landmarkHashes(mono: Float32Array | readonly number[], windowSize = 1024, hopSize = 512): number[] {
   const hashes: number[] = [];
   const bins = 8;
+
   for (let start = 0; start + windowSize <= mono.length; start += hopSize) {
     const energy = new Array<number>(bins).fill(0);
+
     for (let i = 0; i < windowSize; i++) {
       const v = mono[start + i] ?? 0;
       energy[Math.min(bins - 1, Math.floor((i / windowSize) * bins))]! += v * v;
     }
+
     let first = 0;
     let second = 1;
+
     for (let b = 0; b < bins; b++) {
       if (energy[b]! > energy[first]!) {
         second = first;
@@ -96,7 +106,9 @@ export function landmarkHashes(mono: Float32Array | readonly number[], windowSiz
         second = b;
       }
     }
+
     hashes.push(((start / hopSize) & 0xff) | (first! << 8) | (second! << 12));
   }
+
   return hashes;
 }

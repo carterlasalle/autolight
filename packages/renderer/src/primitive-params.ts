@@ -57,4 +57,5 @@ export interface PrimitiveParams {
   VocalFocus: { level: number };
   OutroRelease: { decayBeats: number };
 }
+
 export type PrimitiveName = keyof PrimitiveParams;

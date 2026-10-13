@@ -43,6 +43,7 @@ export function flashIntent(on: boolean): ManualIntent {
 
 export function sensitivityIntent(value: number): ManualIntent {
   const clamped = Math.min(2, Math.max(0.5, value));
+
   return { channel: "master/intensity", payload: { version: 1, value: clamped } };
 }
 
@@ -53,11 +54,14 @@ const SWATCH_BY_KIND: Record<string, [number, number, number]> = {
   breakdown: [12, 36, 150],
   verse: [12, 36, 150],
 };
+
 export function trackPalette(track: TrackModel | null): [number, number, number][] {
   if (!track) return [];
   const kinds: string[] = [];
+
   for (const s of track.sections) {
     if (!kinds.includes(s.kind)) kinds.push(s.kind);
   }
+
   return kinds.map((k) => SWATCH_BY_KIND[k] ?? [255, 255, 255]);
 }

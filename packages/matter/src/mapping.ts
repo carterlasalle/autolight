@@ -31,14 +31,18 @@ export function rgbToHsl254(rgb: Rgb): { hue: number; saturation: number; level:
   const min = Math.min(r, g, b);
   const range = max - min;
   let hueDeg = 0;
+
   if (range > 0) {
     if (max === r) hueDeg = 60 * (((g - b) / range) % 6);
     else if (max === g) hueDeg = 60 * ((b - r) / range + 2);
     else hueDeg = 60 * ((r - g) / range + 4);
+
     if (hueDeg < 0) hueDeg += 360;
   }
+
   const lightness = (max + min) / 2;
   const saturation = range === 0 ? 0 : range / (1 - Math.abs(2 * lightness - 1));
+
   return {
     hue: Math.round((hueDeg / 360) * 254),
     saturation: Math.round(saturation * 254),
@@ -53,7 +57,9 @@ export function toMatterWrites(rgb: Rgb): MatterWrite[] {
   if (clampByte(rgb.r) === 0 && clampByte(rgb.g) === 0 && clampByte(rgb.b) === 0) {
     return [{ cluster: "onOff", command: "off", payload: {} }];
   }
+
   const { hue, saturation, level } = rgbToHsl254(rgb);
+
   return [
     { cluster: "onOff", command: "on", payload: {} },
     { cluster: "levelControl", command: "moveToLevel", payload: { level, transitionDs: 0 } },
@@ -66,6 +72,7 @@ export function toMatterWrites(rgb: Rgb): MatterWrite[] {
 export function cctToMatterSetupWrites(kelvin: number, level01: number): MatterWrite[] {
   const mireds = Math.max(147, Math.min(652, Math.round(1_000_000 / kelvin)));
   const level = Math.max(1, Math.min(254, Math.round(level01 * 254)));
+
   return [
     { cluster: "onOff", command: "on", payload: {} },
     { cluster: "levelControl", command: "moveToLevel", payload: { level, transitionDs: 0 } },

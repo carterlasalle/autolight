@@ -111,6 +111,7 @@ describe("show-runtime", () => {
     const atRate = (rate: number): number => estimatePosition(
       makeDeck({ playheadSeconds: 10, playRate: rate, receivedAtNs: 0n }), 1_000_000_000n,
     );
+
     expect(atRate(1.08)).toBeCloseTo(11.08);
     expect(atRate(0.84)).toBeCloseTo(10.84);
     // Forward + backward seeks both snap, and the beat-space threshold never

@@ -1,6 +1,8 @@
 export interface LogRow { ts: string; monoNs: bigint; module: string; severity: "debug"|"info"|"warn"|"error"; deck?: number; event?: string }
+
 // performance.now fallback: show worker has no process.hrtime (§86).
 const nowNs = (): bigint => BigInt(Math.round(performance.now() * 1e6));
+
 export function log(module: string, severity: LogRow["severity"], event: string): LogRow {
   return { ts: new Date().toISOString(), monoNs: nowNs(), module, severity, event };
 }
@@ -26,6 +28,7 @@ export function emptyMetrics(): Metrics {
 
 // Session recorder (§103): control metadata only, no audio. Replayable into simulator.
 export interface SessionEvent { tNs: bigint; kind: string; payload: Record<string, unknown> }
+
 export class SessionRecorder {
   private events: SessionEvent[] = [];
   constructor(private readonly maxEvents = 100_000) {}
@@ -45,10 +48,13 @@ export class SessionRecorder {
 // events for simulator injection. Malformed lines fail loudly with line number.
 export function parseNdjson(ndjson: string): { kind: string; payload: Record<string, unknown>; tNs: string }[] {
   if (!ndjson.trim()) return [];
+
   return ndjson.split("\n").map((line, i) => {
     try {
       const row = JSON.parse(line) as { kind: string; payload: Record<string, unknown>; tNs: string };
+
       if (typeof row.kind !== "string" || typeof row.payload !== "object") throw new Error("bad shape");
+
       return row;
     } catch (e) {
       throw new Error(`session line ${i + 1}: ${(e as Error).message}`);

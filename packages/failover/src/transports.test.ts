@@ -17,6 +17,7 @@ import {
 
 function cfg(over: Partial<FixtureTransportConfig> = {}): FixtureTransportConfig {
   const { status, ...rest } = over;
+
   return {
     fixtureId: "lamp1",
     mode: "hybrid",
@@ -38,12 +39,14 @@ function cfg(over: Partial<FixtureTransportConfig> = {}): FixtureTransportConfig
 
 function sinks(): { list: FrameSink[]; carried: TransportId[] } {
   const carried: TransportId[] = [];
+
   const list: FrameSink[] = TRANSPORTS.filter((t) => t !== "cloud-metadata").map((t) => ({
     transport: t,
     send: () => {
       carried.push(t);
     },
   }));
+
   return { list, carried };
 }
 
@@ -61,6 +64,7 @@ describe("transport model and policy (P-148 ladder)", () => {
     const sel = selectFrameTransport(
       cfg({ status: { "lan-razer": { verified: true, reachable: false } } }),
     );
+
     expect(sel.transport).toBe("ble-segmented");
     expect(sel.frameClass).toBe("segments");
   });
@@ -75,6 +79,7 @@ describe("transport model and policy (P-148 ladder)", () => {
         },
       }),
     );
+
     expect(sel.transport).toBe("lan-json");
     expect(sel.frameClass).toBe("whole");
     expect(sel.degraded).toBe(true);
@@ -93,6 +98,7 @@ describe("transport model and policy (P-148 ladder)", () => {
         },
       }),
     );
+
     expect(sel.transport).toBe("matter");
     expect(sel.frameClass).toBe("whole");
   });
@@ -105,10 +111,12 @@ describe("transport model and policy (P-148 ladder)", () => {
       "ble-single": { verified: false, reachable: false },
       matter: { verified: false, reachable: false },
     } as const;
+
     for (const policy of ["strict", "auto", "hybrid"] as const) {
       const sel = selectFrameTransport(cfg({ policy, status: { ...down } }));
       expect(sel.transport).not.toBe("cloud-metadata");
     }
+
     expect(FRAME_CLASS["cloud-metadata"]).toBe("never");
   });
 
@@ -124,6 +132,7 @@ describe("transport model and policy (P-148 ladder)", () => {
         },
       }),
     );
+
     expect(sel.transport).toBeNull();
     expect(sel.banner).toContain("dark");
   });
@@ -137,6 +146,7 @@ describe("per-device modes carry bytes on the pinned transport", () => {
     { mode: "ble-basic", expect: "ble-single" },
     { mode: "matter-basic", expect: "matter" },
   ] as const;
+
   for (const c of cases) {
     it(`${c.mode} sends through ${c.expect}`, () => {
       const sel = selectFrameTransport(cfg({ mode: c.mode }));
@@ -150,6 +160,7 @@ describe("per-device modes carry bytes on the pinned transport", () => {
   it("auto follows the best verified transport at the moment", () => {
     const sel = selectFrameTransport(cfg({ mode: "auto", policy: "auto" }));
     expect(sel.transport).toBe("lan-razer");
+
     const down = selectFrameTransport(
       cfg({
         mode: "auto",
@@ -157,6 +168,7 @@ describe("per-device modes carry bytes on the pinned transport", () => {
         status: { "lan-razer": { verified: true, reachable: false } },
       }),
     );
+
     expect(down.transport).toBe("ble-segmented");
   });
 
@@ -170,6 +182,7 @@ describe("per-device modes carry bytes on the pinned transport", () => {
     const sel = selectFrameTransport(
       cfg({ mode: "cloud-basic", fromShowTick: true, cloudAllowed: true }),
     );
+
     expect(sel.transport).toBeNull();
     expect(sel.reason).toContain("show tick");
   });
@@ -193,6 +206,7 @@ describe("strict policy and explicit modes never switch silently", () => {
         },
       }),
     );
+
     expect(sel.transport).toBe("lan-razer");
     expect(sel.banner).toContain("never switches");
   });
@@ -204,6 +218,7 @@ describe("strict policy and explicit modes never switch silently", () => {
         status: { "lan-razer": { verified: true, reachable: false } },
       }),
     );
+
     expect(sel.transport).toBe("lan-razer");
     expect(sel.pinned).toBe(true);
     expect(sel.banner).toContain("never switches");
@@ -221,6 +236,7 @@ describe("strict policy and explicit modes never switch silently", () => {
         },
       }),
     );
+
     expect(sel.transport).toBeNull();
     expect(() => routeFrame(sel, FRAME, sinks().list)).toThrowError(/No transport selected/);
   });
@@ -231,6 +247,7 @@ describe("mode availability reports the qualification reason", () => {
     const avail = modeAvailability("ble-segmented", {
       "lan-razer": { verified: true, reachable: true },
     });
+
     expect(avail.enabled).toBe(false);
     expect(avail.reason).toContain("BLE not qualified");
   });

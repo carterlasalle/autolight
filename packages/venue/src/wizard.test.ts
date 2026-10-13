@@ -9,10 +9,13 @@ function simStrip(cells: number, mirrored = false, gaps: SimStrip["gaps"] = []):
   const run = outlineRuns(room, 2.5)[0]!;
   const pts = [...run.polyline, run.polyline[0]!];
   let total = 0;
+
   for (let i = 0; i + 1 < pts.length; i++) {
     total += Math.hypot(pts[i + 1]!.x - pts[i]!.x, pts[i + 1]!.y - pts[i]!.y);
   }
+
   void gaps;
+
   return {
     strip: { cellCount: cells, cellToArcM: Array.from({ length: cells }, (_, i) => ((i + 0.5) / cells) * total), mirrored, gaps: [] },
     total,

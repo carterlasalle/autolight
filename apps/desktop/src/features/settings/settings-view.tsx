@@ -8,6 +8,7 @@ import { Badge } from "../../components/ui/badge.js";
 import { Input } from "../../components/ui/input.js";
 import { ConfigField } from "../../components/kit.js";
 import { routeConfigChange, settingsGroup, type PendingChange } from "../../routes/diagnostics/diagnostics-model.js";
+
 // Settings (T-UI-11, T-CFG-05): every registry key visible with effective
 // value, default, unit, range, receipt, live-safe badge, reset, and per-scope
 // editing. Non-live-safe edits queue while Live is active with a visible
@@ -18,42 +19,57 @@ export function SettingsView(): JSX.Element {
   const [changedOnly, setChangedOnly] = useState(false);
   const [pending, setPending] = useState<PendingChange[]>([]);
   const [edits, setEdits] = useState<Record<string, string>>({});
+
   const rows = useMemo(() => {
     const q = query.toLowerCase();
+
     return KEYS.filter((k) => {
       if (changedOnly) return edits[k.key] !== undefined;
+
       if (!q) return true;
+
       return k.key.toLowerCase().includes(q) || k.receipt.toLowerCase().includes(q) || k.unit.toLowerCase().includes(q);
     });
   }, [query, changedOnly, edits]);
+
   const groups = useMemo(() => {
     const map = new Map<string, typeof rows>();
+
     for (const k of rows) {
       const g = settingsGroup(k.key);
       const list = map.get(g);
+
       if (list) list.push(k);
       else map.set(g, [k]);
     }
+
     return [...map.entries()];
   }, [rows]);
+
   const commit = (key: string, scope: "app" | "venue" | "device" | "style" | "session", liveSafe: boolean): void => {
     const value = edits[key] ?? "";
     const routing = routeConfigChange({ key, scope, value, liveSafe }, live !== null);
+
     if (routing === "queue-until-live-ends") {
       setPending((prev) => [...prev.filter((p) => p.key !== key), { key, scope, value, liveSafe }]);
+
       return;
     }
+
     void invoke("config/set", { version: 1, scope, key, value });
     setEdits((prev) => {
       const next = { ...prev };
       delete next[key];
+
       return next;
     });
   };
+
   const applyPending = (): void => {
     for (const p of pending) void invoke("config/set", { version: 1, scope: p.scope, key: p.key, value: p.value });
     setPending([]);
   };
+
   return (
     <div className="flex max-w-5xl flex-col gap-3">
       <section aria-label="Settings search and filters" className="rounded-xl border border-border bg-card px-4 py-3">

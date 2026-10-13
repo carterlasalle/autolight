@@ -56,6 +56,7 @@ describe("ble scan and binding (T-BLE-02)", () => {
       lanWifiMac: "aa:bb:cc:dd:ee:ff",
       identifyConfirmed: false,
     });
+
     expect(binding.basis).toBe("wifi-mac-match");
     expect(binding.lanDeviceId).toBe("lan-1");
   });
@@ -68,6 +69,7 @@ describe("ble scan and binding (T-BLE-02)", () => {
       lanWifiMac: null,
       identifyConfirmed: true,
     });
+
     expect(binding.basis).toBe("user-confirmed-identify");
   });
 

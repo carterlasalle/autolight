@@ -11,22 +11,29 @@ const created: string[] = [];
 function crateFixture(): { path: string; bytes: Uint8Array } {
   const dir = mkdtempSync(join(tmpdir(), "autolight-serato-sec04-"));
   created.push(dir);
+
   const encode = (s: string): number[] => {
     const out: number[] = [];
+
     for (const ch of s) {
       const code = ch.charCodeAt(0);
       out.push((code >> 8) & 0xff, code & 0xff);
     }
+
     return out;
   };
+
   const row = (path: string): number[] => {
     const ptrk = [0x70, 0x74, 0x72, 0x6b, 0, 0, 0, path.length * 2, ...encode(path)];
+
     return [0x6f, 0x74, 0x72, 0x6b, 0, 0, 0, ptrk.length, ...ptrk];
   };
+
   const body = [...row("/music/a.mp3"), ...row("/music/b.mp3")];
   const bytes = new Uint8Array([0x76, 0x72, 0x73, 0x6e, 0, 0, 0, 0, ...body]);
   const path = join(dir, "Set.crate");
   writeFileSync(path, bytes);
+
   return { path, bytes };
 }
 
@@ -72,6 +79,7 @@ describe("T-SEC-04 serato read-only", () => {
       trackChanged: false,
       raw: { deck: 1 },
     };
+
     const a = serato.remoteToDeckState(msg, 5n);
     const b = serato.remoteToDeckState({ ...msg, raw: { deck: 1 } }, 5n);
     expect(b).toEqual(a);
@@ -82,6 +90,7 @@ describe("T-SEC-04 serato read-only", () => {
     for (const name of Object.keys(serato)) {
       expect(name).not.toMatch(/^(insert|update|delete|upsert|write|save|remove|create|drop|exec|run|checkpoint)$/i);
     }
+
     expect("writeCrate" in serato).toBe(false);
     expect("saveCrate" in serato).toBe(false);
     expect("updateBeatGrid" in serato).toBe(false);

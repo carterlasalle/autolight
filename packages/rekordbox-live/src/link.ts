@@ -65,6 +65,7 @@ export interface LinkTransport {
 export function parseSidecarLine(line: string, atNs: bigint): LinkTempo | null {
   try {
     const parsed = sidecarTempoSchema.parse(JSON.parse(line));
+
     return { ...parsed, atNs };
   } catch {
     return null;
@@ -122,6 +123,7 @@ export class SidecarLinkTransport implements LinkTransport {
   async stop(): Promise<void> {
     const socket = this.socket;
     this.socket = null;
+
     if (!socket) return;
     const { promise, resolve } = Promise.withResolvers<void>();
     socket.once("close", () => resolve());
@@ -135,15 +137,20 @@ export class SidecarLinkTransport implements LinkTransport {
 
   publish(opts: { tempo?: number; playing?: boolean }): void {
     const socket = this.socket;
+
     if (!socket) return;
     const out: Record<string, unknown> = {};
+
     if (opts.tempo !== undefined) out["setTempo"] = opts.tempo;
+
     if (opts.playing !== undefined) out["setPlaying"] = opts.playing;
+
     if (Object.keys(out).length > 0) socket.write(JSON.stringify(out) + "\n");
   }
 
   onTempo(listener: (tempo: LinkTempo) => void): () => void {
     this.listeners.add(listener);
+
     return () => this.listeners.delete(listener);
   }
 
@@ -151,7 +158,9 @@ export class SidecarLinkTransport implements LinkTransport {
     if (this.socket && this.current) {
       return { state: "live", detail: `sidecar ${this.current.bpm.toFixed(1)} bpm phase ${this.current.phase.toFixed(2)}` };
     }
+
     if (this.socket) return { state: "starting", detail: "sidecar connected, no tempo yet" };
+
     return { state: "unavailable", detail: `no sidecar on ${this.host}:${this.port}` };
   }
 
@@ -159,14 +168,18 @@ export class SidecarLinkTransport implements LinkTransport {
     const combined = this.tail + chunk;
     const lines = combined.split("\n");
     this.tail = lines.pop() ?? "";
+
     for (const line of lines) {
       const text = line.trim();
+
       if (!text) continue;
       const tempo = parseSidecarLine(text, this.now());
+
       if (!tempo) {
         this.rejected += 1;
         continue;
       }
+
       this.current = {
         bpm: tempo.tempo,
         beat: tempo.beat,
@@ -174,6 +187,7 @@ export class SidecarLinkTransport implements LinkTransport {
         quantum: tempo.quantum ?? this.quantum,
         playing: tempo.playing ?? null,
       };
+
       for (const listener of this.listeners) listener(tempo);
     }
   }
@@ -191,12 +205,14 @@ export interface FakeSidecar {
 export async function startFakeSidecar(onLine?: (line: string) => void): Promise<FakeSidecar> {
   const received: string[] = [];
   const sockets = new Set<Socket>();
+
   const server = createServer((socket) => {
     sockets.add(socket);
     socket.setEncoding("utf8");
     socket.on("data", (chunk: string) => {
       for (const line of chunk.split("\n")) {
         const text = line.trim();
+
         if (!text) continue;
         received.push(text);
         onLine?.(text);
@@ -204,11 +220,13 @@ export async function startFakeSidecar(onLine?: (line: string) => void): Promise
     });
     socket.on("close", () => sockets.delete(socket));
   });
+
   const { promise, resolve } = Promise.withResolvers<void>();
   server.listen(0, "127.0.0.1", () => resolve());
   await promise;
   const address = server.address();
   const port = address && typeof address === "object" ? address.port : 0;
+
   return {
     server,
     port,
@@ -242,13 +260,17 @@ export function resolveLinkMode(opts: {
       ? { mode: "sidecar", reason: "sidecar bridge present" }
       : { mode: "unavailable", reason: "no Link sidecar on its socket; install the bridge or use another clock" };
   }
+
   if (opts.mode === "sdk") {
     return opts.sdkLicensed
       ? { mode: "sdk", reason: "SDK build licensed" }
       : { mode: "unavailable", reason: "Link SDK not licensed (Ableton proprietary license required)" };
   }
+
   if (opts.sidecarPresent) return { mode: "sidecar", reason: "auto: sidecar present" };
+
   if (opts.sdkLicensed) return { mode: "sdk", reason: "auto: licensed SDK build present" };
+
   return { mode: "unavailable", reason: "UNAVAILABLE_ON_THIS_DEVICE: no sidecar and no licensed SDK build" };
 }
 

@@ -62,11 +62,13 @@ export function parseOffsetsFile(raw: unknown): MemoryOffsetsFile {
 
 export function lintOffsetsFile(raw: unknown): string[] {
   const failures: string[] = [];
+
   try {
     parseOffsetsFile(raw);
   } catch (err) {
     failures.push(err instanceof Error ? err.message : String(err));
   }
+
   return failures;
 }
 
@@ -83,14 +85,17 @@ export function qualifyOffsets(
   if (offsets.platform !== platform) {
     return { qualified: false, reason: `offsets are for ${offsets.platform}, running on ${platform}` };
   }
+
   const short = installedVersion.split(".").slice(0, 3).join(".");
   const fileShort = offsets.rekordboxVersion.split(".").slice(0, 3).join(".");
+
   if (short !== fileShort) {
     return {
       qualified: false,
       reason: `UNVERIFIED REKORDBOX VERSION ${installedVersion} (offsets verified for ${offsets.rekordboxVersion})`,
     };
   }
+
   return { qualified: true, reason: `verified ${offsets.verification.observations} observations across ${offsets.verification.restarts} restarts (${offsets.verification.runbook})` };
 }
 
@@ -150,23 +155,28 @@ export function readMemorySample(
   deckSlot: (deck: number) => string,
 ): Map<number, MemorySample> {
   const out = new Map<number, MemorySample>();
+
   for (const deck of [1, 2, 3, 4]) {
     const slot = deckSlot(deck);
     let playheadSamples: bigint | null = null;
     let bpm: number | null = null;
     let masterDeck: number | null = null;
     let trackId: number | null = null;
+
     for (const path of offsets.paths) {
       const index = path.offsets[0] ?? 0;
+
       if (path.field === "playheadSamples") playheadSamples = accessor.readU64(slot, index);
       else if (path.field === "bpm") bpm = accessor.readF64(slot, index);
       else if (path.field === "masterDeck") masterDeck = accessor.readU32(slot, index);
       else if (path.field === "trackId") trackId = accessor.readU32(slot, index);
     }
+
     if (playheadSamples !== null || bpm !== null || trackId !== null) {
       out.set(deck, { playheadSamples, bpm, masterDeck, trackId });
     }
   }
+
   return out;
 }
 
@@ -188,31 +198,40 @@ export function scanMemoryOffsets(
   sampleRateHz: number,
 ): MemoryPointerPath[] {
   const first = observations[0];
+
   if (!first) return [];
   const expectedSamples = BigInt(Math.round(first.playheadSeconds * sampleRateHz));
   const found: MemoryPointerPath[] = [];
+
   for (const slot of slots) {
     for (let index = 0; index < range; index++) {
       if (accessor.readU64(slot, index) === expectedSamples) {
         found.push({ field: "playheadSamples", base: slot, offsets: [index], sampleRateHz });
       }
+
       if (accessor.readF64(slot, index) === first.bpm) {
         found.push({ field: "bpm", base: slot, offsets: [index] });
       }
+
       if (accessor.readU32(slot, index) === first.trackId) {
         found.push({ field: "trackId", base: slot, offsets: [index] });
       }
     }
   }
+
   const rest = observations.slice(1);
+
   return found.filter((candidate) => {
     const obs = rest[0];
+
     if (!obs) return true;
     const index = candidate.offsets[0] ?? 0;
+
     if (candidate.field === "playheadSamples") {
       return accessor.readU64(candidate.base, index) === BigInt(Math.round(obs.playheadSeconds * sampleRateHz))
         || accessor.readU64(candidate.base, index) === expectedSamples;
     }
+
     return true;
   });
 }
@@ -260,35 +279,45 @@ export class MemoryCleanroomProvider extends ProviderBase {
 
   capability(): MemoryCapability {
     if (!this.enabled) return "MISSING";
+
     if (!this.consentGranted) return "CONSENT_REQUIRED";
+
     if (!this.offsets || !this.accessor) return "MISSING";
     const qualification = qualifyOffsets(this.offsets, this.installedVersion, this.platform);
+
     return qualification.qualified ? "READY" : "UNAVAILABLE_ON_THIS_DEVICE";
   }
 
   protected async onStart(): Promise<void> {
     const capability = this.capability();
+
     if (capability === "CONSENT_REQUIRED") {
       this.setStatus({
         state: "unavailable",
         reason: "memory reader consent not granted",
         remedy: "grant memory reader consent in Settings (T-SEC-05 flow), or use another live source",
       });
+
       return;
     }
+
     if (capability === "MISSING") {
       this.setStatus({
         state: "unavailable",
         reason: "memory reader disabled or no offsets file (live.memoryReader.enabled, live.memoryReader.offsetsFile)",
         remedy: "enable the reader with consent and run HW-RB-MEM-01 to build the offsets file, or use another live source",
       });
+
       return;
     }
+
     if (capability === "UNAVAILABLE_ON_THIS_DEVICE" && this.offsets) {
       const qualification = qualifyOffsets(this.offsets, this.installedVersion, this.platform);
       this.setStatus({ state: "unavailable", reason: qualification.reason, remedy: "run HW-RB-MEM-01 for this Rekordbox version" });
+
       return;
     }
+
     this.setStatus({ state: "starting" });
   }
 
@@ -304,14 +333,17 @@ export class MemoryCleanroomProvider extends ProviderBase {
 
   poll(atNs?: bigint): void {
     const at = atNs ?? this.now();
+
     if (this.capability() !== "READY" || !this.offsets || !this.accessor) return;
     const rate = this.sampleRateHz;
     const found = readMemorySample(this.accessor, this.offsets, (deck) => `deck${deck}`);
     void rate;
+
     for (const [deck, sample] of found) {
       this.samples.set(deck, { sample, atNs: at });
       this.emit(this.stateFor(deck, at));
     }
+
     if (found.size > 0) this.setStatus({ state: "live", updateHz: 0, ageMs: 0 });
   }
 
@@ -323,9 +355,11 @@ export class MemoryCleanroomProvider extends ProviderBase {
     const entry = this.samples.get(deck);
     const at = atNs ?? entry?.atNs ?? this.now();
     const sample = entry?.sample;
+
     const playheadSeconds = sample?.playheadSamples !== null && sample?.playheadSamples !== undefined
       ? Number(sample.playheadSamples) / this.sampleRateHz
       : 0;
+
     const state = this.mapper.update(this.id, {
       deckId: deck,
       atNs: at,
@@ -340,6 +374,7 @@ export class MemoryCleanroomProvider extends ProviderBase {
         : sample.masterDeck === deck,
       quality: this.qualityFor(),
     });
+
     return { ...state, raw: { provider: MEMORY_PROVIDER_ID } };
   }
 

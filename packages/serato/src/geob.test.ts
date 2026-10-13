@@ -4,6 +4,7 @@ import { parseBeatGrid, tempoRegionsToBeats, parseCrate } from "./index.js";
 function f32be(value: number): number[] {
   const buf = new ArrayBuffer(4);
   new DataView(buf).setFloat32(0, value, false);
+
   return [...new Uint8Array(buf)];
 }
 
@@ -50,11 +51,15 @@ describe("serato geob (T-SER-03)", () => {
   it("parses a synthetic crate with ordered paths", () => {
     // Tags are ASCII; only track paths are UTF-16BE.
     const ascii = (s: string): number[] => [...s].map((ch) => ch.charCodeAt(0));
+
     const enc = (s: string): number[] => {
       const out: number[] = [];
+
       for (const ch of s) out.push(0, ch.charCodeAt(0));
+
       return out;
     };
+
     const ptrk = (p: string): number[] => [...ascii("ptrk"), ...u32be(enc(p).length), ...enc(p)];
     const otrkBody = [...ptrk("/m/a.mp3"), ...ptrk("/m/b.mp3")];
     const buf = new Uint8Array([...ascii("vrsn"), ...u32be(0), ...ascii("otrk"), ...u32be(otrkBody.length), ...otrkBody]);

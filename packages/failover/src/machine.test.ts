@@ -53,6 +53,7 @@ describe("failover machine and the campus scenario", () => {
     const machine = makeMachine(reach, at, events);
 
     const multicast = CAMPUS_SEQUENCE[0];
+
     if (multicast === undefined) throw new Error("campus sequence lost its head");
     at.ms += multicast.advanceMs;
     machine.noteLanReply();
@@ -61,6 +62,7 @@ describe("failover machine and the campus scenario", () => {
     expect(events).toHaveLength(0);
 
     const isolation = CAMPUS_SEQUENCE[1];
+
     if (isolation === undefined) throw new Error("campus sequence lost isolation");
     reach["lan-razer"] = { verified: true, reachable: false };
     reach["lan-json"] = { verified: true, reachable: false };
@@ -134,9 +136,11 @@ describe("failover machine and the campus scenario", () => {
     const reach = fullReach();
     const machine = makeMachine(reach, at, []);
     machine.select();
+
     for (const step of ["lan-razer", "lan-json", "ble-segmented", "ble-single"] as const) {
       reach[step] = { verified: true, reachable: false };
     }
+
     at.ms += 500;
     const sel = machine.tick("stream-fault", false);
     expect(sel.transport).toBe("matter");

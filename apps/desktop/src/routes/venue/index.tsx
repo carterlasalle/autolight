@@ -9,13 +9,16 @@ import { RoomPreview } from "./room-preview.js";
 
 function roomWidth(room: Room): number {
   const xs = room.outline.map((p) => p.x);
+
   return Math.max(1, Math.max(...xs) - Math.min(...xs));
 }
 
 function roomDepth(room: Room): number {
   const ys = room.outline.map((p) => p.y);
+
   return Math.max(1, Math.max(...ys) - Math.min(...ys));
 }
+
 // Width edit rescales the existing outline about its own center, so ceiling,
 // anchors, walls, and openings survive the change (S4: no factory rebuild).
 export function rescaleOutline(room: Room, widthM: number, depthM: number): Room {
@@ -27,13 +30,16 @@ export function rescaleOutline(room: Room, widthM: number, depthM: number): Room
   const cy = (Math.max(...ys) + Math.min(...ys)) / 2;
   const sx = widthM / spanX;
   const sy = depthM / spanY;
+
   const shift = (p: { x: number; y: number }): { x: number; y: number } => ({
     x: cx + (p.x - cx) * sx,
     y: cy + (p.y - cy) * sy,
   });
+
   const dj = room.anchors.dj.position;
   const shiftedDj = shift(dj);
   const djInside = Math.abs(shiftedDj.x - cx) <= widthM / 2 && Math.abs(shiftedDj.y - cy) <= depthM / 2;
+
   return {
     ...room,
     outline: room.outline.map(shift),
@@ -53,6 +59,7 @@ export function RoomVenueRoute({ room: roomProp, onRoom, saved: savedProp, onSav
   const setRoom = onRoom ?? setLocalRoom;
   const saved = savedProp ?? localSaved;
   const setSaved = onSaved ?? setLocalSaved;
+
   return (
     <div className="flex max-w-5xl flex-col gap-3">
       <section aria-label="Room editor" className="flex flex-col gap-2">

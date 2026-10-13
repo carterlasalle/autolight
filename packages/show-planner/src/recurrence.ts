@@ -40,11 +40,13 @@ export function sectionSimilarity(a: SectionSummary, b: SectionSummary): number 
   if (a.kind !== b.kind) return 0;
   const energySim = 1 - Math.min(1, Math.abs(a.energy - b.energy));
   let hueDiff = Math.abs(a.coreHue - b.coreHue) % 360;
+
   if (hueDiff > 180) hueDiff = 360 - hueDiff;
   const hueSim = 1 - hueDiff / 180;
   const lenA = Math.max(1, a.endBeat - a.startBeat);
   const lenB = Math.max(1, b.endBeat - b.startBeat);
   const lenSim = Math.min(lenA, lenB) / Math.max(lenA, lenB);
+
   return 0.5 * energySim + 0.3 * hueSim + 0.2 * lenSim;
 }
 
@@ -66,23 +68,30 @@ export function planRecurrence(
   const motifOf: string[] = new Array(summaries.length).fill("");
   const groups: { id: string; members: number[] }[] = [];
   const threshold = config.similarityThreshold;
+
   for (const s of summaries) {
     let placed: string | null = null;
+
     for (const g of groups) {
       const first = summaries[g.members[0]!]!;
+
       if (sectionSimilarity(s, first) >= threshold) {
         placed = g.id;
         g.members.push(s.index);
         break;
       }
     }
+
     if (placed === null) {
       placed = `motif-${groups.length + 1}`;
       groups.push({ id: placed, members: [s.index] });
     }
+
     motifOf[s.index] = placed;
   }
+
   const secondary = core[1] ?? core[0] ?? { l: 0.6, c: 0.1, h: 0 };
+
   const map: MotifMap = {
     motifs: groups.map((g) => {
       const variations: Record<
@@ -95,6 +104,7 @@ export function planRecurrence(
           accentTiming: number;
         }
       > = {};
+
       g.members.forEach((member, occ) => {
         variations[member] = {
           direction: occ % 2 === 0 ? "forward" : "reverse",
@@ -104,6 +114,7 @@ export function planRecurrence(
           accentTiming: Math.floor(rand() * 4),
         };
       });
+
       return {
         id: g.id,
         baseLook: "static-look",
@@ -112,11 +123,15 @@ export function planRecurrence(
       };
     }),
   };
+
   const motifReturnBeats: number[] = [];
+
   for (const g of groups) {
     if (g.members.length < 2) continue;
+
     for (const m of g.members.slice(1)) motifReturnBeats.push(summaries[m]!.startBeat);
   }
+
   return { motifOf, motifIds: groups.map((g) => g.id), map, motifReturnBeats };
 }
 

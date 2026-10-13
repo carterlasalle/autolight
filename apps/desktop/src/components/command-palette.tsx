@@ -13,19 +13,24 @@ export function CommandPalette(): JSX.Element {
   const set = useShell((s) => s.set);
   useEffect(() => {
     const onPalette = (): void => { setOpen(true); };
+
     window.addEventListener("autolight:palette", onPalette);
+
     return () => { window.removeEventListener("autolight:palette", onPalette); };
   }, []);
+
   const go = (route: "live" | "library" | "inspector" | "venue" | "setup" | "diagnostics" | "settings"): void => {
     set({ route });
     setOpen(false);
   };
+
   const fire = (channel: "master/blackout" | "master/full" | "master/freeze" | "master/resume"): void => {
     if (channel === "master/freeze") void invoke(channel, { version: 1, frozen: true });
     else if (channel === "master/resume") void invoke(channel, { version: 1, at: "bar" });
     else void invoke(channel, { version: 1 });
     setOpen(false);
   };
+
   return (
     <CommandDialog open={open} onOpenChange={setOpen}>
       <CommandInput placeholder="Go to, or trigger…" />

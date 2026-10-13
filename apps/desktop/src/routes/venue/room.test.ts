@@ -5,9 +5,11 @@ import { rectangleRoom } from "@autolight/venue";
 import { RoomVenueRoute, rescaleOutline } from "./index.js";
 import { MappingWizard } from "./mapping-wizard.js";
 import { RoomPreview } from "./room-preview.js";
+
 describe("T-ROOM-03 room editor UI", () => {
   it("renders the room editor with numeric alternatives for every drag", () => {
     const html = renderToStaticMarkup(createElement(RoomVenueRoute));
+
     for (const label of ["Room width meters", "Ceiling height meters", "DJ facing degrees", "Save room"]) {
       expect(html).toContain(label);
     }

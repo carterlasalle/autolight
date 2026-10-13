@@ -15,6 +15,7 @@ import {
 import { makeDeck } from "@autolight/simulator";
 
 const trackA = { id: "a", sourceIds: {} } satisfies TrackIdentity;
+
 const trackB = { id: "b", sourceIds: {} } satisfies TrackIdentity;
 
 const cue = (over: Partial<ShowCue> & Pick<ShowCue, "type">): ShowCue => ({
@@ -93,12 +94,14 @@ describe("show-mixer", () => {
         cue({ type: "section-look", startBeat: 64, durationBeats: 32, intensity: 0.8, priority: 10 }),
       ],
     };
+
     const b: DeckMix = {
       state: makeDeck({ deckId: 2, channelFader: 1, crossfader: 1, track: trackB }),
       beat: 64,
       impactStrength: 0.9,
       cues: [cue({ type: "impact", startBeat: 64, target: "PRIMARY", priority: 90 })],
     };
+
     const mixed = mixDown(a, b);
     expect(mixed.owner).toBe("b");
     // Loser's exclusive is dropped with a reason; base looks from both survive.
@@ -119,12 +122,14 @@ describe("show-mixer", () => {
       impactStrength: 1,
       cues: [cue({ type: "impact", target: "ALL", priority: 90 }), cue({ type: "section-look", durationBeats: 8, intensity: 0.8 })],
     };
+
     const loud: DeckMix = {
       state: makeDeck({ deckId: 2, channelFader: 1, crossfader: 1, master: false, track: trackB }),
       beat: 0,
       impactStrength: 1,
       cues: [],
     };
+
     const mixed = mixDown(quiet, loud);
     expect(mixed.cues.filter((c) => c.type === "impact")).toHaveLength(0);
     expect(mixed.cues.filter((c) => c.type === "section-look")).toHaveLength(1);
@@ -135,6 +140,7 @@ describe("show-mixer", () => {
       loadArtifact: (trackId: string) => (trackId === "t" ? "/cache/t.json" : null),
       loadShowPlan: () => "{\"plan\":true}",
     };
+
     expect(loadFastPath(store, "t", "0.1.0", "fp", "club", "0.1.0")).toEqual({ trackJson: "/cache/t.json", planJson: "{\"plan\":true}" });
     expect(loadFastPath(store, "missing", "0.1.0", "fp", "club", "0.1.0")).toEqual({ trackJson: null, planJson: null });
   });

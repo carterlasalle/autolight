@@ -7,6 +7,7 @@ describe("T-PLAN-04 primitive library", () => {
       expect(PRIMITIVE_REGISTRY[name], name).toBeDefined();
       expect(isPrimitiveName(name)).toBe(true);
     }
+
     expect(SPEC_PRIMITIVES).toHaveLength(27);
     expect(SPATIAL_PRIMITIVES).toHaveLength(23);
   });
@@ -17,6 +18,7 @@ describe("T-PLAN-04 primitive library", () => {
       expect(meta.sections.length).toBeGreaterThan(0);
       expect(["low", "mid", "high"]).toContain(meta.energy);
     }
+
     expect(PRIMITIVE_REGISTRY["Orbit"]!.coordinate).toBe("s");
     expect(PRIMITIVE_REGISTRY["Orbit"]!.needsClosedOrIndependent).toBe(true);
   });

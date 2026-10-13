@@ -13,10 +13,12 @@ describe("T-REND-06 renderer goldens", () => {
     const built = fieldCellsForReference(ref);
     const fields = computeFields(room, built.cells, ref.runs, { zeroS: ref.zeroS });
     const hashes: Record<string, string> = {};
+
     for (const name of SPATIAL_PRIMITIVES) {
       const shape = referenceFrames(name);
       const params = parsePrimitiveParams(name, shape.params);
       const levels = new Uint8Array(fields.count * 3);
+
       for (let i = 0; i < fields.count; i++) {
         const sample = sampleSpatial(name, params, shape.beat, i, fields);
         const env = envelopeLevel(shape.beat, 4, { attackBeats: 0.05, releaseBeats: 0.5 });
@@ -25,11 +27,13 @@ describe("T-REND-06 renderer goldens", () => {
         levels[i * 3 + 1] = Math.round(v * 0.6);
         levels[i * 3 + 2] = Math.round(v * 0.2);
       }
+
       const first = frameHash(new Map([["strip", levels]]));
       const second = frameHash(new Map([["strip", levels]]));
       expect(second).toBe(first);
       hashes[name] = first;
     }
+
     expect(Object.keys(hashes)).toHaveLength(SPATIAL_PRIMITIVES.length);
     expect(new Set(Object.values(hashes)).size).toBeGreaterThan(SPATIAL_PRIMITIVES.length - 3);
   });

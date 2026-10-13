@@ -8,6 +8,7 @@ import { ScriptedProvider } from "./providers.js";
 import { VIRTUAL_TRACK_A, VIRTUAL_TRACK_B } from "./test-tracks.js";
 
 let now = 1_000n * 1_000_000_000n;
+
 const clock = (): bigint => now;
 
 describe("master deck, loop, pitch, SYNC, hotcue and roll (T-LIVE-14)", () => {
@@ -30,9 +31,11 @@ describe("master deck, loop, pitch, SYNC, hotcue and roll (T-LIVE-14)", () => {
 
   it("tracks a mid-loop track switch without carrying the loop generation", () => {
     const provider = new RkbxOscProvider({ now: () => now });
+
     const send = (address: string, value: number | string, atNs: bigint): void => {
       provider.ingestDatagram(encodeOscMessage({ address, args: [value] }), atNs);
     };
+
     send("/1/track/title", VIRTUAL_TRACK_A.title, now);
     send("/1/time", 30, now);
     send("/1/beat/subdiv/1", 4, now);
@@ -60,6 +63,7 @@ describe("master deck, loop, pitch, SYNC, hotcue and roll (T-LIVE-14)", () => {
     });
     const prolinkDeck = prolink.getDecks()[0];
     const rkbxDeck = rkbx.getDecks()[0];
+
     if (!prolinkDeck || !rkbxDeck) throw new Error("scripted provider emitted no deck");
     engine.ingest("prolink", prolinkDeck);
     engine.ingest("rkbx-osc", rkbxDeck);
@@ -91,6 +95,7 @@ describe("master deck, loop, pitch, SYNC, hotcue and roll (T-LIVE-14)", () => {
     });
     const compositeDeck = composite.getDecks()[0];
     const prolinkDeck2 = prolink.getDecks()[0];
+
     if (!compositeDeck || !prolinkDeck2) throw new Error("scripted provider emitted no deck");
     engine.ingest("composite-flx4", compositeDeck);
     engine.ingest("prolink", prolinkDeck2);
@@ -107,6 +112,7 @@ describe("master deck, loop, pitch, SYNC, hotcue and roll (T-LIVE-14)", () => {
       atNs: now,
     });
     const prolinkFresh = prolink.getDecks()[0];
+
     if (!prolinkFresh) throw new Error("scripted provider emitted no deck");
     engine.ingest("prolink", prolinkFresh);
     expect(engine.fused(1)?.loopRoll?.active).toBe(false);

@@ -32,6 +32,7 @@ function accessor(): MapMemoryAccessor {
   memory.writeF64("deck1", 1, 128);
   memory.writeU32("deck1", 2, 1);
   memory.writeU32("deck1", 3, 555);
+
   return memory;
 }
 
@@ -70,10 +71,12 @@ describe("clean-room memory reader (T-LIVE-11)", () => {
     expect(samples.get(1)?.bpm).toBe(128);
     expect(samples.get(1)?.trackId).toBe(555);
     const clock = virtualClock();
+
     const provider = new MemoryCleanroomProvider({
       now: () => clock.nowNs(), enabled: true, consentGranted: true,
       installedVersion: "7.2.18", platform: "macos", offsets: offsets(), accessor: accessor(),
     });
+
     provider.poll(clock.nowNs());
     const decks = provider.getDecks();
     expect(decks).toHaveLength(1);
@@ -90,11 +93,13 @@ describe("clean-room memory reader (T-LIVE-11)", () => {
     memory.writeU64("region", 9, BigInt(Math.round(30 * 44100)));
     memory.writeF64("region", 4, 174);
     memory.writeU32("region", 6, 777);
+
     const found = scanMemoryOffsets(
       memory, ["region"], 16,
       [{ deck: 1, playheadSeconds: 30, bpm: 174, trackId: 777 }],
       44100,
     );
+
     expect(found.map((f) => f.field).sort()).toEqual(["bpm", "playheadSamples", "trackId"]);
     expect(MEMORY_PROVIDER_ID).toBe("memory-cleanroom");
   });
@@ -103,10 +108,12 @@ describe("clean-room memory reader (T-LIVE-11)", () => {
     const clock = virtualClock();
     const memory = new MapMemoryAccessor();
     let generation = 0;
+
     const provider = new MemoryCleanroomProvider({
       now: () => clock.nowNs(), enabled: true, consentGranted: true,
       installedVersion: "7.2.18", platform: "macos", offsets: offsets(), accessor: memory,
     });
+
     const failures = await runProviderContractSuite({
       provider,
       reportsTrackText: false,
@@ -130,6 +137,7 @@ describe("clean-room memory reader (T-LIVE-11)", () => {
       },
       cleanup: async () => {},
     });
+
     expect(failures).toEqual([]);
   });
 });

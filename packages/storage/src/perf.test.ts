@@ -26,7 +26,9 @@ import {
 } from "./perf.js";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
+
 const evidenceDir = join(repoRoot, "docs", "finish", "evidence", "T-QA-05");
+
 // Hermetic by default: the harness writes to a temp file so `yarn test`
 // never dirties the committed evidence snapshot (which broke the push gate:
 // the file rewrites on every run with fresh timestamps). Refresh the
@@ -43,7 +45,9 @@ const measurementPath =
 // product regression. The reference 5 ms budget stays asserted in the
 // "relaxed thresholds" test below; strict runs opt in with AUTOLIGHT_PERF_STRICT=1.
 const ciSlack = process.env["AUTOLIGHT_PERF_STRICT"] === "1" ? 1 : 3;
+
 const thresholds = relaxThresholds(defaultThresholds(), ciSlack);
+
 const plan = showPlanSchema.parse(
   JSON.parse(readFileSync(join(repoRoot, "test-fixtures", "analysis", "live-deck1.showplan.json"), "utf8")),
 );
@@ -62,6 +66,7 @@ describe("performance harness (T-QA-05, spec 117)", () => {
     // Render time per tick with 2,000 cells.
     const wide = makeFixture("wide", 2000, 0, 1, ["PRIMARY"]);
     expect(wide.cells.length).toBe(2000);
+
     const renderMs = timeSamples(() => {
       renderFrame(plan, 120, [wide]);
     }, 200);
@@ -70,6 +75,7 @@ describe("performance harness (T-QA-05, spec 117)", () => {
     // contracts (the transport itself is measured on the packaged app).
     const request = { version: 1 as const };
     const response = { ok: true as const, decks: [{ state: null, track: null, plan: null }], fixtures: [] };
+
     const ipcMs = timeSamples(() => {
       channels["show/live"].request.parse(request);
       channels["show/live"].response.parse(response);
@@ -77,6 +83,7 @@ describe("performance harness (T-QA-05, spec 117)", () => {
 
     // DJ message processing: beat position estimation per incoming message.
     const deck = makeDeck({ deckId: 1, playing: true, playheadSeconds: 42.5, effectiveBpm: 128 });
+
     const djMs = timeSamples(() => {
       estimatePosition(deck, 1_000_000_000n);
     }, 500);
@@ -85,17 +92,21 @@ describe("performance harness (T-QA-05, spec 117)", () => {
     // frame path (blackout payload, razer encode, envelope) into the transport
     // seam the datagram sender is wired to.
     const sends: string[] = [];
+
     const send = (text: string): void => {
       sends.push(text);
     };
+
     const emergencyMs = timeSamples(() => {
       send(envelope(encodeRaw(OPCODE.RGB_STREAM, blackoutPayload(14))));
     }, 200);
+
     expect(sends.length).toBe(200);
     expect(sends[0]).toContain('"cmd":"razer"');
 
     // Queue depth: the coalescer keeps at most one pending frame.
     const coalescer = new FrameCoalescer();
+
     for (let i = 0; i < 100; i += 1) coalescer.push(new Uint8Array(42));
     const first = coalescer.take();
     const second = coalescer.take();

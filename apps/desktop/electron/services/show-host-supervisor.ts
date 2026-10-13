@@ -37,9 +37,12 @@ export interface HostMetricsSnapshot {
 
 function isMetricsMessage(message: unknown): message is { type: "metrics"; metrics: HostMetricsSnapshot } {
   if (message === null || typeof message !== "object") return false;
+
   if (!("type" in message) || message.type !== "metrics") return false;
+
   return "metrics" in message && message.metrics !== null && typeof message.metrics === "object";
 }
+
 // Node Worker speaks on()/postMessage()/terminate(); the supervisor seam
 // speaks postMessage()/onMessage()/terminate(). One adapter, at the
 // construction boundary only.
@@ -71,30 +74,36 @@ export class ShowHostSupervisor implements Service {
       this.ensureWorker().postMessage({ type: "intent", channel, request });
     });
     this.tracker.set("running", "show host spawns on first intent");
+
     return this.status();
   }
 
   stop(): ServiceStatus {
     try {
       const stopping = this.worker?.terminate();
+
       if (stopping !== undefined && typeof (stopping as Promise<number>).then === "function") {
         void (stopping as Promise<number>).catch(() => undefined);
       }
     } catch { /* teardown never throws */ }
+
     this.worker = null;
     this.spawned = false;
     this.tracker.set("stopped");
+
     return this.status();
   }
 
   status(): ServiceStatus {
     this.tracker.setCounter("spawned", this.spawned ? 1 : 0);
     const metrics = this.lastMetrics;
+
     if (metrics !== null) {
       this.tracker.setCounter("ticks", metrics.ticks);
       this.tracker.setCounter("intervalP99Ms", Math.round(metrics.intervalP99Ms * 1000) / 1000);
       this.tracker.setCounter("missedTicksPerHour", Math.round(metrics.missedTicksPerHour * 100) / 100);
     }
+
     return this.tracker.status();
   }
 
@@ -108,6 +117,7 @@ export class ShowHostSupervisor implements Service {
 
   private ensureWorker(): ShowHostPort {
     if (this.worker !== null) return this.worker;
+
     const worker: ShowHostPort = this.opts.createWorker?.() ?? workerPortFrom(new Worker(this.opts.workerEntryUrl, {
       workerData: {
         mode: "worker-thread",
@@ -116,6 +126,7 @@ export class ShowHostSupervisor implements Service {
         ...(this.opts.maxBytes !== undefined ? { maxBytes: this.opts.maxBytes } : {}),
       },
     }));
+
     try {
       worker.onMessage((message) => {
         if (isMetricsMessage(message)) this.lastMetrics = message.metrics;
@@ -123,11 +134,14 @@ export class ShowHostSupervisor implements Service {
     } catch (err) {
       this.tracker.set("degraded", `show host worker message tap failed: ${messageOf(err)}`);
     }
+
     this.worker = worker;
+
     if (!this.spawned) {
       this.spawned = true;
       this.tracker.set("running", "show host worker thread live");
     }
+
     return worker;
   }
 }
@@ -136,6 +150,7 @@ let instance: ShowHostSupervisor | null = null;
 
 export function getShowHostSupervisor(opts: ShowHostSupervisorOptions): ShowHostSupervisor {
   instance ??= new ShowHostSupervisor(opts);
+
   return instance;
 }
 

@@ -15,14 +15,18 @@
 // responses, so this package makes no live call in CI.
 
 export const CLOUD_BASE = "https://openapi.api.govee.com";
+
 export const DEVICES_PATH = "/router/api/v1/user/devices";
+
 export const SCENES_PATH = "/router/api/v1/device/scenes";
+
 export const API_KEY_HEADER = "Govee-API-Key";
 
 /** Cloud never carries frames. Renderers and the show tick read this. */
 export const CLOUD_CARRIES_FRAMES = false;
 
 const MINUTE_MS = 60_000;
+
 const DAY_MS = 86_400_000;
 
 export interface CloudFetchRequest {
@@ -140,13 +144,16 @@ export function ensureNotShowTick(fromShowTick: boolean | undefined): void {
 export function parseDeviceEntry(raw: RawDeviceEntry): CloudDevice {
   const props = raw.properties ?? {};
   let declared: number | null = null;
+
   for (const key of ["segments", "segmentCount", "zoneCount"]) {
     const value = props[key];
+
     if (typeof value === "number" && Number.isFinite(value) && value > 0) {
       declared = Math.floor(value);
       break;
     }
   }
+
   return {
     deviceId: raw.device,
     model: raw.model,
@@ -168,23 +175,29 @@ interface RateHeaders {
 
 function lowerKeys(headers: Record<string, string>): Record<string, string> {
   const out: Record<string, string> = {};
+
   for (const [key, value] of Object.entries(headers)) out[key.toLowerCase()] = value;
+
   return out;
 }
 
 function asCount(value: string | undefined): number | null {
   if (value === undefined) return null;
   const n = Number(value);
+
   return Number.isFinite(n) ? n : null;
 }
 
 /** Rate accounting comes from the response headers, never from a guess. */
 export function parseRateHeaders(headers: Record<string, string>): RateHeaders {
   const h = lowerKeys(headers);
+
   const minuteRemaining =
     asCount(h["x-ratelimit-remaining-minute"]) ?? asCount(h["x-ratelimit-remaining"]);
+
   const dayRemaining = asCount(h["x-ratelimit-remaining-day"]);
   const retrySeconds = asCount(h["retry-after"]);
+
   return {
     minuteRemaining,
     dayRemaining,
@@ -219,7 +232,9 @@ export class CloudMetadataClient {
   get accounting(): CloudAccounting {
     const at = this.now();
     let deviceMinuteUsed = 0;
+
     for (const hits of this.deviceHits.values()) deviceMinuteUsed += this.prune(hits, at, MINUTE_MS).length;
+
     return {
       perDevicePerMinute: this.perDevicePerMinute,
       perAccountPerDay: this.perAccountPerDay,
@@ -234,15 +249,20 @@ export class CloudMetadataClient {
   /** Device list with names and declared capabilities (recorded in tests). */
   async listDevices(opts: CloudRequestOptions = {}): Promise<CloudDevice[]> {
     this.guard(opts, "account");
+
     const res = await this.fetchFn({
       url: `${CLOUD_BASE}${DEVICES_PATH}`,
       method: "GET",
       headers: { [API_KEY_HEADER]: this.apiKey, "Content-Type": "application/json" },
     });
+
     this.noteHeaders(res.headers);
+
     if (res.status === 429) throw this.limited("server", res.headers);
+
     if (res.status < 200 || res.status >= 300) throw this.apiError(res);
     const parsed = JSON.parse(res.body) as { data?: RawDeviceEntry[] };
+
     return (parsed.data ?? []).map(parseDeviceEntry);
   }
 
@@ -250,15 +270,20 @@ export class CloudMetadataClient {
   async listScenes(deviceId: string, model: string, opts: CloudRequestOptions = {}): Promise<CloudScene[]> {
     this.guard(opts, deviceId);
     const query = `device=${encodeURIComponent(deviceId)}&model=${encodeURIComponent(model)}`;
+
     const res = await this.fetchFn({
       url: `${CLOUD_BASE}${SCENES_PATH}?${query}`,
       method: "GET",
       headers: { [API_KEY_HEADER]: this.apiKey, "Content-Type": "application/json" },
     });
+
     this.noteHeaders(res.headers);
+
     if (res.status === 429) throw this.limited("server", res.headers);
+
     if (res.status < 200 || res.status >= 300) throw this.apiError(res);
     const parsed = JSON.parse(res.body) as { data?: Array<{ id?: string; name?: string; sceneId?: string }> };
+
     return (parsed.data ?? []).map((entry, index) => ({
       sceneId: entry.sceneId ?? entry.id ?? `scene-${index}`,
       name: entry.name ?? `scene-${index}`,
@@ -267,14 +292,17 @@ export class CloudMetadataClient {
 
   private guard(opts: CloudRequestOptions, deviceKey: string): void {
     ensureNotShowTick(opts.fromShowTick);
+
     if (!this.enabled || !this.cloudAllowed) {
       throw new CloudDisabledError(
         "Cloud metadata is disabled (govee.cloud.enabled and security.cloudAllowed).",
       );
     }
+
     const at = this.now();
     const key = opts.deviceKey ?? deviceKey;
     const hits = this.prune(this.hitsFor(key), at, MINUTE_MS);
+
     if (hits.length >= this.perDevicePerMinute) {
       throw new CloudRateLimitError(
         "device-minute",
@@ -282,7 +310,9 @@ export class CloudMetadataClient {
         `Device minute budget ${this.perDevicePerMinute} per govee.cloud.perDevicePerMinute.`,
       );
     }
+
     const day = this.prune(this.accountHits, at, DAY_MS);
+
     if (day.length >= this.perAccountPerDay) {
       throw new CloudRateLimitError(
         "account-day",
@@ -290,15 +320,18 @@ export class CloudMetadataClient {
         `Account day budget ${this.perAccountPerDay} per govee.cloud.perAccountPerDay.`,
       );
     }
+
     hits.push(at);
     day.push(at);
   }
 
   private hitsFor(key: string): number[] {
     const existing = this.deviceHits.get(key);
+
     if (existing) return existing;
     const fresh: number[] = [];
     this.deviceHits.set(key, fresh);
+
     return fresh;
   }
 
@@ -306,13 +339,17 @@ export class CloudMetadataClient {
     const kept = hits.filter((t) => t > at - windowMs && t <= at);
     hits.length = 0;
     hits.push(...kept);
+
     return hits;
   }
 
   private noteHeaders(headers: Record<string, string>): void {
     const parsed = parseRateHeaders(headers);
+
     if (parsed.minuteRemaining !== null) this.lastServerMinuteRemaining = parsed.minuteRemaining;
+
     if (parsed.dayRemaining !== null) this.lastServerDayRemaining = parsed.dayRemaining;
+
     if (parsed.retryAfterMs !== null) this.lastRetryAfterMs = parsed.retryAfterMs;
   }
 
@@ -320,17 +357,21 @@ export class CloudMetadataClient {
     const parsed = parseRateHeaders(headers);
     const retryAfterMs = parsed.retryAfterMs ?? MINUTE_MS;
     this.lastRetryAfterMs = retryAfterMs;
+
     return new CloudRateLimitError(scope, retryAfterMs, "Server refused with status 429.");
   }
 
   private apiError(res: CloudFetchResponse): CloudApiError {
     let message = "unknown error";
+
     try {
       const parsed = JSON.parse(res.body) as { message?: unknown };
+
       if (typeof parsed.message === "string" && parsed.message.length > 0) message = parsed.message;
     } catch {
       if (res.body.length > 0) message = res.body.slice(0, 120);
     }
+
     return new CloudApiError(res.status, message);
   }
 }

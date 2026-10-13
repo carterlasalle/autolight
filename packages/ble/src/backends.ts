@@ -117,7 +117,9 @@ export class BackendSelector {
       kind: this.deps.primaryKind,
       available: true,
     };
+
     if (this.deps.primaryReason !== null) out.reason = this.deps.primaryReason;
+
     return out;
   }
 
@@ -127,10 +129,12 @@ export class BackendSelector {
       return await this.deps.primary.scan(timeoutMs);
     } catch (err) {
       const secondary = this.deps.secondary;
+
       if (secondary === null) throw err;
       const detail = err instanceof Error ? err.message : String(err);
       const reasonClass: BleUnavailableReason = err instanceof BleBackendUnavailableError ? err.reasonClass : "error-class";
       this.deps.primaryReason = bleReasonText(reasonClass, detail);
+
       return secondary.scan(timeoutMs);
     }
   }
@@ -138,17 +142,21 @@ export class BackendSelector {
   /** Connect on the device's backend; a failing device retries on the other. */
   async connect(address: string): Promise<BleConnection> {
     const override = this.overrides.get(address);
+
     if (override !== undefined && this.deps.secondary !== null && override.kind !== this.deps.primaryKind) {
       return this.deps.secondary.connect(address);
     }
+
     try {
       return await this.deps.primary.connect(address);
     } catch (err) {
       const secondary = this.deps.secondary;
+
       if (secondary === null) throw err;
       const detail = err instanceof Error ? err.message : String(err);
       const reasonClass: BleUnavailableReason = err instanceof BleBackendUnavailableError ? err.reasonClass : "error-class";
       this.noteFallback(address, bleReasonText(reasonClass, detail));
+
       return secondary.connect(address);
     }
   }
@@ -156,6 +164,7 @@ export class BackendSelector {
   /** Records that a device now runs on the other backend with the reason. */
   noteFallback(address: string, reason: string): void {
     const other = this.deps.secondary;
+
     if (other === null) return;
     this.overrides.set(address, { kind: other.kind, reason });
   }
@@ -163,6 +172,7 @@ export class BackendSelector {
   async close(): Promise<void> {
     await this.deps.primary.close();
     const secondary = this.deps.secondary;
+
     if (secondary !== null && secondary !== this.deps.primary) await secondary.close();
   }
 }
@@ -179,23 +189,33 @@ export class BleBackendLoadFailure extends Error {
 /** Builds the selector. `auto` attempts the toolkit load once, up front. */
 export async function createBackendSelector(opts: BackendSelectorOptions): Promise<BackendSelector> {
   const noble = opts.noble ?? null;
+
   if (opts.mode === "noble") {
     if (noble === null) throw new BleBackendLoadFailure("load", "no noble adapter was provided");
+
     return new BackendSelector({ mode: opts.mode, primary: noble, primaryKind: "noble", primaryReason: null, secondary: null });
   }
+
   if (opts.mode === "toolkit-ble" && opts.toolkit !== undefined) {
     const secondary = noble;
+
     return new BackendSelector({ mode: opts.mode, primary: opts.toolkit, primaryKind: "toolkit-ble", primaryReason: null, secondary });
   }
+
   const loaded = await tryLoadToolkit(opts);
+
   if (opts.mode === "toolkit-ble") {
     if (!loaded.ok) throw new BleBackendLoadFailure(loaded.reasonClass, loaded.detail);
+
     return new BackendSelector({ mode: opts.mode, primary: loaded.adapter, primaryKind: "toolkit-ble", primaryReason: null, secondary: noble });
   }
+
   if (loaded.ok) {
     return new BackendSelector({ mode: "auto", primary: loaded.adapter, primaryKind: "toolkit-ble", primaryReason: null, secondary: noble });
   }
+
   if (noble === null) throw new BleBackendLoadFailure(loaded.reasonClass, loaded.detail);
+
   return new BackendSelector({
     mode: "auto",
     primary: noble,
@@ -210,11 +230,14 @@ async function tryLoadToolkit(opts: BackendSelectorOptions): Promise<
 > {
   if (opts.toolkit !== undefined) return { ok: true, adapter: opts.toolkit };
   const load = opts.loadToolkit;
+
   if (load === undefined) return { ok: false, reasonClass: "load", detail: "no toolkit loader was provided" };
+
   try {
     return { ok: true, adapter: await load() };
   } catch (err) {
     if (err instanceof BleBackendUnavailableError) return { ok: false, reasonClass: err.reasonClass, detail: err.message };
+
     return { ok: false, reasonClass: "load", detail: err instanceof Error ? err.message : String(err) };
   }
 }
@@ -249,9 +272,11 @@ export function placeBleBackend(kind: BleBackendKind, caps: BlePlacementCaps): B
   if (caps.workerBleOk) {
     return { host: "worker-thread", reason: `${kind} scans in the show host worker thread`, bridged: false };
   }
+
   if (caps.utilityBleOk) {
     return { host: "utility-process", reason: `${kind} needs the Electron utility process`, bridged: false };
   }
+
   return {
     host: "main",
     reason: `${kind} requires the main thread; show host frames cross a latest-wins channel`,
@@ -276,6 +301,7 @@ export class LatestWinsChannel {
   take(): Uint8Array | null {
     const frame = this.pending;
     this.pending = null;
+
     return frame;
   }
 

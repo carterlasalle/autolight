@@ -26,12 +26,15 @@ export type DirectorEngine = "rules" | "audio-informed" | "combined";
 
 /** runtime.adaptive.phraseBeats default. */
 export const DEFAULT_PHRASE_BEATS = 32;
+
 /** runtime.adaptive.cooldownPhrases default. */
 export const DEFAULT_COOLDOWN_PHRASES = 2;
+
 /** runtime.adaptive.minLooks default: the library never shrinks below this. */
 export const DEFAULT_MIN_LOOKS = 24;
 
 export type EnergyLevel = "low" | "mid" | "high";
+
 export type SpatialDirection = "left" | "right" | "center" | "alternate";
 
 /** Structural hint; FLX4 expressive hints match this shape without an import. */
@@ -110,15 +113,18 @@ export function initialDirectorState(): DirectorState {
 // Deterministic phrase counter: phrase 0 covers beats [0, phraseBeats).
 export function phraseOf(beat: number, phraseBeats: number = DEFAULT_PHRASE_BEATS): number {
   if (!Number.isFinite(beat) || beat < 0) return 0;
+
   return Math.floor(beat / Math.max(1, phraseBeats));
 }
 
 function hashSeed(seed: string): number {
   let h = 0x811c9dc5;
+
   for (let i = 0; i < seed.length; i++) {
     h ^= seed.charCodeAt(i)!;
     h = Math.imul(h, 0x01000193) >>> 0;
   }
+
   return h >>> 0;
 }
 
@@ -132,6 +138,7 @@ export function buildLookLibrary(opts: { minLooks?: number; seed?: string } = {}
   const spatials: SpatialDirection[] = ["left", "right", "center", "alternate"];
   const looks: PhraseLook[] = [];
   let i = 0;
+
   while (looks.length < minLooks) {
     const energy = energies[i % energies.length]!;
     const spatial = spatials[Math.floor(i / energies.length) % spatials.length]!;
@@ -151,10 +158,12 @@ export function buildLookLibrary(opts: { minLooks?: number; seed?: string } = {}
     });
     i++;
   }
+
   const seed = hashSeed(opts.seed ?? "adaptive");
   // Deterministic rotation so libraries with the same size differ by seed
   // without any randomness at pick time.
   const rotate = seed % Math.max(1, looks.length);
+
   return [...looks.slice(rotate), ...looks.slice(0, rotate)];
 }
 
@@ -166,18 +175,22 @@ function advisedEnergy(base: EnergyLevel, input: DirectorInput, engine: Director
   const order: EnergyLevel[] = ["low", "mid", "high"];
   let idx = order.indexOf(base);
   const live = input.energy;
+
   if (typeof live === "number" && Number.isFinite(live)) {
     const clamped = Math.min(1, Math.max(0, live));
     const target = order.indexOf(clamped >= 0.66 ? "high" : clamped >= 0.33 ? "mid" : "low");
+
     if (target > idx) idx = Math.min(order.length - 1, idx + 1);
     else if (target < idx) idx = Math.max(0, idx - 1);
   }
+
   for (const hint of input.hints ?? []) {
     if (hint.kind === "fader-rise" && hint.value > 0.7 && idx < order.length - 1) {
       idx += 1;
       break;
     }
   }
+
   return order[idx]!;
 }
 
@@ -190,23 +203,33 @@ export function pickPhraseLook(library: PhraseLook[], state: DirectorState, ener
   const pool = atEnergy.length > 0 ? atEnergy : library;
   const last = state.effects[state.effects.length - 1];
   const lastStrobe = pool.find((l) => l.id === last)?.strobe === true;
+
   const candidates = pool.filter((l) => {
     if ((state.cooldowns[l.id] ?? 0) > 0) return false;
+
     if (l.id === last) return false;
+
     if (l.strobe && lastStrobe) return false;
+
     return true;
   });
+
   const usable = candidates.length > 0 ? candidates : pool.filter((l) => l.id !== last);
   const fallback = usable.length > 0 ? usable : pool;
+
   const ranked = [...fallback].sort((a, b) => {
     const aMotif = state.motifs.includes(a.motif) ? 1 : 0;
     const bMotif = state.motifs.includes(b.motif) ? 1 : 0;
+
     if (aMotif !== bMotif) return aMotif - bMotif;
     const aPal = a.palette === state.palette ? 1 : 0;
     const bPal = b.palette === state.palette ? 1 : 0;
+
     if (aPal !== bPal) return aPal - bPal;
+
     return a.id < b.id ? -1 : 1;
   });
+
   // Note: deterministic tie-break by phrase counter rotates through equal
   // candidates instead of always taking the first; per-look history if this
   // ever looks samey.
@@ -228,13 +251,17 @@ export function directorTick(
   const phrase = phraseOf(input.beat, phraseBeats);
   const current = state.effects[state.effects.length - 1];
   const currentLook = library.find((l) => l.id === current);
+
   if (phrase <= state.phrase && currentLook !== undefined) {
     return { look: currentLook, changed: false, state };
   }
+
   const energy = advisedEnergy(state.energy, input, engine);
   const look = pickPhraseLook(library, state, energy);
   const decayed: Record<string, number> = {};
+
   for (const [k, v] of Object.entries(state.cooldowns)) decayed[k] = Math.max(0, v - 1);
+
   const next: DirectorState = {
     energy: look.energy,
     phrase,
@@ -245,5 +272,6 @@ export function directorTick(
     darkness: look.darkness,
     spatial: look.spatial,
   };
+
   return { look, changed: true, state: next };
 }

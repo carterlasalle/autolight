@@ -13,12 +13,14 @@ function run(rows: readonly Row[], opts: { djSoftware?: "rekordbox" | "serato" |
   const deriver = new Flx4SignalDeriver(opts);
   const signals: Flx4Signal[] = [];
   let atNs = 1_000_000n;
+
   for (const [status, data1, data2] of rows) {
     atNs += 10_000_000n;
     const event = decoder.decode({ status, data1, data2, receivedAtNs: atNs });
     model.apply(event);
     signals.push(...deriver.derive(event, model.snapshot()));
   }
+
   return signals;
 }
 
@@ -34,11 +36,13 @@ describe("flx4 runtime signals", () => {
       [0xb0, 0x22, 0x45], // reversal 2
       [0x90, 0x36, 0x00], // release
     ]);
+
     const start = scratch.find((signal) => signal.kind === "scratch-start");
     const end = scratch.find((signal) => signal.kind === "scratch-end");
     expect(start).toBeDefined();
     expect(end).toBeDefined();
     expect(kinds(scratch)).toEqual(["scratch-start", "scratch-end"]);
+
     if (start !== undefined && start.kind === "scratch-start") {
       expect(start.deck).toBe(1);
       expect(start.quality).toBe("estimated");
@@ -54,13 +58,16 @@ describe("flx4 runtime signals", () => {
       [0xb0, 0x22, 0x45],
       [0xb0, 0x22, 0x3b],
     ]);
+
     expect(kinds(single)).toEqual([]);
+
     const steady = run([
       [0x90, 0x36, 0x7f],
       [0xb0, 0x22, 0x3b],
       [0xb0, 0x22, 0x3b],
       [0xb0, 0x22, 0x3b],
     ]);
+
     expect(kinds(steady)).toEqual([]);
   });
 
@@ -69,6 +76,7 @@ describe("flx4 runtime signals", () => {
     const model = new Flx4StateModel();
     const deriver = new Flx4SignalDeriver();
     let atNs = 1_000_000n;
+
     for (const [status, data1, data2] of [
       [0x90, 0x36, 0x7f],
       [0xb0, 0x22, 0x45],
@@ -78,6 +86,7 @@ describe("flx4 runtime signals", () => {
       atNs += 10_000_000n;
       model.apply(decoder.decode({ status, data1, data2, receivedAtNs: atNs }));
     }
+
     const trace = deriver.scratchTrace(model.snapshot(), 1);
     expect(trace.active).toBe(true);
     expect(trace.direction).toBe(1);
@@ -91,19 +100,24 @@ describe("flx4 runtime signals", () => {
       [0x97, 0x00, 0x7f], // hot cue pad 1
       [0x97, 0x02, 0x7f], // hot cue pad 3
     ]);
+
     expect(kinds(signals)).toEqual(["cue-hold", "cue-hold", "hot-cue", "hot-cue"]);
     expect(signals[2]).toMatchObject({ kind: "hot-cue", deck: 1, padIndex: 1, quality: "observed" });
+
     const roll = run([
       [0x97, 0x51, 0x7f], // PAD FX 2 (Serato Roll) pad 2 down
       [0x97, 0x51, 0x00],
     ], { djSoftware: "serato" });
+
     expect(roll).toMatchObject([
       { kind: "pad-roll-start", deck: 1, padIndex: 2, beats: null, quality: "estimated" },
       { kind: "pad-roll-stop", deck: 1, padIndex: 2 },
     ]);
+
     const rekordbox = run([
       [0x97, 0x51, 0x7f],
     ], { djSoftware: "rekordbox" });
+
     expect(kinds(rekordbox)).toEqual(["pad-press"]);
   });
 
@@ -120,6 +134,7 @@ describe("flx4 runtime signals", () => {
       [0x97, 0x21, 0x7f], // beat-jump pad 2: 1 beat forward
       [0x98, 0x27, 0x7f], // +SHIFT pad 8: 8 beats times 16
     ]);
+
     expect(kinds(signals)).toEqual([
       "loop-in",
       "loop-out",
@@ -144,6 +159,7 @@ describe("flx4 runtime signals", () => {
       [0x90, 0x4d, 0x7f],
       [0x90, 0x4d, 0x7f],
     ]);
+
     expect(kinds(signals)).toEqual(["loop-in", "loop-exit", "reloop"]);
   });
 
@@ -157,10 +173,12 @@ describe("flx4 runtime signals", () => {
       [0xb6, 0x3f, 0x00], // crossfader left
       [0x96, 0x46, 0x7f], // LOAD deck 1
     ]);
+
     expect(kinds(signals)).toEqual(["sync", "sync", "fader", "crossfader", "load"]);
     expect(signals[0]).toMatchObject({ kind: "sync", on: true, master: false, quality: "estimated" });
     expect(signals[1]).toMatchObject({ kind: "sync", on: true, master: true });
     expect(signals[2]).toMatchObject({ kind: "fader", deck: 1, quality: "observed" });
+
     if (signals[2] !== undefined && signals[2].kind === "fader") expect(signals[2].value).toBeCloseTo(8192 / 16383, 12);
     expect(signals[3]).toMatchObject({ kind: "crossfader", value: 0, quality: "observed" });
     expect(signals[4]).toMatchObject({ kind: "load", deck: 1 });
@@ -172,8 +190,10 @@ describe("flx4 runtime signals", () => {
       [0xb1, 0x13, 0x7f],
       [0xb1, 0x33, 0x7f], // deck 2 channel fader full
     ]);
+
     expect(signals[0]).toMatchObject({ kind: "hot-cue", deck: 2, padIndex: 2 });
     expect(signals[1]).toMatchObject({ kind: "fader", deck: 2 });
+
     if (signals[1] !== undefined && signals[1].kind === "fader") expect(signals[1].value).toBeCloseTo(1, 12);
   });
 });

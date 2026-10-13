@@ -30,10 +30,12 @@ describe("T-SEC-03 security checklist", () => {
     expect(script).toBe("script-src 'self'");
     expect(csp).not.toContain("unsafe-eval");
     expect(csp).not.toContain("https:");
+
     for (const dir of csp.split(";").map((d) => d.trim())) {
       if (dir.startsWith("connect-src")) continue;
       expect(dir).not.toContain("http:");
     }
+
     expect(csp).toContain("object-src 'none'");
     expect(csp).toContain("frame-ancestors 'none'");
   });

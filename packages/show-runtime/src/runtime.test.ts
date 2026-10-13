@@ -25,6 +25,7 @@ import {
 } from "./index.js";
 
 const BPM = 120; // 2 beats per second: playhead seconds map cleanly onto beats
+
 const NS_PER_SECOND = 1_000_000_000n;
 
 const plan: ShowPlan = {
@@ -46,6 +47,7 @@ const plan: ShowPlan = {
 function deckWorld(deckId = 1, beat = 0): DeckWorld {
   const world = createDeckWorld(deckId, { startBeat: beat });
   installPlan(world, 1, plan);
+
   return world;
 }
 
@@ -63,6 +65,7 @@ function observe(world: DeckWorld, playheadSeconds: number, nowNs: bigint, over:
     }),
     "exact",
   );
+
   return tickWorld(world, nowNs);
 }
 
@@ -94,6 +97,7 @@ describe("show runtime", () => {
 
   it("holds at most four deck worlds (spec 62, T-RUN-01)", () => {
     const runtime = new ShowRuntime();
+
     for (let i = 1; i <= MAX_DECKS; i += 1) runtime.world(i);
     expect(() => runtime.world(MAX_DECKS + 1)).toThrow(/at most 4 deck worlds/);
   });
@@ -125,23 +129,29 @@ describe("show runtime", () => {
   it("renders at a beat after any seek history exactly as from a fresh cursor (P-58-seek)", () => {
     const history = deckWorld();
     let seed = 5;
+
     const rand = (): number => {
       seed = (seed * 1664525 + 1013904223) >>> 0;
+
       return seed / 0x100000000;
     };
+
     const beats = [0, 64, 128, 256, 300, 200, 129, 300.2, 64.5, 257];
+
     for (const b of beats) {
       // History mixes seeks, loops and scratch holds before the sample.
       seekWorld(history, b, BigInt(Math.round(b * 1000)));
       observe(history, b / 2, BigInt(Math.round(b * 1000)), { loop: { active: true, startSeconds: 64, endSeconds: 68, beatLength: 8 } });
       observe(history, rand() * 200, BigInt(Math.round(rand() * 1000)), { playRate: 0.3 });
     }
+
     for (const b of [64, 128, 200, 256.5, 300.1, 129.5]) {
       const fresh = deckWorld(9, b);
       const expected = fresh.plan === null ? [] : evaluateCues(fresh.plan, b);
       const actual = seekWorld(history, b, 0n).cues;
       expect(actual, `beat ${b}`).toEqual(expected);
     }
+
     // Every cue type in the plan is covered by the reconstruction check.
     expect(new Set(plan.cues.map((c) => c.type)).size).toBe(6);
   });
@@ -154,14 +164,17 @@ describe("show runtime", () => {
     const pass2 = observe(world, 72, 2n * NS_PER_SECOND, { loop });
     expect([pass0?.loopPass, pass1?.loopPass, pass2?.loopPass]).toEqual([0, 1, 2]);
     expect([pass0?.beat, pass1?.beat, pass2?.beat]).toEqual([128, 128, 128]);
+
     // A hit at the loop start fires on every pass, not once.
     for (const pass of [pass0, pass1, pass2]) {
       expect(pass?.transients.map((c) => c.type)).toContain("impact");
     }
+
     // A, B, A: pass 2 repeats pass 0; pass 1 is the variation, and the cue
     // identity (type, start beat, priority) is untouched on every pass.
     const shape = (p: typeof pass0): string =>
       JSON.stringify((p?.cues ?? []).map((c) => [c.type, c.startBeat, c.priority, c.target, c.intensity]));
+
     expect(shape(pass2)).toBe(shape(pass0));
     expect(shape(pass1)).not.toBe(shape(pass0));
     expect(loopPassVariant(0)).toBe(loopPassVariant(2));
@@ -240,6 +253,7 @@ describe("show runtime", () => {
       beatFeatures: [],
       phrases: [],
     };
+
     const world = deckWorld(1, 200);
     installModel(world, 1, model);
     const loopFree = { loop: { active: false, startSeconds: null, endSeconds: null, beatLength: null } };
@@ -325,6 +339,7 @@ describe("show runtime", () => {
       beatFeatures: [],
       phrases: [],
     };
+
     const grid = resumeGridFromModel(model);
     expect(grid.barBeats.slice(0, 3)).toEqual([0, 4, 8]);
     expect(grid.phraseBeats).toEqual([96]);

@@ -19,6 +19,7 @@ function testCrypto(): {
       encryptString: (p: string): Uint8Array => new TextEncoder().encode(`enc(${p})`),
       decryptString: (b: Uint8Array): string => {
         const raw = new TextDecoder().decode(b);
+
         return raw.slice(4, -1);
       },
       isEncryptionAvailable: (): boolean => true,
@@ -29,6 +30,7 @@ function testCrypto(): {
 async function started(blobFile: string, crypto = testCrypto().port): Promise<SecretsService> {
   const svc = new SecretsService({ blobFile, crypto });
   await svc.start();
+
   return svc;
 }
 
@@ -85,6 +87,7 @@ describe("secrets-service", () => {
         isEncryptionAvailable: () => false,
       },
     });
+
     const status = await locked.start();
     expect(status.state).toBe("degraded");
     expect(locked.setSecret("govee.cloud.apiKey", PLAIN)).toMatchObject({ ok: false, error: { code: "E_SECRET_STORE" } });

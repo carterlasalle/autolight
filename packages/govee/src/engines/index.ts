@@ -68,7 +68,9 @@ export class EngineSelector {
   // Which engine serves this device, with the reason when it is the fallback.
   decision(deviceId: string): DeviceEngineDecision {
     const override = this.overrides.get(deviceId);
+
     if (override) return override;
+
     return { engine: this.deps.primaryKind, reason: this.deps.primaryReason };
   }
 
@@ -77,7 +79,7 @@ export class EngineSelector {
       mode: this.deps.mode,
       engine: this.deps.primaryKind,
       reason: this.deps.primaryReason,
-      perDevice: Object.fromEntries([...this.overrides.entries()]),
+      perDevice: Object.fromEntries(this.overrides.entries()),
     };
   }
 
@@ -85,9 +87,11 @@ export class EngineSelector {
     const base = this.deps.primaryKind === "native-ts"
       ? this.deps.native.report()
       : this.deps.primary.report();
+
     if (this.deps.primaryReason !== null && this.deps.primaryKind === "native-ts") {
       return { kind: "native-ts", available: base.available, reason: this.deps.primaryReason };
     }
+
     return base;
   }
 
@@ -97,15 +101,18 @@ export class EngineSelector {
 
   async openStream(deviceId: string, opts: StreamOptions): Promise<SegmentStreamLike> {
     const engine = this.engineFor(deviceId);
+
     if (engine === this.deps.native || this.deps.primaryKind === "native-ts") {
       return engine.openStream(deviceId, opts);
     }
+
     try {
       return await engine.openStream(deviceId, opts);
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
       const reasonClass: UnavailableReason = isUnavailableError(err) ? "context" : "error-class";
       this.noteFallback(deviceId, reasonText(reasonClass, detail));
+
       return this.deps.native.openStream(deviceId, opts);
     }
   }
@@ -138,9 +145,11 @@ export class EngineSelector {
 
   metrics(deviceId?: string): EngineMetrics[] {
     const target = deviceId !== undefined ? this.engineFor(deviceId) : this.deps.primary;
+
     if (deviceId === undefined && this.deps.primary !== this.deps.native) {
       return [...this.deps.primary.metrics(), ...this.deps.native.metrics()];
     }
+
     return target.metrics(deviceId);
   }
 
@@ -148,8 +157,10 @@ export class EngineSelector {
     if (this.deps.primary !== this.deps.native) {
       await this.deps.primary.close();
       await this.deps.native.close();
+
       return;
     }
+
     await this.deps.primary.close();
   }
 }
@@ -172,6 +183,7 @@ export async function createEngineSelector(opts: EngineSelectorOptions): Promise
   }
 
   const load = await attemptToolkitLoad(toolkit);
+
   if (load.ok) {
     return new EngineSelector({
       mode: opts.mode,
@@ -181,9 +193,11 @@ export async function createEngineSelector(opts: EngineSelectorOptions): Promise
       native,
     });
   }
+
   if (opts.mode === "toolkit") {
     throw new ToolkitLoadFailure(load.reasonClass, load.detail);
   }
+
   // auto: every device tile carries the same typed reason.
   return new EngineSelector({
     mode: opts.mode,
@@ -208,10 +222,14 @@ async function attemptToolkitLoad(toolkit: LanStreamEngine): Promise<
 > {
   if (toolkit instanceof ToolkitEngine) {
     const result = await toolkit.ensureLoad();
+
     return result.ok ? { ok: true } : { ok: false, reasonClass: result.reasonClass, detail: result.detail };
   }
+
   // An injected engine owns its own load; its report is the answer.
   const report = toolkit.report();
+
   if (report.available) return { ok: true };
+
   return { ok: false, reasonClass: "load", detail: report.reason ?? "toolkit engine reports unavailable" };
 }

@@ -30,13 +30,17 @@ export interface BleFrame {
 
 function xorOf(bytes: Uint8Array, end: number): number {
   let xor = 0;
+
   for (let i = 0; i < end; i++) xor ^= bytes[i] ?? 0;
+
   return xor & 0xff;
 }
 
 function sumOf(bytes: Uint8Array): number {
   let sum = 0;
+
   for (const b of bytes) sum = (sum + b) & 0xff;
+
   return sum;
 }
 
@@ -45,14 +49,17 @@ export function encodeBleFrame(proType: number, cmd: number, payload: Uint8Array
   if (proType === BLE_PROTYPE.HOST_COLOR) {
     throw new RangeError("use encodeHostColor for 0xA5 frames");
   }
+
   if (payload.length > BLE_PAYLOAD_LEN) {
     throw new RangeError(`BLE payload needs at most ${BLE_PAYLOAD_LEN} bytes, got ${payload.length}`);
   }
+
   const out = new Uint8Array(BLE_FRAME_LEN);
   out[0] = proType & 0xff;
   out[1] = cmd & 0xff;
   out.set(payload, 2);
   out[BLE_FRAME_LEN - 1] = xorOf(out, BLE_FRAME_LEN - 1);
+
   return out;
 }
 
@@ -60,6 +67,7 @@ export function encodeBleFrame(proType: number, cmd: number, payload: Uint8Array
 export function decodeBleFrame(frame: Uint8Array): BleFrame | null {
   if (frame.length !== BLE_FRAME_LEN) return null;
   const proType = frame[0] ?? -1;
+
   if (
     proType !== BLE_PROTYPE.WRITE &&
     proType !== BLE_PROTYPE.READ &&
@@ -68,8 +76,10 @@ export function decodeBleFrame(frame: Uint8Array): BleFrame | null {
   ) {
     return null;
   }
+
   if ((frame[BLE_FRAME_LEN - 1] ?? -1) !== xorOf(frame, BLE_FRAME_LEN - 1)) return null;
   const cmd = frame[1] ?? 0;
+
   return { proType, cmd, payload: frame.slice(2, 2 + BLE_PAYLOAD_LEN) };
 }
 
@@ -80,14 +90,18 @@ export function encodeHostColor(sub: number, payload: Uint8Array = new Uint8Arra
   out[1] = sub & 0xff;
   out.set(payload, 2);
   out[out.length - 1] = sumOf(out.subarray(0, out.length - 1));
+
   return out;
 }
 
 /** Decodes a short 0xA5 frame. Returns null on marker or sum mismatch. */
 export function decodeHostColor(frame: Uint8Array): { sub: number; payload: Uint8Array } | null {
   if (frame.length < BLE_A5_MIN_LEN) return null;
+
   if ((frame[0] ?? -1) !== BLE_PROTYPE.HOST_COLOR) return null;
+
   if ((frame[frame.length - 1] ?? -1) !== sumOf(frame.subarray(0, frame.length - 1))) return null;
+
   return { sub: frame[1] ?? 0, payload: frame.slice(2, frame.length - 1) };
 }
 
@@ -106,9 +120,11 @@ export interface BleAck {
 /** Parses a notify ack of the form [0x33, cmd, status]. Null on any other shape. */
 export function parseBleAck(notify: Uint8Array): BleAck | null {
   if (notify.length < 3) return null;
+
   if ((notify[0] ?? -1) !== BLE_PROTYPE.WRITE) return null;
   const cmd = notify[1] ?? 0;
   const status = notify[2] ?? 0;
+
   return { cmd, status, accepted: status === 0x00 };
 }
 
@@ -126,9 +142,11 @@ export type BleBrightnessScale = 100 | 255;
 /** Brightness write: 33 04 <level>. Scale comes from the device profile. */
 export function bleBrightness(level01: number, scale: BleBrightnessScale = 100): Uint8Array {
   const clamped01 = Math.min(1, Math.max(0, level01));
+
   const level = scale === 100
     ? Math.min(100, Math.max(0, Math.round(clamped01 * 100)))
     : Math.min(255, Math.max(0, Math.round(clamped01 * 255)));
+
   return encodeBleFrame(BLE_PROTYPE.WRITE, 0x04, new Uint8Array([level]));
 }
 
@@ -150,6 +168,7 @@ export function bleColorSingle(color: BleRgb, kelvin = 0, white: BleRgb = { r: 0
     (kelvin >> 8) & 0xff, kelvin & 0xff,
     byte(white.r), byte(white.g), byte(white.b),
   ]);
+
   return encodeBleFrame(BLE_PROTYPE.WRITE, 0x05, payload);
 }
 
@@ -158,6 +177,7 @@ export function bleColorLegacy(tail: Uint8Array): Uint8Array {
   const payload = new Uint8Array(1 + tail.length);
   payload[0] = 0x02;
   payload.set(tail, 1);
+
   return encodeBleFrame(BLE_PROTYPE.WRITE, 0x05, payload);
 }
 
@@ -165,10 +185,12 @@ export function bleColorLegacy(tail: Uint8Array): Uint8Array {
 export function maskForZones(zones: readonly number[], zoneCount: number): Uint8Array {
   const len = Math.ceil(Math.max(0, zoneCount) / 8);
   const out = new Uint8Array(len);
+
   for (const z of zones) {
     if (z < 0 || z >= zoneCount) throw new RangeError(`zone ${z} outside 0 to ${zoneCount - 1}`);
     out[Math.floor(z / 8)]! |= 1 << (z % 8);
   }
+
   return out;
 }
 
@@ -192,6 +214,7 @@ export function bleColorMasked(
   payload[7] = byte(white.g);
   payload[8] = byte(white.b);
   payload.set(mask, 9);
+
   return encodeBleFrame(BLE_PROTYPE.WRITE, 0x05, payload);
 }
 
@@ -205,12 +228,14 @@ export function bleMaskedBrightness(
   const level = scale === 100
     ? Math.min(100, Math.max(0, Math.round(Math.min(1, Math.max(0, level01)) * 100)))
     : Math.min(255, Math.max(0, Math.round(Math.min(1, Math.max(0, level01)) * 255)));
+
   const mask = maskForZones(zones, zoneCount);
   const payload = new Uint8Array(3 + mask.length);
   payload[0] = 0x15;
   payload[1] = BLE_MASKED_KIND.BRIGHTNESS;
   payload[2] = level;
   payload.set(mask, 3);
+
   return encodeBleFrame(BLE_PROTYPE.WRITE, 0x05, payload);
 }
 
@@ -223,6 +248,7 @@ export function blePerZoneBrightness(levels01: readonly number[], scale: BleBrig
     const c = Math.min(1, Math.max(0, v));
     payload[2 + i] = scale === 100 ? Math.min(100, Math.max(0, Math.round(c * 100))) : Math.min(255, Math.max(0, Math.round(c * 255)));
   });
+
   return encodeBleFrame(BLE_PROTYPE.WRITE, 0x05, payload);
 }
 

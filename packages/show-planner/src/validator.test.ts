@@ -52,7 +52,9 @@ function model(): TrackModel {
     phrases: [],
   } as TrackModel;
 }
+
 const cfg = DEFAULT_CONFIG;
+
 const good = () => compileShow({ track: model(), venue: DEFAULT_VENUE_CLASS, style: BUILT_IN_STYLES["club"]!, config: cfg }).plan;
 
 describe("T-PLAN-10 validator and evaluator (P-114, P-115)", () => {
@@ -62,28 +64,34 @@ describe("T-PLAN-10 validator and evaluator (P-114, P-115)", () => {
   });
   it("rejects overlapping exclusives", () => {
     const plan = good();
+
     const bad = { ...plan, cues: [...plan.cues,
       { id: "x1", type: "blackout", startBeat: 10, durationBeats: 4, intensity: 0, target: "ALL", priority: 95, level: "beat", layer: "exclusive", reason: "t" },
       { id: "x2", type: "white-hit", startBeat: 12, durationBeats: 1, intensity: 1, target: "ALL", priority: 100, level: "beat", layer: "exclusive", reason: "t" },
     ] } as typeof plan;
+
     expect(validateCompiledPlan(bad, 200, cfg).some((p) => p.includes("overlapping exclusive"))).toBe(true);
   });
   it("rejects negative durations and out-of-range cues", () => {
     const plan = good();
+
     const bad = { ...plan, cues: [...plan.cues,
       { id: "x3", type: "pulse", startBeat: 5, durationBeats: -1, intensity: 0.5, target: "PRIMARY", priority: 60, level: "beat", layer: "rhythm", reason: "t" },
       { id: "x4", type: "impact", startBeat: 9999, durationBeats: 1, intensity: 1, target: "ALL", priority: 90, level: "beat", layer: "exclusive", reason: "t" },
     ] } as typeof plan;
+
     const ps = validateCompiledPlan(bad, 200, cfg);
     expect(ps.some((p) => p.includes("negative duration"))).toBe(true);
     expect(ps.some((p) => p.includes("out-of-range"))).toBe(true);
   });
   it("rejects unknown primitives and level violations", () => {
     const plan = good();
+
     const bad = { ...plan, cues: [...plan.cues,
       { id: "x5", type: "nope-cue", startBeat: 5, durationBeats: 1, intensity: 0.5, target: "ALL", priority: 10, level: "beat", layer: "accents", reason: "t" },
       { id: "x6", type: "pulse", startBeat: 6, durationBeats: 0.5, intensity: 0.5, target: "PRIMARY", priority: 60, level: "section", layer: "base", reason: "t" },
     ] } as typeof plan;
+
     const ps = validateCompiledPlan(bad, 200, cfg);
     expect(ps.some((p) => p.includes("unknown primitive"))).toBe(true);
     expect(ps.some((p) => p.includes("level violation"))).toBe(true);
@@ -95,10 +103,13 @@ describe("T-PLAN-10 validator and evaluator (P-114, P-115)", () => {
   });
   it("computes all ten spec 115 diagnostics and flags out-of-bounds generations", () => {
     const d = evaluateCompiledPlan(good(), cfg);
+
     for (const k of ["activeDensity","darknessPct","colourChangeRate","whiteHits","blackouts","strobeBeats","patternRecurrence","spatialEntropy","sectionContrast","intensityArc"] as const) {
       expect(typeof d[k]).toBe("number");
     }
+
     const tight = { ...cfg, evaluationBounds: { ...cfg.evaluationBounds, whiteHits: [0, 0] as readonly [number, number] } };
+
     if (d.whiteHits > 0) expect(diagnosticsOutOfBounds(d, tight).some((x) => x.includes("whiteHits"))).toBe(true);
   });
 });

@@ -27,7 +27,9 @@ function hexOf(bytes: Uint8Array): string {
 // Zone colours as the simulator reports them, for rendered-state comparisons.
 function zonesOf(frame: Uint8Array): string {
   const zones: Array<[number, number, number]> = [];
+
   for (let i = 0; i + 2 < frame.length; i += 3) zones.push([frame[i]!, frame[i + 1]!, frame[i + 2]!]);
+
   return JSON.stringify(zones);
 }
 
@@ -95,9 +97,11 @@ describe("govee", () => {
   });
   it("closed streams drop pending frames instead of sending", async () => {
     const sent: Uint8Array[] = [];
+
     const factory: ToolkitStreamFactory = {
       openStream: async (_ip, _zones) => new LatestStream((f) => { sent.push(f); }),
     };
+
     const stream = await factory.openStream("10.0.0.2", 14);
     stream.setAll(new Uint8Array([1, 2, 3]));
     stream.close();
@@ -114,6 +118,7 @@ describe("govee", () => {
     const dir = fixtureDir();
     const names = readdirSync(dir).filter((n) => n.endsWith(".json") && n !== "status-armed.json");
     expect(names.length).toBeGreaterThanOrEqual(18);
+
     for (const name of names) {
       const vec = JSON.parse(readFileSync(join(dir, name), "utf8")) as { hex: string; base64: string };
       const raw = new Uint8Array(Buffer.from(vec.base64, "base64"));
@@ -122,21 +127,27 @@ describe("govee", () => {
       expect(decoded).not.toBeNull();
       expect(hexOf(encodeRaw(decoded!.opcode, decoded!.payload))).toBe(vec.hex);
     }
+
     const status = JSON.parse(readFileSync(join(dir, "status-armed.json"), "utf8")) as {
       json: { msg: { cmd: string; data: { onOff: number; brightness: number; pt: string } } };
     };
+
     const parsed = parseStatus(status.json);
     expect(parsed).toMatchObject({ onOff: true, brightness: 80, armed: true });
   });
   it("round-trips decode(encode(x)) with checksum validation", () => {
     let seed = 0x12345678;
+
     const next = (): number => {
       seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+
       return seed & 0xff;
     };
+
     for (let round = 0; round < 200; round++) {
       const len = next() % 64;
       const payload = new Uint8Array(len);
+
       for (let i = 0; i < len; i++) payload[i] = next();
       const opcode = [0xb0, 0xb1, 0xb2, 0xb4][round % 4]!;
       const frame = encodeRaw(opcode, payload);
@@ -147,6 +158,7 @@ describe("govee", () => {
       corrupt[corrupt.length - 1]! ^= 0xff;
       expect(decodeRaw(corrupt)).toBeNull();
     }
+
     const colors = new Uint8Array([255, 0, 0, 0, 255, 0]);
     expect(hexOf(paint(colors, 0))).toBe(hexOf(encodeRaw(0xb0, new Uint8Array([0, 2, 255, 0, 0, 0, 255, 0]))));
     expect(() => paint(new Uint8Array([1, 2]), 0)).toThrow(RangeError);
@@ -176,12 +188,14 @@ class FakeClock implements Scheduler {
   setTimeout(fn: () => void, ms: number): TimerHandle {
     const handle = ++this.seq;
     this.tasks.set(handle, { at: this.current + Math.max(0, ms), fn, every: null });
+
     return handle;
   }
   setInterval(fn: () => void, ms: number): TimerHandle {
     const handle = ++this.seq;
     const every = Math.max(1, ms);
     this.tasks.set(handle, { at: this.current + every, fn, every });
+
     return handle;
   }
   clearTimeout(handle: TimerHandle): void { if (typeof handle === "number") this.tasks.delete(handle); }
@@ -189,19 +203,25 @@ class FakeClock implements Scheduler {
   // Runs every task due inside the window, in time order, never rewinding time.
   advance(ms: number): void {
     const target = this.current + ms;
+
     for (;;) {
       let earliest: [number, FakeTask] | null = null;
+
       for (const entry of this.tasks) {
         if (entry[1].at > target) continue;
+
         if (earliest === null || entry[1].at < earliest[1].at) earliest = entry;
       }
+
       if (earliest === null) break;
       const [handle, task] = earliest;
       this.current = Math.max(this.current, task.at);
+
       if (task.every === null) this.tasks.delete(handle);
       else task.at = this.current + task.every;
       task.fn();
     }
+
     this.current = Math.max(this.current, target);
   }
   // Time passes with no loop run (backgrounded app, long GC pause).
@@ -218,7 +238,9 @@ class RecordingSender implements StreamTransport {
 // Our own envelope shape, generated in this process, is the input here.
 function razerHex(text: string): string {
   const env = JSON.parse(text) as { msg: { cmd: string; data: { pt: string } } };
+
   if (env.msg.cmd !== "razer") throw new Error(`not a razer datagram: ${text}`);
+
   return hexOf(new Uint8Array(Buffer.from(env.msg.data.pt, "base64")));
 }
 
@@ -261,6 +283,7 @@ class StubBindingStream implements BindingStream {
     const frame = this.pending;
     this.pending = null;
     const hex = hexOf(frame);
+
     if (hex === this.lastHex) return;
     this.lastHex = hex;
     this.framesSent += 1;
@@ -269,12 +292,14 @@ class StubBindingStream implements BindingStream {
 
   setAll(colors: Uint8Array | Array<[number, number, number]>): void {
     const frame = colors instanceof Uint8Array ? colors : new Uint8Array(colors.flat());
+
     if (this.pending !== null) this.framesSuperseded += 1;
     this.pending = frame.slice();
   }
 
   async close(): Promise<void> {
     if (this.timer !== null) { this.clock.clearInterval(this.timer); this.timer = null; }
+
     this.pending = null;
     this.sink(envelope(arm(false)));
   }
@@ -326,6 +351,7 @@ class StubBinding implements BindingModule {
         this.opened.push(id);
         const zones = typeof resolution === "number" ? resolution : 14;
         const rateHz = typeof rate === "number" ? rate : 40;
+
         return new StubBindingStream(
           { zones, rateHz, gradient: gradient === true ? 1 : 0, armSettleMs: this.armSettleMs },
           this.sink,
@@ -340,6 +366,7 @@ class StubBinding implements BindingModule {
 }
 
 const PARITY_OPTS: StreamOptions = { resolution: 4, rateHz: 20, gradient: 0, armSettleMs: 20 };
+
 const PARITY_FRAMES = {
   a: new Uint8Array([255, 0, 0, 0, 255, 0, 0, 0, 255, 12, 34, 56]),
   b: new Uint8Array([0, 0, 0, 10, 20, 30, 40, 50, 60, 70, 80, 90]),
@@ -387,13 +414,16 @@ const SIM_MODULE = "@autolight/simulator/dist/govee-lan.js";
 async function loadSimulator(): Promise<SimCtor | null> {
   try {
     const mod: unknown = await import(/* @vite-ignore */ SIM_MODULE);
+
     if (typeof mod !== "object" || mod === null) return null;
     const ctor = "GoveeLanSim" in mod ? mod.GoveeLanSim : undefined;
+
     // Checked as a function; the simulator's constructor shape is documented.
     return typeof ctor === "function" ? (ctor as SimCtor) : null;
   } catch (err) {
     // Loud, not silent: the simulator tests skip and say why.
     console.warn("govee: LAN simulator unavailable, skipping simulator parity", err);
+
     return null;
   }
 }
@@ -402,6 +432,7 @@ const SimClass = await loadSimulator();
 
 function udpSink(port: number): { send: (text: string) => void; close: () => void } {
   const sock = createSocket("udp4");
+
   return {
     send: (text: string) => { sock.send(text, port, "127.0.0.1", () => undefined); },
     close: () => { sock.close(); },
@@ -468,11 +499,13 @@ describe("govee engines (T-GOV-01..03)", () => {
 
   it("auto falls back to native-ts with the typed load reason", async () => {
     const loadError = new Error("dlopen(govee_toolkit.node): image not found");
+
     const selector = await createEngineSelector({
       mode: "auto",
       toolkit: new ToolkitEngine({ loader: async () => { throw loadError; } }),
       native: new NativeStreamEngine({ transport: new RecordingSender(), clock: new FakeClock() }),
     });
+
     expect(selector.currentKind()).toBe("native-ts");
     expect(selector.report().reason).toContain("dlopen(govee_toolkit.node)");
     expect(selector.decision("SIM:01").reason).toContain("toolkit addon failed to load");
@@ -485,6 +518,7 @@ describe("govee engines (T-GOV-01..03)", () => {
       toolkit: new ToolkitEngine({ loader: async () => { throw new Error("no artifact for darwin-x64"); } }),
       native: new NativeStreamEngine({ transport: new RecordingSender(), clock: new FakeClock() }),
     });
+
     await expect(selector).rejects.toBeInstanceOf(ToolkitLoadFailure);
     await expect(selector).rejects.toThrow(/no artifact for darwin-x64/);
   });
@@ -512,6 +546,7 @@ describe("govee engines (T-GOV-01..03)", () => {
     const toolkitSink = new RecordingSender();
     const nativeSink = new RecordingSender();
     const binding = new StubBinding({ clock, sink: (text) => toolkitSink.push(text), armSettleMs: 20 });
+
     const selector = await createEngineSelector({
       mode: "auto",
       toolkit: new ToolkitEngine({ loader: async () => binding }),
@@ -548,35 +583,43 @@ describe("govee engines (T-GOV-01..03)", () => {
   it.skipIf(SimClass === null)("both engines against the LAN simulator paint identically", async () => {
     if (SimClass === null) throw new Error("simulator build missing");
     const PROFILE = { device: "SIM:01", sku: "H6076", zones: 4, armSettleMs: 5 };
+
     const FRAMES = [
       new Uint8Array([255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 255]),
       new Uint8Array([0, 255, 0, 0, 0, 255, 255, 0, 0, 0, 0, 0]),
       new Uint8Array([10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120]),
       new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]),
     ];
+
     // Real timers cannot be faked here: the frames travel real UDP through the
     // engine's own interval, so each step waits for the device to report the
     // paint (bounded, condition driven, never a guessed duration).
     const waitFor = async (predicate: () => boolean, timeoutMs: number): Promise<void> => {
       const deadline = Date.now() + timeoutMs;
+
       while (!predicate()) {
         if (Date.now() > deadline) throw new Error("the simulator never reported the condition");
         await new Promise<void>((resolve) => { setTimeout(() => resolve(), 5); });
       }
     };
+
     interface SimRun { paints: number; rendered: string; disarmed: boolean }
+
     const drive = async (engine: NativeStreamEngine | ToolkitEngine, sim: SimLike): Promise<SimRun> => {
       const stream = await engine.openStream("SIM:01", { resolution: 4, rateHz: 20, gradient: 0, armSettleMs: 30 });
+
       for (let i = 0; i < FRAMES.length; i++) {
         stream.setAll(FRAMES[i]!);
         // Newest-wins would replace a frame before it leaves, so wait for this
         // one to be applied before queueing the next.
         await waitFor(() => sim.metrics.paintsApplied >= i + 1, 1000);
       }
+
       const run: SimRun = { paints: sim.metrics.paintsApplied, rendered: JSON.stringify(sim.rendered), disarmed: false };
       stream.close();
       await waitFor(() => !sim.armedState, 1000); // the disarm reached the device
       run.disarmed = !sim.armedState;
+
       return run;
     };
 

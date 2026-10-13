@@ -6,11 +6,13 @@ export const SETUP_EVIDENCE_STEPS = [
   "dj", "controller", "library", "lights", "identify",
   "placement", "orientation", "qualification", "analysis", "preview",
 ] as const;
+
 export type EvidenceStep = (typeof SETUP_EVIDENCE_STEPS)[number];
 
 export function setupProgress(evidence: Partial<Record<EvidenceStep, boolean>>): { done: EvidenceStep[]; next: EvidenceStep | "ready" } {
   const done = SETUP_EVIDENCE_STEPS.filter((s) => evidence[s] === true);
   const next = SETUP_EVIDENCE_STEPS.find((s) => evidence[s] !== true) ?? "ready";
+
   return { done, next };
 }
 
@@ -35,6 +37,7 @@ export function setupEvidence(inputs: SetupInputs): Partial<Record<EvidenceStep,
   const titles = live === null ? [] : [live.deckA.title, live.deckB.title].filter((t) => t !== "—");
   const identified = new Set(inputs.identifiedIds);
   const chased = new Set(inputs.chasePassedIds);
+
   return {
     dj: live !== null,
     controller: false,

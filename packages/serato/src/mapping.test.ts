@@ -57,6 +57,7 @@ describe("serato remote mapping (T-SER-02)", () => {
       },
       2n,
     );
+
     expect(state.effectiveBpm).toBeNull();
     expect(state.loop).toEqual({ active: false, startSeconds: null, endSeconds: null, beatLength: null });
     expect(state.channelFader).toBeNull();
@@ -68,6 +69,7 @@ describe("serato remote mapping (T-SER-02)", () => {
       { ...base, filepath: null, trackChanged: true, loopActive: false, loopStartSeconds: null, loopEndSeconds: null, loopBeatLength: null },
       3n,
     );
+
     expect(state.track).toBeNull();
     expect(state.loop).toEqual({ active: false, startSeconds: null, endSeconds: null, beatLength: null });
   });
@@ -77,6 +79,7 @@ describe("serato remote mapping (T-SER-02)", () => {
       { ...base, filepath: "/music/track-b.mp3", trackChanged: true, loopActive: false },
       4n,
     );
+
     expect(state.track?.sourceIds.seratoPath).toBe("/music/track-b.mp3");
     expect(state.loop).toEqual({ active: false, startSeconds: null, endSeconds: null, beatLength: null });
   });

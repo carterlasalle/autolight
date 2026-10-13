@@ -23,6 +23,7 @@ describe("venue", () => {
   it("tracks wizard completion", () => {
     const q = emptyQualification();
     expect(qualificationComplete(q)).toBe(false);
+
     for (const k of Object.keys(q.passed) as (keyof typeof q.passed)[]) q.passed[k] = true;
     expect(qualificationComplete(q)).toBe(true);
   });

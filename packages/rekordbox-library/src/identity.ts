@@ -76,50 +76,66 @@ export function resolveLiveTrack(
   makeId: () => string,
 ): Resolution {
   const steps: ResolverStepOutcome[] = [];
+
   const idSteps: { step: ResolverStepId; confidence: number; id: string | undefined }[] = [
     { step: "memory-reader-id", confidence: 1, id: input.memoryReaderId ?? input.rekordboxId },
     { step: "lighting-ipc-id", confidence: 0.95, id: input.lightingIpcId },
     { step: "agent-api", confidence: 0.9, id: input.agentTrackId },
     { step: "history-table", confidence: 0.8, id: input.historyTrackId },
   ];
+
   for (const { step, confidence, id } of idSteps) {
     if (id === undefined || id === "") {
       steps.push({ step, matched: false, confidence: 0, trackId: null, note: "no id reported" });
       continue;
     }
+
     if (step === "history-table" && input.historyIds !== undefined && !input.historyIds.has(id)) {
       steps.push({ step, matched: false, confidence: 0, trackId: null, note: "id not in history table" });
       continue;
     }
+
     const row = input.libraryById?.(id);
+
     const parts: IdentityParts = {
-      ...(row ?? {}),
+      ...row,
       rekordboxId: row?.rekordboxId ?? id,
       ...(input.fileHash !== undefined ? { fileHash: input.fileHash } : {}),
       ...(input.pcmFingerprint !== undefined ? { pcmFingerprint: input.pcmFingerprint } : {}),
     };
+
     const { trackId } = resolveTrackId(store, parts, makeId);
     steps.push({ step, matched: true, confidence, trackId });
+
     return { trackId, steps, matchedStep: step, confidence };
   }
+
   const path = input.canonicalPath ?? input.filePath ?? input.anlzPath;
+
   if (path !== undefined && path !== "") {
     const row = input.libraryByPath?.(path);
+
     const outcome: ResolverStepOutcome = row?.rekordboxId !== undefined
       ? { step: "title-path", matched: true, confidence: 0.7, trackId: resolveTrackId(store, row, makeId).trackId }
       : { step: "title-path", matched: false, confidence: 0, trackId: null, note: "path not in library" };
+
     steps.push(outcome);
+
     if (outcome.matched) return { trackId: outcome.trackId, steps, matchedStep: "title-path", confidence: 0.7 };
   }
+
   if (input.title !== undefined && input.title !== "") {
     const candidates = (input.artist === undefined ? input.titleIndex?.(input.title) : input.titleIndex?.(input.title, input.artist)) ?? [];
+
     if (candidates.length === 1 && candidates[0] !== undefined) {
       const row = input.libraryById?.(candidates[0]);
       const fallback: IdentityParts = { rekordboxId: candidates[0], title: input.title };
       const { trackId } = resolveTrackId(store, row ?? (input.artist === undefined ? fallback : { ...fallback, artist: input.artist }), makeId);
       steps.push({ step: "title-path", matched: true, confidence: 0.5, trackId });
+
       return { trackId, steps, matchedStep: "title-path", confidence: 0.5 };
     }
+
     steps.push({
       step: "title-path",
       matched: false,
@@ -127,8 +143,11 @@ export function resolveLiveTrack(
       trackId: null,
       note: candidates.length === 0 ? "no title match" : `ambiguous title: ${candidates.length} candidates`,
     });
+
     return { trackId: null, steps, matchedStep: null, confidence: 0 };
   }
+
   steps.push({ step: "title-path", matched: false, confidence: 0, trackId: null, note: "nothing to resolve" });
+
   return { trackId: null, steps, matchedStep: null, confidence: 0 };
 }

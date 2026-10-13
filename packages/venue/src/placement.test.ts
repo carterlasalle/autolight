@@ -21,11 +21,13 @@ describe("T-ROOM-02 placements and Fixture v2", () => {
 
   it("fits anchors monotonically and rejects non-monotonic fits", () => {
     const run = square();
+
     const cells = fitRunMapping(run, 20, [
       { cell: 0, run: "loop", atMeters: 0 },
       { cell: 10, run: "loop", atMeters: 10 },
       { cell: 19, run: "loop", atMeters: 19 },
     ]);
+
     expect(cells).toHaveLength(20);
     expect(() =>
       fitRunMapping(run, 20, [

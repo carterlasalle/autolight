@@ -32,6 +32,7 @@ function scriptedDriver(
   const listeners = new Set<(bytes: readonly number[]) => void>();
   const openCalls: Array<{ port: Flx4PortInfo; args: number }> = [];
   let closes = 0;
+
   return {
     name,
     sharing: opts.sharing ?? "shared",
@@ -43,8 +44,10 @@ function scriptedDriver(
     },
     async open(port, onMessage, ...rest: unknown[]) {
       openCalls.push({ port, args: 2 + rest.length });
+
       if (opts.openError !== undefined) throw opts.openError;
       listeners.add(onMessage);
+
       return {
         port,
         close() {
@@ -64,11 +67,13 @@ function scriptedDriver(
 function fakeScheduler(): Flx4IntervalScheduler & { intervals: number[]; cleared: unknown[] } {
   const intervals: number[] = [];
   const cleared: unknown[] = [];
+
   return {
     intervals,
     cleared,
     setInterval(_fn, ms) {
       intervals.push(ms);
+
       return { handle: intervals.length };
     },
     clearInterval(handle) {
@@ -112,6 +117,7 @@ describe("flx4 backend selection (DS-13)", () => {
       ports: [flx4Port],
       openError: new Error("the input port is in use by another application"),
     });
+
     const windows = new Flx4ControllerService({ mode: "native", drivers: { native: held }, platform: "win32" });
     const windowsStatus = await windows.start();
     expect(windowsStatus.connection).toBe("unavailable-on-this-device");
@@ -126,6 +132,7 @@ describe("flx4 backend selection (DS-13)", () => {
       ports: [flx4Port],
       openError: new Error("the input port is in use by another application"),
     });
+
     const mac = new Flx4ControllerService({ mode: "native", drivers: { native: macDriver }, platform: "darwin" });
     const macStatus = await mac.start();
     expect(macStatus.connection).toBe("unavailable-on-this-device");
@@ -153,6 +160,7 @@ describe("flx4 backend selection (DS-13)", () => {
       { id: "1", name: "Some Other Keyboard" },
       { id: "2", name: "DDJ-FLX4 MIDI 1" },
     ];
+
     const driver = scriptedDriver("native", { ports });
     const service = new Flx4ControllerService({ mode: "native", drivers: { native: driver } });
     const status = await service.start();
@@ -194,17 +202,21 @@ describe("flx4 backend selection (DS-13)", () => {
   it("keeps messages in a bounded ring with a drop counter and ages the last message", async () => {
     let now = 0n;
     const driver = scriptedDriver("native", { ports: [flx4Port] });
+
     const service = new Flx4ControllerService({
       mode: "native",
       drivers: { native: driver },
       ringCapacity: 4,
       nowNs: () => now,
     });
+
     await service.start();
+
     for (let index = 0; index < 6; index += 1) {
       now += 1_000_000n;
       driver.emit([0xb0, 0x13 + index, 0x40]);
     }
+
     const status = service.status();
     expect(status.messagesReceived).toBe(6);
     expect(status.messagesDropped).toBe(2);
@@ -237,6 +249,7 @@ describe("flx4 backend selection (DS-13)", () => {
 
   it("bounds the ring directly", () => {
     const ring = new Flx4MessageRing(3);
+
     for (let index = 0; index < 5; index += 1) ring.push({ bytes: [0x90, 0x0b, index], receivedAtNs: BigInt(index) });
     expect(ring.dropped).toBe(2);
     expect(ring.recent(2).map((message) => message.bytes[2])).toEqual([3, 4]);
@@ -247,6 +260,7 @@ describe("flx4 platform drivers", () => {
   it("reads ports and messages through the native RtMidi surface", async () => {
     const listeners: Array<(deltaTime: number, message: number[]) => void> = [];
     let closed = 0;
+
     class FakeInput {
       getPortCount() {
         return 1;
@@ -262,6 +276,7 @@ describe("flx4 platform drivers", () => {
         listeners.push(listener);
       }
     }
+
     const driver = createNativeDriver(() => ({ Input: FakeInput }), "darwin");
     expect(driver.sharing).toBe("shared");
     expect(await driver.probe()).toEqual({ ok: true, reason: "" });
@@ -283,17 +298,21 @@ describe("flx4 platform drivers", () => {
     const notWindows = createWindowsMidiServicesDriver(() => ({}), "darwin");
     const probe = await notWindows.probe();
     expect(probe).toEqual({ ok: false, reason: "Windows MIDI Services is Windows only" });
+
     const missing = createWindowsMidiServicesDriver(() => {
       throw new Error("Cannot find module 'windows-midi-services'");
     }, "win32");
+
     expect((await missing.probe()).ok).toBe(false);
 
     const seen: number[][] = [];
     let closed = false;
+
     const binding = {
       listInputPorts: () => ["DDJ-FLX4"],
       openInput: (_name: string, onMessage: (bytes: readonly number[]) => void) => {
         const listener = onMessage;
+
         return {
           close() {
             closed = true;
@@ -304,6 +323,7 @@ describe("flx4 platform drivers", () => {
         };
       },
     };
+
     const driver = createWindowsMidiServicesDriver(() => binding, "win32");
     expect(await driver.probe()).toEqual({ ok: true, reason: "" });
     expect(await driver.listPorts()).toEqual([{ id: "DDJ-FLX4", name: "DDJ-FLX4" }]);

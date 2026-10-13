@@ -42,6 +42,7 @@ describe("issue-7 empty states and venue tabs", () => {
       state: { intensity: 0.8, frozen: false, blackout: false, auto: true },
       onIntent: () => undefined,
     }));
+
     for (const hint of ["(B)", "(W)", "(F)", "(A)"]) expect(html).toContain(hint);
   });
   it("live deck rows carry artist and readiness without parsing titles", () => {
@@ -49,6 +50,7 @@ describe("issue-7 empty states and venue tabs", () => {
       { title: "Track One", artist: "Artist One", readiness: "READY", bpm: 128 },
       { title: "—", artist: "", readiness: "NEEDS ANALYSIS", bpm: null },
     ], 120, "");
+
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ id: "deck-a", title: "Track One", artist: "Artist One", readiness: "READY", bpm: 128 });
     expect(liveDeckRows([
@@ -61,6 +63,7 @@ describe("issue-7 empty states and venue tabs", () => {
       { title: "A", artist: "", readiness: "READY", bpm: 120 },
       { title: "B", artist: "", readiness: "READY", bpm: 140 },
     ], null, "");
+
     expect(rows.map((r) => r.bpm)).toEqual([120, 140]);
   });
 });

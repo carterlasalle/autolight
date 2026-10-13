@@ -28,6 +28,7 @@ describe("live-mode change safety (T-CFG-07, spec 144)", () => {
       { "runtime.clock.tickHz": 60, "runtime.snapshot.uiRateHz": 30 },
       { "runtime.clock.tickHz": 90, "runtime.snapshot.uiRateHz": 30 },
     );
+
     expect(diff).toEqual([{ key: "runtime.clock.tickHz", before: 60, after: 90 }]);
   });
 });

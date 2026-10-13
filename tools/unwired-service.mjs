@@ -100,6 +100,7 @@ for (const { getter, file } of getters) {
 {
   const show = texts.get("apps/desktop/electron/show-service.ts") ?? "";
   const live = show.includes("getProviderManager().pollOnce()") && show.includes("svc.ax = readings.map");
+
   if (!live) {
     console.error("apps/desktop/electron/show-service.ts: pollAxCommand must poll through getProviderManager().pollOnce() and write svc.ax (single AX authority; see AL-FLOW-001)");
     failures++;

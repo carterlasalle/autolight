@@ -12,8 +12,10 @@ import {
 
 function lcg(seed: number): () => number {
   let s = seed >>> 0;
+
   return () => {
     s = (s * 1664525 + 1013904223) >>> 0;
+
     return s / 0x100000000;
   };
 }
@@ -21,11 +23,13 @@ function lcg(seed: number): () => number {
 function gridAt(bpm: number, beats: number, driftBpm = 0): BeatGrid {
   const out: BeatGrid = { version: 1, beats: [] };
   let ms = 0;
+
   for (let i = 0; i < beats; i++) {
     const b = bpm + driftBpm * (i / Math.max(1, beats - 1));
     out.beats.push({ index: i, beatInBar: ((i % 4) + 1) as 1 | 2 | 3 | 4, sourceTimeMs: ms, bpm: b });
     ms += 60000 / b;
   }
+
   return out;
 }
 
@@ -40,6 +44,7 @@ describe("beat mapping properties", () => {
   it("round-trips beat -> seconds -> beat on fixed and drifting grids", () => {
     for (const g of [gridAt(128, 256), gridAt(100, 256, 28), gridAt(174, 512, -40)]) {
       const rand = lcg(7);
+
       for (let k = 0; k < 200; k++) {
         const beat = rand() * 250;
         const back = sourceSecondsToBeat(g, beatToSourceSeconds(g, beat));
@@ -51,6 +56,7 @@ describe("beat mapping properties", () => {
   it("is monotone non-decreasing in source time", () => {
     const g = gridAt(120, 300, 15);
     let prev = -Infinity;
+
     for (let s = 0; s < 600; s += 0.25) {
       const b = sourceSecondsToBeat(g, s);
       expect(b).toBeGreaterThanOrEqual(prev);
@@ -66,6 +72,7 @@ describe("beat mapping properties", () => {
 
   it("extrapolates linearly while playing and holds while paused", () => {
     const rand = lcg(21);
+
     for (let k = 0; k < 100; k++) {
       const start = rand() * 300;
       const rate = 0.84 + rand() * 0.32; // pitch +-8/16pct around 1x
@@ -80,13 +87,16 @@ describe("beat mapping properties", () => {
     expect(isSeek(10, 10.2, 0.25)).toBe(false);
     expect(isSeek(10, 10.3, 0.25)).toBe(true);
     const rand = lcg(99);
+
     for (let k = 0; k < 200; k++) {
       const predicted = rand() * 500;
       const observed = predicted + (rand() - 0.5) * 4;
       const beats = 1.5 + rand() * 1.5;
       const errBeats = Math.abs(observed - predicted);
       const got = exceedsSeekThreshold(predicted, observed, beats);
+
       if (errBeats > 0.5 * (1 + 1e-9)) expect(got).toBe(true);
+
       if (errBeats < 0.4 && (errBeats / beats) * 1000 < 140) expect(got).toBe(false);
     }
   });

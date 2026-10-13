@@ -57,11 +57,13 @@ function percentileOf(sorted: number[], target: number): number {
   const hi = Math.ceil(rank);
   const lower = sorted[lo] ?? 0;
   const upper = sorted[hi] ?? lower;
+
   return lower + (upper - lower) * (rank - lo);
 }
 
 export function histogramOf(samples: readonly number[]): Histogram {
   const sorted = [...samples].sort((a, b) => a - b);
+
   return {
     count: sorted.length,
     p50: percentileOf(sorted, 50),
@@ -81,12 +83,16 @@ export class MetricsRegistry {
     if (!Number.isFinite(value)) return;
     const key = label === "" ? name : `${name}:${label}`;
     const target = label === "" ? this.samples.get(name) : this.labels.get(key);
+
     if (target === undefined) {
       if (label === "") this.samples.set(name, [value]);
       else this.labels.set(key, [value]);
+
       return;
     }
+
     target.push(value);
+
     if (target.length > WINDOW) target.splice(0, target.length - WINDOW);
   }
 
@@ -99,6 +105,7 @@ export class MetricsRegistry {
 
   histogram(name: MetricName, label = ""): Histogram {
     const samples = label === "" ? (this.samples.get(name) ?? []) : (this.labels.get(`${name}:${label}`) ?? []);
+
     return histogramOf(samples);
   }
 
@@ -106,10 +113,13 @@ export class MetricsRegistry {
   // metric can never read as a constant zero before it is exercised.
   snapshot(): Partial<Record<MetricName, Histogram>> {
     const out: Partial<Record<MetricName, Histogram>> = {};
+
     for (const name of METRIC_NAMES) {
       const samples = this.samples.get(name) ?? [];
+
       if (samples.length > 0) out[name] = histogramOf(samples);
     }
+
     return out;
   }
 

@@ -33,6 +33,7 @@ describe("Ableton Link participation (T-LIVE-12, DS-36)", () => {
 
   it("tracks tempo and phase from a scripted sidecar over a real socket", async () => {
     const sidecar = await startFakeSidecar();
+
     try {
       // Wait for the server side to accept before sending. The client
       // connect event can fire before the fake sidecar registers the
@@ -52,10 +53,12 @@ describe("Ableton Link participation (T-LIVE-12, DS-36)", () => {
       expect(transport.getStatus().state).toBe("live");
       transport.publish({ tempo: 126 });
       const published = Promise.withResolvers<void>();
+
       const check = (): void => {
         if (sidecar.received.join("\n").includes("setTempo")) published.resolve();
         else setImmediate(check);
       };
+
       check();
       await published.promise;
       transport.ingest("garbage-line\n");

@@ -65,7 +65,9 @@ function packageRoot(): string {
 
 export function resolveProjectDir(input?: string): string {
   if (input && isAbsolute(input)) return input;
+
   if (input) return resolve(process.cwd(), input);
+
   return resolve(packageRoot(), "..", "..", "..", "analysis");
 }
 
@@ -107,26 +109,31 @@ export class AnalysisClient {
 
   start(): void {
     if (this.procs.length > 0) return;
+
     for (let i = 0; i < this.opts.concurrency; i += 1) this.spawnOne();
     this.heartbeatTimer = setInterval(() => this.checkHeartbeat(), 1000);
   }
 
   analyze(req: AnalyzeRequest): Promise<AnalyzeResult> {
     const job = toJob(req);
+
     if (job.priority === "deck") this.queue.unshift(job);
     else this.queue.push(job);
     const { promise, resolve, reject } = Promise.withResolvers<AnalyzeResult>();
     job.state = "Queued";
     this.pending.set(job.id, { job, resolve, reject, timer: undefined });
     this.drain();
+
     return promise;
   }
 
   cancel(id: string): boolean {
     const entry = this.pending.get(id);
+
     if (!entry) return false;
     this.send({ v: PROTOCOL_VERSION, id, type: "cancel" });
     this.failEntry(entry, "worker-timeout", "cancelled by request id");
+
     return true;
   }
 
@@ -140,29 +147,42 @@ export class AnalysisClient {
     stage?: string;
   }): void {
     const frame = msg as ProtocolFrame;
+
     if (frame.type === "heartbeat" || frame.v === PROTOCOL_VERSION) {
       if (frame.type === "heartbeat") {
         this.lastHeartbeat = Date.now();
+
         return;
       }
+
       const routed = frameId(frame);
+
       if (routed === undefined) return;
       const entry = this.findEntry(routed);
+
       if (!entry) return;
+
       const routedMsg: { type: string; id: string; artifactPath?: string; error?: string; stage?: string } = {
         type: String(frame.type),
         id: routed,
       };
+
       if (typeof frame["artifactPath"] === "string") routedMsg.artifactPath = frame["artifactPath"] as string;
+
       if (typeof frame["reason"] === "string") routedMsg.error = frame["reason"] as string;
       else if (typeof frame["error"] === "string") routedMsg.error = frame["error"] as string;
+
       if (typeof frame["stage"] === "string") routedMsg.stage = frame["stage"] as string;
       this.routeFrame(entry, routedMsg);
+
       return;
     }
+
     const legacyId = msg.trackId ?? msg.id;
+
     if (!legacyId) return;
     const entry = this.findEntry(legacyId);
+
     if (!entry) return;
     this.routeFrame(entry, msg);
   }
@@ -192,6 +212,7 @@ export class AnalysisClient {
   stop(): void {
     if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
     this.heartbeatTimer = undefined;
+
     for (const proc of this.procs) {
       try {
         proc.kill();
@@ -199,6 +220,7 @@ export class AnalysisClient {
         /* teardown never throws */
       }
     }
+
     this.procs = [];
   }
 
@@ -215,9 +237,12 @@ export class AnalysisClient {
   ): void {
     if (msg.type === "progress" && msg.stage) {
       entry.job.state = "Analyzing";
+
       if (this.onProgress) this.onProgress(entry.job, msg.stage);
+
       return;
     }
+
     if (msg.type === "complete" && msg.artifactPath) {
       entry.job.state = "Ready";
       this.clearEntry(entry);
@@ -227,8 +252,10 @@ export class AnalysisClient {
         artifactPath: msg.artifactPath,
       });
       this.drain();
+
       return;
     }
+
     const code = classifyError(msg.error ?? "analysis failed");
     entry.job.state = "Failed";
     entry.job.lastError = { code, message: msg.error ?? "analysis failed" };
@@ -239,6 +266,7 @@ export class AnalysisClient {
 
   private clearEntry(entry: PendingEntry): void {
     this.pending.delete(entry.job.id);
+
     if (entry.timer) clearTimeout(entry.timer);
   }
 
@@ -253,10 +281,13 @@ export class AnalysisClient {
     if (this.procs.length === 0) return;
     const inFlight = [...this.pending.values()].filter((e) => e.timer !== undefined).length;
     const capacity = this.procs.length - inFlight;
+
     for (let i = 0; i < capacity; i += 1) {
       const job = this.queue.shift();
+
       if (!job) return;
       const entry = this.pending.get(job.id);
+
       if (!entry) continue;
       job.state = "Analyzing";
       job.attempts += 1;
@@ -279,6 +310,7 @@ export class AnalysisClient {
 
   private send(msg: unknown): void {
     const proc = this.procs[0];
+
     try {
       proc?.stdin?.write(`${JSON.stringify(msg)}\n`);
     } catch {
@@ -288,6 +320,7 @@ export class AnalysisClient {
 
   private spawnOne(): void {
     let proc: ChildProcess;
+
     try {
       proc = spawn(
         this.command,
@@ -296,8 +329,10 @@ export class AnalysisClient {
       );
     } catch (err) {
       if (this.onLog) this.onLog("spawn-failed", err);
+
       return;
     }
+
     this.procs.push(proc);
     const rl = createInterface({ input: proc.stdout! });
     rl.on("line", (line: string) => {
@@ -315,12 +350,14 @@ export class AnalysisClient {
       this.removeProc(proc);
       // Interrupted jobs keep identical inputs and go back to the head (spec 109).
       const interrupted = [...this.pending.values()].filter((e) => e.timer !== undefined);
+
       for (const entry of interrupted) {
         if (entry.timer) clearTimeout(entry.timer);
         entry.timer = undefined;
         entry.job.state = "Queued";
         this.queue.unshift(entry.job);
       }
+
       if (this.procs.length === 0) this.restartWithBackoff();
       else this.drain();
     });
@@ -340,6 +377,7 @@ export class AnalysisClient {
 
   private checkHeartbeat(): void {
     if (this.lastHeartbeat === null || this.procs.length === 0) return;
+
     if (Date.now() - this.lastHeartbeat > this.opts.heartbeatTimeoutMs) {
       if (this.onLog) this.onLog("heartbeat-timeout", null);
       this.restartWithBackoff();

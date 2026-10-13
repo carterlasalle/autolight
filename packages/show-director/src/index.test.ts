@@ -22,13 +22,16 @@ function run(beats: number, energy = 0.5, opts: { cooldown?: number } = {}): { c
   const changes: number[] = [];
   const ids: string[] = [];
   const states: DirectorState[] = [];
+
   for (let beat = 0; beat < beats; beat++) {
     const out = directorTick(state, { beat, energy }, opts.cooldown === undefined ? { library } : { library, cooldownPhrases: opts.cooldown });
+
     if (out.changed) changes.push(beat);
     ids.push(out.look.id);
     states.push(out.state);
     state = out.state;
   }
+
   return { changes, ids, states };
 }
 
@@ -41,13 +44,16 @@ describe("adaptive director (P-71)", () => {
   it("never repeats the same look twice in a row", () => {
     const { ids } = run(256, 0.9);
     const phrases = [0, 32, 64, 96, 128, 160, 192, 224].map((b) => ids[b]);
+
     for (let i = 1; i < phrases.length; i++) expect(phrases[i]).not.toBe(phrases[i - 1]);
   });
   it("respects cooldowns across the run", () => {
     const { changes, ids } = run(256);
+
     for (let i = 0; i < changes.length; i++) {
       for (let j = i + 1; j < changes.length; j++) {
         const gap = j - i;
+
         if (ids[changes[i]!] === ids[changes[j]!] && gap <= DEFAULT_COOLDOWN_PHRASES) {
           throw new Error(`look ${ids[changes[i]!]} reused after ${gap} phrases`);
         }
@@ -60,6 +66,7 @@ describe("adaptive director (P-71)", () => {
     let state = initialDirectorState();
     const first = directorTick(state, { beat: 0 }, { library });
     state = first.state;
+
     for (const beat of [0.5, 7, 15, 31.75]) {
       const out = directorTick(state, { beat, energy: 1 }, { library });
       expect(out.changed).toBe(false);
@@ -72,17 +79,21 @@ describe("adaptive director (P-71)", () => {
     const library = buildLookLibrary({ minLooks: 8 });
     let state = initialDirectorState();
     state = directorTick(state, { beat: 0 }, { library }).state;
+
     const mid = directorTick(
       state,
       { beat: 16, energy: 1, onset: true, hints: [{ kind: "fader-rise", channel: 1, value: 1 }] },
       { library },
     );
+
     expect(mid.changed).toBe(false);
+
     const edge = directorTick(
       state,
       { beat: 32, energy: 1, onset: true, hints: [{ kind: "fader-rise", channel: 1, value: 1 }] },
       { library },
     );
+
     expect(edge.changed).toBe(true);
   });
 
@@ -91,11 +102,13 @@ describe("adaptive director (P-71)", () => {
     const quiet = directorTick(initialDirectorState(), { beat: 0, energy: 0 }, { library, engine: "rules" });
     const loud = directorTick(initialDirectorState(), { beat: 0, energy: 1 }, { library, engine: "rules" });
     expect(quiet.look.id).toBe(loud.look.id);
+
     const combinedLoud = directorTick(
       { ...initialDirectorState(), energy: "low" },
       { beat: 0, energy: 1 },
       { library, engine: "combined" },
     );
+
     expect(combinedLoud.look.energy).not.toBe("low");
   });
 
@@ -103,20 +116,25 @@ describe("adaptive director (P-71)", () => {
     const library = buildLookLibrary({ minLooks: 24 });
     expect(library.length).toBeGreaterThanOrEqual(24);
     expect(new Set(library.map((l) => l.id)).size).toBe(library.length);
+
     for (const look of library) {
       expect(look.darkness).toBeGreaterThanOrEqual(0);
       expect(look.darkness).toBeLessThanOrEqual(0.5);
       expect(look.palette).toBeGreaterThanOrEqual(0);
       expect(typeof look.motif).toBe("string");
     }
+
     expect(library.some((l) => l.strobe)).toBe(true);
     let strobeRuns = 0;
     const seq = run(256, 1).ids.filter((_, i) => i % PHRASE === 0);
+
     for (let i = 1; i < seq.length; i++) {
       const prev = library.find((l) => l.id === seq[i - 1])!;
       const cur = library.find((l) => l.id === seq[i])!;
+
       if (prev.strobe && cur.strobe) strobeRuns++;
     }
+
     expect(strobeRuns).toBe(0);
   });
 
@@ -141,11 +159,13 @@ describe("adaptive director (P-71)", () => {
 
   it("accepts FLX4 expressive hints structurally without importing them", () => {
     const library = buildLookLibrary({ minLooks: 8 });
+
     const hinted = directorTick(
       { ...initialDirectorState(), energy: "low" },
       { beat: 0, energy: 0, hints: [{ kind: "fader-rise", channel: 2, value: 0.9 }] },
       { library },
     );
+
     expect(hinted.changed).toBe(true);
     const look: PhraseLook = hinted.look;
     expect(typeof look.id).toBe("string");

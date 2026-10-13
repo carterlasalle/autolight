@@ -15,12 +15,14 @@ const allowAll: AddonProbe = () => ({ id: "govee-toolkit", available: true, reas
 function makeHost() {
   const crashes: string[] = [];
   let now = 0n;
+
   const host = new ShowHost({
     config: { mode: "worker-thread", tickHz: 60, uiRateHz: 30, maxBytes: 262144 },
     onCrash: (reason) => { crashes.push(reason); },
     addonProbe: allowAll,
     nowNs: () => now,
   });
+
   return { host, crashes, advance: (ns: bigint) => { now = ns; } };
 }
 
@@ -29,9 +31,11 @@ function makeHost() {
 // event loop. Deterministic: no timers, no sleeps, no wall clock.
 function pumpPair(): { main: HostPort; host: HostPort } {
   type Listener = (message: unknown) => void;
+
   const queues: { main: Listener[]; host: Listener[] } = { main: [], host: [] };
   const pending: { to: "main" | "host"; message: unknown }[] = [];
   let closed = false;
+
   const peer: { main: HostPort; host: HostPort } = {
     main: {
       connected: true,
@@ -60,13 +64,16 @@ function pumpPair(): { main: HostPort; host: HostPort } {
       close(): void { closed = true; },
     },
   };
+
   const flush = (): void => {
     let item = pending.shift();
+
     while (item !== undefined) {
       for (const listener of queues[item.to]) listener(item.message);
       item = pending.shift();
     }
   };
+
   return peer;
 }
 
@@ -74,11 +81,13 @@ describe("show-host modes", () => {
   it("probes every DS-07 mode and reports unavailable with reason, never silent fallback", () => {
     expect(HOST_MODES).toEqual(["worker-thread", "utility-process", "utility-process-worker"]);
     const deny: AddonProbe = (id) => ({ id, available: false, reason: `no ${id} here` });
+
     for (const mode of HOST_MODES) {
       const status = probeMode(mode, deny);
       expect(status.available).toBe(false);
       expect(status.reason ?? "").not.toBe("");
     }
+
     expect(() => startHost("worker-thread", deny)).toThrow(/unavailable/);
   });
   it("tick advances cursors and publishes a snapshot within maxBytes", async () => {
@@ -94,11 +103,13 @@ describe("show-host modes", () => {
       channelFader: 1, crossfader: 1, master: true, receivedAtNs: 0n,
     });
     let now = 0n;
+
     for (let i = 0; i < 40; i += 1) {
       now += 16_666_666n;
       host.tick(now);
       await Promise.resolve();
     }
+
     await Promise.resolve();
     const snapshots = seen.filter((m) => (m as { type?: string }).type === "snapshot");
     expect(seen.length).toBeGreaterThan(0);
@@ -115,11 +126,13 @@ describe("show-host modes", () => {
   it("killing the supervised port fires the crash-policy hook exactly once", async () => {
     const { host, crashes } = makeHost();
     const channel = new MessageChannel();
+
     // Real port close event (no wall-clock sleep): the crash hook fires on
     // the close callback, awaited as a promise the code already exposes.
     const closed = new Promise<void>((resolve) => {
       channel.port2.on("close", () => resolve());
     });
+
     host.attach(wrapMessagePort(channel.port2, true));
     channel.port2.close();
     await closed;
@@ -150,12 +163,14 @@ describe("show-host modes", () => {
     expect(handle.status.available).toBe(true);
     expect(handle.port).toBeDefined();
     const seen: unknown[] = [];
+
     const first = new Promise<void>((resolve) => {
       handle.port.on("message", (message) => {
         seen.push(message);
         resolve();
       });
     });
+
     handle.port.start();
     handle.port.postMessage({
       type: "deck",

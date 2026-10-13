@@ -78,10 +78,12 @@ export interface ShutdownOptions {
 
 export async function runShutdown(opts: ShutdownOptions): Promise<ShutdownStepLog[]> {
   const logs: ShutdownStepLog[] = [];
+
   for (const step of SHUTDOWN_ORDER) {
     const port = opts.ports[step];
     const started = Date.now();
     let entry: ShutdownStepLog;
+
     if (!port) {
       // No port wired for this step: record it so the shutdown timeline shows
       // the full spec 133 order, including the steps this build does not own.
@@ -89,6 +91,7 @@ export async function runShutdown(opts: ShutdownOptions): Promise<ShutdownStepLo
     } else {
       const timer = Promise.withResolvers<true>();
       const handle = setTimeout(() => { timer.resolve(true); }, opts.timeoutMs);
+
       try {
         const result = await Promise.race([Promise.resolve(port()), timer.promise]);
         entry = result === true
@@ -100,9 +103,11 @@ export async function runShutdown(opts: ShutdownOptions): Promise<ShutdownStepLo
         clearTimeout(handle);
       }
     }
+
     logs.push(entry);
     opts.onStep?.(step, entry.ms);
   }
+
   return logs;
 }
 
@@ -132,12 +137,15 @@ export function applyCrashPolicy(ports: CrashPolicyPorts): CrashPolicyResult {
   ports.writeRecord(ports.crashRecordPath, JSON.stringify({ at, error: errorText }));
   ports.safeLook("hold");
   const dim = Promise.withResolvers<void>();
+
   const handle = setTimeout(() => {
     ports.safeLook("dim");
     dim.resolve();
   }, ports.holdMs);
+
   handle.unref?.();
   ports.restartShowHost();
+
   return {
     recordPath: ports.crashRecordPath,
     heldMs: ports.holdMs,
@@ -172,6 +180,7 @@ export class LifecycleService implements Service {
     this.stages = STARTUP_ORDER.map((stage) => ({ stage, state: "pending" as StageState }));
     this.accepting = true;
     this.tracker.set("running");
+
     return this.status();
   }
 
@@ -179,6 +188,7 @@ export class LifecycleService implements Service {
     // spec 133 step 1: the UI stops sending intents before anything else.
     this.accepting = false;
     this.tracker.set("stopped");
+
     return this.status();
   }
 
@@ -190,25 +200,33 @@ export class LifecycleService implements Service {
     this.tracker.setCounter("ready", this.ready() ? 1 : 0);
     this.tracker.setCounter("acceptingUi", this.accepting ? 1 : 0);
     const out = this.tracker.status();
+
     if (this.degradedReasons().length > 0) out.detail = this.degradedReasons().join("; ");
+
     return out;
   }
 
   // A stage marked running records its start; ok/degraded/failed record ms.
   advance(stage: StageName, state: StageState, detail?: string): StageRecord {
     const found = this.stages.find((s) => s.stage === stage);
+
     if (!found) throw new Error(`unknown startup stage: ${stage}`);
     found.state = state;
+
     if (detail !== undefined) found.detail = detail;
+
     if (state === "running") found.startedAtMs = Date.now();
+
     if (state !== "running" && state !== "pending" && found.startedAtMs !== undefined) {
       found.ms = Date.now() - found.startedAtMs;
     }
+
     return found;
   }
 
   nextStage(): StageName | null {
     const next = this.stages.find((s) => s.state !== "ok" && s.state !== "degraded");
+
     return next?.stage ?? null;
   }
 
@@ -236,6 +254,7 @@ export class LifecycleService implements Service {
 
   shutdown(opts: { timeoutMs: number; ports: ShutdownPorts; onStep?: (step: string, ms: number) => void }): Promise<ShutdownStepLog[]> {
     this.accepting = false;
+
     return runShutdown(opts);
   }
 
@@ -248,5 +267,6 @@ let instance: LifecycleService | null = null;
 
 export function getLifecycleService(opts: LifecycleServiceOptions = {}): LifecycleService {
   instance ??= new LifecycleService(opts);
+
   return instance;
 }

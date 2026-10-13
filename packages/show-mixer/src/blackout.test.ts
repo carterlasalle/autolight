@@ -12,20 +12,26 @@ import { blackoutDecision, mixDown, type BlackoutPolicy, type DeckMix, type MixR
 // The old SIDE target test is deleted with the SIDE target itself.
 
 const dir = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "test-fixtures", "analysis");
+
 const trackA = { id: "a", sourceIds: {} } satisfies TrackIdentity;
+
 const trackB = { id: "b", sourceIds: {} } satisfies TrackIdentity;
 
 // The real planner produces the blackout: a fake drop holds darkness (spec 25).
 function plannerBlackout(): ShowCue {
   const model = trackModelSchema.parse(JSON.parse(readFileSync(join(dir, "real-track-1.trackmodel.json"), "utf8"))) as TrackModel;
+
   const withFakeDrop: TrackModel = {
     ...model,
     musicalEvents: [...model.musicalEvents, { type: "fake-drop", beat: 256, endBeat: 258, confidence: 1 }],
   };
+
   const plan = planShow(withFakeDrop, showStyleSchema.parse(BUILT_IN_STYLES.club));
   const blackout = plan.cues.find((c) => c.type === "blackout");
+
   if (blackout === undefined) throw new Error("planner did not program the fake-drop blackout");
   expect(blackout.target).toBe("ALL");
+
   return blackout;
 }
 
@@ -33,24 +39,29 @@ const blackoutCue = plannerBlackout();
 
 function mixWith(otherWeight: number, policy: BlackoutPolicy, structural = false): MixResult {
   const buildCue: ShowCue = { type: "build-ramp", startBeat: blackoutCue.startBeat, durationBeats: 8, intensity: 0.6, target: "ALL", priority: 50 };
+
   const a: DeckMix = {
     state: makeDeck({ deckId: 1, channelFader: 1, crossfader: 1, master: false, track: trackA }),
     beat: blackoutCue.startBeat + 0.5,
     impactStrength: 1,
     cues: structural ? [blackoutCue, buildCue] : [blackoutCue],
   };
+
   const b: DeckMix = {
     state: makeDeck({ deckId: 2, channelFader: otherWeight, crossfader: 1, master: false, track: trackB }),
     beat: blackoutCue.startBeat + 0.5,
     impactStrength: 0.5,
     cues: structural ? [buildCue] : [],
   };
+
   return mixDown(a, b, { blackoutPolicy: policy });
 }
 
 function blackoutOut(result: MixResult): ShowCue {
   const kept = result.cues.find((c) => c.type === "blackout" || c.type === "dip");
+
   if (kept === undefined) throw new Error(`blackout was dropped: ${result.dropped.map((d) => d.reason).join("; ")}`);
+
   return kept;
 }
 

@@ -26,10 +26,14 @@ import { bleV2Decrypt, type BleV2Key } from "./encrypted.js";
 /** Decodes a 20-byte E7 handshake frame locally; null on any other shape. */
 function decodeHandshakeFrame(frame: Uint8Array): { cmd: number; payload: Uint8Array } | null {
   if (frame.length !== BLE_FRAME_LEN) return null;
+
   if ((frame[0] ?? -1) !== BLE_PROTYPE.HANDSHAKE) return null;
   let xor = 0;
+
   for (let i = 0; i < BLE_FRAME_LEN - 1; i++) xor ^= frame[i] ?? 0;
+
   if ((frame[BLE_FRAME_LEN - 1] ?? -1) !== (xor & 0xff)) return null;
+
   return { cmd: frame[1] ?? 0, payload: frame.slice(2, BLE_FRAME_LEN - 1) };
 }
 
@@ -99,6 +103,7 @@ export class SimPeripheral {
       ...(options.manufacturer !== undefined ? { manufacturer: options.manufacturer } : {}),
       ...(options.rssi !== undefined ? { rssi: options.rssi } : {}),
     };
+
     this.advertisement = parseBleAdvertisement(input);
     this.zones = Math.max(1, options.zones ?? 8);
     this.wifiMac = options.wifiMac ?? null;
@@ -120,6 +125,7 @@ export class SimPeripheral {
 
   handleConnect(): void {
     if (this.options.failConnect === true) throw new Error(`sim ${this.options.address} refused the connection`);
+
     if (this.connected) throw new Error(`sim ${this.options.address} allows one connection at a time`);
     this.connected = true;
     this.metrics.connects += 1;
@@ -138,51 +144,72 @@ export class SimPeripheral {
   handleWrite(frame: Uint8Array, now: number): void {
     this.metrics.writes += 1;
     this.written.push(frame.slice());
+
     if (this.stalled(now)) {
       this.metrics.stalled += 1;
+
       return;
     }
+
     if (this.budgetHz !== null) {
       const spacing = 1000 / Math.max(1, this.budgetHz);
       this.writeTimes = this.writeTimes.filter((t) => now - t < 1000);
       const last = this.writeTimes.length > 0 ? (this.writeTimes[this.writeTimes.length - 1] ?? now) : null;
+
       if (last !== null && now - last < spacing - 1) {
         this.metrics.stalled += 1;
         this.stalledUntil = now + 2000;
+
         return;
       }
+
       this.writeTimes.push(now);
     }
+
     const short = decodeHostColor(frame);
+
     if (short !== null) {
       this.applyHostColor(short.sub, short.payload, now);
+
       return;
     }
+
     const decoded = decodeBleFrame(frame);
     const handshake = decoded === null ? decodeHandshakeFrame(frame) : null;
+
     if (handshake !== null) {
       this.answerHandshake(handshake.cmd, handshake.payload);
+
       return;
     }
+
     if (decoded === null) {
       this.ack(0x00, 0x01);
+
       return;
     }
+
     if (decoded.proType === BLE_PROTYPE.READ) {
       this.metrics.reads += 1;
       this.ack(decoded.cmd, 0x00);
+
       return;
     }
+
     if (decoded.proType === BLE_PROTYPE.PROVISION) {
       this.answerProvision(decoded.proType, decoded.cmd, decoded.payload);
       this.ack(decoded.cmd, 0x00);
+
       return;
     }
+
     if (decoded.proType === BLE_PROTYPE.WRITE && decoded.cmd === 0x17) {
       this.answerProvision(decoded.proType, decoded.cmd, decoded.payload);
       this.ack(decoded.cmd, 0x00);
+
       return;
     }
+
     this.applyWrite(decoded.cmd, decoded.payload);
     this.ack(decoded.cmd, 0x00);
   }
@@ -193,6 +220,7 @@ export class SimPeripheral {
   private ack(cmd: number, status: number): void {
     this.metrics.acks += 1;
     const notify = this.notify;
+
     if (notify === null) return;
     notify(new Uint8Array([BLE_PROTYPE.WRITE, cmd & 0xff, status & 0xff]));
   }
@@ -200,29 +228,41 @@ export class SimPeripheral {
   private applyWrite(cmd: number, payload: Uint8Array): void {
     if (cmd === 0x01) {
       this.power = (payload[0] ?? 0) !== 0;
+
       return;
     }
+
     if (cmd === 0x04) {
       this.brightness01 = Math.min(1, Math.max(0, (payload[0] ?? 0) / 100));
+
       return;
     }
+
     if (cmd !== 0x05) return;
     const mode = payload[0] ?? 0;
+
     if (mode === 0x0d) {
       const color: [number, number, number] = [payload[1] ?? 0, payload[2] ?? 0, payload[3] ?? 0];
+
       for (let z = 0; z < this.zones; z++) this.painted[z] = [...color];
+
       return;
     }
+
     if (mode === 0x15 && (payload[1] ?? 0) === 0x01) {
       const color: [number, number, number] = [payload[2] ?? 0, payload[3] ?? 0, payload[4] ?? 0];
       const mask = payload.subarray(9, 9 + Math.ceil(this.zones / 8));
+
       for (let z = 0; z < this.zones; z++) {
         if (((mask[Math.floor(z / 8)] ?? 0) & (1 << (z % 8))) !== 0) this.painted[z] = [...color];
       }
+
       return;
     }
+
     if (mode === 0x02) {
       const color: [number, number, number] = [payload[1] ?? 0, payload[2] ?? 0, payload[3] ?? 0];
+
       for (let z = 0; z < this.zones; z++) this.painted[z] = [...color];
     }
   }
@@ -230,6 +270,7 @@ export class SimPeripheral {
   private applyHostColor(sub: number, payload: Uint8Array, now: number): void {
     if (sub !== 0x02 || (payload[0] ?? -1) !== 0x83) return;
     const color: [number, number, number] = [payload[1] ?? 0, payload[2] ?? 0, payload[3] ?? 0];
+
     for (let z = 0; z < this.zones; z++) this.painted[z] = [...color];
     this.hostColorAt = now;
   }
@@ -239,21 +280,27 @@ export class SimPeripheral {
     if (cmd === 0x01 && this.options.handshakeSeed === true) {
       this.handshakeSeedSeen = payload.length > 0;
       this.ack(cmd, this.handshakeSeedSeen ? 0x00 : 0x01);
+
       return;
     }
+
     if (cmd === 0x02 && this.options.handshakeSeed === true) {
       const ok = this.handshakeSeedSeen && payload.length > 0;
       this.handshakeSeedSeen = false;
       this.handshakeDone = this.handshakeDone || ok;
       this.ack(cmd, ok ? 0x00 : 0x01);
+
       return;
     }
+
     if (cmd === 0x11 && (payload[0] ?? -1) === 0x01 && this.options.v2Key !== undefined) {
       this.handshakeDone = true;
       this.ack(cmd, 0x00);
       this.pushV2Reply();
+
       return;
     }
+
     this.ack(cmd, 0x01);
   }
 
@@ -267,12 +314,16 @@ export class SimPeripheral {
   private answerProvision(proType: number, cmd: number, payload: Uint8Array): void {
     if (proType === BLE_PROTYPE.WRITE && cmd === 0x17) {
       if ((payload[0] ?? -1) === 0x01) this.provisionStarted = true;
+
       if ((payload[0] ?? -1) === 0x00) this.provisionStopped = this.provisionStarted;
+
       return;
     }
+
     if (proType === BLE_PROTYPE.PROVISION && cmd === 0x11 && this.provisionStarted) {
       this.provisioned.push(payload.slice(0, 17));
       const log = this.options.provisioningLog;
+
       if (log !== undefined) log.push(payload.slice(0, 17));
     }
   }
@@ -280,6 +331,7 @@ export class SimPeripheral {
   /** Reads the sim state the way a real read-back would report it. */
   readState(cmd: number, extra = 0): number[] | string | null {
     void extra;
+
     switch (cmd) {
       case 0x01: return [this.power ? 1 : 0];
       case 0x04: return [Math.round(this.brightness01 * 100)];
@@ -305,6 +357,7 @@ export class SimPeripheral {
   /** True while the host colour hold has not expired at now. */
   hostColorHeld(now: number): boolean {
     const hold = this.options.renderHoldMs ?? 0;
+
     return hold > 0 && now - this.hostColorAt < hold;
   }
 
@@ -344,6 +397,7 @@ export class SimBleAdapter implements BleAdapter {
 
   async scan(_timeoutMs: number): Promise<BleAdvertisement[]> {
     if (this.scanFails) throw new Error(`sim ${this.kind} scan failed`);
+
     return this.peripherals
       .filter((p) => !p.connected)
       .map((p) => parseBleAdvertisement(p.scanInput()));
@@ -351,11 +405,13 @@ export class SimBleAdapter implements BleAdapter {
 
   async connect(address: string): Promise<BleConnection> {
     const peripheral = this.find(address);
+
     if (peripheral === null) throw new Error(`sim has no peripheral ${address}`);
     peripheral.handleConnect();
     const kind = this.kind;
     const clock = this.clock;
     const adapter = this;
+
     return {
       address,
       kind,
@@ -387,10 +443,13 @@ export function simGoldenFrame(proType: number, cmd: number, payload: readonly n
   const out = new Uint8Array(BLE_FRAME_LEN);
   out[0] = proType & 0xff;
   out[1] = cmd & 0xff;
+
   for (let i = 0; i < Math.min(payload.length, 17); i++) out[2 + i] = payload[i] ?? 0;
   let xor = 0;
+
   for (let i = 0; i < BLE_FRAME_LEN - 1; i++) xor ^= out[i] ?? 0;
   out[BLE_FRAME_LEN - 1] = xor & 0xff;
+
   return Buffer.from(out).toString("hex");
 }
 
@@ -422,6 +481,7 @@ export function simFamilyPeripherals(): SimPeripheral[] {
     minger: "Minger_F005",
     unknown: "Other_light",
   };
+
   return (Object.keys(names) as Array<(typeof SIM_NAME_FAMILIES)[number]>).map((family, i) => new SimPeripheral({
     address: `AA:BB:CC:F0:00:${(i + 1).toString(16).padStart(2, "0")}`,
     name: names[family],
@@ -458,17 +518,21 @@ export function simProvisionBytes(peripheral: SimPeripheral): Uint8Array {
   const total = peripheral.provisioned.reduce((n, c) => n + c.length, 0);
   const out = new Uint8Array(total);
   let at = 0;
+
   for (const chunk of peripheral.provisioned) {
     out.set(chunk, at);
     at += chunk.length;
   }
+
   return out;
 }
 
 /** Runs every contract check the full sim promises. All must pass. */
 export function simContractChecks(peripherals: SimPeripheral[], now: number): SimContractCheck[] {
   const present: Record<string, true> = {};
+
   for (const p of peripherals) present[p.advertisement.family] = true;
+
   const checks: SimContractCheck[] = [
     {
       name: "advertisement-families",
@@ -491,5 +555,6 @@ export function simContractChecks(peripherals: SimPeripheral[], now: number): Si
       detail: "render hold queryable on every peripheral",
     },
   ];
+
   return checks;
 }

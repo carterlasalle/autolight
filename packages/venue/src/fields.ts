@@ -43,7 +43,9 @@ export interface VenueFields {
 }
 
 export const SIDE_LEFT = 0;
+
 export const SIDE_CENTER = 1;
+
 export const SIDE_RIGHT = 2;
 
 export interface FieldOptions {
@@ -57,11 +59,13 @@ export interface FieldOptions {
 
 function outlineCum(outline: Point2[]): { cum: number[]; total: number } {
   const cum: number[] = [0];
+
   for (let i = 0; i < outline.length; i++) {
     const a = outline[i]!;
     const b = outline[(i + 1) % outline.length]!;
     cum.push(cum[i]! + Math.hypot(b.x - a.x, b.y - a.y));
   }
+
   return { cum, total: cum[cum.length - 1]! };
 }
 
@@ -75,6 +79,7 @@ export function projectToOutline(
   let bestT = 0;
   let bestD2 = Infinity;
   let bestSegLen = 1;
+
   for (let i = 0; i < outline.length; i++) {
     const a = outline[i]!;
     const b = outline[(i + 1) % outline.length]!;
@@ -85,6 +90,7 @@ export function projectToOutline(
     const px = a.x + dx * t;
     const py = a.y + dy * t;
     const d2 = (p.x - px) * (p.x - px) + (p.y - py) * (p.y - py);
+
     if (d2 < bestD2) {
       bestD2 = d2;
       bestWall = i;
@@ -92,6 +98,7 @@ export function projectToOutline(
       bestSegLen = Math.sqrt(len2);
     }
   }
+
   return {
     s: (cum[bestWall]! + bestSegLen * bestT) / safe,
     wall: bestWall,
@@ -103,6 +110,7 @@ export function projectToOutline(
 function outlinePointAt(outline: Point2[], s: number): { p: Point2; tangent: Point2 } {
   const { cum, total } = outlineCum(outline);
   const d = (((s % 1) + 1) % 1) * Math.max(1e-9, total);
+
   for (let i = 0; i < outline.length; i++) {
     if (d >= cum[i]! && d <= cum[i + 1]!) {
       const a = outline[i]!;
@@ -110,15 +118,18 @@ function outlinePointAt(outline: Point2[], s: number): { p: Point2; tangent: Poi
       const seg = Math.max(1e-9, cum[i + 1]! - cum[i]!);
       const t = (d - cum[i]!) / seg;
       const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+
       return {
         p: { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t },
         tangent: { x: (b.x - a.x) / len, y: (b.y - a.y) / len },
       };
     }
   }
+
   const a = outline[0]!;
   const b = outline[1] ?? outline[0]!;
   const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+
   return { p: { ...a }, tangent: { x: (b.x - a.x) / len, y: (b.y - a.y) / len } };
 }
 
@@ -134,21 +145,27 @@ export function runPointAt(
   const total = Math.max(1e-9, runLength(run));
   const d = run.closed ? (((arcM % total) + total) % total) : Math.min(Math.max(0, arcM), total);
   let acc = 0;
+
   for (let i = 0; i + 1 < pts.length; i++) {
     const a = pts[i]!;
     const b = pts[i + 1]!;
     const seg = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z);
+
     if (d <= acc + seg || i === pts.length - 2) {
       const t = seg < 1e-9 ? 0 : (d - acc) / seg;
       const planar = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+
       return {
         p: { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, z: a.z + (b.z - a.z) * t },
         tangent: { x: (b.x - a.x) / planar, y: (b.y - a.y) / planar },
       };
     }
+
     acc += seg;
   }
+
   const last = pts[pts.length - 1]!;
+
   return { p: { ...last }, tangent: { x: 1, y: 0 } };
 }
 
@@ -168,35 +185,48 @@ export function computeFields(
   const splitAngle = opts.splitAngleRad ?? 0;
   const n = cells.length;
   const runById: Record<string, Run> = {};
+
   for (const r of runs) runById[r.id] = r;
   let maxDist = 1e-6;
+
   for (const c of cells) {
     for (const q of outline) maxDist = Math.max(maxDist, Math.hypot(c.pos.x - q.x, c.pos.y - q.y));
   }
+
   const cosF = Math.cos(-facing);
   const sinF = Math.sin(-facing);
+
   const rx = (x: number, y: number): number =>
     (x - room.anchors.dj.position.x) * cosF - (y - room.anchors.dj.position.y) * sinF;
+
   const ry = (x: number, y: number): number =>
     (x - room.anchors.dj.position.x) * sinF + (y - room.anchors.dj.position.y) * cosF;
+
   let minX = Infinity;
   let maxX = -Infinity;
   let minY = Infinity;
   let maxY = -Infinity;
+
   for (const p of outline) {
     const x = rx(p.x, p.y);
     const y = ry(p.x, p.y);
+
     if (x < minX) minX = x;
+
     if (x > maxX) maxX = x;
+
     if (y < minY) minY = y;
+
     if (y > maxY) maxY = y;
   }
+
   const spanX = Math.max(1e-6, maxX - minX);
   const spanY = Math.max(1e-6, maxY - minY);
   const center = polygonCentroid(outline);
   const djS = projectToOutline(room.anchors.dj.position, outline).s;
   const splitDx = Math.cos(splitAngle + facing);
   const splitDy = Math.sin(splitAngle + facing);
+
   const f: VenueFields = {
     version: opts.version ?? 1,
     count: n,
@@ -223,6 +253,7 @@ export function computeFields(
     perimeterLen: total,
     maxDist,
   };
+
   for (let i = 0; i < n; i++) {
     const c = cells[i]!;
     f.pos[i * 3] = c.pos.x;
@@ -241,6 +272,7 @@ export function computeFields(
     f.h[i] = Math.min(1, Math.max(0, c.pos.z / Math.max(1e-6, room.ceilingHeight)));
     let sRaw: number;
     let tangent: Point2 = { x: 1, y: 0 };
+
     if (c.runId !== null && runById[c.runId] !== undefined) {
       const at = runPointAt(runById[c.runId]!, c.arcM);
       const proj = projectToOutline(at.p, outline);
@@ -257,6 +289,7 @@ export function computeFields(
       f.wallPos[i] = proj.wallPos;
       f.corner[i] = proj.corner;
     }
+
     const rel = direction === "clockwise" ? sRaw - zeroS : zeroS - sRaw;
     f.s[i] = ((rel % 1) + 1) % 1;
     f.theta[i] = Math.atan2(c.pos.y - pivot.y, c.pos.x - pivot.x) - facing;
@@ -274,6 +307,7 @@ export function computeFields(
     f.tangent[i * 2 + 1] = tangent.y / tl;
     f.signedSplit[i] = ((c.pos.x - pivot.x) * splitDx + (c.pos.y - pivot.y) * splitDy) / maxDist;
   }
+
   return f;
 }
 
@@ -284,9 +318,12 @@ export function fieldCellsFromMap(
   z: number,
 ): FieldCell[] {
   const runById: Record<string, Run> = {};
+
   for (const r of runs) runById[r.id] = r;
+
   return map.cells.map((c) => {
     const p = c.positions[0];
+
     if (!p) {
       return {
         fixtureId, physicalIndex: c.physicalIndex, logicalIndex: c.logicalIndex,
@@ -294,7 +331,9 @@ export function fieldCellsFromMap(
         runId: null, arcM: 0, chain: c.physicalIndex,
       };
     }
+
     const run = runById[p.run] ?? runs[0];
+
     if (!run) {
       return {
         fixtureId, physicalIndex: c.physicalIndex, logicalIndex: c.logicalIndex,
@@ -302,8 +341,10 @@ export function fieldCellsFromMap(
         runId: null, arcM: 0, chain: c.physicalIndex,
       };
     }
+
     const midM = (p.startM + p.endM) / 2;
     const pt = runPointAt(run, midM).p;
+
     return {
       fixtureId,
       physicalIndex: c.physicalIndex,
@@ -334,15 +375,21 @@ export function pointCells(fixtureId: string, positions: { x: number; y: number;
 
 export function zeroSFor(room: Room, outline: Point2[], mode: string): number {
   const o = outline.length >= 3 ? outline : room.outline;
+
   if (mode === "front-center") {
     let best = 0;
     let bestY = -Infinity;
+
     for (let k = 0; k < 64; k++) {
       const p = outlinePoint(o, k / 64);
+
       if (p.y > bestY) { bestY = p.y; best = k / 64; }
     }
+
     return best;
   }
+
   if (mode === "controller" || mode === "custom-anchor") return room.logicalZeroS ?? 0;
+
   return projectToOutline(room.anchors.dj.position, o).s;
 }

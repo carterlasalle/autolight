@@ -10,6 +10,7 @@ import {
   splitOs2lMessages,
 } from "./os2l.js";
 import { runProviderContractSuite, virtualClock } from "./contract-suite.js";
+
 describe("OS2L framing (T-LIVE-10, os2l.org reference)", () => {
   it("advertises the documented service type and port range", () => {
     expect(OS2L_SERVICE_TYPE).toBe("_os2l._tcp");
@@ -34,6 +35,7 @@ describe("OS2L framing (T-LIVE-10, os2l.org reference)", () => {
       '{"evt":"cmd","id":42,"param":100.0}\n' +
       '{"evt":"feedback","name":"program1","state":"on"}\n',
     );
+
     expect(decoded.malformed).toEqual([]);
     expect(decoded.messages).toHaveLength(4);
     expect(decoded.messages[0]).toMatchObject({ evt: "beat", pos: 42, bpm: 120 });
@@ -92,9 +94,11 @@ describe("OS2L provider (T-LIVE-10)", () => {
       if (state.beat === 16) seen.resolve();
     });
     const { promise: closed, resolve: onClosed } = Promise.withResolvers<void>();
+
     const sender = connect({ host: "127.0.0.1", port: port ?? 0 }, () => {
       sender.write('{"evt":"beat","pos":16,"bpm":128,"change":false}\n');
     });
+
     sender.on("close", () => onClosed());
     await seen.promise;
     expect(provider.getDecks()[0]?.effectiveBpm).toBe(128);
@@ -123,6 +127,7 @@ describe("OS2L provider (T-LIVE-10)", () => {
   it("passes the shared contract suite except two documented single-deck N/A rows", async () => {
     const clock = virtualClock();
     const provider = new Os2lProvider({ now: () => clock.nowNs() });
+
     const failures = await runProviderContractSuite({
       provider,
       reportsTrackText: false,
@@ -140,10 +145,12 @@ describe("OS2L provider (T-LIVE-10)", () => {
       },
       cleanup: async () => {},
     });
+
     const notApplicable: Record<string, true> = {
       "generation did not increase on track change": true,
       "no deck state emitted for the second deck": true,
     };
+
     const applicable = failures.filter((f) => !notApplicable[f]);
     expect(applicable).toEqual([]);
     expect(failures).toContain("generation did not increase on track change");

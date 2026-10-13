@@ -17,8 +17,10 @@ import {
 
 function lcg(seed: number): () => number {
   let s = seed >>> 0;
+
   return () => {
     s = (s * 1664525 + 1013904223) >>> 0;
+
     return s / 0x100000000;
   };
 }
@@ -26,10 +28,12 @@ function lcg(seed: number): () => number {
 describe("razer codec properties", () => {
   it("round-trips arbitrary opcodes and payloads", () => {
     const rand = lcg(3);
+
     for (let k = 0; k < 300; k++) {
       const opcode = Math.floor(rand() * 256);
       const len = Math.floor(rand() * 64);
       const payload = new Uint8Array(len);
+
       for (let i = 0; i < len; i++) payload[i] = Math.floor(rand() * 256);
       const back = decodeRaw(encodeRaw(opcode, payload));
       expect(back).not.toBeNull();
@@ -40,6 +44,7 @@ describe("razer codec properties", () => {
 
   it("rejects any single-bit flip in the frame", () => {
     const rand = lcg(11);
+
     for (let k = 0; k < 100; k++) {
       const payload = new Uint8Array([1, 2, 3, 4, 5]);
       const frame = encodeRaw(OPCODE.RGB_STREAM, payload);
@@ -75,13 +80,17 @@ describe("razer codec properties", () => {
     const zoned = paintZoned([{ r: 1, g: 2, b: 3, zone: 7 }]);
     expect(decodeRaw(zoned)!.opcode).toBe(OPCODE.ZONED);
     expect(() => paint(new Uint8Array([1, 2]))).toThrow(RangeError);
+
     const status = parseDevStatus({
       msg: { cmd: "devStatus", data: { onOff: 1, brightness: 80, color: { r: 1, g: 2, b: 3 }, colorTemInKelvin: 0 } },
     });
+
     expect(status).toEqual({ onOff: true, brightness: 80, color: { r: 1, g: 2, b: 3 }, colorTemInKelvin: 0 });
+
     const scan = parseScanReply({
       msg: { cmd: "scan", data: { ip: "1.2.3.4", device: "H6076", sku: "H6076" } },
     });
+
     expect(scan).not.toBeNull();
     expect(scan!.ip).toBe("1.2.3.4");
     expect(parseScanReply({ msg: { cmd: "scan", data: { ip: "1.2.3.4" } } })).toBeNull();

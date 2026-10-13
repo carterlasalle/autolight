@@ -11,6 +11,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+
 const ev = (task) => join(root, "docs", "finish", "evidence", task, "README.md");
 
 const GATES = [
@@ -31,22 +32,29 @@ const RB_DOD = Array.from({ length: 18 }, (_, i) => ({
 }));
 
 let failures = 0;
+
 for (const g of GATES) {
   const missing = g.tasks.filter((t) => !existsSync(ev(t)));
   const status = missing.length === 0 ? "PASS" : "MISSING";
+
   if (status !== "PASS") failures++;
   console.log(`Gate ${g.id} ${g.name}: ${status}`);
   console.log(`  probes: ${g.probes.join(", ")}`);
   console.log(`  tasks: ${g.tasks.map((t) => (existsSync(ev(t)) ? `${t} ok` : `${t} MISSING`)).join(", ")}`);
 }
+
 console.log("Rekordbox DoD (spec 120):");
+
 for (const row of RB_DOD) {
   const ok = row.tasks.every((t) => existsSync(ev(t)));
+
   if (!ok) failures++;
   console.log(`  item ${row.item}: ${ok ? "PASS" : "MISSING"} (${row.probe})`);
 }
+
 if (failures > 0) {
   console.log(`gates: ${failures} MISSING entries (evidence not yet landed)`);
   process.exit(1);
 }
+
 console.log("gates: all PASS");

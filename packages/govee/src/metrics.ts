@@ -39,7 +39,9 @@ export class DeviceMetrics {
 
   private rowFor(hardwareId: string): DeviceMetricsRow {
     const existing = this.rows.get(hardwareId);
+
     if (existing) return existing;
+
     const row: DeviceMetricsRow = {
       hardwareId,
       framesRequested: 0,
@@ -53,7 +55,9 @@ export class DeviceMetrics {
       engine: "native-ts",
       reconnects: 0,
     };
+
     this.rows.set(hardwareId, row);
+
     return row;
   }
 
@@ -63,20 +67,28 @@ export class DeviceMetrics {
     row.framesRequested += sample.framesRequested ?? 0;
     row.framesSent += sample.framesSent ?? 0;
     row.framesSuperseded += sample.framesSuperseded ?? 0;
+
     if (sample.effectiveFps !== undefined) row.effectiveFps = sample.effectiveFps;
+
     if (sample.statusRttMs !== undefined) {
       row.statusRttMs = sample.statusRttMs;
+
       if (sample.statusRttMs !== null) row.lastResponseAtMs = (sample.clock ?? Date.now)();
     }
+
     if (sample.transport !== undefined) row.transport = sample.transport;
+
     if (sample.engine !== undefined) row.engine = sample.engine;
+
     if (sample.health !== undefined) row.health = sample.health;
+
     return { ...row };
   }
 
   recordReconnect(hardwareId: string): number {
     const row = this.rowFor(hardwareId);
     row.reconnects += 1;
+
     return row.reconnects;
   }
 
@@ -86,6 +98,7 @@ export class DeviceMetrics {
 
   snapshot(hardwareId: string): DeviceMetricsRow | null {
     const row = this.rows.get(hardwareId);
+
     return row ? { ...row } : null;
   }
 

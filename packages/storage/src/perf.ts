@@ -38,6 +38,7 @@ export function defaultThresholds(): PerfThresholds {
 export function relaxThresholds(thresholds: PerfThresholds, slack: number): PerfThresholds {
   const factor = slack > 0 ? slack : 1;
   const scale = (value: number): number => value * factor;
+
   return {
     tickJitterP99Ms: scale(thresholds.tickJitterP99Ms),
     renderP95Ms: scale(thresholds.renderP95Ms),
@@ -57,6 +58,7 @@ export function percentile(samples: readonly number[], target: number): number {
   const upper = Math.ceil(rank);
   const lo = sorted[lower] ?? 0;
   const hi = sorted[upper] ?? lo;
+
   return lo + (hi - lo) * (rank - lower);
 }
 
@@ -85,8 +87,11 @@ export interface SummariseOptions {
 
 function statOf(value: Measurement, statistic: Statistic): number {
   if (statistic === "p50") return value.p50;
+
   if (statistic === "p99") return value.p99;
+
   if (statistic === "max") return value.max;
+
   return value.p95;
 }
 
@@ -98,6 +103,7 @@ export function summarise(
 ): Measurement {
   const statistic = options.statistic ?? "p95";
   const mean = samples.length > 0 ? samples.reduce((sum, v) => sum + v, 0) / samples.length : 0;
+
   const measurement: Measurement = {
     name,
     unit,
@@ -113,7 +119,9 @@ export function summarise(
     statistic,
     pass: false,
   };
+
   measurement.pass = measurement.measured && statOf(measurement, statistic) <= options.threshold;
+
   return measurement;
 }
 
@@ -140,11 +148,13 @@ export function notMeasured(name: string, unit: string, threshold: number, reaso
 
 export function timeSamples(fn: () => void, count: number, now: () => number = () => performance.now()): number[] {
   const samples: number[] = [];
+
   for (let i = 0; i < count; i += 1) {
     const started = now();
     fn();
     samples.push(now() - started);
   }
+
   return samples;
 }
 
@@ -161,6 +171,7 @@ export interface TickOptions {
 
 function busyWait(now: () => number, ms: number): void {
   const end = now() + ms;
+
   while (now() < end) {
     // Deliberate stall.
   }
@@ -175,20 +186,26 @@ export async function measureTickJitter(options: TickOptions): Promise<number[]>
   const started = now();
   const samples: number[] = [];
   let tick = 0;
+
   for (;;) {
     const deadline = started + tick * period;
     const wait = deadline - now();
+
     if (wait > 0) await sleep(wait);
+
     if (options.stallMs !== undefined && options.stallAtTick === tick) busyWait(now, options.stallMs);
     samples.push(Math.max(0, now() - deadline));
     tick += 1;
+
     if (deadline >= started + options.durationMs) break;
   }
+
   return samples;
 }
 
 export function stallDetected(samples: readonly number[], stallMs: number): boolean {
   const floor = stallMs * 0.5;
+
   return samples.some((sample) => sample > floor);
 }
 

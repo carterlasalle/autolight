@@ -9,11 +9,14 @@ import { selectResolution } from "./resolution.js";
 /** Toolkit-style ceiling: the rate for the nearest key at or below zones. */
 function ceilingFor(table: Record<number, number>, fallback: number): (zones: number) => number {
   const keys = Object.keys(table).map(Number).sort((a, b) => a - b);
+
   return (zones: number): number => {
     let out = fallback;
+
     for (const key of keys) {
       if (zones >= key) out = table[key] ?? out;
     }
+
     return out;
   };
 }
@@ -28,6 +31,7 @@ describe("selectResolution", () => {
       stableFpsFor: ceilingFor(CEILING, 10),
       targetHz: 30,
     });
+
     expect(decision.kind).toBe("native");
     expect(decision.zones).toBe(20);
     expect(decision.meetsTarget).toBe(true);
@@ -41,6 +45,7 @@ describe("selectResolution", () => {
       stableFpsFor: ceilingFor(CEILING, 10),
       targetHz: 30,
     });
+
     expect(decision.kind).toBe("grouped");
     expect(decision.zones).toBe(40);
     expect(decision.meetsTarget).toBe(true);
@@ -58,6 +63,7 @@ describe("selectResolution", () => {
       targetHz: 30,
       mode: "native",
     });
+
     expect(decision.kind).toBe("native");
     expect(decision.zones).toBe(120);
     expect(decision.meetsTarget).toBe(false);

@@ -53,12 +53,19 @@ export interface Flx4ControlDef {
 // --- status byte helpers ---------------------------------------------------
 
 export const DECK_NOTE_STATUS: Record<Flx4Deck, number> = { 1: 0x90, 2: 0x91 };
+
 export const DECK_CC_STATUS: Record<Flx4Deck, number> = { 1: 0xb0, 2: 0xb1 };
+
 export const MIXER_CC_STATUS = 0xb6;
+
 export const MIXER_NOTE_STATUS = 0x96;
+
 export const EFFECT_FX1_STATUS = 0x94;
+
 export const EFFECT_FX2_STATUS = 0x95;
+
 export const EFFECT_LEVEL_STATUS = 0xb4;
+
 export const PAD_STATUS: Record<Flx4Deck, readonly [number, number]> = {
   1: [0x97, 0x98],
   2: [0x99, 0x9a],
@@ -94,6 +101,7 @@ const deckControls = (deck: Flx4Deck): Flx4ControlDef[] => {
   const note = DECK_NOTE_STATUS[deck];
   const cc = DECK_CC_STATUS[deck];
   const prefix = `deck${deck}`;
+
   const def = (
     id: string,
     name: string,
@@ -102,6 +110,7 @@ const deckControls = (deck: Flx4Deck): Flx4ControlDef[] => {
     data1: number,
     shift = false,
   ): Flx4ControlDef => ({ id, name, group: "deck", deck, kind, status, data1, shift });
+
   const rows: Flx4ControlDef[] = [
     def(`${prefix}.play`, "PLAY/PAUSE", "button", note, 0x0b),
     def(`${prefix}.play`, "PLAY/PAUSE +SHIFT (censor)", "button", note, 0x0e, true),
@@ -132,18 +141,22 @@ const deckControls = (deck: Flx4Deck): Flx4ControlDef[] => {
     def(`${prefix}.fader-start.play`, "CH FADER start (play message)", "button", note, 0x66),
     def(`${prefix}.fader-start.cue`, "CH FADER start (cue message)", "button", note, 0x52),
   ];
+
   for (const { mode, note: modeNote, shiftNote, shiftMode } of PAD_MODE_KEYS) {
     rows.push({ id: `${prefix}.pad-mode.${mode}`, name: `${mode} mode`, group: "deck", deck, kind: "button", status: note, data1: modeNote, shift: false, padMode: mode });
+
     if (shiftNote !== null && shiftMode !== null) {
       rows.push({ id: `${prefix}.pad-mode.${shiftMode}`, name: `${shiftMode} mode +SHIFT`, group: "deck", deck, kind: "button", status: note, data1: shiftNote, shift: true, padMode: shiftMode });
     }
   }
+
   return rows;
 };
 
 const padControls = (deck: Flx4Deck): Flx4ControlDef[] => {
   const [plain, shifted] = PAD_STATUS[deck];
   const rows: Flx4ControlDef[] = [];
+
   for (const [mode, base] of Object.entries(PAD_MODE_BASE) as Array<[Flx4PadMode, number]>) {
     for (let pad = 1; pad <= 8; pad += 1) {
       const data1 = base + pad - 1;
@@ -151,6 +164,7 @@ const padControls = (deck: Flx4Deck): Flx4ControlDef[] => {
       rows.push({ id: `deck${deck}.pad.${mode}.${pad}`, name: `${mode} pad ${pad} +SHIFT`, group: "pad", deck, kind: "button", status: shifted, data1, shift: true, padMode: mode, padIndex: pad });
     }
   }
+
   return rows;
 };
 
@@ -158,6 +172,7 @@ const mixerControls = (): Flx4ControlDef[] => {
   const cc = MIXER_CC_STATUS;
   const note = MIXER_NOTE_STATUS;
   const def = (id: string, name: string, kind: Flx4ControlKind, status: number, data1: number, deck: Flx4Deck | null = null, shift = false): Flx4ControlDef => ({ id, name, group: "mixer", deck, kind, status, data1, shift });
+
   const rows: Flx4ControlDef[] = [
     def("mixer.master-level", "MASTER LEVEL MSB", "cc14-msb", cc, 0x08),
     def("mixer.master-level", "MASTER LEVEL LSB", "cc14-lsb", cc, 0x28),
@@ -177,6 +192,7 @@ const mixerControls = (): Flx4ControlDef[] => {
     def("mixer.crossfader", "CROSSFADER MSB", "cc14-msb", cc, 0x1f),
     def("mixer.crossfader", "CROSSFADER LSB", "cc14-lsb", cc, 0x3f),
   ];
+
   for (const deck of [1, 2] as const) {
     const deckCc = DECK_CC_STATUS[deck];
     const deckNote = DECK_NOTE_STATUS[deck];
@@ -198,6 +214,7 @@ const mixerControls = (): Flx4ControlDef[] => {
       def(`${prefix}.head-cue-shift`, "CH CUE +SHIFT", "button", deckNote, 0x68, deck, true),
     );
   }
+
   return rows;
 };
 
@@ -303,10 +320,13 @@ export class Flx4Decoder {
     const { status, data1, data2, receivedAtNs } = message;
     const raw = [status & 0xff, data1 & 0x7f, data2 & 0x7f] as const;
     const control = controlFor(status & 0xff, data1 & 0x7f);
+
     if (control === undefined) {
       this.unknown += 1;
+
       return { type: "unknown", raw, receivedAtNs };
     }
+
     const base = {
       type: "control" as const,
       id: control.id,
@@ -320,6 +340,7 @@ export class Flx4Decoder {
       ...(control.padMode !== undefined ? { padMode: control.padMode } : {}),
       ...(control.padIndex !== undefined ? { padIndex: control.padIndex } : {}),
     };
+
     switch (control.kind) {
       case "button":
       case "touch":
@@ -330,14 +351,19 @@ export class Flx4Decoder {
         return { ...base, value: data2 / 127, on: data2 > 0, complete: true };
       case "cc14-msb": {
         this.msb.set(`${status & 0xff}:${data1 & 0x7f}`, data2 & 0x7f);
+
         return { ...base, value: (data2 & 0x7f) / 127, on: false, complete: false };
       }
+
       case "cc14-lsb": {
         const msb = this.msb.get(`${status & 0xff}:${data1 - 0x20}`);
+
         if (msb === undefined) {
           return { ...base, value: (data2 & 0x7f) / 16383, on: false, complete: false };
         }
+
         this.msb.delete(`${status & 0xff}:${data1 - 0x20}`);
+
         return { ...base, value: ((msb << 7) | (data2 & 0x7f)) / 16383, on: false, complete: true };
       }
     }
@@ -348,10 +374,13 @@ export class Flx4Decoder {
     const status = bytes[0];
     const data1 = bytes[1];
     const data2 = bytes[2];
+
     if (status === undefined || data1 === undefined || data2 === undefined) {
       this.unknown += 1;
+
       return { type: "unknown", raw: [status ?? 0, data1 ?? 0, data2 ?? 0], receivedAtNs };
     }
+
     return this.decode({ status, data1, data2, receivedAtNs });
   }
 }

@@ -32,7 +32,9 @@ import {
 import { CompositeProvider, type CompositeProviderOptions } from "./composite.js";
 
 export const FLX4_MACOS_DEVICE_NAME = "DDJ-FLX4";
+
 export const FLX4_MACOS_PORT_NAME = "DDJ-FLX4 MIDI 1";
+
 export const FLX4_IDLE_MESSAGE = "FLX4 not present, composite idle";
 
 export interface CompositeFlx4BootServiceOpts {
@@ -66,8 +68,11 @@ export function activeCompositeFlx4Boot(): CompositeFlx4Boot | null {
 
 function serviceOptionsFor(opts: CompositeFlx4BootOptions, portMatch: string): Flx4ServiceOptions {
   const out: Flx4ServiceOptions = { portMatch };
+
   if (opts.mode !== undefined) out.mode = opts.mode;
+
   if (opts.hotplugPollMs !== undefined) out.hotplugPollMs = opts.hotplugPollMs;
+
   return out;
 }
 
@@ -76,16 +81,20 @@ export async function startCompositeFlx4Boot(
 ): Promise<{ boot: CompositeFlx4Boot; connected: boolean; status: Flx4ControllerStatus }> {
   const log = opts.log ?? console.info.bind(console, "[composite-flx4]");
   const portMatch = opts.portMatch ?? FLX4_MACOS_DEVICE_NAME;
+
   const provider =
     opts.createComposite === undefined
       ? new CompositeProvider(opts.composite ?? {})
       : opts.createComposite(opts.composite ?? {});
+
   const service =
     opts.createService === undefined
       ? new Flx4ControllerService(serviceOptionsFor(opts, portMatch))
       : opts.createService(serviceOptionsFor(opts, portMatch));
+
   const model = new Flx4StateModel();
   const deriver = new Flx4SignalDeriver({ djSoftware: "rekordbox" });
+
   // The deriver needs the post-apply snapshot; the wiring only forwards the
   // derived signals, so adapt the two-arg shape at the boundary.
   const wiring = subscribeServiceToComposite(
@@ -94,6 +103,7 @@ export async function startCompositeFlx4Boot(
     (event: Flx4Event) => deriver.derive(event, model.snapshot()),
     provider,
   );
+
   const announce = (status: Flx4ControllerStatus): void => {
     if (status.connection === "connected") {
       provider.reportMidiAvailable();
@@ -103,10 +113,12 @@ export async function startCompositeFlx4Boot(
       log(FLX4_IDLE_MESSAGE);
     }
   };
+
   const stopStatus = service.onStatusChange(announce);
   const status = await service.start();
   await provider.start();
   announce(status);
+
   const boot: CompositeFlx4Boot = {
     provider,
     service,
@@ -115,11 +127,14 @@ export async function startCompositeFlx4Boot(
       wiring.stop();
       await service.stop();
       await provider.stop();
+
       if (active === boot) active = null;
     },
     fuseAx: (deck, axPlayheadSeconds, atNs) => provider.ingestAxPlayhead(deck, axPlayheadSeconds, atNs),
   };
+
   active = boot;
+
   return { boot, connected: status.connection === "connected", status };
 }
 

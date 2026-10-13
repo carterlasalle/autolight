@@ -65,13 +65,16 @@ describe("T-PLAN-09 styles (P-135)", () => {
     for (const id of ["club", "house", "festival", "lounge", "pop", "dark", "minimal"]) {
       const s = BUILT_IN_STYLES[id.toLowerCase()] ?? BUILT_IN_STYLES[id]!;
       expect(s, id).toBeDefined();
+
       for (const p of STYLE_PROPERTIES) expect((s as unknown as Record<string, unknown>)[p], `${id}.${p}`).toBeDefined();
     }
+
     expect(STYLE_PROPERTIES).toHaveLength(11);
   });
 
   it("moves the plan in the expected direction for every property", () => {
     const base = BUILT_IN_STYLES["club"]!;
+
     const cases: Array<{ prop: string; low: PlannerStyle; high: PlannerStyle; check: (l: number, h: number) => boolean; metric?: "default" | "darknessPct" | "intensity" | "whiteHits" | "intensity" }> = [
       {
         prop: "intensityRange",
@@ -143,18 +146,27 @@ describe("T-PLAN-09 styles (P-135)", () => {
         check: (l, h) => h !== l,
       },
     ];
+
     const metricFor = (s: PlannerStyle, which?: "default" | "darknessPct" | "intensity" | "whiteHits"): number => {
       const r = compile(s);
       const d = evaluateCompiledPlan(r.plan, DEFAULT_CONFIG);
+
       if (which === "intensity") return evaluateCompiledPlan(compile(s).plan, DEFAULT_CONFIG).intensityArc;
+
       if (which === "whiteHits") return compile(s).plan.cues.filter((c) => c.type === "white-hit").length;
-      if (which === "darknessPct") { const r2 = compile(s); const dip = r2.plan.cues.filter((c) => c.type === "dip" && c.reason.includes("darkness preference")).reduce((n, c) => n + c.durationBeats, 0); const sec = r2.plan.sections.reduce((n, x) => n + x.darkness, 0); return dip + sec; }
+
+      if (which === "darknessPct") { const r2 = compile(s); const dip = r2.plan.cues.filter((c) => c.type === "dip" && c.reason.includes("darkness preference")).reduce((n, c) => n + c.durationBeats, 0); const sec = r2.plan.sections.reduce((n, x) => n + x.darkness, 0);
+
+ return dip + sec; }
+
       const chroma = r.plan.cues.reduce((n, c) => n + (c.color?.c ?? 0), 0);
       const hue = r.plan.cues.reduce((n, c) => n + ((c.color?.h ?? 0) / 360), 0);
       const secondary = r.plan.cues.filter((c) => c.target === "SECONDARY").length / 10;
       const exclusive = r.plan.cues.filter((c) => c.layer === "exclusive").length;
+
       return r.plan.cues.length + d.intensityArc + chroma + hue + secondary + exclusive;
     };
+
     for (const c of cases) {
       expect(c.check(metricFor(c.low, c.metric), metricFor(c.high, c.metric)), c.prop).toBe(true);
     }

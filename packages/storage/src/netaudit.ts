@@ -15,6 +15,7 @@ export interface ListenerDecl {
 
 function isLoopback(host: string): boolean {
   const h = host.toLowerCase();
+
   return h === "127.0.0.1" || h === "::1" || h === "localhost";
 }
 
@@ -38,27 +39,35 @@ export interface NetworkAuditResult {
 export function auditListeners(listeners: readonly ListenerDecl[]): NetworkAuditResult {
   const allowed: ListenerDecl[] = [];
   const denied: { listener: ListenerDecl; reason: string }[] = [];
+
   for (const l of listeners) {
     if (isLoopback(l.host)) {
       allowed.push(l);
       continue;
     }
+
     if (l.loopbackOnly) {
       denied.push({ listener: l, reason: `${l.name}: declared loopback-only but bound to ${l.host}` });
       continue;
     }
+
     const portRule = ALLOWED_NON_LOOPBACK.find((r) => r.port === l.port);
+
     if (portRule !== undefined) {
       allowed.push(l);
       continue;
     }
+
     const discovery = ALLOWED_DISCOVERY.find((r) => l.name.toLowerCase().includes(r.name));
+
     if (discovery !== undefined) {
       allowed.push(l);
       continue;
     }
+
     denied.push({ listener: l, reason: `${l.name}: non-loopback ${l.host}:${l.port} has no listed discovery reason` });
   }
+
   return { allowed, denied };
 }
 

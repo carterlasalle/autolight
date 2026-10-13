@@ -60,13 +60,16 @@ const agentPathSchema = z.object({
 
 export function redactAgentSecrets(text: string, token: string | null = null): string {
   let out = text.replace(/(bearer\s+)[A-Za-z0-9._~+/=-]+/gi, "$1[redacted]");
+
   if (token !== null && token.length > 0) out = out.split(token).join("[redacted]");
+
   return out;
 }
 
 export function pickAgentTokenSource(states: readonly AgentTokenSourceState[]): { source: AgentTokenSource | null; report: string[] } {
   const report = states.map((s) => `${s.source}: ${s.available ? `available (${s.detail})` : `unavailable (${s.detail})`}`);
   const chosen = states.find((s) => s.available);
+
   return { source: chosen?.source ?? null, report };
 }
 
@@ -109,25 +112,35 @@ export class RekordboxAgentClient {
   // Liveness without a token: any HTTP answer means the agent is present.
   async probe(): Promise<AgentProbe> {
     const response = await this.get("/");
+
     if (response === null) return { present: false, status: null, reason: `no answer on ${this.host}:${this.port}` };
+
     return { present: true, status: response.status, reason: `agent answered HTTP ${response.status}` };
   }
 
   async resolveContent(contentId: string): Promise<AgentResolution> {
     if (this.token === null) return { ok: false, path: null, endpoint: null, reason: "no-token" };
     let sawResponse = false;
+
     for (const candidate of AGENT_RESOLVE_ENDPOINTS) {
       const endpoint = candidate.replace("{id}", encodeURIComponent(contentId));
       const response = await this.get(endpoint, this.token);
+
       if (response === null) continue;
       sawResponse = true;
+
       if (response.status === 401 || response.status === 403) return { ok: false, path: null, endpoint, reason: "denied" };
+
       if (response.status === 404) continue;
+
       if (response.status >= 400) continue;
       const path = parsePathBody(response.body);
+
       if (path === null) return { ok: false, path: null, endpoint, reason: "malformed" };
+
       return { ok: true, path, endpoint, reason: "resolved" };
     }
+
     return sawResponse
       ? { ok: false, path: null, endpoint: null, reason: "not-found" }
       : { ok: false, path: null, endpoint: null, reason: "not-present" };
@@ -135,6 +148,7 @@ export class RekordboxAgentClient {
 
   private get(path: string, token?: string): Promise<{ status: number; body: string } | null> {
     const { promise, resolve } = Promise.withResolvers<{ status: number; body: string } | null>();
+
     const req = request(
       {
         host: this.host,
@@ -154,12 +168,14 @@ export class RekordboxAgentClient {
         res.on("error", () => resolve(null));
       },
     );
+
     req.on("timeout", () => {
       req.destroy();
       resolve(null);
     });
     req.on("error", () => resolve(null));
     req.end();
+
     return promise;
   }
 }
@@ -167,11 +183,15 @@ export class RekordboxAgentClient {
 function parsePathBody(body: string): string | null {
   try {
     const parsed = agentPathSchema.safeParse(JSON.parse(body));
+
     if (!parsed.success) return null;
+
     for (const key of PATH_KEYS) {
       const value = parsed.data[key];
+
       if (typeof value === "string" && value.length > 0) return value;
     }
+
     return null;
   } catch {
     return null;
@@ -192,15 +212,20 @@ export async function resolveWithAgent(
   sources: readonly AgentTokenSourceState[],
 ): Promise<AgentResolverStep> {
   const { source, report } = pickAgentTokenSource(sources);
+
   if (source === null) {
     return { path: null, source: "none", report: `agent API: no token (${report.join("; ")})` };
   }
+
   if (!client.hasToken()) {
     return { path: null, source: "none", report: `agent API: no token loaded from ${source} (${report.join("; ")})` };
   }
+
   const resolution = await client.resolveContent(contentId);
+
   if (!resolution.ok) {
     return { path: null, source: "none", report: `agent API: ${resolution.reason} via ${resolution.endpoint ?? "no endpoint"}` };
   }
+
   return { path: resolution.path, source: "agent-api", report: `agent API: resolved via ${resolution.endpoint ?? "unknown endpoint"}` };
 }

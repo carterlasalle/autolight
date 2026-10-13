@@ -14,6 +14,7 @@ export interface LiveChangePlan {
 
 export function planLiveChange(key: string): LiveChangePlan {
   const def = defineKey(key);
+
   if (def.liveSafe) {
     return {
       key,
@@ -22,6 +23,7 @@ export function planLiveChange(key: string): LiveChangePlan {
       note: `${key}: live-safe, applies at the next bar`,
     };
   }
+
   return {
     key,
     liveSafe: false,
@@ -38,8 +40,11 @@ export interface PendingQueue {
 // confirm) applies them in order.
 export function queueLiveChange(queue: PendingQueue, key: string): PendingQueue {
   const planned = planLiveChange(key);
+
   if (planned.apply === "next-bar") return queue;
+
   if (queue.keys.includes(key)) return queue;
+
   return { keys: [...queue.keys, key] };
 }
 
@@ -51,10 +56,13 @@ export function drainLiveQueue(queue: PendingQueue): { applied: string[]; queue:
 export function compareKeys(a: Record<string, unknown>, b: Record<string, unknown>): { key: string; before: unknown; after: unknown }[] {
   const out: { key: string; before: unknown; after: unknown }[] = [];
   const names = new Set([...Object.keys(a), ...Object.keys(b)]);
+
   for (const key of [...names].sort()) {
     const before = a[key];
     const after = b[key];
+
     if (JSON.stringify(before) !== JSON.stringify(after)) out.push({ key, before, after });
   }
+
   return out;
 }

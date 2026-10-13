@@ -12,11 +12,14 @@ export type EnvelopeTime =
 
 export function envelopeToBeats(e: EnvelopeTime, bpm: number): number {
   if (e.kind === "beats") return e.beats;
+
   if (!(bpm > 0)) return 0;
+
   return (e.ms / 1000) * (bpm / 60);
 }
 
 export const CUE_LEVELS = ["track", "section", "phrase", "bar", "beat", "sub-beat"] as const;
+
 export type CueLevel = (typeof CUE_LEVELS)[number];
 
 export function isCueLevel(v: string): v is CueLevel {
@@ -35,6 +38,7 @@ export const PLAN_LAYERS = [
   "manual",
   "master",
 ] as const;
+
 export type PlanLayer = (typeof PLAN_LAYERS)[number];
 
 export function isPlanLayer(v: string): v is PlanLayer {
@@ -329,21 +333,27 @@ export interface CompileResult {
 
 export function fnv1aHex(s: string): string {
   let h = 0x811c9dc5;
+
   for (let i = 0; i < s.length; i++) {
     h ^= s.charCodeAt(i);
     h = Math.imul(h, 0x01000193) >>> 0;
   }
+
   return h.toString(16).padStart(8, "0");
 }
 
 export function stableStringify(v: unknown): string {
   if (v === null || v === undefined) return "null";
+
   if (typeof v !== "object") return JSON.stringify(v) ?? "null";
+
   if (Array.isArray(v)) return `[${v.map(stableStringify).join(",")}]`;
   const keys = Object.keys(v as Record<string, unknown>).sort();
+
   const body = keys
     .map((k) => `${JSON.stringify(k)}:${stableStringify((v as Record<string, unknown>)[k])}`)
     .join(",");
+
   return `{${body}}`;
 }
 
@@ -353,20 +363,25 @@ export function hashValue(v: unknown): string {
 
 export function trackFingerprint(track: TrackModel): { value: string; source: "pcm" | "file" | "id" } {
   const id = track.identity;
+
   if (id.pcmFingerprint !== undefined && id.pcmFingerprint !== "") {
     return { value: id.pcmFingerprint, source: "pcm" };
   }
+
   if (id.fileHash !== undefined && id.fileHash !== "") return { value: id.fileHash, source: "file" };
+
   return { value: id.id, source: "id" };
 }
 
 export function mulberry32(seedHex: string): () => number {
   let a = parseInt(seedHex.slice(0, 8), 16) >>> 0;
+
   return () => {
     a |= 0;
     a = (a + 0x6d2b79f5) | 0;
     let t = Math.imul(a ^ (a >>> 15), 1 | a);
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }

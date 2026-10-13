@@ -61,9 +61,13 @@ export class MatterError extends Error {
  *  guess. Multi-admin is provenance declared by the caller, not a format. */
 export function classifyPairingCode(code: string): PairingKind | null {
   const trimmed = code.trim();
+
   if (trimmed.length === 0) return null;
+
   if (/^MT:[A-Z0-9.+-]+$/i.test(trimmed)) return "qr-payload";
-  if (/^\d{11}$/.test(trimmed.replace(/[ \-]/g, ""))) return "manual-code";
+
+  if (/^\d{11}$/.test(trimmed.replace(/[ -]/g, ""))) return "manual-code";
+
   return null;
 }
 
@@ -107,6 +111,7 @@ export class InMemoryAdapter implements MatterAdapter {
   async commission(pairingCode: string, options: CommissionOptions): Promise<CommissionedNode> {
     if (this.closed) throw new MatterError("stopped", "controller is closed");
     const pairingKind = classifyPairingCode(pairingCode);
+
     if (pairingKind === null) throw new MatterError("bad-pairing-code", `rejected ${JSON.stringify(pairingCode)}`);
     const nodeId = this.nextNodeId;
     this.nextNodeId += 1;
@@ -116,20 +121,24 @@ export class InMemoryAdapter implements MatterAdapter {
       productId: this.identity.productId,
       on: false, level: 0, hue: 0, saturation: 0, multiAdmin,
     });
+
     return { nodeId, pairingKind, commissionedVia: options.source, multiAdmin };
   }
 
   async command(nodeId: number, cluster: string, cmd: string, payload: Record<string, number> = {}): Promise<void> {
     if (this.closed) throw new MatterError("stopped", "controller is closed");
     const node = this.nodes.get(nodeId);
+
     if (node === undefined) throw new MatterError("unknown-node", `no node ${nodeId}`);
     this.recorded.push({ nodeId, cluster, command: cmd, payload: { ...payload } });
+
     if (cluster === "onOff" && cmd === "on") node.on = true;
     else if (cluster === "onOff" && cmd === "off") node.on = false;
     else if (cluster === "levelControl" && cmd === "moveToLevel" && typeof payload["level"] === "number") {
       node.level = payload["level"] as number;
     } else if (cluster === "colorControl" && cmd === "moveToHueAndSaturation") {
       if (typeof payload["hue"] === "number") node.hue = payload["hue"] as number;
+
       if (typeof payload["saturation"] === "number") node.saturation = payload["saturation"] as number;
     }
   }
@@ -137,15 +146,21 @@ export class InMemoryAdapter implements MatterAdapter {
   async read(nodeId: number, cluster: string, attribute: string): Promise<number | null> {
     if (this.closed) throw new MatterError("stopped", "controller is closed");
     const node = this.nodes.get(nodeId);
+
     if (node === undefined) throw new MatterError("unknown-node", `no node ${nodeId}`);
+
     if (cluster === "basicInformation" && attribute === "vendorId") return node.vendorId;
+
     if (cluster === "basicInformation" && attribute === "productId") return node.productId;
+
     return null;
   }
 
   nodeState(nodeId: number): { on: boolean; level: number; hue: number; saturation: number } | undefined {
     const node = this.nodes.get(nodeId);
+
     if (node === undefined) return undefined;
+
     return { on: node.on, level: node.level, hue: node.hue, saturation: node.saturation };
   }
 

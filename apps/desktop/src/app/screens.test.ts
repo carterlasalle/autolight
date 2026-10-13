@@ -57,6 +57,7 @@ describe("desktop screens", () => {
       { id: "f1", adapter: "govee", sku: "H6076", hardwareId: "h", cells: [{ index: 0, position: { x: 0, y: 0 }, order: 0, tags: [] }], calibration: null },
       { fps: 30, sent: 100, superseded: 5, latencyMs: 25, health: "online", ip: "10.0.0.2" },
     );
+
     expect(tile.segments).toBe(1);
     expect(tile.health).toBe("online");
   });

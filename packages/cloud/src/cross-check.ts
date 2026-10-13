@@ -37,6 +37,7 @@ export function compareDeclaredSegments(
   declared: number | null,
 ): SegmentComparison {
   if (declared === null) return "cloud-silent";
+
   return measured === declared ? "agree" : "disagree";
 }
 
@@ -44,6 +45,7 @@ export function compareDeclaredSegments(
 export function crossCheckQualification(input: CrossCheckInput): CrossCheckOutcome {
   const declared = input.cloud?.capabilities.declaredSegmentCount ?? null;
   const comparison = compareDeclaredSegments(input.measuredSegmentCount, declared);
+
   if (comparison === "agree") {
     return {
       comparison,
@@ -53,6 +55,7 @@ export function crossCheckQualification(input: CrossCheckInput): CrossCheckOutco
       evidenceNote: `Cloud declares ${declared} segments for ${input.model}; matches the measured count.`,
     };
   }
+
   if (comparison === "cloud-silent") {
     return {
       comparison,
@@ -62,6 +65,7 @@ export function crossCheckQualification(input: CrossCheckInput): CrossCheckOutco
       evidenceNote: `Cloud declares no segment count for ${input.model}; measured count stands.`,
     };
   }
+
   return {
     comparison,
     measuredSegmentCount: input.measuredSegmentCount,

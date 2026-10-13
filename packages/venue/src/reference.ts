@@ -24,13 +24,17 @@ function loopRun(room: Room, z: number, opts: { closed?: boolean; id?: string; m
   run.id = opts.id ?? run.id;
   run.closed = opts.closed ?? true;
   run.mirroredOf = opts.mirroredOf ?? null;
+
   if (opts.gaps !== undefined) run.gaps = opts.gaps;
+
   if (opts.controllerS !== undefined) run.controllerS = opts.controllerS;
+
   return [run];
 }
 
 export function squareRoom(): ReferenceRoom {
   const room = rectangleRoom(5, 5, "Square room");
+
   return {
     id: "square-loop",
     room,
@@ -50,6 +54,7 @@ export function squareMirrored(): ReferenceRoom {
   const runs = loopRun(base.room, 2.5, { closed: false });
   const a = { ...runs[0]!, id: "run-a", mirroredOf: null };
   const b = { ...runs[0]!, id: "run-b", mirroredOf: "run-a" };
+
   return {
     ...base,
     id: "square-mirrored",
@@ -68,6 +73,7 @@ export function squareChunks(): ReferenceRoom {
     { fromM: total * 0.2, toM: total * 0.25 },
     { fromM: total * 0.6, toM: total * 0.68 },
   ];
+
   return {
     id: "square-chunks",
     room,
@@ -89,6 +95,7 @@ export function clubRectangle(): ReferenceRoom {
   const room = rectangleRoom(6, 10, "Club rectangle");
   const runs = outlineRuns(room, 2.8);
   runs[0]!.gaps = [{ fromM: 2, toM: 3.4 }];
+
   return {
     id: "club-rectangle",
     room,
@@ -114,6 +121,7 @@ export function lRoom(): ReferenceRoom {
     { x: 3, y: -3 },
   ];
   room.wallNames = ["W0", "W1", "W2", "W3", "W4", "W5"];
+
   return {
     id: "l-room",
     room,
@@ -132,6 +140,7 @@ export function curvedRoom(): ReferenceRoom {
   const room = rectangleRoom(5, 5, "Curved wall room");
   const runs = outlineRuns(room, 2.5);
   runs[0]!.geom = { kind: "catmull-rom" };
+
   return {
     id: "curved-room",
     room,
@@ -157,7 +166,9 @@ export const REFERENCE_ROOMS: ReferenceRoom[] = [
 
 export function referenceById(id: string): ReferenceRoom {
   const found = REFERENCE_ROOMS.find((r) => r.id === id);
+
   if (!found) throw new Error(`unknown reference room ${id}`);
+
   return found;
 }
 
@@ -166,6 +177,7 @@ export function fieldCellsForReference(ref: ReferenceRoom): { cells: FieldCell[]
   const total = runLengthOf(run);
   const cells: FieldCell[] = [];
   const midS: number[] = [];
+
   for (let i = 0; i < ref.stripCells; i++) {
     const arcM = ((i + 0.5) / ref.stripCells) * total;
     const at = runPointAt(run, arcM);
@@ -183,6 +195,7 @@ export function fieldCellsForReference(ref: ReferenceRoom): { cells: FieldCell[]
     });
     midS.push(s);
   }
+
   for (let l = 0; l < ref.lampPositions.length; l++) {
     const p = ref.lampPositions[l]!;
     cells.push({
@@ -198,17 +211,20 @@ export function fieldCellsForReference(ref: ReferenceRoom): { cells: FieldCell[]
     });
     midS.push(lampS(ref.room, p));
   }
+
   return { cells, midS };
 }
 
 function runLengthOf(run: Run): number {
   const pts = run.closed ? [...run.polyline, run.polyline[0]!] : run.polyline;
   let len = 0;
+
   for (let i = 0; i + 1 < pts.length; i++) {
     const a = pts[i]!;
     const b = pts[i + 1]!;
     len += Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z);
   }
+
   return Math.max(1e-9, len);
 }
 
@@ -222,11 +238,13 @@ function lampS(room: Room, p: { x: number; y: number }): number {
   let bestD = Infinity;
   let acc = 0;
   let total = 0;
+
   for (let i = 0; i < outline.length; i++) {
     const a = outline[i]!;
     const b = outline[(i + 1) % outline.length]!;
     total += Math.hypot(b.x - a.x, b.y - a.y);
   }
+
   for (let i = 0; i < outline.length; i++) {
     const a = outline[i]!;
     const b = outline[(i + 1) % outline.length]!;
@@ -236,9 +254,12 @@ function lampS(room: Room, p: { x: number; y: number }): number {
     const t = Math.min(1, Math.max(0, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2));
     const d = Math.hypot(p.x - (a.x + dx * t), p.y - (a.y + dy * t));
     const seg = Math.sqrt(len2);
+
     if (d < bestD) { bestD = d; best = (acc + seg * t) / Math.max(1e-9, total); }
+
     acc += seg;
   }
+
   return best;
 }
 

@@ -33,16 +33,21 @@ export async function bindNode(
 ): Promise<DeviceRecord> {
   const vendorId = await adapter.read(req.nodeId, "basicInformation", "vendorId");
   const productId = await adapter.read(req.nodeId, "basicInformation", "productId");
+
   if (vendorId === null || productId === null) {
     throw new MatterError("unknown-node", `node ${req.nodeId} has no Basic Information cluster`);
   }
+
   await adapter.command(req.nodeId, "identify", "identify", { identifyTime: 5 });
   const confirmed = await req.confirmIdentify();
+
   if (!confirmed) throw new MatterError("not-confirmed", `fixture ${req.fixtureId} binding declined after identify flash`);
   const existing = store.get(req.fixtureId);
+
   if (existing !== undefined && existing.matterNodeId !== req.nodeId && !req.allowRebind) {
     throw new MatterError("already-bound", `fixture ${req.fixtureId} is bound to node ${existing.matterNodeId}`);
   }
+
   const record: DeviceRecord = {
     fixtureId: req.fixtureId,
     matterNodeId: req.nodeId,
@@ -51,6 +56,8 @@ export async function bindNode(
     multiAdmin: req.multiAdmin,
     boundAtMs: Date.now(),
   };
+
   store.set(record.fixtureId, { ...record });
+
   return record;
 }

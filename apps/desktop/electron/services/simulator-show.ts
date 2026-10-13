@@ -56,8 +56,11 @@ export interface TestCommand {
 }
 
 const H6076_MAC = "AA:BB:CC:DD:EE:01";
+
 const H6076_SKU = "H6076";
+
 const H6076_ZONES = 14;
+
 // Qualification receipt for the simulated H6076: the sim profile pins the
 // segment count, so discovery reports the count it was built with.
 const SIM_PROFILE: SimDeviceProfile = {
@@ -66,13 +69,16 @@ const SIM_PROFILE: SimDeviceProfile = {
   zones: H6076_ZONES,
   armSettleMs: 5,
 };
+
 // Fast-path budget the journey asserts against: plan install must land under
 // it. Measured at ~6 ms on this tree; 250 ms is the tripwire that fails
 // loudly if planning ever regresses toward frame time.
 const PLAN_BUDGET_MS = 250;
+
 // Render tick: 25 Hz keeps CI well under the sim's rate ceiling while
 // producing frames within milliseconds of any keypress.
 const TICK_MS = 40;
+
 // Deck playhead advances in beats per tick. 128 BPM ≈ 2.13 beats/s, so one
 // 40 ms tick ≈ 0.085 beats: the rendered plan evolves every frame.
 const BEATS_PER_TICK = (128 / 60) * (TICK_MS / 1000);
@@ -117,11 +123,13 @@ export class SimulatorShow {
     this.installMs = Date.now() - t0;
     this.track = track;
     this.plan = plan;
+
     return { cues: plan.cues.length, installMs: this.installMs, budgetMs: PLAN_BUDGET_MS };
   }
 
   planInfo(): { cues: unknown[]; installMs: number; budgetMs: number } {
     if (!this.plan) this.loadTrack();
+
     return { cues: this.plan?.cues ?? [], installMs: this.installMs, budgetMs: PLAN_BUDGET_MS };
   }
 
@@ -223,12 +231,15 @@ export class SimulatorShow {
   private async tick(): Promise<void> {
     if (!this.plan || !this.recording) return;
     this.beat += BEATS_PER_TICK;
+
     if (this.beat > 320) this.beat = 1.6;
     const out = renderFrame(this.plan, this.beat, [this.fixture()]);
     const buf = out.get(`sim-${H6076_MAC}`);
+
     if (!buf) return;
     const cells: Array<[number, number, number]> = [];
     const rgb = new Uint8Array(H6076_ZONES * 3);
+
     for (let i = 0; i < H6076_ZONES; i++) {
       const r = buf[i * 3] ?? 0;
       const g = buf[i * 3 + 1] ?? 0;
@@ -239,6 +250,7 @@ export class SimulatorShow {
       rgb[i * 3 + 1] = lit[1];
       rgb[i * 3 + 2] = lit[2];
     }
+
     // Blackout travels as an all-zero paint on the armed stream, never a
     // power command: the sim (and hardware) keeps the channel armed.
     this.send(envelope(paint(rgb, 0)));
@@ -249,16 +261,20 @@ export class SimulatorShow {
   frames(): TestFrame[] {
     const records = this.recording?.records ?? [];
     const out: TestFrame[] = [];
+
     for (const r of records) {
       if (r.kind !== "razer") continue;
+
       try {
         const pt = (JSON.parse(r.text) as { msg: { data: { pt: string } } }).msg.data.pt;
         const decoded = decodeRaw(new Uint8Array(Buffer.from(pt, "base64")));
+
         // B0 paint only: grad, nbSeg, then 3 bytes per zone. Arm frames
         // (B1) and zoned paints (B4) never feed this channel.
         if (!decoded || decoded.opcode !== OPCODE.RGB_STREAM || decoded.payload.length < 2) continue;
         const n = decoded.payload[1] ?? 0;
         const cells: Array<[number, number, number]> = [];
+
         for (let i = 0; i < n && 2 + i * 3 + 2 < decoded.payload.length; i++) {
           cells.push([
             decoded.payload[2 + i * 3] ?? 0,
@@ -266,32 +282,40 @@ export class SimulatorShow {
             decoded.payload[2 + i * 3 + 2] ?? 0,
           ]);
         }
+
         out.push({ fixture: `sim-${H6076_MAC}`, cells, sentAtMs: r.atMs });
       } catch {
         // A malformed record never breaks the channel; skip it.
       }
     }
+
     return out;
   }
 
   commands(): TestCommand[] {
     const out: TestCommand[] = [];
+
     for (const r of this.recording?.records ?? []) {
       if (r.kind === "turn") {
         out.push({ cmd: "turn" });
         continue;
       }
+
       if (r.kind === "colorwc") {
         let kelvin: number | undefined;
+
         try {
           const data = (JSON.parse(r.text) as { msg: { data: { colorTemInKelvin?: unknown } } }).msg.data;
+
           if (typeof data.colorTemInKelvin === "number") kelvin = data.colorTemInKelvin;
         } catch {
           // Keep the row; kelvin stays undefined.
         }
+
         out.push({ cmd: "colorwc", kelvin });
       }
     }
+
     return out;
   }
 
@@ -301,6 +325,7 @@ export class SimulatorShow {
     // same bytes the sim received.
     const frames = this.frames();
     const last = frames[frames.length - 1] ?? this.lastFrame;
+
     return { cells: last?.cells ?? [] };
   }
 
@@ -317,6 +342,7 @@ export class SimulatorShow {
       this.resumedAt = "bar";
       void this.tick().catch(() => undefined);
     }
+
     return { resumedAt: this.resumedAt };
   }
 
@@ -331,7 +357,9 @@ export class SimulatorShow {
     const before = this.frames().length;
     await new Promise((r) => setTimeout(r, ms));
     const after = this.frames().length;
+
     if (after <= before) await this.tick();
+
     return { frozenMs: ms };
   }
 
@@ -340,19 +368,23 @@ export class SimulatorShow {
       clearInterval(this.timer);
       this.timer = null;
     }
+
     // Ending look: one zero paint, then disarm, then close the sockets.
     // The zero paint is recorded so the journey can observe it.
     if (this.recording) {
       this.send(envelope(paint(new Uint8Array(H6076_ZONES * 3), 0)));
       this.send(envelope(arm(false)));
     }
+
     await new Promise((r) => setTimeout(r, 30));
     this.sender?.close();
     this.sender = null;
+
     if (this.sim) {
       await this.sim.stop();
       this.sim = null;
     }
+
     return { endingLookSent: true, streamsDisarmed: true, dbFlushed: true };
   }
 

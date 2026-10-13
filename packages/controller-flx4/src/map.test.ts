@@ -20,7 +20,9 @@ interface Row {
 }
 
 const NOTE_STATUS = { 1: 0x90, 2: 0x91 } as const;
+
 const CC_STATUS = { 1: 0xb0, 2: 0xb1 } as const;
+
 const PAD_STATUS = { 1: [0x97, 0x98], 2: [0x99, 0x9a] } as const;
 
 // Group 1, DECK, per deck channel.
@@ -122,6 +124,7 @@ const PROW_ROWS: ReadonlyArray<{ status: number; data1: number; id: string; deck
 
 function allRows(): Row[] {
   const rows: Row[] = [];
+
   for (const deck of [1, 2] as const) {
     for (const item of DECK_LIST) {
       const isCc = item.kind === "jog" || item.kind.startsWith("cc14");
@@ -134,6 +137,7 @@ function allRows(): Row[] {
         kind: item.kind,
       });
     }
+
     for (const { mode, base } of PAD_BASES) {
       for (let pad = 1; pad <= 8; pad += 1) {
         for (const shift of [false, true]) {
@@ -151,9 +155,11 @@ function allRows(): Row[] {
         }
       }
     }
+
     const cc = CC_STATUS[deck];
     const note = NOTE_STATUS[deck];
     const prefix = `deck${deck}`;
+
     const mixerRows: ReadonlyArray<{ status: number; data1: number; id: string; kind: Flx4ControlKind; shift?: boolean }> = [
       { status: cc, data1: 0x04, id: "trim", kind: "cc14-msb" },
       { status: cc, data1: 0x24, id: "trim", kind: "cc14-lsb" },
@@ -170,13 +176,16 @@ function allRows(): Row[] {
       { status: note, data1: 0x54, id: "head-cue", kind: "button" },
       { status: note, data1: 0x68, id: "head-cue-shift", kind: "button", shift: true },
     ];
+
     for (const item of mixerRows) {
       rows.push({ status: item.status, data1: item.data1, id: `mixer.${prefix}.${item.id}`, deck, shift: item.shift ?? false, kind: item.kind });
     }
   }
+
   for (const item of PROW_ROWS) {
     rows.push({ status: item.status, data1: item.data1, id: item.id, deck: item.deck, shift: item.shift ?? false, kind: item.kind });
   }
+
   return rows;
 }
 
@@ -184,27 +193,34 @@ describe("flx4 map (P-11-flx4-map)", () => {
   it("decodes every control of the capture with the right deck", () => {
     const decoder = new Flx4Decoder();
     let atNs = 0n;
+
     for (const row of allRows()) {
       atNs += 1_000_000n;
       const event = decoder.decode({ status: row.status, data1: row.data1, data2: 0x7f, receivedAtNs: atNs });
       expect(event.type, `${row.id} at ${row.status.toString(16)}:${row.data1.toString(16)}`).toBe("control");
+
       if (event.type !== "control") continue;
       const where = `${row.id} ${row.status.toString(16)}:${row.data1.toString(16)}`;
       expect(event.id, where).toBe(row.id);
       expect(event.deck, where).toBe(row.deck);
       expect(event.shift, where).toBe(row.shift);
       expect(event.kind, where).toBe(row.kind);
+
       if (row.padIndex !== undefined) expect(event.padIndex, where).toBe(row.padIndex);
+
       if (row.padMode !== undefined) expect(event.padMode, where).toBe(row.padMode);
     }
+
     expect(decoder.unknownCount).toBe(0);
   });
 
   it("covers the whole map: no control without a capture row", () => {
     const captured = new Set(allRows().map((row) => `${row.status}:${row.data1}:${row.id}:${row.shift}`));
+
     const missing = FLX4_CONTROLS.filter(
       (control) => !captured.has(`${control.status}:${control.data1}:${control.id}:${control.shift}`),
     ).map((control) => `${control.id} ${control.status.toString(16)}:${control.data1.toString(16)} shift=${control.shift}`);
+
     expect(missing).toEqual([]);
   });
 
@@ -212,6 +228,7 @@ describe("flx4 map (P-11-flx4-map)", () => {
     const decoder = new Flx4Decoder();
     const unknown = decoder.decode({ status: 0x90, data1: 0x7e, data2: 0x40, receivedAtNs: 5n });
     expect(unknown.type).toBe("unknown");
+
     if (unknown.type === "unknown") expect([...unknown.raw]).toEqual([0x90, 0x7e, 0x40]);
     const malformed = decoder.decodeBytes([0xb0], 6n);
     expect(malformed.type).toBe("unknown");
@@ -223,6 +240,7 @@ describe("flx4 map (P-11-flx4-map)", () => {
 
   it("reconstructs 14-bit pairs monotonically across the full travel", () => {
     const decoder = new Flx4Decoder();
+
     const continuous: ReadonlyArray<{ status: number; msb: number; lsb: number }> = [
       { status: 0xb0, msb: 0x00, lsb: 0x20 },
       { status: 0xb1, msb: 0x00, lsb: 0x20 },
@@ -235,22 +253,27 @@ describe("flx4 map (P-11-flx4-map)", () => {
       { status: 0xb6, msb: 0x08, lsb: 0x28 },
       { status: 0xb4, msb: 0x02, lsb: 0x22 },
     ];
+
     for (const pair of continuous) {
       let previous = -1;
       let atNs = 0n;
       const steps: number[] = [];
+
       for (let value = 0; value < FOURTEEN_BIT_STEPS; value += 137) steps.push(value);
       steps.push(FOURTEEN_BIT_STEPS);
+
       for (const value of steps) {
         const msb = value >> 7;
         const lsb = value & 0x7f;
         atNs += 1_000n;
         const partial = decoder.decode({ status: pair.status, data1: pair.msb, data2: msb, receivedAtNs: atNs });
         expect(partial.type).toBe("control");
+
         if (partial.type === "control") expect(partial.complete).toBe(false);
         atNs += 1_000n;
         const event = decoder.decode({ status: pair.status, data1: pair.lsb, data2: lsb, receivedAtNs: atNs });
         expect(event.type).toBe("control");
+
         if (event.type !== "control") continue;
         expect(event.complete).toBe(true);
         const expected = fourteenBit(msb, lsb) / FOURTEEN_BIT_STEPS;
@@ -258,6 +281,7 @@ describe("flx4 map (P-11-flx4-map)", () => {
         expect(event.value).toBeGreaterThanOrEqual(previous);
         previous = event.value;
       }
+
       expect(previous).toBeCloseTo(1, 12);
     }
   });

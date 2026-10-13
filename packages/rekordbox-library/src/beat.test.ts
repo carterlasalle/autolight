@@ -16,19 +16,26 @@ import {
 } from "./beat.js";
 
 const GRIDS = 10_000;
+
 const ROUND_TRIP_SECONDS_TOLERANCE = 1e-6;
+
 const ROUND_TRIP_BEATS_TOLERANCE = 1e-9;
+
 const BENCH_BEATS = 2000;
+
 const BENCH_MAPPINGS = 1_000_000;
+
 const BENCH_LIMIT_MS = 250;
 
 function mulberry32(seed: number): () => number {
   let state = seed >>> 0;
+
   return () => {
     state = (state + 0x6d2b79f5) >>> 0;
     let t = state;
     t = Math.imul(t ^ (t >>> 15), t | 1);
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
@@ -36,11 +43,13 @@ function mulberry32(seed: number): () => number {
 function variableTempoGrid(rand: () => number, beatCount: number, startMs: number): BeatGridLike & { beats: BeatAnchor[] } {
   const beats: BeatAnchor[] = [];
   let timeMs = startMs;
+
   for (let i = 0; i < beatCount; i++) {
     const bpm = 80 + rand() * 100;
     beats.push({ index: i, beatInBar: ((i % 4) + 1) as 1 | 2 | 3 | 4, sourceTimeMs: timeMs, bpm });
     timeMs += (60 / bpm) * 1000;
   }
+
   return { beats };
 }
 
@@ -74,6 +83,7 @@ describe("beat domain", () => {
   // assertion, not the wall time.
   it("round trips 10,000 generated variable-tempo grids within 1e-6 s", { timeout: 60_000 }, () => {
     const rand = mulberry32(20260930);
+
     for (let g = 0; g < GRIDS; g++) {
       const beatCount = 4 + Math.floor(rand() * 60);
       const startMs = rand() * 60_000;
@@ -81,6 +91,7 @@ describe("beat domain", () => {
       const gridSecondsStart = grid.beats[0]!.sourceTimeMs / 1000;
       const gridSecondsEnd = grid.beats[beatCount - 1]!.sourceTimeMs / 1000;
       const span = gridSecondsEnd - gridSecondsStart;
+
       for (let sample = 0; sample < 12; sample++) {
         // Some samples deliberately fall outside the grid: the edge policy
         // extrapolates, so the round trip must hold there too.
@@ -100,6 +111,7 @@ describe("beat domain", () => {
     const grid = variableTempoGrid(rand, 128, 1_000);
     let previousSeconds = -Infinity;
     let previousBeat = -Infinity;
+
     for (let i = -30; i <= 160; i++) {
       const beat = (i / 2) as Beat;
       const seconds = beatToSourceSeconds(grid, beat);
@@ -134,14 +146,17 @@ describe("beat domain", () => {
     const grid = variableTempoGrid(mulberry32(99), BENCH_BEATS, 0);
     const started = performance.now();
     let accumulator = 0;
+
     for (let i = 0; i < BENCH_MAPPINGS / 2; i++) {
       const beat = ((i % (BENCH_BEATS * 2)) / 2) as Beat;
       accumulator += beatToSourceSeconds(grid, beat);
     }
+
     for (let i = 0; i < BENCH_MAPPINGS / 2; i++) {
       const seconds = ((i % (BENCH_BEATS * 2)) / 2) as Seconds;
       accumulator += sourceSecondsToBeat(grid, seconds);
     }
+
     const elapsedMs = performance.now() - started;
     expect(Number.isFinite(accumulator)).toBe(true);
     expect(elapsedMs).toBeLessThan(BENCH_LIMIT_MS);

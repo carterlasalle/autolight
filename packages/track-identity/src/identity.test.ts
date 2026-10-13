@@ -50,6 +50,7 @@ describe("alias graph", () => {
     let n = 0;
     const first = resolveTrackId(store, { rekordboxId: "101", canonicalPath: "/a.mp3", fileHash: "h1" }, () => `t${++n}`);
     const rebuilt = new MemoryAliasStore();
+
     for (const row of store.all()) rebuilt.insert(row);
     expect(rebuilt.trackIdForAlias("rb:101")).toBe(first.trackId);
     expect(rebuilt.trackIdForAlias(`path:${normalizePath("/a.mp3")}`)).toBe(first.trackId);

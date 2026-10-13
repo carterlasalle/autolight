@@ -23,8 +23,10 @@ interface ProlinkVector {
 }
 
 const fixturePath = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "protocol-fixtures", "rekordbox", "golden", "prolink-vectors.json");
+
 // Reason for the cast: this is our own committed fixture, shaped below.
 const fixture = JSON.parse(readFileSync(fixturePath, "utf8")) as { vectors: ProlinkVector[] };
+
 const vectors = fixture.vectors;
 
 describe("PRO DJ LINK decode (T-LIVE-05)", () => {
@@ -34,8 +36,10 @@ describe("PRO DJ LINK decode (T-LIVE-05)", () => {
       expect(bytes.length, `${vector.name} length`).toBe(vector.length);
       const decoded = decodeProlinkPacket(bytes);
       expect(decoded.kind, vector.name).toBe(vector.kind);
+
       if (decoded.kind === "malformed" || !vector.fields) continue;
       const fields = vector.fields;
+
       if (decoded.kind === "beat") {
         expect(decoded.header.deviceName).toBe(fields["deviceName"]);
         expect(decoded.deviceNumber).toBe(fields["deviceNumber"]);
@@ -45,6 +49,7 @@ describe("PRO DJ LINK decode (T-LIVE-05)", () => {
         expect(decoded.bpm).toBe(fields["bpm"]);
         expect(decoded.beatInBar).toBe(fields["beatInBar"]);
       }
+
       if (decoded.kind === "status") {
         expect(decoded.trackId).toBe(fields["trackId"]);
         expect(decoded.trackSlot).toBe(fields["trackSlot"]);
@@ -54,6 +59,7 @@ describe("PRO DJ LINK decode (T-LIVE-05)", () => {
         expect(decoded.sync).toBe(fields["sync"]);
         expect(decoded.beatInBar).toBe(fields["beatInBar"]);
       }
+
       if (decoded.kind === "keepalive") {
         expect(decoded.deviceNumber).toBe(fields["deviceNumber"]);
       }
@@ -108,6 +114,7 @@ describe("PRO DJ LINK decode (T-LIVE-05)", () => {
     const packet = buildBeatPacket({ deviceName: "CDJ-1", deviceNumber: 1, nextBeatMs: 500, pitchRaw: 0x110000, bpm: 128 });
     const decoded = decodeProlinkPacket(packet);
     expect(decoded.kind).toBe("beat");
+
     if (decoded.kind === "beat") expect(pitchPercent(decoded.pitch)).toBeCloseTo(6.25, 6);
   });
 });

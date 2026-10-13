@@ -35,26 +35,35 @@ export class MatterBridge implements Service {
 
   start(): ServiceStatus {
     if (this.port !== null) return this.status();
+
     try {
       const port = this.opts.spawn?.();
+
       if (port === undefined) {
         this.tracker.set("degraded", "Matter utility process not wired (controller lands with the Matter task)");
+
         return this.status();
       }
+
       port.onMessage((msg) => {
         this.tracker.count("inbound");
         this.inbound.push(msg);
+
         if (this.inbound.length > 64) this.inbound.shift();
+
         for (const listener of this.listeners) listener(msg);
       });
       port.onExit((code) => {
         this.tracker.count("exits");
         this.port = null;
         const limit = this.opts.maxRestarts ?? 3;
+
         if (this.restarts >= limit) {
           this.tracker.set("degraded", `Matter controller exited (code ${code ?? "unknown"}); restart limit ${limit} reached`);
+
           return;
         }
+
         this.restarts += 1;
         this.tracker.count("restarts");
         this.start();
@@ -64,6 +73,7 @@ export class MatterBridge implements Service {
     } catch (err) {
       this.tracker.set("degraded", `Matter controller failed to start: ${messageOf(err)}`);
     }
+
     return this.status();
   }
 
@@ -71,14 +81,17 @@ export class MatterBridge implements Service {
     try {
       this.port?.kill();
     } catch { /* teardown never throws */ }
+
     this.port = null;
     this.tracker.set("stopped");
+
     return this.status();
   }
 
   status(): ServiceStatus {
     this.tracker.setCounter("process", this.port === null ? 0 : 1);
     this.tracker.setCounter("restarts", this.restarts);
+
     return this.tracker.status();
   }
 
@@ -86,11 +99,13 @@ export class MatterBridge implements Service {
     if (this.port === null) return false;
     this.port.postMessage(msg);
     this.tracker.count("outbound");
+
     return true;
   }
 
   onMessage(listener: (msg: unknown) => void): () => void {
     this.listeners.add(listener);
+
     return () => {
       this.listeners.delete(listener);
     };
@@ -105,5 +120,6 @@ let instance: MatterBridge | null = null;
 
 export function getMatterBridge(opts: MatterBridgeOptions = {}): MatterBridge {
   instance ??= new MatterBridge(opts);
+
   return instance;
 }

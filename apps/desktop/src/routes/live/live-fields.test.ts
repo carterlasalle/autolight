@@ -40,6 +40,7 @@ describe("live deck fields (T-UI-02, spec 90)", () => {
       { type: "section-look", startBeat: 0, durationBeats: 32, intensity: 0.5, target: "PRIMARY", priority: 10 },
       { type: "white-hit", startBeat: 40, durationBeats: 0.25, intensity: 1, target: "ALL", priority: 100 },
     ];
+
     expect(predictiveLabel(cues as never[], 32)).toBe("DROP IN 8");
   });
   it("prefers drops over breakdowns over builds", () => {
@@ -47,6 +48,7 @@ describe("live deck fields (T-UI-02, spec 90)", () => {
       { type: "breakdown-look", startBeat: 40, durationBeats: 16, intensity: 0.25, target: "AMBIENT", priority: 40 },
       { type: "white-hit", startBeat: 48, durationBeats: 0.25, intensity: 1, target: "ALL", priority: 100 },
     ];
+
     expect(predictiveLabel(cues as never[], 32)).toBe("DROP IN 16");
     expect(nextPhraseBeat(33)).toBe(64);
   });

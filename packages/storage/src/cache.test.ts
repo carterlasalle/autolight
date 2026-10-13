@@ -44,11 +44,13 @@ function seed(): Store {
     venueClass: venueClassHash(["segments"]),
     configHash: "cfg1",
   });
+
   return store;
 }
 
 function counts(store: Store): Record<string, number> {
   const one = (sql: string): number => Number(store.get<{ n: number }>(sql)?.n ?? 0);
+
   return {
     tracks: one("SELECT COUNT(*) AS n FROM tracks"),
     artifacts: one("SELECT COUNT(*) AS n FROM analysis_artifacts"),
@@ -61,6 +63,7 @@ function counts(store: Store): Record<string, number> {
 describe("cache versioning and selective invalidation (T-DATA-03, spec 82)", () => {
   it("invalidates analysis-dependent artifacts only when the analyzer version changes (P-82)", () => {
     const store = seed();
+
     try {
       const report = invalidate(store, { rule: "analyzer", analyzerVersion: "a2" });
       expect(report.deleted).toEqual({ analysis_artifacts: 1, analysis_runs: 1 });
@@ -76,6 +79,7 @@ describe("cache versioning and selective invalidation (T-DATA-03, spec 82)", () 
 
   it("reuses TrackModels and regenerates plans when the planner version changes (P-82)", () => {
     const store = seed();
+
     try {
       const report = invalidate(store, { rule: "planner", plannerVersion: "p2" });
       expect(report.deleted).toEqual({ show_plans: 2 });
@@ -89,6 +93,7 @@ describe("cache versioning and selective invalidation (T-DATA-03, spec 82)", () 
 
   it("reuses TrackModels and semantic plans when the venue changes (P-82)", () => {
     const store = seed();
+
     try {
       const report = invalidate(store, { rule: "venue", venueClass: venueClassHash(["segments", "zones"]) });
       expect(report.deleted).toEqual({});
@@ -101,6 +106,7 @@ describe("cache versioning and selective invalidation (T-DATA-03, spec 82)", () 
 
   it("regenerates plans for the changed style only (P-82)", () => {
     const store = seed();
+
     try {
       const report = invalidate(store, { rule: "style", styleId: "house" });
       expect(report.deleted).toEqual({ show_plans: 1 });
@@ -114,6 +120,7 @@ describe("cache versioning and selective invalidation (T-DATA-03, spec 82)", () 
 
   it("invalidates only the changed track's derived rows on a library change (T-RBL-06)", () => {
     const store = seed();
+
     try {
       store.saveTrack("t2", JSON.stringify({ id: "t2", sourceIds: {} }), 180);
       store.saveArtifact("t2", "a2", "/cache/t2.json", "fp2", { configHash: "cfg1" });
@@ -129,6 +136,7 @@ describe("cache versioning and selective invalidation (T-DATA-03, spec 82)", () 
 
   it("invalidates plans built under another config snapshot (P-82)", () => {
     const store = seed();
+
     try {
       const report = invalidate(store, { rule: "config", configHash: "cfg2" });
       expect(report.deleted).toEqual({ show_plans: 2 });
@@ -153,6 +161,7 @@ describe("cache versioning and selective invalidation (T-DATA-03, spec 82)", () 
     const parts = { trackId: "t1", analyzerVersion: "a1", sourceFingerprint: "fp1", configHash: "cfg1" };
     expect(artifactKey(parts)).toBe(artifactKey({ ...parts }));
     expect(artifactKey(parts)).not.toBe(artifactKey({ ...parts, analyzerVersion: "a2" }));
+
     const planParts = {
       trackId: "t1",
       styleId: "club",
@@ -162,6 +171,7 @@ describe("cache versioning and selective invalidation (T-DATA-03, spec 82)", () 
       venueClass: "vc1",
       configHash: "cfg1",
     };
+
     expect(planKey(planParts)).not.toBe(planKey({ ...planParts, venueClass: "vc2" }));
     expect(planKey(planParts)).not.toBe(planKey({ ...planParts, configHash: "cfg2" }));
     expect(planKey(planParts)).not.toBe(planKey({ ...planParts, styleHash: "sh2" }));
@@ -186,6 +196,7 @@ describe("cache versioning and selective invalidation (T-DATA-03, spec 82)", () 
       artifact_path: "/cache/t1.json",
       created_at: null,
     };
+
     expect(artifactFresh(artifact, { trackId: "t1", analyzerVersion: "a1", sourceFingerprint: "fp1", configHash: "cfg1" })).toBe(true);
     expect(artifactFresh(artifact, { trackId: "t1", analyzerVersion: "a2", sourceFingerprint: "fp1", configHash: "cfg1" })).toBe(false);
     expect(artifactFresh(artifact, { trackId: "t1", analyzerVersion: "a1", sourceFingerprint: "fp2", configHash: "cfg1" })).toBe(false);
@@ -203,6 +214,7 @@ describe("cache versioning and selective invalidation (T-DATA-03, spec 82)", () 
       plan_json: "{}",
       created_at: null,
     };
+
     const key = {
       trackId: "t1",
       styleId: "club",
@@ -212,6 +224,7 @@ describe("cache versioning and selective invalidation (T-DATA-03, spec 82)", () 
       venueClass: "vc1",
       configHash: "cfg1",
     };
+
     expect(planFresh(plan, key)).toBe(true);
     expect(planFresh(plan, { ...key, venueClass: "vc2" })).toBe(false);
     expect(planFresh(plan, { ...key, plannerVersion: "p2" })).toBe(false);

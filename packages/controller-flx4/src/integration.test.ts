@@ -28,23 +28,30 @@ function deckEvent(
 describe("flx4 composite integration (T-FLX-06)", () => {
   it("converts deck-aware decoder events with channel-derived decks", () => {
     const decoder = new Flx4Decoder();
+
     // Deck 1 PLAY on channel 1, deck 2 PLAY on channel 2: same Data 1.
     const d1 = feedEventFromDecoded(
       decoder.decode({ status: 0x90, data1: 0x0b, data2: 0x7f, receivedAtNs: at(0) }),
     );
+
     const d2 = feedEventFromDecoded(
       decoder.decode({ status: 0x91, data1: 0x0b, data2: 0x7f, receivedAtNs: at(10) }),
     );
+
     expect(d1).toMatchObject({ deck: 1, control: "play", value: 1 });
     expect(d2).toMatchObject({ deck: 2, control: "play", value: 1 });
+
     // 14-bit tempo MSB+LSB on deck 2 reconstructs monotonically.
     const t1 = feedEventFromDecoded(
       decoder.decode({ status: 0xb1, data1: 0x00, data2: 0x40, receivedAtNs: at(20) }),
     );
+
     expect(t1).toBeNull(); // MSB alone is incomplete
+
     const t2 = feedEventFromDecoded(
       decoder.decode({ status: 0xb1, data1: 0x20, data2: 0x00, receivedAtNs: at(21) }),
     );
+
     expect(t2).toMatchObject({ deck: 2, control: "tempo" });
     expect(t2?.value ?? 0).toBeCloseTo(0x2000 / 16383, 4);
   });
@@ -53,11 +60,13 @@ describe("flx4 composite integration (T-FLX-06)", () => {
     const decoder = new Flx4Decoder();
     const feed = new Flx4Feed();
     const seen: { deck: number; control: string; value: number }[] = [];
+
     const composite = {
       ingestControllerEvent: (event: { deck: 1 | 2 | 0; control: string; value: number; pad: number | null; atNs: bigint }) => {
         seen.push({ deck: event.deck, control: event.control, value: event.value });
       },
     };
+
     // Recorded session on real bytes: LOAD deck 1, PLAY, tempo pair, channel
     // fader pair, crossfader pair. Each 14-bit MSB arrives incomplete and is
     // kept as unknown; the completed LSB carries the full value.
@@ -71,11 +80,14 @@ describe("flx4 composite integration (T-FLX-06)", () => {
       [0xb6, 0x1f, 0x30],
       [0xb6, 0x3f, 0x08],
     ];
+
     let ms = 0;
+
     for (const [status, data1, data2] of session) {
       feed.ingestDecoded(decoder.decode({ status, data1, data2, receivedAtNs: at(ms) }));
       ms += 10;
     }
+
     expect(feed.unknownEvents()).toHaveLength(3);
     const drained = driveCompositeFromFeed(feed, composite);
     expect(drained).toBeGreaterThan(0);
@@ -110,18 +122,23 @@ describe("flx4 composite integration (T-FLX-06)", () => {
     const decoder = new Flx4Decoder();
     const feed = new Flx4Feed();
     const compositeSeen: string[] = [];
+
     const composite = {
       ingestControllerEvent: (event: { deck: 1 | 2 | 0; control: string; value: number; pad: number | null; atNs: bigint }) => {
         compositeSeen.push(`${event.deck}:${event.control}`);
       },
     };
+
     const applied: string[] = [];
     const model = { apply: (event: { type: string }) => applied.push(event.type) };
     const listeners = new Set<(event: never) => void>();
+
     const service = { onEvent: (listener: (event: never) => void) => {
       listeners.add(listener);
+
       return () => listeners.delete(listener);
     } };
+
     const wiring = subscribeServiceToComposite(
       service,
       model,
@@ -129,9 +146,11 @@ describe("flx4 composite integration (T-FLX-06)", () => {
       composite,
       feed,
     );
+
     const emit = (event: never): void => {
       for (const listener of listeners) listener(event);
     };
+
     emit(decoder.decode({ status: 0x90, data1: 0x0b, data2: 0x7f, receivedAtNs: at(0) }) as never);
     expect(applied).toEqual(["control"]);
     expect(wiring.signals()).toHaveLength(1);
@@ -168,6 +187,7 @@ describe("expressive hints (T-FLX-05)", () => {
       [deckEvent(1, "filter", 0.55, 1000)],
       [deckEvent(1, "filter", 0.5, 0)],
     );
+
     expect(hints).toHaveLength(0);
   });
 
@@ -176,6 +196,7 @@ describe("expressive hints (T-FLX-05)", () => {
       [deckEvent(2, "channel-fader", 0.8, 1000)],
       [deckEvent(2, "channel-fader", 0.1, 0)],
     );
+
     expect(hints).toHaveLength(1);
     const { mapped } = mapHintToMixer(hints[0]!, audibleCtx([2]));
     expect(mapped).toEqual({ action: "advance-intro", stage: "impacts" });
@@ -201,10 +222,12 @@ describe("expressive hints (T-FLX-05)", () => {
     const killMapped = mapHintToMixer(kill, audibleCtx());
     expect(killMapped.mapped).toEqual({ action: "ignore", reason: "kill arms re-entry" });
     expect(killMapped.used.used).toBe(false);
+
     const reentry = deriveExpressiveHints(
       [deckEvent(1, "eq-low", 0.8, 5000)],
       [deckEvent(1, "eq-low", 0, 0)],
     )[0]!;
+
     expect(reentry.detail).toBe("re-entry");
     const { mapped, used } = mapHintToMixer(reentry, audibleCtx());
     expect(mapped).toMatchObject({ action: "mark-bass-reentry" });

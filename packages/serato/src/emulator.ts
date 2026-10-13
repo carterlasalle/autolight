@@ -85,20 +85,24 @@ function autoLoopMessage(deckId: number, on: boolean): OscMessage {
 /** Scripted timeline for one spec 119 action the Remote protocol can express. */
 export function seratoActionScript(action: SeratoAction): SeratoScriptStep[] {
   const steps: SeratoScriptStep[] = [];
+
   const add = (atMs: number, message: OscMessage): void => {
     steps.push({ atMs, message });
   };
+
   switch (action) {
     case "load-deck-1":
       for (const [i, message] of trackMessages(1, "/music/fixture-a.mp3", "Fixture A", "Emulator").entries()) {
         add(i * 4, message);
       }
+
       add(20, playheadMessage(1, 0, 0, 124));
       break;
     case "load-deck-2":
       for (const [i, message] of trackMessages(2, "/music/fixture-b.mp3", "Fixture B", "Emulator").entries()) {
         add(i * 4, message);
       }
+
       add(20, playheadMessage(2, 0, 0, 126));
       break;
     case "play":
@@ -155,6 +159,7 @@ export function seratoActionScript(action: SeratoAction): SeratoScriptStep[] {
       break;
     case "two-decks":
       for (const step of seratoActionScript("load-deck-1")) add(step.atMs, step.message);
+
       for (const step of seratoActionScript("load-deck-2")) add(step.atMs + 40, step.message);
       add(140, playheadMessage(1, 4, 1, 124));
       add(160, playheadMessage(2, 2, 1, 126));
@@ -165,9 +170,11 @@ export function seratoActionScript(action: SeratoAction): SeratoScriptStep[] {
       add(20, autoLoopMessage(1, true));
       add(24, osc("/Status/Deck/Loop/BeatLength", deckIndex(1), arg.f(4)));
       add(60, playheadMessage(1, 30, 1, 124));
+
       for (const [i, message] of trackMessages(1, "/music/fixture-c.mp3", "Fixture C", "Emulator").entries()) {
         add(120 + i * 4, message);
       }
+
       add(160, playheadMessage(1, 0, 0, 128));
       break;
     case "eject-deck-1":
@@ -176,6 +183,7 @@ export function seratoActionScript(action: SeratoAction): SeratoScriptStep[] {
       add(80, osc("/Status/Deck/Song/Valid", deckIndex(1), arg.f(0)));
       break;
   }
+
   return steps.sort((a, b) => a.atMs - b.atMs);
 }
 
@@ -235,6 +243,7 @@ export class SeratoRemoteEmulator {
       for (const message of this.reader.push(chunk)) {
         this.receivedMessages.push(message);
         this.recorded.push({ atMs: Date.now(), bytes: frameOsc(message), direction: "received" });
+
         for (const waiter of [...this.waiters]) {
           if (!waiter.match(message)) continue;
           this.waiters.splice(this.waiters.indexOf(waiter), 1);
@@ -252,17 +261,21 @@ export class SeratoRemoteEmulator {
     this.send(osc("/StreamMgmt/Authorize/Request", arg.b(nonce)));
     const response = await this.awaitMessage("/StreamMgmt/Authorize/Response");
     const digest = response.args.find((a) => a.type === "b");
+
     if (!digest) throw new Error("Authorize response carried no digest blob");
+
     if (digest.value.length !== 16) throw new Error(`Authorize digest was ${digest.value.length} bytes, expected 16`);
     this.send(osc("/StreamMgmt/Pairing/Pair", arg.s(this.options.peerName ?? "SDJ @ emulator"), arg.s(this.options.peerUuid ?? "Serato DJ"), arg.i(0)));
     const pair = await this.awaitMessage("/StreamMgmt/Pairing/Pair");
     const active = pair.args.find((a) => a.type === "i");
+
     if (active?.value !== 1) throw new Error("server did not reply to Pair with isActive=1");
     const register = await this.awaitMessagePrefix("/Register/Status/");
     // The subscription burst ends with the mixer topic; waiting for it proves
     // every /Register/Status/... frame has arrived before we read them back.
     await this.awaitMessage("/Register/Status/Video/Mixer/Crossfader");
     const topics = [register, ...this.receivedMessages.filter((m) => m.address.startsWith("/Register/Status/")).map((m) => m.address)];
+
     return { topics: [...new Set(topics)], digestBytes: digest.value.length };
   }
 
@@ -285,9 +298,11 @@ export class SeratoRemoteEmulator {
   async playAction(action: SeratoAction, speed = 4): Promise<void> {
     const steps = seratoActionScript(action);
     let previousAt = 0;
+
     for (const step of steps) {
       const waitMs = (step.atMs - previousAt) / speed;
       previousAt = step.atMs;
+
       if (waitMs > 0) await new Promise<void>((resolve) => setTimeout(resolve, waitMs));
       this.sendAt(step.message, step.atMs);
     }
@@ -329,21 +344,25 @@ export class SeratoRemoteEmulator {
 
   private async awaitMessagePrefix(prefix: string): Promise<string> {
     const message = await this.awaitPredicate((m) => m.address.startsWith(prefix), `no ${prefix}* from server`);
+
     return message.address;
   }
 
   private awaitPredicate(match: (message: OscMessage) => boolean, onTimeout: string): Promise<OscMessage> {
     const existing = this.receivedMessages.find(match);
+
     if (existing) return Promise.resolve(existing);
     const { promise, resolve, reject } = Promise.withResolvers<OscMessage>();
     const waiter = { match, resolve, reject, onTimeout };
     this.waiters.push(waiter);
     setTimeout(() => {
       const index = this.waiters.indexOf(waiter);
+
       if (index === -1) return;
       this.waiters.splice(index, 1);
       reject(new Error(onTimeout));
     }, 4000);
+
     return promise;
   }
 }

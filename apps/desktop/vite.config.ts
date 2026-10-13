@@ -5,6 +5,7 @@ import { readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execSync } from "node:child_process";
+
 const root = dirname(fileURLToPath(import.meta.url));
 
 // Build SHA: short HEAD + dirty flag + timestamp, baked at bundle time so the
@@ -13,17 +14,23 @@ const root = dirname(fileURLToPath(import.meta.url));
 function buildInfo(): { sha: string; dirty: boolean; builtAt: string } {
   let sha = "unknown";
   let dirty = false;
+
   try {
     sha = execSync("git rev-parse --short HEAD", { cwd: root }).toString().trim();
     dirty = execSync("git status --porcelain", { cwd: root }).toString().trim().length > 0;
   } catch { /* not a git checkout: stay unknown */ }
+
   return { sha, dirty, builtAt: new Date().toISOString() };
 }
+
 const info = buildInfo();
+
 const workspaceSrc = join(root, "..", "..", "packages");
+
 const workspaceAlias = Object.fromEntries(
   readdirSync(workspaceSrc).map((p) => [`@autolight/${p}`, join(workspaceSrc, p, "src", "index.ts")]),
 );
+
 // Browser-safe subpaths (T-TRU-04 spine fix). Vite matches string aliases
 // by prefix, so a barrel like `@autolight/rekordbox-live` swallows any
 // `/subpath` when the object form is used. The regex below maps every

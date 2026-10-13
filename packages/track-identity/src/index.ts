@@ -5,6 +5,9 @@
 // and hash ever seen for a TrackId lives in the alias graph, which persists
 // in the `track_aliases` table (packages/storage) across restarts.
 export * from "./alias.js";
+
 export * from "./fingerprint.js";
+
 export * from "./hash.js";
+
 export * from "./seed.js";

@@ -9,9 +9,11 @@ import { introductionStage, mixDown, type DeckMix, type LayerTag } from "./index
 // then its exclusive impacts, decided by layer tag (spec 67).
 
 const trackA = { id: "a", sourceIds: {} } satisfies TrackIdentity;
+
 const trackB = { id: "b", sourceIds: {} } satisfies TrackIdentity;
 
 const BEAT = 64;
+
 const fixtures: Fixture[] = [makeFixture("f1", 6, 0, 1, ["PRIMARY", "SECONDARY"])];
 
 const cue = (over: Partial<ShowCue> & Pick<ShowCue, "type">): ShowCue => ({
@@ -37,14 +39,17 @@ function atWeight(weight: number): { layers: LayerTag[]; cues: ShowCue[]; hash: 
     impactStrength: 0.5,
     cues: incomingCues,
   };
+
   const outgoing: DeckMix = {
     state: makeDeck({ deckId: 1, channelFader: 1, crossfader: 1, master: false, track: trackA }),
     beat: BEAT,
     impactStrength: 0.4,
     cues: [cue({ type: "section-look", target: "PRIMARY", priority: 12 })],
   };
+
   const mixed = mixDown(incoming, outgoing);
   const plan: ShowPlan = { schemaVersion: 1, plannerVersion: "x", trackId: "t", styleId: "s", seed: "a", cues: mixed.cues };
+
   return {
     // The incoming deck is the first mix argument, so its layers carry side "a".
     layers: mixed.layers.filter((l) => l.side === "a").map((l) => l.tag),

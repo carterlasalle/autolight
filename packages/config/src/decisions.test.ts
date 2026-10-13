@@ -11,10 +11,12 @@ const knownKeys = new Set(KEYS.map((k) => k.key));
 describe("decision switch metadata", () => {
   it("covers DS-01 to DS-36 contiguously", () => {
     expect(DECISION_IDS).toHaveLength(36);
+
     for (let i = 1; i <= 36; i += 1) {
       const id = `DS-${String(i).padStart(2, "0")}`;
       expect(decisionFor(id).ds).toBe(id);
     }
+
     expect(() => decisionFor("DS-99")).toThrow(/unknown-decision/);
   });
 
@@ -24,11 +26,13 @@ describe("decision switch metadata", () => {
       expect(decision.measurements.length, decision.ds).toBeGreaterThanOrEqual(1);
       expect(decision.tasks.length, decision.ds).toBeGreaterThanOrEqual(1);
       expect(decision.title.length, decision.ds).toBeGreaterThan(0);
+
       for (const option of decision.options) {
         expect(option.summary.length, `${decision.ds}:${option.id}`).toBeGreaterThan(0);
         expect(option.pros.length, `${decision.ds}:${option.id}`).toBeGreaterThan(0);
         expect(option.cons.length, `${decision.ds}:${option.id}`).toBeGreaterThan(0);
       }
+
       // 36 excepted: the only switch with a single option is the build-time one.
       if (decision.ds !== "DS-30") expect(decision.options.length, decision.ds).toBeGreaterThanOrEqual(2);
     }
@@ -39,7 +43,9 @@ describe("decision switch metadata", () => {
       const ids = decision.options.map((o) => o.id);
       const reachable = ids.includes(decision.defaultMode) || decision.defaultMode === decision.combined;
       expect(reachable, `${decision.ds} default ${decision.defaultMode}`).toBe(true);
+
       if (decision.combined !== null) expect(decision.combined.length, decision.ds).toBeGreaterThan(0);
+
       // 25 and 30 are pure choices: there is nothing to combine.
       if (decision.ds === "DS-25" || decision.ds === "DS-30") expect(decision.combined).toBeNull();
     }
@@ -47,6 +53,7 @@ describe("decision switch metadata", () => {
 
   it("binds every runtime switch to a real registry key", () => {
     let bound = 0;
+
     for (const decision of DECISIONS) {
       if (decision.key === null) continue;
       bound += 1;
@@ -54,6 +61,7 @@ describe("decision switch metadata", () => {
       expect(knownKeys.has(decision.key), `${decision.ds} -> ${decision.key}`).toBe(true);
       expect(decisionForConfigKey(decision.key)?.ds).toBe(decision.ds);
     }
+
     expect(bound).toBeGreaterThanOrEqual(25);
     expect(decisionForConfigKey("runtime.clock.spinWindowMs")).toBeNull();
   });

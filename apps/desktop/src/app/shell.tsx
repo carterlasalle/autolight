@@ -6,6 +6,7 @@ import { Routes } from "../routes/index.js";
 import { useShell, invoke } from "./store.js";
 import { useLiveCursor } from "./resolve-live.js";
 import { shortcutFor } from "./shortcuts.js";
+
 // App shell (spec 83 src/app, spec 88-89): titlebar + sidebar + workspace +
 // statusbar. Screens live in src/routes and src/features; the shell owns no
 // timing and no I/O beyond the typed intents it forwards.
@@ -26,27 +27,36 @@ export function Shell(): JSX.Element {
       if (cancelled) return;
       const envelope = raw as { ok?: boolean; value?: unknown } | null;
       const saved = envelope && envelope.ok !== false && typeof envelope.value === "string" ? envelope.value : null;
+
       if (saved === "preview" || saved === "ax-beat" || saved === "prolink" || saved === "soundswitch") {
         if (useShell.getState().followMode !== saved) useShell.getState().set({ followMode: saved });
       }
     });
+
     return () => { cancelled = true; };
   }, [route]);
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       const el = event.target as HTMLElement | null;
+
       if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA")) return;
+
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
         window.dispatchEvent(new CustomEvent("autolight:palette"));
+
         return;
       }
+
       const ch = shortcutFor(event.key);
+
       if (ch === "master/freeze") void invoke(ch, { version: 1, frozen: true });
       else if (ch === "master/resume") void invoke(ch, { version: 1, at: "bar" });
       else if (ch) void invoke(ch, { version: 1 });
     };
+
     window.addEventListener("keydown", onKeyDown);
+
     return () => { window.removeEventListener("keydown", onKeyDown); };
   }, []);
 

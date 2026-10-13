@@ -45,6 +45,7 @@ function strengthOf(ev: { readonly strength?: number | undefined }): number {
 
 function clampIntensity(v: number, style: PlannerStyle): number {
   const [lo, hi] = style.intensityRange;
+
   return Math.min(hi, Math.max(lo, v));
 }
 
@@ -59,9 +60,11 @@ export function planEvent(
   moved: boolean,
 ): PlannedEvent | null {
   const floor = eventConfidenceFloor(type, config);
+
   if (confidence < floor * 0.5) return null;
   const soft = confidence < floor;
   const span = Math.max(0, (endBeat ?? beat + 4) - beat);
+
   switch (type) {
     case "build-start":
       return {
@@ -114,6 +117,7 @@ export function planEvent(
           moved,
         };
       }
+
       // Confident drops that pass the impact-aggression floor stay in the
       // event layer as impacts; the drop engine adds the white hit and body.
       return {
@@ -295,9 +299,11 @@ export function planTrackEvents(
   movedEvents: Readonly<Record<string, number>>,
 ): PlannedEvent[] {
   const out: PlannedEvent[] = [];
+
   for (const ev of track.musicalEvents) {
     const movedTo = movedEvents[`${ev.type}@${ev.beat}`];
     const beat = movedTo ?? ev.beat;
+
     const planned = planEvent(
       ev.type,
       beat,
@@ -308,9 +314,11 @@ export function planTrackEvents(
       config,
       movedTo !== undefined,
     );
+
     // A confident drop that is not soft is programmed by the drop engine
     // (contrast.ts), not here; planEvent returns null for it by design.
     if (planned) out.push(planned);
   }
+
   return out;
 }

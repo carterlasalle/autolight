@@ -61,6 +61,7 @@ export interface SidecarRun {
 export type SidecarRunner = (command: SidecarCommand, stdin: string) => Promise<SidecarRun>;
 
 export const SIDECAR_TIMEOUT_MS = 30_000;
+
 export const SIDECAR_MAX_OUTPUT_BYTES = 64 * 1024 * 1024;
 
 export const SIDECAR_SCRIPT = String.raw`"""Read-only Rekordbox library reader (autolight sidecar protocol)."""
@@ -160,14 +161,17 @@ export function runSidecarProcess(command: SidecarCommand, stdin: string, timeou
     let stdout = "";
     let stderr = "";
     let settled = false;
+
     const timer = setTimeout(() => {
       if (settled) return;
       settled = true;
       child.kill("SIGKILL");
       reject(new Error(`sidecar timed out after ${timeoutMs} ms`));
     }, timeoutMs);
+
     child.stdout.on("data", (chunk: Buffer) => {
       stdout += chunk.toString("utf8");
+
       if (stdout.length > SIDECAR_MAX_OUTPUT_BYTES) child.kill("SIGKILL");
     });
     child.stderr.on("data", (chunk: Buffer) => {
@@ -191,6 +195,7 @@ export function runSidecarProcess(command: SidecarCommand, stdin: string, timeou
 
 function isSidecarPayload(value: unknown): value is SidecarPayload {
   if (typeof value !== "object" || value === null || !("ok" in value)) return false;
+
   return typeof value.ok === "boolean";
 }
 
@@ -206,7 +211,9 @@ function parseJsonLine(line: string): unknown {
 
 function parsePayloadError(line: string): string | undefined {
   const parsed = parseJsonLine(line);
+
   if (typeof parsed !== "object" || parsed === null || !("error" in parsed)) return undefined;
+
   return typeof parsed.error === "string" ? parsed.error : undefined;
 }
 
@@ -217,21 +224,28 @@ export async function readLibraryViaSidecar(
 ): Promise<SidecarResult> {
   const startedAt = Date.now();
   const run = options.run ?? ((command: SidecarCommand, stdin: string) => runSidecarProcess(command, stdin, options.timeoutMs));
+
   try {
     const result = await run(options.command ?? DEFAULT_SIDECAR_COMMAND, JSON.stringify(request));
     const lastLine = result.stdout.trim().split("\n").pop() ?? "null";
+
     if (result.code !== 0) {
       const reported = parsePayloadError(lastLine);
       const detail = reported ?? (result.stderr.trim().split("\n").slice(-1)[0] ?? "");
+
       return { ok: false, error: `sidecar exited ${result.code}: ${detail.slice(0, 400)}`, durationMs: Date.now() - startedAt };
     }
+
     const parsed = parseJsonLine(lastLine);
+
     if (parsed === undefined || !isSidecarPayload(parsed)) {
       return { ok: false, error: "sidecar returned an unexpected payload", durationMs: Date.now() - startedAt };
     }
+
     return { ...parsed, durationMs: Date.now() - startedAt };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+
     return { ok: false, error: message, durationMs: Date.now() - startedAt };
   }
 }
@@ -265,13 +279,17 @@ export class SidecarReader implements LibrarySource {
 
   static async open(config: SidecarReaderConfig): Promise<SidecarReader> {
     const { run, command, timeoutMs, ...request } = config;
+
     const options = {
       ...(run === undefined ? {} : { run }),
       ...(command === undefined ? {} : { command }),
       ...(timeoutMs === undefined ? {} : { timeoutMs }),
     };
+
     const result = await readLibraryViaSidecar(request, options);
+
     if (!result.ok) throw new Error(result.error ?? "pyrekordbox sidecar failed");
+
     return new SidecarReader(result, result.durationMs, request, options);
   }
 
@@ -285,10 +303,13 @@ export class SidecarReader implements LibrarySource {
 
   trackRows(query: TrackQuery = {}): SqlRow[] {
     const rows = this.payload.tracks ?? [];
+
     const searched = query.search === undefined || query.search === ""
       ? rows
       : rows.filter((row) => matchesSearch(row, query.search as string));
+
     const offset = query.offset ?? 0;
+
     return searched.slice(offset, query.limit === undefined ? undefined : offset + query.limit);
   }
 
@@ -298,6 +319,7 @@ export class SidecarReader implements LibrarySource {
 
   trackCount(search?: string): number {
     if (search === undefined || search === "") return this.counts().tracks;
+
     return (this.payload.tracks ?? []).filter((row) => matchesSearch(row, search)).length;
   }
 
@@ -324,6 +346,7 @@ export class SidecarReader implements LibrarySource {
   /** Attempt a write through the sidecar's handle; SQLite must reject it. */
   async probeWrite(): Promise<{ rejected: boolean; error: string | null }> {
     const result = await readLibraryViaSidecar({ ...this.request, probeWrite: true }, this.options);
+
     return result.writeProbe ?? { rejected: false, error: result.error ?? "sidecar reported no probe outcome" };
   }
 
@@ -334,6 +357,7 @@ export class SidecarReader implements LibrarySource {
 
 function matchesSearch(row: SqlRow, needle: string): boolean {
   const lower = needle.toLowerCase();
+
   return ["Title", "artistName", "FolderPath"].some((column) =>
     String(row[column] ?? "").toLowerCase().includes(lower),
   );

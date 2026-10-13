@@ -83,50 +83,70 @@ export const FLX4_FEED_DEFAULT_CAPACITY = 256;
 // everything else returns null and the caller keeps it as `unknown`.
 export function feedEventFromDecoded(event: Flx4Event): Flx4FeedEvent | null {
   if (event.type === "unknown") return null;
+
   if (!event.complete) return null;
   const atNs = event.receivedAtNs;
+
   if (event.group === "deck") {
     const deck = event.deck;
+
     if (deck === null) return null;
     const id = event.id.slice(`deck${deck}.`.length);
+
     if (id === "play") return { deck, control: "play", value: event.on ? 1 : 0, pad: null, atNs };
+
     if (id === "cue") return { deck, control: "cue", value: event.on ? 1 : 0, pad: null, atNs };
+
     if (id === "sync" || id === "sync-master") {
       return event.on ? { deck, control: "sync", value: 1, pad: null, atNs } : null;
     }
+
     if (id === "loop-in" || id === "loop-in-adjust") {
       return event.on ? { deck, control: "loop-in", value: 1, pad: null, atNs } : null;
     }
+
     if (id === "loop-out" || id === "loop-out-adjust") {
       return event.on ? { deck, control: "loop-out", value: 1, pad: null, atNs } : null;
     }
+
     if (id === "loop-exit" || id === "loop-exit-shift") {
       return event.on ? { deck, control: "loop-exit", value: 1, pad: null, atNs } : null;
     }
+
     if (id === "loop-halve" || id === "loop-halve-shift") {
       return event.on ? { deck, control: "loop-halve", value: 1, pad: null, atNs } : null;
     }
+
     if (id === "loop-double" || id === "loop-double-shift") {
       return event.on ? { deck, control: "loop-double", value: 1, pad: null, atNs } : null;
     }
+
     if (id === "tempo") return { deck, control: "tempo", value: event.value, pad: null, atNs };
+
     if (id === "jog.platter" || id === "jog.platter-pitch" || id === "jog.wheel" || id === "jog.search") {
       if (event.value === 0) return null;
+
       return { deck, control: "jog-move", value: event.value, pad: null, atNs };
     }
+
     if (id === "jog.touch" || id === "jog.touch-shift") {
       return { deck, control: "jog-touch", value: event.on ? 1 : 0, pad: null, atNs };
     }
+
     return null;
   }
+
   if (event.group === "pad") {
     const deck = event.deck;
+
     if (deck === null || event.padIndex === undefined || event.padMode === undefined) return null;
+
     if (event.padMode === "hot-cue" && !event.shift) {
       return event.on
         ? { deck, control: "hotcue", value: 1, pad: event.padIndex, atNs }
         : null;
     }
+
     if (event.padMode === "beat-loop" && event.shift && event.on) {
       return {
         deck,
@@ -136,39 +156,51 @@ export function feedEventFromDecoded(event: Flx4Event): Flx4FeedEvent | null {
         atNs,
       };
     }
+
     // Roll layer (Serato Roll pads, rekordbox Pad FX 2): hold is a roll.
     if (event.padMode === "pad-fx-2") {
       return { deck, control: "pad-roll", value: event.on ? 1 : 0, pad: event.padIndex, atNs };
     }
+
     if (event.padMode === "beat-jump" && event.on) {
       return { deck, control: "beat-jump", value: event.padIndex, pad: event.padIndex, atNs };
     }
+
     return null;
   }
+
   if (event.group === "mixer") {
     const deck = event.deck;
+
     if (event.id === "mixer.crossfader") {
       return { deck: 0, control: "crossfader", value: event.value, pad: null, atNs };
     }
+
     if (deck !== null) {
       if (event.id.endsWith(".channel-fader")) {
         return { deck, control: "channel-fader", value: event.value, pad: null, atNs };
       }
+
       if (event.id.endsWith(".eq-low")) {
         return { deck, control: "eq-low", value: event.value, pad: null, atNs };
       }
+
       if (event.id.endsWith(".cfx")) {
         return { deck, control: "filter", value: event.value, pad: null, atNs };
       }
     }
+
     return null;
   }
+
   if (event.group === "browse") {
     if (event.id.startsWith("browse.load") && event.on && event.deck !== null) {
       return { deck: event.deck, control: "load", value: 1, pad: null, atNs };
     }
+
     return null;
   }
+
   return null;
 }
 
@@ -194,20 +226,27 @@ export class Flx4Feed {
   // raw messages and unmapped controls are kept, never dropped silently.
   ingestDecoded(event: Flx4Event): Flx4FeedEvent | null {
     const mapped = feedEventFromDecoded(event);
+
     if (mapped === null) {
       this.unknown.push(event);
+
       return null;
     }
+
     this.push(mapped);
+
     return mapped;
   }
 
   push(event: Flx4FeedEvent): void {
     const key = this.keyOf(event);
+
     if (!this.buckets.has(key)) this.order.push(key);
     this.buckets.set(key, event);
+
     while (this.order.length > this.capacity) {
       const oldest = this.order.shift();
+
       if (oldest !== undefined && this.buckets.delete(oldest)) this.dropped += 1;
     }
   }
@@ -217,8 +256,10 @@ export class Flx4Feed {
       .map((key) => this.buckets.get(key))
       .filter((event): event is Flx4FeedEvent => event !== undefined)
       .sort((a, b) => (a.atNs < b.atNs ? -1 : a.atNs > b.atNs ? 1 : 0));
+
     this.buckets.clear();
     this.order = [];
+
     return out;
   }
 
@@ -248,7 +289,9 @@ export interface CompositeControllerInput {
 // Drain the feed into the composite provider. Returns the drained count.
 export function driveCompositeFromFeed(feed: Flx4Feed, composite: CompositeControllerInput): number {
   const events = feed.drain();
+
   for (const event of events) composite.ingestControllerEvent({ ...event });
+
   return events.length;
 }
 
@@ -283,13 +326,17 @@ export function subscribeServiceToComposite(
 ): Flx4CompositeWiring {
   const seen: Flx4Signal[] = [];
   let consumed = 0;
+
   const stop = service.onEvent((event) => {
     model.apply(event);
+
     for (const signal of derive(event)) seen.push(signal);
+
     if (feed.ingestDecoded(event) !== null) {
       consumed += driveCompositeFromFeed(feed, composite);
     }
   });
+
   return {
     stop,
     consumed: () => consumed,
@@ -346,16 +393,21 @@ export function deriveExpressiveHints(
   const enabled = new Set<ExpressiveHintKind>(opts.enabled ?? [...HINT_DEFAULTS.enabled]);
   const filterWindowMs = opts.filterWindowMs ?? HINT_DEFAULTS.filterWindowMs;
   const out: ExpressiveHint[] = [];
+
   for (const event of events) {
     const ms = Number(event.atNs) / 1e6;
+
     if (event.control === "filter" && event.deck !== 0 && enabled.has("filter-sweep")) {
       const deck = event.deck;
       const windowStart = ms - filterWindowMs;
+
       const trail = history
         .filter((h) => h.control === "filter" && h.deck === event.deck && Number(h.atNs) / 1e6 >= windowStart)
         .map((h) => h.value);
+
       trail.push(event.value);
       const sweep = Math.max(...trail) - Math.min(...trail);
+
       if (sweep >= 0.4) {
         const direction = event.value >= (trail[0] ?? event.value) ? 1 : -1;
         out.push({
@@ -373,6 +425,7 @@ export function deriveExpressiveHints(
         });
       }
     }
+
     if (event.control === "pad-roll" && enabled.has("roll")) {
       const deck = event.deck === 0 ? 1 : event.deck;
       out.push({
@@ -389,12 +442,16 @@ export function deriveExpressiveHints(
         used: false,
       });
     }
+
     if (event.control === "channel-fader" && event.deck !== 0 && enabled.has("fader-rise")) {
       const deck = event.deck;
+
       const previous = [...history]
         .reverse()
         .find((h) => h.control === "channel-fader" && h.deck === event.deck);
+
       const rise = event.value - (previous?.value ?? 0);
+
       if (event.value >= 0.3 && rise >= 0.2) {
         out.push({
           kind: "fader-rise",
@@ -411,6 +468,7 @@ export function deriveExpressiveHints(
         });
       }
     }
+
     if (
       (event.control === "loop-halve" || event.control === "loop-double") &&
       event.value >= 1 &&
@@ -431,6 +489,7 @@ export function deriveExpressiveHints(
         used: false,
       });
     }
+
     if (event.control === "loop-exit" && event.value >= 1 && enabled.has("loop-change")) {
       const deck = event.deck === 0 ? 1 : event.deck;
       out.push({
@@ -447,8 +506,10 @@ export function deriveExpressiveHints(
         used: false,
       });
     }
+
     if (event.control === "eq-low" && enabled.has("eq-kill")) {
       const deck = event.deck === 0 ? 1 : event.deck;
+
       if (event.value <= 0.05) {
         out.push({
           kind: "eq-kill",
@@ -467,6 +528,7 @@ export function deriveExpressiveHints(
         const killed = [...history]
           .reverse()
           .find((h) => h.control === "eq-low" && h.deck === event.deck && h.value <= 0.05);
+
         if (killed) {
           out.push({
             kind: "eq-kill",
@@ -484,6 +546,7 @@ export function deriveExpressiveHints(
         }
       }
     }
+
     if (
       (event.control === "play" ||
         event.control === "cue" ||
@@ -509,6 +572,7 @@ export function deriveExpressiveHints(
       });
     }
   }
+
   return out;
 }
 
@@ -546,58 +610,77 @@ export function mapHintToMixer(
   ctx: MixerHintContext,
 ): { mapped: MixerHintAction; used: ExpressiveHint } {
   const mark = (used: boolean): ExpressiveHint => ({ ...hint, used });
+
   switch (hint.kind) {
     case "filter-sweep": {
       if (!ctx.audible(hint.deck)) {
         return { mapped: { action: "ignore", reason: "deck not audible" }, used: mark(false) };
       }
+
       return { mapped: { action: "reduce-density", amount: Math.abs(hint.strength) }, used: mark(true) };
     }
+
     case "roll": {
       if (!ctx.audible(hint.deck)) {
         return { mapped: { action: "ignore", reason: "deck not audible" }, used: mark(false) };
       }
+
       const beats = hint.value ?? 0.5;
+
       return { mapped: { action: "subdivide-spatial", beats }, used: mark(true) };
     }
+
     case "fader-rise": {
       if (!ctx.audible(hint.deck)) {
         return { mapped: { action: "ignore", reason: "deck not audible" }, used: mark(false) };
       }
+
       const level = hint.value ?? 0;
       const stage = level >= 0.7 ? "impacts" : level >= 0.3 ? "rhythm" : "palette";
+
       return { mapped: { action: "advance-intro", stage }, used: mark(true) };
     }
+
     case "loop-change": {
       if (hint.detail === "release") {
         const windowMs = ctx.restraintWindowMs ?? HINT_DEFAULTS.restraintWindowMs;
         const last = ctx.lastImpactAtNs ?? null;
+
         if (last !== null && Number(hint.atNs - last) / 1e6 < windowMs) {
           return { mapped: { action: "ignore", reason: "impact restraint window" }, used: mark(false) };
         }
+
         if (!ctx.impactAllowed(hint.atNs)) {
           return { mapped: { action: "ignore", reason: "impact not allowed" }, used: mark(false) };
         }
+
         return { mapped: { action: "impact-on-next-beat", atNs: hint.atNs }, used: mark(true) };
       }
+
       if (!ctx.audible(hint.deck)) {
         return { mapped: { action: "ignore", reason: "deck not audible" }, used: mark(false) };
       }
+
       return { mapped: { action: "raise-cadence", amount: hint.strength }, used: mark(true) };
     }
+
     case "eq-kill": {
       if (hint.detail !== "re-entry") {
         return { mapped: { action: "ignore", reason: "kill arms re-entry" }, used: mark(false) };
       }
+
       if (!ctx.audible(hint.deck)) {
         return { mapped: { action: "ignore", reason: "deck not audible" }, used: mark(false) };
       }
+
       return { mapped: { action: "mark-bass-reentry", atNs: hint.atNs }, used: mark(true) };
     }
+
     case "transport": {
       if (!ctx.audible(hint.deck)) {
         return { mapped: { action: "ignore", reason: "deck not audible" }, used: mark(false) };
       }
+
       return { mapped: { action: "accent-phrase-change", control: hint.control ?? "play" }, used: mark(true) };
     }
   }

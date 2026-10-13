@@ -103,12 +103,15 @@ export class Flx4SignalDeriver {
 
   derive(event: Flx4Event, state: Flx4ControllerSnapshot): Flx4Signal[] {
     const signals: Flx4Signal[] = [];
+
     if (event.type === "unknown") return signals;
     const atNs = event.receivedAtNs;
+
     if (event.deck !== null) {
       const deck = event.deck;
       const jog = state.decks[deck].jog;
       const scratchNow = jog.scratchActive;
+
       if (scratchNow !== this.scratch[deck]) {
         this.scratch[deck] = scratchNow;
         const direction: -1 | 1 = jog.direction < 0 ? -1 : 1;
@@ -123,77 +126,101 @@ export class Flx4SignalDeriver {
         });
       }
     }
+
     if (event.group === "deck") {
       signals.push(...this.fromDeck(event, state));
+
       return signals;
     }
+
     if (event.group === "pad") {
       signals.push(...this.fromPad(event, state));
+
       return signals;
     }
+
     if (event.group === "mixer" && event.complete) {
       if (event.id === "mixer.crossfader") {
         signals.push({ kind: "crossfader", value: event.value, atNs, quality: "observed", source: "controller" });
       } else if (event.deck !== null && event.id.endsWith(".channel-fader")) {
         signals.push({ kind: "fader", deck: event.deck, value: event.value, atNs, quality: "observed", source: "controller" });
       }
+
       return signals;
     }
+
     if (event.group === "browse" && event.id.startsWith("browse.load") && event.on && event.deck !== null) {
       signals.push({ kind: "load", deck: event.deck, atNs, quality: "observed", source: "controller" });
     }
+
     return signals;
   }
 
   /** Scratch trace a runtime caller folds into its own scratch state. */
   scratchTrace(state: Flx4ControllerSnapshot, deck: Flx4Deck): { active: boolean; reversalNs: bigint[]; direction: -1 | 0 | 1 } {
     const jog = state.decks[deck].jog;
+
     return { active: jog.scratchActive, reversalNs: [...jog.reversals], direction: jog.direction };
   }
 
   private fromDeck(event: Flx4ControlEvent, state: Flx4ControllerSnapshot): Flx4Signal[] {
     const deck = event.deck;
+
     if (deck === null) return [];
     const atNs = event.receivedAtNs;
     const id = event.id.slice(`deck${deck}.`.length);
+
     if (id === "cue" && !event.shift) {
       return [{ kind: "cue-hold", deck, on: event.on, atNs, quality: "observed", source: "controller" }];
     }
+
     if (id === "loop-in" || id === "loop-out") {
       return event.on
         ? [{ kind: id === "loop-in" ? "loop-in" : "loop-out", deck, beats: null, atNs, quality: "estimated", source: "controller" }]
         : [];
     }
+
     if (id === "loop-halve" || id === "loop-double") {
       return event.on
         ? [{ kind: id, deck, beats: state.decks[deck].loop.beatLength, atNs, quality: "estimated", source: "controller" }]
         : [];
     }
+
     if (id === "loop-exit" && event.on) {
       const action = state.decks[deck].loop.lastAction;
+
       return [{ kind: action === "reloop" ? "reloop" : "loop-exit", deck, beats: null, atNs, quality: "estimated", source: "controller" }];
     }
+
     if ((id === "sync" || id === "sync-master") && event.on && !event.shift) {
       const sync = state.decks[deck].sync;
+
       return [{ kind: "sync", deck, on: sync.enabled === true, master: sync.master, atNs, quality: "estimated", source: "controller" }];
     }
+
     return [];
   }
 
   private fromPad(event: Flx4ControlEvent, state: Flx4ControllerSnapshot): Flx4Signal[] {
     const deck = event.deck;
+
     if (deck === null || event.padIndex === undefined || event.padMode === undefined) return [];
     const atNs = event.receivedAtNs;
     const base = { atNs, quality: "observed" as const, source: "controller" as const };
+
     if (event.padMode === "hot-cue" && !event.shift) {
       return event.on ? [{ kind: "hot-cue", deck, padIndex: event.padIndex, ...base }] : [];
     }
+
     if (event.padMode === "beat-loop" && !event.shift && event.on) {
       const beats = BEAT_LOOP_PAD_BEATS[event.padIndex - 1] ?? 1;
+
       return [{ kind: "beat-loop", deck, padIndex: event.padIndex, beats, ...base }];
     }
+
     if (event.padMode === "beat-loop" && event.shift && event.on) {
       const halves = event.padIndex <= 4;
+
       return [{
         kind: halves ? "loop-halve" : "loop-double",
         deck,
@@ -203,12 +230,16 @@ export class Flx4SignalDeriver {
         source: "controller",
       }];
     }
+
     if (event.padMode === "beat-jump" && event.on) {
       const factor = event.shift ? 16 : 1;
       const beats = (BEAT_JUMP_PAD_BEATS[event.padIndex - 1] ?? 1) * factor;
+
       return [{ kind: "beat-jump", deck, padIndex: event.padIndex, beats, ...base }];
     }
+
     const rollLayer = event.padMode === "pad-fx-2" && this.opts.djSoftware === "serato";
+
     if (rollLayer) {
       return [{
         kind: event.on ? "pad-roll-start" : "pad-roll-stop",
@@ -220,6 +251,7 @@ export class Flx4SignalDeriver {
         source: "controller",
       }];
     }
+
     return [{ kind: event.on ? "pad-press" : "pad-release", deck, padIndex: event.padIndex, padMode: event.padMode, ...base }];
   }
 }

@@ -7,43 +7,61 @@
 import { readdirSync, statSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 // (root resolved above: tools/qa -> tools -> repo root)
 
 function walk(dir, out = []) {
   let names = [];
+
   try { names = readdirSync(dir); } catch { return out; }
+
   for (const n of names) {
     if (n === "node_modules" || n === "dist" || n === ".venv" || n === "__pycache__") continue;
     const p = join(dir, n);
     let st;
+
     try { st = statSync(p); } catch { continue; }
+
     if (st.isDirectory()) walk(p, out);
     else if (/\.test\.(ts|tsx)$/.test(n) || /^test_.*\.py$/.test(n)) out.push(p);
-    else if (/\.journey\.ts$/.test(n) || /\.spec\.ts$/.test(n)) out.push(p);
+    else if (n.endsWith('.journey.ts') || n.endsWith('.spec.ts')) out.push(p);
     else if (/fault-injection\.(ts|tsx)$/.test(n)) out.push(p);
   }
+
   return out;
 }
 
 function classify(f) {
-  if (/\.property\.test\.ts$/.test(f)) return "property";
+  if (f.endsWith('.property.test.ts')) return "property";
+
   if (/test_.*_golden\.py$/.test(f) || /golden/.test(f)) {
     if (f.includes("analysis") || f.endsWith("test_analysis_golden.py")) return "analysis golden";
+
     if (f.includes("planner")) return "planner golden";
+
     return "renderer golden";
   }
+
   if (/apps\/desktop\/(e2e\/.*\.spec\.ts|journeys\/.*\.journey\.ts)$/.test(f)) return "desktop E2E";
+
   if (/replay/i.test(f)) return "protocol-replay";
+
   // SecFaultDocs T-QA-04 scope: the fault-injection transport plus its test.
   if (/fault-injection/i.test(f)) return "fault injection";
+
   if (/simulator|fault/i.test(f)) {
     if (/fault/i.test(f)) return "fault injection";
+
     return "device simulator";
   }
+
   if (/perf/i.test(f)) return "performance";
+
   if (/soak/i.test(f)) return "soak";
+
   if (/schema|contract/i.test(f)) return "schema";
+
   return "unit";
 }
 
@@ -55,7 +73,9 @@ const files = [
   ...walk(join(root, "apps", "desktop", "electron")),
   ...walk(join(root, "analysis", "tests")),
 ];
+
 const counts = {};
+
 for (const f of files) {
   const c = classify(f);
   counts[c] = (counts[c] ?? 0) + 1;
@@ -78,17 +98,25 @@ const CLASSES = ["unit", "schema", "property", "protocol-replay", "analysis gold
   "desktop E2E", "performance", "soak"];
 
 let failures = 0;
+
 for (const c of CLASSES) {
   const n = counts[c] ?? 0;
   console.log(`${c}: ${n} file(s)`);
+
   if (n === 0) { console.error(`MISSING class: ${c}`); failures++; }
 }
+
 for (const [cls, artifact, what] of required) {
   const ok = existsSync(join(root, artifact));
   console.log(`${cls} suite artifact ${artifact}: ${ok ? "present" : "MISSING"} (${what})`);
+
   if (!ok) { console.error(`MISSING required suite: ${what}`); failures++; }
 }
+
 const unique = new Set(files).size;
+
 console.log(`unique test files: ${unique} (S18)`);
+
 if (failures > 0) { console.error(`class check: ${failures} missing`); process.exit(1); }
+
 console.log("class check: all 12 classes present with required suites");

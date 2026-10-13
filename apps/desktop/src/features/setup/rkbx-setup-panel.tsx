@@ -35,6 +35,7 @@ function StepRow({ id, ok, detail }: { id: string; ok: boolean; detail: string }
 
 export function RkbxSetupPanel({ snapshot }: { snapshot: RkbxAssistantSnapshot }): JSX.Element {
   const { report } = snapshot;
+
   return (
     <div className="flex flex-col gap-2 text-sm">
       <div className="flex flex-wrap items-center gap-2">
@@ -76,6 +77,7 @@ export function RkbxSetupAssistant(): JSX.Element {
     void invoke("config/get", { version: 1, key: "live.rkbx.configPath" }).then((raw: unknown) => {
       if (cancelled) return;
       const envelope = raw as { ok?: boolean; value?: unknown } | null;
+
       if (envelope && envelope.ok !== false && typeof envelope.value === "string" && envelope.value.length > 0) {
         setConfigPath(envelope.value);
       }
@@ -83,10 +85,12 @@ export function RkbxSetupAssistant(): JSX.Element {
     void invoke("config/get", { version: 1, key: "live.rkbx.oscBind" }).then((raw: unknown) => {
       if (cancelled) return;
       const envelope = raw as { ok?: boolean; value?: unknown } | null;
+
       if (envelope && envelope.ok !== false && typeof envelope.value === "string" && envelope.value.length > 0) {
         setOscBind(envelope.value);
       }
     });
+
     return () => { cancelled = true; };
   }, []);
 

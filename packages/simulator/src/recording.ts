@@ -14,11 +14,13 @@ export interface RecordedDatagram {
 export function classifyDatagram(text: string): RecordedDatagram["kind"] {
   try {
     const cmd = (JSON.parse(text) as { msg?: { cmd?: unknown } }).msg?.cmd;
+
     if (cmd === "scan" || cmd === "turn" || cmd === "brightness" || cmd === "colorwc" ||
       cmd === "devStatus" || cmd === "status" || cmd === "razer") return cmd;
   } catch {
     // Falls through to "other" below.
   }
+
   return "other";
 }
 
@@ -56,7 +58,9 @@ export class FaultInjectingTransport {
 
   send(text: string): void {
     this.n += 1;
+
     if (this.faults.dropEvery && this.faults.dropEvery > 0 && this.n % this.faults.dropEvery === 0) return;
+
     const deliver = (t: string): void => {
       if (this.faults.latencyMs && this.faults.latencyMs > 0) {
         const timer = setTimeout(() => this.sender(t), this.faults.latencyMs);
@@ -65,6 +69,7 @@ export class FaultInjectingTransport {
         this.sender(t);
       }
     };
+
     if (this.faults.reorderHold) {
       if (this.held !== null) {
         const first = this.held;
@@ -73,9 +78,12 @@ export class FaultInjectingTransport {
       } else {
         this.held = text;
       }
+
       return;
     }
+
     deliver(text);
+
     if (this.faults.duplicateEvery && this.faults.duplicateEvery > 0 && this.n % this.faults.duplicateEvery === 0) {
       deliver(text);
     }

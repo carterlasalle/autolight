@@ -4,6 +4,7 @@
 import type { PlannerStyle } from "./types.js";
 
 export const STYLE_IDS = ["club", "house", "festival", "lounge", "pop", "dark", "minimal"] as const;
+
 export type BuiltInStyleId = (typeof STYLE_IDS)[number];
 
 function style(
@@ -139,4 +140,5 @@ export const STYLE_PROPERTIES = [
   "symmetry",
   "reactiveAmount",
 ] as const;
+
 export type StyleProperty = (typeof STYLE_PROPERTIES)[number];
