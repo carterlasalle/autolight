@@ -26,7 +26,7 @@ export interface BleClock {
 const wallClock: BleClock = {
   now: () => Date.now(),
   setTimeout: (fn, ms) => Number(setTimeout(fn, Math.max(0, ms))),
-  clearTimeout: () => undefined,
+  clearTimeout: (handle) => { clearTimeout(handle); },
 };
 
 export interface BleLinkPerDeviceConfig {
@@ -64,7 +64,9 @@ export class BleLink {
   private queue: QueuedWrite[] = [];
   private lastFlushAt = 0;
   private lastWriteAt = 0;
-  private lastSeenAt: number;
+  /** Last notify from the unit: the advertise-gap watchdog's only heartbeat.
+   * Writes are not liveness — a unit that stopped answering keeps writing. */
+  private lastNotifyAt: number;
   private readonly budgetHz: number;
   private readonly unmeasured: boolean;
   private readonly drainMs: number;
@@ -77,6 +79,10 @@ export class BleLink {
   private dropped = 0;
   private drainTimer: BleTimer | null = null;
   private reconnectTimer: BleTimer | null = null;
+  private reconnectResolve: (() => void) | null = null;
+  /** Bumped by cancelReconnect(): a waiter that outlives its cancellation
+   * must not connect over the open()/close() that cancelled it. */
+  private reconnectToken = 0;
   private closed = false;
 
   constructor(
@@ -90,7 +96,7 @@ export class BleLink {
     this.drainMs = Math.max(0, config.writeDrainMs ?? BLE_DEFAULTS.WRITE_DRAIN_MS);
     this.gapMs = Math.max(0, config.advertiseGapMs ?? 5000);
     this.backoff = config.backoffMs ?? [250, 1000, 5000];
-    this.lastSeenAt = this.clock.now();
+    this.lastNotifyAt = this.clock.now();
   }
 
   get budgetBadge(): string | null {
@@ -102,10 +108,21 @@ export class BleLink {
     if (this.closed) throw new Error(`ble link ${this.address} is closed`);
     this.notifyHandler = onNotify;
     this.cancelReconnect();
-    this.connection = await this.adapter.connect(this.address);
+    const connection = await this.adapter.connect(this.address);
+
+    // close() may have run while the connect was in flight: the connection it
+    // never learned about is released here, not leaked on a closed link.
+    if (this.closed) {
+      await connection.disconnect().catch(() => undefined);
+
+      return;
+    }
+
+    this.connection = connection;
     this.attachNotify();
     this.state = "connected";
     this.lastFlushAt = this.clock.now();
+    this.lastNotifyAt = this.clock.now();
   }
 
   private attachNotify(): void {
@@ -113,7 +130,7 @@ export class BleLink {
 
     if (handler === null) return;
     this.connection?.subscribe((notify) => {
-      this.lastSeenAt = this.clock.now();
+      this.lastNotifyAt = this.clock.now();
       handler(notify);
     });
   }
@@ -128,19 +145,18 @@ export class BleLink {
     const waiting = this.queue.length > 0;
     const now = this.clock.now();
     const spacing = 1000 / Math.max(1, this.budgetHz);
+    const connection = this.connection;
 
-    if (!waiting && now - this.lastFlushAt >= spacing) {
+    // The fast path needs a live connection: counting a write that never left
+    // (no connection while reconnecting) over-reports writesSent and loses the
+    // frame, so that case falls through to the queue below.
+    if (!waiting && connection !== null && now - this.lastFlushAt >= spacing) {
       this.lastFlushAt = now;
       this.lastWriteAt = now;
-      this.lastSeenAt = now;
-      const connection = this.connection;
       this.writesSent += 1;
-
-      if (connection !== null) {
-        void connection.write(frame.slice()).catch(() => {
-          this.onDrop();
-        });
-      }
+      void connection.write(frame.slice()).catch(() => {
+        this.onDrop(connection);
+      });
 
       return;
     }
@@ -162,13 +178,12 @@ export class BleLink {
     if (now - this.lastFlushAt < spacing) return;
     this.lastFlushAt = now;
     this.lastWriteAt = now;
-    this.lastSeenAt = now;
     const { frame } = head;
     this.queue = [];
     const connection = this.connection;
     this.writesSent += 1;
     void connection.write(frame).catch(() => {
-      this.onDrop();
+      this.onDrop(connection);
     });
   }
 
@@ -176,7 +191,7 @@ export class BleLink {
   tick(): void {
     this.pump();
 
-    if (this.state === "connected" && this.connection !== null && this.clock.now() - this.lastSeenAt > this.gapMs) {
+    if (this.state === "connected" && this.connection !== null && this.clock.now() - this.lastNotifyAt > this.gapMs) {
       void this.reconnect();
     }
   }
@@ -188,6 +203,9 @@ export class BleLink {
 
   /** Closes the link, holding it for the drain window after the last write. */
   async close(): Promise<void> {
+    // Idempotent: a second close() would otherwise clear the first one's drain
+    // timer and leave that drain wait, which only its own timer settles, hung.
+    if (this.closed) return;
     this.closed = true;
     this.cancelReconnect();
 
@@ -207,6 +225,9 @@ export class BleLink {
       });
     }
 
+    // Queued writes never went out: they count as dropped, or the caller has
+    // no signal that the command was lost (writesDroppedBudget is that signal).
+    this.dropped += this.queue.length;
     this.queue = [];
     const connection = this.connection;
     this.connection = null;
@@ -215,8 +236,15 @@ export class BleLink {
     if (connection !== null) await connection.disconnect();
   }
 
-  private onDrop(): void {
+  private onDrop(failed: BleConnection): void {
     this.dropped += 1;
+    // Release the connection that failed: reconnect() reads this.connection,
+    // which is empty by the time it runs, so nothing else would disconnect it.
+    void failed.disconnect().catch(() => undefined);
+
+    // Only the live connection failing means the link is down. A late failure
+    // from a superseded connection must not touch the newer, healthy one.
+    if (this.connection !== failed) return;
     this.connection = null;
 
     if (!this.closed) void this.reconnect();
@@ -224,6 +252,13 @@ export class BleLink {
 
   private async reconnect(): Promise<void> {
     if (this.closed || this.state === "reconnecting") return;
+    await this.attemptReconnect();
+  }
+
+  // One reconnect attempt. The guard sits in reconnect(); the retry after a
+  // failed connect comes here directly, so the state stays "reconnecting"
+  // instead of being faked to "connected" to slip past that guard.
+  private async attemptReconnect(): Promise<void> {
     this.state = "reconnecting";
     const stale = this.connection;
     this.connection = null;
@@ -234,50 +269,65 @@ export class BleLink {
     this.reconnects += 1;
     const delay = this.backoff[Math.min(this.backoffIndex, this.backoff.length - 1)] ?? 1000;
     this.backoffIndex += 1;
+    const attempt = this.reconnectToken;
+
+    await new Promise<void>((resolve) => {
+      this.reconnectResolve = resolve;
+      this.reconnectTimer = this.clock.setTimeout(() => {
+        this.reconnectTimer = null;
+        this.reconnectResolve = null;
+        resolve();
+      }, delay);
+    });
+
+    // Cancelled while the backoff was pending: whoever cancelled owns the link.
+    if (this.closed || attempt !== this.reconnectToken) return;
+    await this.connect(attempt);
+  }
+
+  private async connect(attempt: number): Promise<void> {
+    let connection: BleConnection;
 
     try {
-      await new Promise<void>((resolve) => {
-        this.reconnectTimer = this.clock.setTimeout(() => {
-          this.reconnectTimer = null;
-          resolve();
-        }, delay);
-      });
+      connection = await this.adapter.connect(this.address);
     } catch {
+      // The next attempt is scheduled here; the state stays "reconnecting".
+      if (!this.closed && attempt === this.reconnectToken) void this.attemptReconnect();
+
       return;
     }
 
-    if (this.closed) return;
-    await this.finishReconnect();
-  }
+    // close() ran while the connect was in flight: release what it never
+    // learned about instead of holding a connection on a closed link.
+    if (this.closed || attempt !== this.reconnectToken) {
+      await connection.disconnect().catch(() => undefined);
 
-  private async finishReconnect(): Promise<void> {
-    try {
-      this.connection = await this.adapter.connect(this.address);
-      this.attachNotify();
-      this.state = "connected";
-      this.backoffIndex = 0;
-      this.lastSeenAt = this.clock.now();
-      this.lastFlushAt = this.clock.now();
-      this.pump();
-    } catch {
-      if (this.closed) return;
-
-      if (this.state !== "reconnecting") {
-        void this.reconnect();
-
-        return;
-      }
-
-      this.state = "connected";
-      void this.reconnect();
+      return;
     }
+
+    this.connection = connection;
+    this.attachNotify();
+    this.state = "connected";
+    this.backoffIndex = 0;
+    this.lastNotifyAt = this.clock.now();
+    this.lastFlushAt = this.clock.now();
+    this.pump();
   }
 
   private cancelReconnect(): void {
+    this.reconnectToken += 1;
+
     if (this.reconnectTimer !== null) {
       this.clock.clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
+
+    // Settle the backoff wait: a waiter whose timer was cancelled would
+    // otherwise stay suspended forever.
+    const settle = this.reconnectResolve;
+
+    this.reconnectResolve = null;
+    settle?.();
   }
 
   status(): BleLinkStatus {

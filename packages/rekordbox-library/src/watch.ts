@@ -16,6 +16,7 @@
 // and a title edit drops nothing but the row cache.
 import { realpathSync as fsRealpathSync, statSync as fsStatSync, watch as fsWatch } from "node:fs";
 import type { FSWatcher } from "node:fs";
+import { dirname } from "node:path";
 import type { StatFile } from "./anlz.js";
 
 export type WatchEngine = "auto" | "native-events" | "polling";
@@ -125,7 +126,12 @@ export class LibraryWatcher {
   private timer: ReturnType<typeof setTimeout> | undefined;
   private interval: ReturnType<typeof setInterval> | undefined;
   private listeners: ((change: WatchChange) => void)[] = [];
-  private pending: WatchedFile[] = [];
+  // Queued files stay with their source: a native burst and a manual report
+  // that land in the same debounce window are two changes, not one attributed
+  // to whichever call re-armed the timer last.
+  private pending: { source: WatchSource; files: WatchedFile[] }[] = [];
+  private starting: Promise<void> | null = null;
+  private stopped = false;
 
   constructor(options: LibraryWatcherOptions) {
     this.files = options.files;
@@ -146,14 +152,38 @@ export class LibraryWatcher {
     };
   }
 
-  async start(): Promise<void> {
+  start(): Promise<void> {
+    // `??=` on an awaited value would let two concurrent calls each create a
+    // native watcher (the later assignment leaking the earlier one) and each
+    // arm its own interval. One in-flight promise, one start.
+    this.starting ??= this.startOnce();
+
+    return this.starting;
+  }
+
+  private async startOnce(): Promise<void> {
     if (this.engine !== "polling") {
-      this.native ??= await createNativeWatch();
-      await this.native.start(this.files, (path) => {
+      const native = this.native ?? await createNativeWatch();
+
+      // stop() ran while the engine was being created: a watcher made after
+      // shutdown is a leak, so it is closed here.
+      if (this.stopped) {
+        await native.stop();
+
+        return;
+      }
+
+      this.native = native;
+      await native.start(this.files, (path) => {
         this.nativeReported.add(path);
+        this.markSeen(path);
         this.queue(this.files.filter((file) => file.path === path), "native");
       });
+
+      if (this.stopped) return;
     }
+
+    if (this.stopped) return;
 
     if (this.engine !== "native-events") {
       this.interval = setInterval(() => {
@@ -163,10 +193,12 @@ export class LibraryWatcher {
   }
 
   async stop(): Promise<void> {
-    if (this.timer !== undefined) clearTimeout(this.timer);
+    this.stopped = true;
+    // Flush before tearing down: a change the debounce still holds already
+    // happened, and shutdown must not swallow it.
+    this.flushPending();
 
     if (this.interval !== undefined) clearInterval(this.interval);
-    this.timer = undefined;
     this.interval = undefined;
     await this.native?.stop();
   }
@@ -234,15 +266,48 @@ export class LibraryWatcher {
   // Debounce: OS events arrive in bursts while Rekordbox writes, so one
   // trailing edge reports them (library.watch.debounceMs).
   private queue(files: WatchedFile[], source: WatchSource): void {
-    this.pending.push(...files);
+    const group = this.pending.find((entry) => entry.source === source);
+
+    if (group === undefined) this.pending.push({ source, files: [...files] });
+    else group.files.push(...files);
+
     clearTimeout(this.timer);
     this.timer = setTimeout(() => {
-      const pending = this.pending;
-      this.pending = [];
-      this.timer = undefined;
-
-      if (pending.length > 0) this.emit(pending, source);
+      this.flushPending();
     }, this.debounceMs);
+  }
+
+  /** Report everything the debounce holds, one change per source. */
+  private flushPending(): void {
+    if (this.timer !== undefined) {
+      clearTimeout(this.timer);
+      this.timer = undefined;
+    }
+
+    const pending = this.pending;
+
+    this.pending = [];
+
+    for (const group of pending) {
+      if (group.files.length > 0) this.emit(group.files, group.source);
+    }
+  }
+
+  // A native event proves the file moved: refreshing its snapshot here keeps
+  // the periodic sweep from reporting the same change a second time.
+  private markSeen(path: string): void {
+    const index = this.files.findIndex((file) => file.path === path);
+    const file = this.files[index];
+
+    if (file === undefined) return;
+    const stats = this.statFile(path);
+
+    this.snapshots[index] = {
+      path: file.path,
+      kind: file.kind,
+      sizeBytes: stats?.sizeBytes ?? null,
+      mtimeMs: stats?.mtimeMs ?? null,
+    };
   }
 
   private emit(files: WatchedFile[], source: WatchSource): WatchChange {
@@ -283,6 +348,18 @@ export function invalidationForFiles(files: readonly WatchedFile[]): Invalidatio
   return (Object.keys(scopes) as InvalidationScope[]).sort();
 }
 
+// Value-aware column comparison. `!==` reports NaN and structurally equal
+// objects (JSON and BLOB columns) as changed every time, which would invalidate
+// the analysis and the plan for a row that did not move.
+function sameColumnValue<T, U>(left: T, right: U): boolean {
+  if (Object.is(left, right)) return true;
+
+  // Object.is already equated two NaNs; exactly one NaN is a change.
+  if (Number.isNaN(left) || Number.isNaN(right)) return false;
+
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
 /** Row-level diff of two library snapshots (added, removed, changed columns). */
 export function diffLibraryRows(prev: readonly LibraryRowSnapshot[], next: readonly LibraryRowSnapshot[]): LibraryRowDiff {
   const before = new Map(prev.map((row) => [row.rekordboxId, row.columns]));
@@ -298,7 +375,9 @@ export function diffLibraryRows(prev: readonly LibraryRowSnapshot[], next: reado
       continue;
     }
 
-    const columns = Object.keys(row.columns).filter((column) => old[column] !== row.columns[column]);
+    // Both key sets: a column that dropped out of the new row is a change too.
+    const columns = [...new Set([...Object.keys(old), ...Object.keys(row.columns)])]
+      .filter((column) => !sameColumnValue(old[column], row.columns[column]));
 
     if (columns.length > 0) changed.push({ rekordboxId: row.rekordboxId, columns });
   }
@@ -376,7 +455,7 @@ class ParcelWatcher implements NativeWatch {
     // the raw path. The callback still receives the original watched path so
     // downstream path filtering keeps working.
     const canonical = new Map(files.map((file) => [file.path, canonicalPath(file.path)] as const));
-    const dirs = new Set(files.map((file) => file.path.slice(0, file.path.lastIndexOf("/"))));
+    const dirs = new Set(files.map((file) => dirname(file.path)));
 
     for (const dir of dirs) {
       const subscription = await this.parcel.subscribe(

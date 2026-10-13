@@ -15,7 +15,7 @@
 // runs. A missing interpreter surfaces as a typed result, never a throw.
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import type { LibraryCounts, LibrarySource, PlaylistEntry, TrackQuery } from "./db.js";
+import { DEFAULT_PAGE_SIZE, type LibraryCounts, type LibrarySource, type PlaylistEntry, type TrackQuery } from "./db.js";
 import type { SqlRow } from "./driver.js";
 
 export interface SidecarRequest {
@@ -35,6 +35,9 @@ export interface SidecarPayload {
   counts?: LibraryCounts;
   dbVersion?: string | null;
   tracks?: SqlRow[];
+  /** True when `tracks` stopped at the request's `limit`: the row set is a
+   * page of the library, not the whole table. */
+  tracksTruncated?: boolean;
   playlists?: SqlRow[];
   songPlaylists?: (SqlRow & { PlaylistID: string; ContentID: string; TrackNo: number })[];
   history?: SqlRow[];
@@ -67,6 +70,7 @@ export const SIDECAR_MAX_OUTPUT_BYTES = 64 * 1024 * 1024;
 export const SIDECAR_SCRIPT = String.raw`"""Read-only Rekordbox library reader (autolight sidecar protocol)."""
 import json
 import sys
+from urllib.parse import quote
 
 TRACK_SELECT = """select c.*,
          ar.Name as artistName,
@@ -89,6 +93,12 @@ def rows(cur, sql, params=()):
     return [dict(zip(names, row)) for row in cur.fetchall()]
 
 
+def sql_literal(value) -> str:
+    """Quote a value as a SQL string literal: '' is SQLite's only escape, so a
+    key containing a quote cannot end the literal early."""
+    return "'%s'" % str(value).replace("'", "''")
+
+
 def main() -> int:
     req = json.loads(sys.stdin.read())
     db_path = req["dbPath"]
@@ -103,9 +113,11 @@ def main() -> int:
         from sqlcipher3 import dbapi2 as driver
     except ImportError:
         import sqlite3 as driver
-    con = driver.connect("file:%s?mode=ro" % db_path, uri=True)
+    # The path is a URI component (a '?', '#' or space would otherwise change
+    # what file or mode is opened) and the key is a SQL literal.
+    con = driver.connect("file:%s?mode=ro" % quote(db_path), uri=True)
     if encrypted:
-        con.execute("PRAGMA key='%s'" % key)
+        con.execute("PRAGMA key=%s" % sql_literal(key))
     con.execute("PRAGMA query_only=ON")
     cur = con.cursor()
     out = {"ok": True}
@@ -122,7 +134,11 @@ def main() -> int:
     cur.execute("select DBVersion from djmdProperty limit 1")
     version = cur.fetchone()
     out["dbVersion"] = version[0] if version else None
-    out["tracks"] = rows(cur, TRACK_SELECT, (int(req.get("limit", 5000)),))
+    tracks = rows(cur, TRACK_SELECT, (int(req.get("limit", 5000)),))
+    out["tracks"] = tracks
+    # The caller pages over these rows, so it is told when they are a page:
+    # counts["tracks"] is the table, this is what the dump actually holds.
+    out["tracksTruncated"] = counts["tracks"] > len(tracks)
     out["playlists"] = rows(cur, "select * from djmdPlaylist order by Seq")
     out["songPlaylists"] = rows(
         cur, "select PlaylistID, ContentID, TrackNo from djmdSongPlaylist order by PlaylistID, TrackNo"
@@ -160,28 +176,50 @@ export function runSidecarProcess(command: SidecarCommand, stdin: string, timeou
     const child = spawn(command.command, command.args, { stdio: ["pipe", "pipe", "pipe"] });
     let stdout = "";
     let stderr = "";
+    let stdoutBytes = 0;
+    let stderrBytes = 0;
     let settled = false;
 
-    const timer = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      child.kill("SIGKILL");
-      reject(new Error(`sidecar timed out after ${timeoutMs} ms`));
-    }, timeoutMs);
-
-    child.stdout.on("data", (chunk: Buffer) => {
-      stdout += chunk.toString("utf8");
-
-      if (stdout.length > SIDECAR_MAX_OUTPUT_BYTES) child.kill("SIGKILL");
-    });
-    child.stderr.on("data", (chunk: Buffer) => {
-      stderr += chunk.toString("utf8");
-    });
-    child.on("error", (error: Error) => {
+    // Settling here is what keeps the `close` handler from resolving with the
+    // oversized buffer: a runaway dump is an error, never a payload.
+    const fail = (error: Error): void => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      child.kill("SIGKILL");
       reject(error);
+    };
+
+    const timer = setTimeout(() => {
+      fail(new Error(`sidecar timed out after ${timeoutMs} ms`));
+    }, timeoutMs);
+
+    child.stdout.on("data", (chunk: Buffer) => {
+      if (settled) return;
+      stdoutBytes += chunk.byteLength;
+
+      if (stdoutBytes > SIDECAR_MAX_OUTPUT_BYTES) {
+        fail(new Error(`sidecar wrote more than ${SIDECAR_MAX_OUTPUT_BYTES} bytes to stdout`));
+
+        return;
+      }
+
+      stdout += chunk.toString("utf8");
+    });
+    child.stderr.on("data", (chunk: Buffer) => {
+      if (settled) return;
+      stderrBytes += chunk.byteLength;
+
+      if (stderrBytes > SIDECAR_MAX_OUTPUT_BYTES) {
+        fail(new Error(`sidecar wrote more than ${SIDECAR_MAX_OUTPUT_BYTES} bytes to stderr`));
+
+        return;
+      }
+
+      stderr += chunk.toString("utf8");
+    });
+    child.on("error", (error: Error) => {
+      fail(error);
     });
     child.on("close", (code: number | null) => {
       if (settled) return;
@@ -189,6 +227,10 @@ export function runSidecarProcess(command: SidecarCommand, stdin: string, timeou
       clearTimeout(timer);
       resolve({ code: code ?? -1, stdout, stderr });
     });
+    // The child can exit before reading stdin (no interpreter, instant
+    // failure) and EPIPE here would crash the host: the outcome is already
+    // reported through the error/close handlers above.
+    child.stdin.on("error", () => undefined);
     child.stdin.end(stdin);
   });
 }
@@ -261,6 +303,9 @@ export interface SidecarReaderConfig extends SidecarRequest {
 export class SidecarReader implements LibrarySource {
   readonly driver = "pyrekordbox-sidecar";
   readonly durationMs: number;
+  /** True when the dump stopped short of the table: `trackRows` pages over the
+   * rows the sidecar returned (the request's `limit`) and no further. */
+  readonly truncated: boolean;
   private readonly payload: SidecarPayload;
   private readonly request: SidecarRequest;
   private readonly options: { run?: SidecarRunner; command?: SidecarCommand; timeoutMs?: number };
@@ -273,6 +318,7 @@ export class SidecarReader implements LibrarySource {
   ) {
     this.payload = payload;
     this.durationMs = durationMs;
+    this.truncated = payload.tracksTruncated ?? false;
     this.request = request;
     this.options = options;
   }
@@ -309,8 +355,11 @@ export class SidecarReader implements LibrarySource {
       : rows.filter((row) => matchesSearch(row, query.search as string));
 
     const offset = query.offset ?? 0;
+    // The same page the SQLite reader returns for the same query: one
+    // DEFAULT_PAGE_SIZE page unless the caller asks for another size.
+    const limit = query.limit ?? DEFAULT_PAGE_SIZE;
 
-    return searched.slice(offset, query.limit === undefined ? undefined : offset + query.limit);
+    return searched.slice(offset, offset + limit);
   }
 
   trackRow(rekordboxId: string): SqlRow | undefined {
@@ -318,9 +367,13 @@ export class SidecarReader implements LibrarySource {
   }
 
   trackCount(search?: string): number {
-    if (search === undefined || search === "") return this.counts().tracks;
+    // Counted over the dump, the only rows this reader can yield: the table
+    // count would promise rows no page can reach (a truncated dump).
+    const rows = this.payload.tracks ?? [];
 
-    return (this.payload.tracks ?? []).filter((row) => matchesSearch(row, search)).length;
+    if (search === undefined || search === "") return rows.length;
+
+    return rows.filter((row) => matchesSearch(row, search)).length;
   }
 
   playlistRows(): SqlRow[] {
@@ -347,7 +400,14 @@ export class SidecarReader implements LibrarySource {
   async probeWrite(): Promise<{ rejected: boolean; error: string | null }> {
     const result = await readLibraryViaSidecar({ ...this.request, probeWrite: true }, this.options);
 
-    return result.writeProbe ?? { rejected: false, error: result.error ?? "sidecar reported no probe outcome" };
+    // No probe outcome means the script never attempted the write. Reporting
+    // that as `rejected: false` would read exactly like a permitted write, so
+    // an unverified handle fails loudly instead.
+    if (result.writeProbe === undefined) {
+      throw new Error(result.error ?? "sidecar reported no probe outcome");
+    }
+
+    return result.writeProbe;
   }
 
   close(): void {

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useShell, invoke } from "../app/store.js";
+import { useShell } from "../app/store.js";
 import { Button } from "./ui/button.js";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card.js";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select.js";
@@ -13,41 +13,77 @@ export function AudioSyncCard(): JSX.Element {
   const [level, setLevel] = useState(0);
   const streamRef = useRef<MediaStream | null>(null);
   const rafRef = useRef(0);
+  const ctxRef = useRef<AudioContext | null>(null);
+  const startingRef = useRef(false);
+  // deviceId per listed input, in the order the select shows: the stored index
+  // is a position in that list, never a stable device identifier.
+  const deviceIdsRef = useRef<string[]>([]);
+
+  // One source for the input list: the renderer's own enumeration. The main
+  // process reports no devices (listAudioDevices returns none by design), so a
+  // second IPC-fed list would only fight this one over index semantics.
+  const listDevices = async (): Promise<void> => {
+    const { audioDevice, set } = useShell.getState();
+
+    if (!navigator.mediaDevices) return;
+
+    try {
+      const inputs = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === "audioinput");
+
+      deviceIdsRef.current = inputs.map((d) => d.deviceId);
+
+      if (inputs.length === 0) return;
+      set({ audioDevices: inputs.map((d, i) => ({ index: i, name: d.label || `Input ${i + 1}` })) });
+
+      if (audioDevice === null) set({ audioDevice: 0 });
+    } catch {
+      set({ audioPermission: "denied" });
+    }
+  };
+
+  // Stops the capture: the RAF loop, the mic tracks and the context it fed. A
+  // context left open keeps counting against the page's audio-context budget.
+  const releaseCapture = (): void => {
+    cancelAnimationFrame(rafRef.current);
+    rafRef.current = 0;
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    const ctx = ctxRef.current;
+
+    ctxRef.current = null;
+    void ctx?.close();
+  };
 
   useEffect(() => {
-    void invoke("audio/devices", { version: 1 }).then((raw: unknown) => {
-      const envelope = raw as { ok?: boolean; devices?: { index: number; name: string }[] } | null;
-      const list = envelope && envelope.ok !== false && Array.isArray(envelope.devices) ? envelope.devices : [];
+    void listDevices();
+  }, []);
 
-      if (list.length > 0) s.set({ audioDevices: list });
-    });
-
+  useEffect(() => {
     return () => {
-      cancelAnimationFrame(rafRef.current);
-      streamRef.current?.getTracks().forEach((t) => t.stop());
+      releaseCapture();
     };
   }, []);
 
-  useEffect(() => {
-    void navigator.mediaDevices?.enumerateDevices().then((devs) => {
-      const inputs = devs
-        .filter((d) => d.kind === "audioinput")
-        .map((d, i) => ({ index: i, name: d.label || `Input ${i + 1}` }));
-
-      if (inputs.length > 0) {
-        s.set({ audioDevices: inputs, audioPermission: "granted" });
-
-        if (s.audioDevice === null) s.set({ audioDevice: inputs[0]?.index ?? 0 });
-      }
-    }).catch(() => { s.set({ audioPermission: "denied" }); });
-  }, []);
-
   const start = async (): Promise<void> => {
+    // A second Start would orphan the live stream, its RAF loop and its
+    // context: while a capture is live (or starting) this is a no-op.
+    if (startingRef.current || streamRef.current !== null) return;
+    startingRef.current = true;
+
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const selected = deviceIdsRef.current[s.audioDevice ?? -1] ?? "";
+
+      // The chosen input, by id: without the constraint the browser opens the
+      // system default and the select would claim a device it never opened.
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: selected === "" ? true : { deviceId: { exact: selected } },
+      });
+
       streamRef.current = stream;
       s.set({ audioPermission: "granted" });
       const ctx = new AudioContext();
+
+      ctxRef.current = ctx;
       const src = ctx.createMediaStreamSource(stream);
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 256;
@@ -60,20 +96,37 @@ export function AudioSyncCard(): JSX.Element {
 
         for (const v of data) peak = Math.max(peak, Math.abs(v - 128) / 128);
         setLevel(peak);
-        s.set({ audioLevel: peak, reactiveLevel: Math.min(1, peak * s.sensitivity) });
+        // Sensitivity is live control state: read it at use time, not from the
+        // render that started this loop.
+        const sensitivity = useShell.getState().sensitivity;
+
+        s.set({ audioLevel: peak, reactiveLevel: Math.min(1, peak * sensitivity) });
         rafRef.current = requestAnimationFrame(tick);
       };
 
       tick();
-    } catch {
-      s.set({ audioPermission: "denied" });
+      // The grant is what fills labels and real deviceIds in, so the list (and
+      // with it the select) becomes meaningful only now; then show the input
+      // that is actually capturing.
+      await listDevices();
+      const live = stream.getAudioTracks()[0]?.getSettings().deviceId ?? "";
+      const index = deviceIdsRef.current.indexOf(live);
+
+      if (index >= 0) s.set({ audioDevice: index });
+    } catch (err) {
+      // Only a refusal (or no input at all) is a permission verdict: a
+      // constraint failure from an unplugged input must not claim the mic is
+      // blocked.
+      const refused = err instanceof DOMException && (err.name === "NotAllowedError" || err.name === "NotFoundError");
+
+      if (refused || !(err instanceof DOMException)) s.set({ audioPermission: "denied" });
+    } finally {
+      startingRef.current = false;
     }
   };
 
   const stop = (): void => {
-    cancelAnimationFrame(rafRef.current);
-    streamRef.current?.getTracks().forEach((t) => t.stop());
-    streamRef.current = null;
+    releaseCapture();
     setLevel(0);
     s.set({ audioLevel: 0, reactiveLevel: 0 });
   };
