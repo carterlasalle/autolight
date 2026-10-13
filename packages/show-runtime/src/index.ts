@@ -202,8 +202,11 @@ export function scratchDetected(
 export function observeRate(scratch: ScratchState, state: DeckState): ScratchState {
   const previous = scratch.lastRate;
   const reversed = Math.sign(state.playRate) !== Math.sign(previous) && previous !== 0 && state.playRate !== 0;
-  const reversals = reversed ? [...scratch.reversals, state.receivedAtNs] : scratch.reversals;
-
+  // Prune to the reversal window on every tick so a long session between
+  // seeks cannot grow the array (or the per-tick scan) without bound.
+  const windowNs = BigInt(Math.round(REVERSAL_WINDOW_SECONDS * 1e9));
+  const kept = scratch.reversals.filter((ns) => state.receivedAtNs - ns <= windowNs);
+  const reversals = reversed ? [...kept, state.receivedAtNs] : kept;
   return { ...scratch, reversals, lastRate: state.playRate };
 }
 
@@ -244,10 +247,12 @@ function nextBoundary(beat: number, boundaries: number[]): number | null {
 
   return best;
 }
-
 // Quantized resume: beat and bar boundaries come from the native grid and
 // phrase boundaries from fused or PSSI phrases, never from multiples of 4 and
 // 16. `immediate` is really immediate, not rounded up (spec 134).
+// Degraded approximation: without a grid (or with an empty bar/phrase grid)
+// there are no native boundaries to quantize to, so the fallback keeps the
+// historical 1/4/16-beat multiples rather than refusing to resume.
 export function quantizeResume(beat: number, at: ResumeAt, grid?: ResumeGrid | null): number {
   if (at === "immediate") return beat;
 
@@ -342,7 +347,10 @@ export function setOverride(
   return { ...prev, kind: "none", resumeAt: at, whiteIntensity, resumeBeat, pendingResume: resumeBeat > opts.beat };
 }
 
-// Advance the override state machine against the cursor.
+// Advance the override state machine against the cursor. The tick keeps the
+// `resumed` flag so consumers can observe the quantized resumption; the
+// pending window stays inert for the renderer (overrideEffect keys off
+// `kind`, already released) but the state machine records the boundary.
 export function advanceOverride(state: OverrideState, beat: number): { state: OverrideState; resumed: boolean } {
   if (!state.pendingResume || state.resumeBeat === null || beat < state.resumeBeat) {
     return { state, resumed: false };
@@ -455,12 +463,15 @@ export function adaptiveBeat(
   const audioWeight = Math.min(1, Math.max(0, inputs.audioConfidence));
 
   if (inputs.djBpm !== null && inputs.audioBpm !== null && inputs.audioBpm > 0 && audioWeight > 0) {
-    const bpm = (inputs.djBpm + inputs.audioBpm * audioWeight) / (1 + audioWeight);
+    // djBpm is beatsPerSecond * 60: negative in reverse, zero when paused.
+    // A non-positive blend tempo would freeze or reverse the adaptive clock.
+    const djClamped = Math.max(0, inputs.djBpm);
+    const bpm = (djClamped + inputs.audioBpm * audioWeight) / (1 + audioWeight);
     const blended = atTempo(inputs.djBeat, bpm, inputs.djAnchorNs);
 
     if (blended !== null) return { beat: blended, bpm, source: "blend" };
 
-    if (audio !== null) return { beat: audio, bpm, source: "blend" };
+    if (audio !== null && bpm > 0) return { beat: audio, bpm, source: "blend" };
   }
 
   if (dj !== null && inputs.djBpm !== null) return { beat: dj, bpm: inputs.djBpm, source: "dj-bpm" };
@@ -544,6 +555,8 @@ export interface DeckTick {
   loopPass: number;
   scratchHold: boolean;
   seeked: boolean;
+  /** True on the tick the quantized override resume lands. */
+  resumed: boolean;
   /** In-flight exclusive cues at this beat. */
   transients: ShowCue[];
   cues: ShowCue[];
@@ -629,11 +642,14 @@ export function ingestDeck(world: DeckWorld, state: DeckState, quality?: Observa
 }
 
 export function installPlan(world: DeckWorld, generation: number, plan: ShowPlan | null): void {
+  // Monotonic guard: a stale install must not clobber newer artefacts.
+  if (generation < world.generation) return;
   world.plan = plan;
   world.generation = generation;
 }
 
 export function installModel(world: DeckWorld, generation: number, model: TrackModel | null): void {
+  if (generation < world.generation) return;
   world.model = model;
   world.generation = generation;
 }
@@ -741,8 +757,10 @@ export function tickWorld(world: DeckWorld, nowNs: bigint, opts: TickOptions = {
       estimated = { beat: extrapolated, seeked: false, corrected: 0, errorMs: 0 };
     }
   }
-
-  const clockSource: ClockSource = adaptive !== null ? "adaptive" : health === "holding" ? "hold" : "provider";
+  // clockSource follows the branch that produced `estimated`, not `health`
+  // alone: a fresh observation feeds the estimator (provider) even when an
+  // estimator override pushes seekThresholdMs past the hold threshold.
+  const clockSource: ClockSource = adaptive !== null ? "adaptive" : !fresh && health === "holding" ? "hold" : "provider";
   const motion = motionFactor(health, ageMs);
 
   world.scratch = observeRate(world.scratch, state);
@@ -809,7 +827,8 @@ export function tickWorld(world: DeckWorld, nowNs: bigint, opts: TickOptions = {
   if (window !== null && variant > 0) cues = cues.map((c) => varyCueForPass(c, variant));
   world.transients = exclusiveOf(cues);
   world.cursor = { beat, loopPass, scratchHold: world.scratch.holding };
-  world.override = advanceOverride(world.override, beat).state;
+  const overrideAdvance = advanceOverride(world.override, beat);
+  world.override = overrideAdvance.state;
 
   return {
     deckId: world.deckId,
@@ -818,6 +837,7 @@ export function tickWorld(world: DeckWorld, nowNs: bigint, opts: TickOptions = {
     loopPass,
     scratchHold: world.scratch.holding,
     seeked: estimated.seeked,
+    resumed: overrideAdvance.resumed,
     transients: world.transients,
     cues,
     upcoming: world.plan === null ? [] : upcomingCues(world.plan, beat, 8),
@@ -917,12 +937,18 @@ export interface TrackDeckOptions {
   seekThresholdMs?: number;
   beatsPerSecond?: number;
   scratch?: Partial<ScratchOptions>;
+  /** Prior scratch state carried across calls; without it every call sees
+  the default lastRate and can record at most one reversal, so the
+  reversal-based half of scratchDetected stays dead. */
+  scratchState?: ScratchState;
 }
 
 export interface TrackedDeck {
   beat: number;
   scratchHold: boolean;
   seeked: boolean;
+  /** Scratch state to pass back as `scratchState` on the next call. */
+  scratch: ScratchState;
 }
 
 // Track a deck observation: seek snap vs smooth follow vs scratch hold
@@ -936,17 +962,16 @@ export function trackDeck(
 ): TrackedDeck {
   const observed = gridBeat(obs.playheadSeconds);
   const scratchOpts: ScratchOptions = { ...SCRATCH_DEFAULTS, ...opts.scratch };
-  const scratch = observeRate(initialScratchState(prevBeat), obs);
+  const scratch = observeRate(opts.scratchState ?? initialScratchState(prevBeat), obs);
 
-  if (scratchDetected(obs, scratch, scratchOpts)) return { beat: prevBeat, scratchHold: true, seeked: false };
+  if (scratchDetected(obs, scratch, scratchOpts)) return { beat: prevBeat, scratchHold: true, seeked: false, scratch };
   const bps = opts.beatsPerSecond ?? beatsPerSecondOf(obs);
 
   const jumped = exceedsSeekThreshold(prevBeat, observed, bps, {
     beats: opts.seekThresholdBeats ?? ESTIMATOR_DEFAULTS.seekThresholdBeats,
     ms: opts.seekThresholdMs ?? ESTIMATOR_DEFAULTS.seekThresholdMs,
   });
-
-  return { beat: observed, scratchHold: false, seeked: jumped };
+  return { beat: observed, scratchHold: false, seeked: jumped, scratch };
 }
 
 export function cursorBeat(state: CursorState): number {

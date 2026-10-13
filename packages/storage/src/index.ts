@@ -107,7 +107,6 @@ export class Store implements SqlExec {
   readonly synchronous: string;
   readonly busyTimeoutMs: number;
   readonly foreignKeys: boolean;
-
   constructor(pathOrOptions: string | StoreOptions = ":memory:") {
     const options: StoreOptions = typeof pathOrOptions === "string" ? { path: pathOrOptions } : pathOrOptions;
 
@@ -125,7 +124,14 @@ export class Store implements SqlExec {
     this.busyTimeoutMs = opened.busyTimeoutMs;
     this.foreignKeys = opened.foreignKeys;
 
-    if (options.skipMigrations !== true) migrate(this.driver);
+    if (options.skipMigrations !== true) {
+      try {
+        migrate(this.driver);
+      } catch (error) {
+        this.driver.close();
+        throw error;
+      }
+    }
   }
 
   get version(): number {

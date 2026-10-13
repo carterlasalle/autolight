@@ -30,15 +30,24 @@ export class FirmwarePolicy {
   private readonly windowMs: number;
   private readonly clock: () => number;
   private readonly rearmAt: number[] = [];
+  private lastSeen: number | null = null;
 
   constructor(options: FirmwarePolicyOptions = {}) {
-    this.maxRearm = Math.max(0, Math.floor(options.maxRearmAttempts ?? DEFAULT_MAX_REARM));
-    this.windowMs = Math.max(1, options.rearmWindowMs ?? DEFAULT_REARM_WINDOW_MS);
+    const maxRearmAttempts = options.maxRearmAttempts ?? DEFAULT_MAX_REARM;
+    this.maxRearm = Number.isFinite(maxRearmAttempts)
+      ? Math.max(0, Math.floor(maxRearmAttempts))
+      : DEFAULT_MAX_REARM;
+    const rearmWindowMs = options.rearmWindowMs ?? DEFAULT_REARM_WINDOW_MS;
+    this.windowMs =
+      Number.isFinite(rearmWindowMs) && rearmWindowMs > 0 ? rearmWindowMs : DEFAULT_REARM_WINDOW_MS;
     this.clock = options.clock ?? Date.now;
   }
 
   decide(savedFirmware: string, currentFirmware: string, segmentedVerified: boolean): FirmwareDecision {
-    const known = currentFirmware !== "" && currentFirmware === savedFirmware;
+    const known =
+      currentFirmware !== "" &&
+      currentFirmware !== "unmeasured" &&
+      currentFirmware === savedFirmware;
 
     if (known && segmentedVerified) {
       return { gate: "segmented", warning: null, reason: "firmware matches the qualified record" };
@@ -66,24 +75,27 @@ export class FirmwarePolicy {
       reason: "no verified segmented capability",
     };
   }
+  // Sliding-window eviction shared by mayRearm/rearmCount so the budget
+  // accounting cannot diverge. A backward clock step (NTP/manual adjustment)
+  // would make `now - oldest` negative and freeze eviction, permanently
+  // disabling rearm; clamp to the last observed time instead.
+  private pruneRearm(now: number): number {
+    if (this.lastSeen !== null && now < this.lastSeen) return this.lastSeen;
+    this.lastSeen = now;
+    while (this.rearmAt.length > 0 && now - this.rearmAt[0]! >= this.windowMs) this.rearmAt.shift();
+    return now;
+  }
 
   /** A failing raw stream asks before each re-arm. False means stop spamming. */
   mayRearm(): boolean {
-    const now = this.clock();
-
-    while (this.rearmAt.length > 0 && now - this.rearmAt[0]! >= this.windowMs) this.rearmAt.shift();
-
+    const now = this.pruneRearm(this.clock());
     if (this.rearmAt.length >= this.maxRearm) return false;
     this.rearmAt.push(now);
-
     return true;
   }
 
   rearmCount(): number {
-    const now = this.clock();
-
-    while (this.rearmAt.length > 0 && now - this.rearmAt[0]! >= this.windowMs) this.rearmAt.shift();
-
+    this.pruneRearm(this.clock());
     return this.rearmAt.length;
   }
 }
