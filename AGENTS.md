@@ -3042,6 +3042,17 @@ TBD.
 
 ## Durable learnings
 
+- `yarn truth` now includes `tools/bundle-scan.mjs`: it fails unless
+  `apps/desktop/dist` is a RELEASE build (`yarn workspace @autolight/desktop
+  build`). `test:e2e` self-builds the `--test` main bundle (test API
+  compiled in), so run a plain build again before truth after e2e.
+- The journey test API is a build-time define (`scripts/build-main.mjs
+  --test` + minifySyntax DCE); main.ts and `journeys/_harness.ts` share its
+  types in `electron/test-api-contract.ts`. `normal-night.spec.ts` calls the
+  deliberately unwired `normal-night-row` channel, which fails at the
+  dispatcher by design (T-QA-11 remaining work).
+- `tools/forbidden-words.mjs` bans words like "future" and "placeholder" —
+  the gate fails on any hit, including comments.
 - TrackModel v2 (2026-10-01): Zod owns the TS shape, Python mirrors it by
   hand; the drift check is the parity fixture
   (`test-fixtures/analysis/trackmodel-v2.fixture.json`) plus the mirror
