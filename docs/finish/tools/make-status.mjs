@@ -92,11 +92,19 @@ const explicit = new Map();
 
 for (const [ms, ids] of Object.entries(MILESTONE_BY_ID)) for (const id of ids) explicit.set(id, ms);
 
+const unknownMilestones = new Set();
+
 function milestone(id) {
   if (explicit.has(id)) return explicit.get(id);
   const prefix = id.split("-").slice(0, 2).join("-");
+  const ms = MILESTONE_BY_PREFIX[prefix];
 
-  return MILESTONE_BY_PREFIX[prefix] ?? "M0";
+  if (ms === undefined && !unknownMilestones.has(id)) {
+    unknownMilestones.add(id);
+    console.warn(`make-status: unknown milestone prefix for ${id}, filing under M0`);
+  }
+
+  return ms ?? "M0";
 }
 
 // Preserve existing cells.
@@ -109,6 +117,56 @@ if (existsSync(statusPath)) {
     prev.set(m[1], m[2]);
   }
 }
+
+// Split a preserved row on unescaped pipes; emitted `\|` sequences unescape
+// back to a literal pipe so titles containing `|` survive a round trip.
+function splitRow(row) {
+  return row
+    .split(/(?<!\\)\|/)
+    .map((c) => c.replaceAll("\\|", "|").trim());
+}
+
+const KNOWN_STATUS = new Set([
+  "TODO",
+  "IN-PROGRESS",
+  "DONE-VERIFIED",
+  "BLOCKED-HARDWARE",
+  "BLOCKED-OWNER-DECISION",
+  "CLOSED-OWNER-DECLINED",
+]);
+
+const bareStatus = (cell) => (cell ?? "").replaceAll("`", "").trim();
+
+ // The preserved row is Title | File | Milestone | Status | Evidence | Notes;
+// the Status cell is located by value (not by fixed index) so a `|` inside
+// an earlier cell cannot shift status/evidence/notes into the wrong slots,
+// and status words inside Evidence/Notes cannot miscategorize the counts.
+ function preservedStatus(id) {
+   const row = prev.get(id);
+ 
+   if (row === undefined) return "";
+  const cells = splitRow(row);
+  const hit = cells.find((c) => KNOWN_STATUS.has(bareStatus(c)));
+ 
+  return hit ?? (cells.length >= 5 ? (cells[3] ?? "") : row);
+ }
+
+// Preserved evidence/notes keyed off the Status cell, not a fixed index.
+function preservedCells(id) {
+  const row = prev.get(id);
+
+  if (row === undefined) return null;
+  const cells = splitRow(row);
+  const idx = cells.findIndex((c) => KNOWN_STATUS.has(bareStatus(c)));
+
+  if (idx < 0) return null;
+
+  return { status: cells[idx] ?? "", evidence: cells[idx + 1] ?? "", notes: cells.slice(idx + 2).join(" | ") };
+}
+
+// Pipes would split the markdown table, so titles and file names are
+// emitted escaped (splitRow unescapes them on the next read).
+const tableCell = (s) => s.replaceAll("|", "\\|");
 
 const register = read("01-findings-register.md");
 
@@ -148,7 +206,7 @@ for (const ms of order) {
   let todo = 0, prog = 0, done = 0, blocked = 0, declined = 0;
 
   for (const t of list) {
-    const cell = prev.get(t.id) ?? "";
+    const cell = preservedStatus(t.id);
 
     if (cell.includes("DONE-VERIFIED")) done++;
     else if (cell.includes("IN-PROGRESS")) prog++;
@@ -166,20 +224,12 @@ for (const ms of order) {
   out += `\n## Tasks in ${ms}\n\n| Task | Title | File | Milestone | Status | Evidence | Notes |\n| --- | --- | --- | --- | --- | --- | --- |\n`;
 
   for (const t of byMs.get(ms)) {
-    const old = prev.get(t.id);
-    let status = "`TODO`", evidence = "none yet", notes = t.closes ? `Closes ${t.closes}` : "";
+    const kept = preservedCells(t.id);
+    const status = kept?.status || "`TODO`";
+    const evidence = kept?.evidence || "none yet";
+    const notes = kept !== null ? kept.notes || (t.closes ? `Closes ${t.closes}` : "") : (t.closes ? `Closes ${t.closes}` : "");
 
-    if (old) {
-      const cells = old.split("|").map((c) => c.trim());
-
-      if (cells.length >= 5) {
-        status = cells[3] || status;
-        evidence = cells[4] || evidence;
-        notes = cells[5] || notes;
-      }
-    }
-
-    out += `| ${t.id} | ${t.title} | \`${t.file}\` | ${ms} | ${status} | ${evidence} | ${notes} |\n`;
+    out += `| ${t.id} | ${tableCell(t.title)} | \`${tableCell(t.file)}\` | ${ms} | ${status} | ${evidence} | ${notes} |\n`;
   }
 }
 
@@ -190,7 +240,13 @@ so nobody acts on them as stated.\n\n| Finding | Verification | Closed by | Stat
 
 for (const f of findings) {
   const cells = f.rest.split("|").map((c) => c.trim());
-  out += `| ${f.id} | ${cells[0] ?? ""} | ${cells[cells.length - 2] ?? ""} | ${cells[cells.length - 1] ?? ""} |\n`;
+  // Register columns are Finding | Sources | Ver | Closed by; index from the
+  // end so a pipe inside the finding text cannot shift the Ver/Closed-by cells.
+  const ver = cells[cells.length - 2] ?? "";
+  const closedBy = cells[cells.length - 1] ?? "";
+  const closers = closedBy.split(",").map((t) => t.trim()).filter((t) => t.length > 0);
+  const closed = closers.length > 0 && closers.every((t) => preservedStatus(t).includes("DONE-VERIFIED"));
+  out += `| ${f.id} | ${ver} | ${closedBy} | ${closed ? "closed" : "open"} |\n`;
 }
 
 out += `

@@ -78,16 +78,22 @@ describe("composite-flx4 provider (T-LIVE-07)", () => {
     expect(deck?.playheadSeconds ?? 0).toBeGreaterThan(1);
     expect(deck?.playheadSeconds ?? 0).toBeCloseTo(1.05, 2);
     expect(deck?.quality.playheadSeconds).toBe("estimated");
-    expect(deck?.quality.channelFader).toBe("exact");
+    // The tempo/play path never ingests a fader event, so the fader stays at
+    // its unobserved default: the value is null and the path is unexercised.
+    expect(deck?.channelFader).toBeNull();
   });
-
   it("resolves the loaded track from LOAD plus open files with a new generation", () => {
     let now = 2_000_000_000_000n;
     let resolveId = "rb:first";
 
     const provider = new CompositeProvider({
       now: () => now,
-      resolveTrack: () => resolution(resolveId, false),
+      resolveTrack: (deck, query) => {
+        expect(deck).toBe(1);
+        expect(query.path).toBe("/music/first.mp3");
+
+        return resolution(resolveId, false);
+      },
       listOpenFiles: () => ["/music/first.mp3"],
       libraryRoots: ["/music"],
     });
@@ -130,17 +136,35 @@ describe("composite-flx4 provider (T-LIVE-07)", () => {
     provider.ingestControllerEvent({ deck: 1, control: "play", value: 1, pad: null, atNs: now });
     const deck = () => provider.getDecks().find((d) => d.deckId === 1);
     const envelope = resolution("rb:lock", true).onsetEnvelope ?? [];
+    const rateHz = 50;
+    const windowSamples = 128;
     now += 3_000_000_000n;
     provider.tick(now);
 
     for (let i = 0; i < 10; i++) {
       now += 100_000_000n;
-      const end = Math.max(0, Math.round((deck()?.playheadSeconds ?? 0) * 50));
-      provider.pushAudio(envelope.slice(Math.max(0, end - 128), end));
+      // Slice to the pre-tick position: the reference window builds from the
+      // position at tick time, and the estimate only advances when the clock
+      // does, so one tick per freshly pushed slice keeps live aligned to ref.
+      // (A second tick on the same timestamp correlates the window against
+      // its own stale tail: lag ~5 samples = 100 ms, which unlocks.)
+      const end = Math.max(0, Math.round((deck()?.playheadSeconds ?? 0) * rateHz));
+      provider.pushAudio(envelope.slice(Math.max(0, end - windowSamples), end));
       provider.tick(now);
     }
 
     expect(deck()?.quality.playheadSeconds).toBe("derived");
+
+    // The lock contract is a residual inside the threshold with confidence:
+    // an aligned loopback must correlate near 1 at zero lag.
+    const locked = correlateEnvelopes(
+      envelope.slice(0, windowSamples),
+      envelope.slice(0, windowSamples),
+      8,
+    );
+
+    expect(locked.lagSamples).toBe(0);
+    expect(locked.confidence).toBeGreaterThan(0.99);
   });
 
   it("resolves master to the louder deck and keeps faders exact", () => {

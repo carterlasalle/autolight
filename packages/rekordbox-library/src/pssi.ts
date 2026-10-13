@@ -12,43 +12,55 @@
 // AUTOLIGHT_PSSI_LABELS.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { z } from "zod";
 
-export interface HighVariantTemplate {
-  template: string;
-  flag: "k1" | "k2" | "k3";
-  nWhenSet: number;
-  nWhenClear: number;
-}
+const highVariantTemplateSchema = z.object({
+  template: z.string(),
+  flag: z.union([z.literal("k1"), z.literal("k2"), z.literal("k3")]),
+  nWhenSet: z.number(),
+  nWhenClear: z.number(),
+}).strict();
 
-export interface HighVariantRules {
-  rules: { k1?: number; k2?: number; k3?: number; label: string }[];
-  fallback: string;
-}
+const highVariantRulesSchema = z.object({
+  rules: z.array(z.object({
+    k1: z.number().optional(),
+    k2: z.number().optional(),
+    k3: z.number().optional(),
+    label: z.string(),
+  }).strict()),
+  fallback: z.string(),
+}).strict();
 
-export interface PssiCase {
-  mood: number;
-  kind: number;
-  k1: number;
-  k2: number;
-  k3: number;
-  label: string;
-  section: string;
-}
+const labelTableSchema = z.object({
+  schema: z.string(),
+  generator: z.string(),
+  source: z.string(),
+  moods: z.record(z.string(), z.string()),
+  high: z.record(z.string(), z.string()),
+  mid: z.record(z.string(), z.string()),
+  low: z.record(z.string(), z.string()),
+  highVariants: z.record(z.string(), z.union([highVariantTemplateSchema, highVariantRulesSchema])),
+  unknownTemplate: z.string(),
+  sections: z.record(z.string(), z.string()),
+  unknownSection: z.string(),
+  cases: z.array(z.object({
+    mood: z.number(),
+    kind: z.number(),
+    k1: z.number(),
+    k2: z.number(),
+    k3: z.number(),
+    label: z.string(),
+    section: z.string(),
+  }).strict()),
+}).strict();
 
-export interface PssiLabelTable {
-  schema: string;
-  generator: string;
-  source: string;
-  moods: Record<string, string>;
-  high: Record<string, string>;
-  mid: Record<string, string>;
-  low: Record<string, string>;
-  highVariants: Record<string, HighVariantTemplate | HighVariantRules>;
-  unknownTemplate: string;
-  sections: Record<string, string>;
-  unknownSection: string;
-  cases: PssiCase[];
-}
+export type HighVariantTemplate = z.infer<typeof highVariantTemplateSchema>;
+
+export type HighVariantRules = z.infer<typeof highVariantRulesSchema>;
+
+export type PssiCase = z.infer<typeof labelTableSchema>["cases"][number];
+
+export type PssiLabelTable = z.infer<typeof labelTableSchema>;
 
 const DEFAULT_LABELS_PATH = fileURLToPath(
   new URL("../../../analysis/tests/fixtures/pssi-labels.json", import.meta.url),
@@ -56,54 +68,57 @@ const DEFAULT_LABELS_PATH = fileURLToPath(
 
 export function loadPssiLabels(path: string = process.env["AUTOLIGHT_PSSI_LABELS"] ?? DEFAULT_LABELS_PATH): PssiLabelTable {
   const parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
+  const table = labelTableSchema.safeParse(parsed);
 
-  if (!isLabelTable(parsed)) throw new TypeError(`pssi-labels.json is not a label table: ${path}`);
+  if (!table.success) throw new TypeError(`pssi-labels.json is not a label table: ${path}: ${table.error.message}`);
 
-  return parsed;
-}
-
-function isLabelTable(value: unknown): value is PssiLabelTable {
-  if (typeof value !== "object" || value === null) return false;
-  const t = value as Partial<PssiLabelTable>;
-
-  return (
-    typeof t.schema === "string" &&
-    typeof t.high === "object" && t.high !== null &&
-    typeof t.mid === "object" && t.mid !== null &&
-    typeof t.low === "object" && t.low !== null &&
-    typeof t.highVariants === "object" && t.highVariants !== null &&
-    typeof t.sections === "object" && t.sections !== null &&
-    Array.isArray(t.cases)
-  );
+  return table.data;
 }
 
 // Committed table, read once per process (labels never change at runtime).
-let cached: PssiLabelTable | undefined;
+// Keyed by resolved path: a custom table passed to loadPssiLabels must reach
+// the lookups, and the suite must not see a stale table across cases.
+const cachedByPath = new Map<string, PssiLabelTable>();
 
-function table(): PssiLabelTable {
-  cached ??= loadPssiLabels();
+export function resetPssiLabelsForTest(): void {
+  cachedByPath.clear();
+}
 
-  return cached;
+function table(path?: string): PssiLabelTable {
+  const key = path ?? process.env["AUTOLIGHT_PSSI_LABELS"] ?? DEFAULT_LABELS_PATH;
+  const hit = cachedByPath.get(key);
+
+  if (hit !== undefined) return hit;
+  const loaded = loadPssiLabels(key);
+  cachedByPath.set(key, loaded);
+
+  return loaded;
 }
 
 // Three call sites, all needing the same "missing kind" spelling.
-function labelOrUnknown(map: Record<string, string>, kind: number): string {
-  return map[String(kind)] ?? table().unknownTemplate.replace("{kind}", String(kind));
+function labelOrUnknown(map: Record<string, string>, kind: number, path?: string): string {
+  return map[String(kind)] ?? table(path).unknownTemplate.replace("{kind}", String(kind));
+}
+
+function isTemplateVariant(variant: HighVariantTemplate | HighVariantRules): variant is HighVariantTemplate {
+  return "template" in variant;
 }
 
 // §5.2 high mood: k-flags expand Intro, Up, Chorus and Outro variants.
-export function highPhraseLabel(kind: number, k1 = 0, k2 = 0, k3 = 0): string {
-  const t = table();
+export function highPhraseLabel(kind: number, k1 = 0, k2 = 0, k3 = 0, path?: string): string {
+  const t = table(path);
   const variant = t.highVariants[String(kind)];
 
-  if (variant === undefined) return labelOrUnknown(t.high, kind);
-  const flags: Record<string, number> = { k1, k2, k3 };
+  if (variant === undefined) return labelOrUnknown(t.high, kind, path);
 
-  if ("template" in variant) {
-    const n = flags[variant.flag] ? variant.nWhenSet : variant.nWhenClear;
+  if (isTemplateVariant(variant)) {
+    const flags = { k1, k2, k3 };
+    const n = flags[variant.flag] === 0 ? variant.nWhenClear : variant.nWhenSet;
 
     return variant.template.replace("{n}", String(n));
   }
+
+  const flags = { k1, k2, k3 };
 
   for (const rule of variant.rules) {
     if ((["k1", "k2", "k3"] as const).every((f) => rule[f] === undefined || rule[f] === flags[f])) return rule.label;
@@ -112,23 +127,23 @@ export function highPhraseLabel(kind: number, k1 = 0, k2 = 0, k3 = 0): string {
   return variant.fallback;
 }
 
-export function phraseLabel(mood: number, kind: number, k1 = 0, k2 = 0, k3 = 0): string {
-  const t = table();
+export function phraseLabel(mood: number, kind: number, k1 = 0, k2 = 0, k3 = 0, path?: string): string {
+  const t = table(path);
   const moodName = t.moods[String(mood)];
 
-  if (moodName === "high") return highPhraseLabel(kind, k1, k2, k3);
+  if (moodName === "high") return highPhraseLabel(kind, k1, k2, k3, path);
 
-  if (moodName === "mid") return labelOrUnknown(t.mid, kind);
+  if (moodName === "mid") return labelOrUnknown(t.mid, kind, path);
 
-  if (moodName === "low") return labelOrUnknown(t.low, kind);
+  if (moodName === "low") return labelOrUnknown(t.low, kind, path);
 
-  return labelOrUnknown({}, kind);
+  return labelOrUnknown({}, kind, path);
 }
 
 /** Normalized §21 section; the first word of the raw label decides ("Up 1" to build). */
 export function normalizeSection(rawLabel: string): string {
   const t = table();
-  const first = rawLabel.split(" ")[0] ?? "";
+  const first = rawLabel.trim().split(/\s+/)[0] ?? "";
 
   return t.sections[first.toLowerCase()] ?? t.unknownSection;
 }

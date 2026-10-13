@@ -8,17 +8,17 @@
   ],
   "scripts": {
     "build": "yarn workspaces foreach --all --topological-dev --exclude autolight run build",
-    "test": "yarn workspaces foreach --all run test",
-    "lint": "yarn workspaces foreach --all run lint",
-    "typecheck": "yarn workspaces foreach --all run typecheck",
-    "verify:phase1": "yarn workspaces foreach --all run typecheck && uv run --project analysis pytest -q",
+    "test": "yarn workspaces foreach --all --exclude autolight run test",
+    "lint": "yarn workspaces foreach --all --exclude autolight run lint",
+    "typecheck": "yarn workspaces foreach --all --exclude autolight run typecheck",
+    "verify:phase1": "yarn workspaces foreach --all --exclude autolight run typecheck && uv sync --locked --project analysis && uv run --project analysis pytest -q",
     "golden:update": "node scripts/golden-update.mjs",
     "gates": "node tools/gates/gates.mjs",
-    "test:count": "vitest run --reporter=json 2>/dev/null | tail -1",
+    "test:count": "vitest run --reporter=json > ./node_modules/.vitest-count.json 2>/dev/null; CODE=$?; tail -1 ./node_modules/.vitest-count.json; rm -f ./node_modules/.vitest-count.json; exit $CODE",
     "dev": "yarn workspace @autolight/desktop dev",
     "truth": "node docs/finish/tools/check-coverage.mjs && node tools/capabilities-check.mjs && node tools/claim-check.mjs && node tools/forbidden-words.mjs && node tools/bundle-scan.mjs && node tools/trackmodel-drift.mjs && yarn sg scan --config tools/ast-grep/sgconfig.yml",
     "audit:truth": "yarn truth",
-    "analyze": "node_modules/.bin/oxlint; OXLINT_EXIT=$?; yarn knip && yarn depcruise --config .dependency-cruiser.cjs packages apps/desktop/src apps/desktop/electron && node tools/unwired-service.mjs && yarn tsc --noEmit -p apps/desktop/tsconfig.typecheck.json --noUnusedLocals --noUnusedParameters --noImplicitReturns --noFallthroughCasesInSwitch && yarn madge --circular packages/*/src apps/desktop/src apps/desktop/electron && uv run --project analysis ruff check analysis/src analysis/tests && uv run --project analysis pyright analysis/src/autolight_analysis && uv run --project analysis --with vulture vulture analysis/src --min-confidence 80; GATE_EXIT=$?; if [ $OXLINT_EXIT -ne 0 ]; then echo \"analyze: oxlint found findings (see above)\"; exit $OXLINT_EXIT; fi; exit $GATE_EXIT",
+    "analyze": "bash -c 'yarn oxlint; OXLINT_EXIT=$?; GATE_EXIT=0; yarn knip || GATE_EXIT=$?; yarn depcruise --config .dependency-cruiser.cjs packages apps/desktop/src apps/desktop/electron || GATE_EXIT=$?; node tools/unwired-service.mjs || GATE_EXIT=$?; yarn tsc --noEmit -p apps/desktop/tsconfig.typecheck.json --noUnusedLocals --noUnusedParameters --noImplicitReturns --noFallthroughCasesInSwitch || GATE_EXIT=$?; yarn madge --circular packages/*/src apps/desktop/src apps/desktop/electron || GATE_EXIT=$?; uv sync --locked --project analysis || GATE_EXIT=$?; uv run --project analysis ruff check analysis/src analysis/tests || GATE_EXIT=$?; uv run --project analysis pyright analysis/src/autolight_analysis || GATE_EXIT=$?; uv run --project analysis --with vulture vulture analysis/src --min-confidence 80 || GATE_EXIT=$?; if [ $OXLINT_EXIT -ne 0 ]; then echo \"analyze: oxlint found findings (see above)\"; exit $OXLINT_EXIT; fi; exit $GATE_EXIT'",
     "verify:all": "yarn build && yarn typecheck && yarn vitest run && uv run --project analysis pytest -q && yarn workspace @autolight/desktop test:e2e"
   },
   "devDependencies": {
