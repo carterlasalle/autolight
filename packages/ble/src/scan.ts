@@ -32,7 +32,13 @@ export interface BleScanInput {
   rssi?: number | null;
 }
 
-/** Parses one live advertisement. Manufacturer bytes carry the encoded flag (bit 0x40), pactType and pactCode. */
+/** Parses one live advertisement. Manufacturer bytes carry the encoded flag (bit 0x40), pactType and pactCode.
+ *
+ * Expected layout is the backend's already-trimmed Govee manufacturer payload
+ * (flag, pactType, pactCode at offsets 0/1/2), NOT the raw BLE AD structure
+ * with a 2-byte company id prefix. Both shipped backends (toolkit-ble,
+ * noble) hand over the payload with the company id already stripped; a caller
+ * passing raw AD bytes would misread all three fields. */
 export function parseBleAdvertisement(input: BleScanInput): BleAdvertisement {
   const name = input.name ?? null;
   const manufacturer = input.manufacturer ?? new Uint8Array(0);
@@ -50,19 +56,20 @@ export function parseBleAdvertisement(input: BleScanInput): BleAdvertisement {
   };
 }
 
-/** Classifies an advertisement name into its family. Legacy prefixes kept. */
+/** Classifies an advertisement name into its family. Legacy prefixes kept; match is case-insensitive (real advertisement casing varies). */
 export function nameFamilyOf(name: string | null): BleNameFamily {
   if (name === null || name.length === 0) return "unknown";
+  const upper = name.toUpperCase();
 
-  if (name.startsWith("GBK_")) return "gbk";
+  if (upper.startsWith("GBK_")) return "gbk";
 
-  if (name.startsWith("GV")) return "gv";
+  if (upper.startsWith("GV")) return "gv";
 
-  if (name.startsWith("ihoment_")) return "ihoment";
+  if (upper.startsWith("IHOMENT_")) return "ihoment";
 
-  if (name.startsWith("Govee_")) return "govee";
+  if (upper.startsWith("GOVEE_")) return "govee";
 
-  if (name.startsWith("Minger_")) return "minger";
+  if (upper.startsWith("MINGER_")) return "minger";
 
   return "unknown";
 }
@@ -78,11 +85,11 @@ export interface BleScanEntry {
   guidance: string | null;
 }
 
-export function toScanEntry(ad: BleAdvertisement, missing: BleAdvertisement | null = null): BleScanEntry {
+export function toScanEntry(ad: BleAdvertisement, missing = false): BleScanEntry {
   return {
     kind: "bluetooth",
     advertisement: ad,
-    guidance: missing === null ? null : BLE_NOT_ADVERTISING_GUIDANCE,
+    guidance: missing ? BLE_NOT_ADVERTISING_GUIDANCE : null,
   };
 }
 
@@ -114,7 +121,7 @@ export function bindBleToLan(inputs: BleBindingInputs): BleBinding {
   const lan = normalizeMac(inputs.lanWifiMac);
 
   if (ble !== null && lan !== null && ble === lan) {
-    return { bleAddress: inputs.bleAddress, lanDeviceId: inputs.lanDeviceId, basis: "wifi-mac-match", wifiMac: inputs.bleWifiMac };
+    return { bleAddress: inputs.bleAddress, lanDeviceId: inputs.lanDeviceId, basis: "wifi-mac-match", wifiMac: ble };
   }
 
   if (inputs.identifyConfirmed) {
@@ -129,12 +136,13 @@ export function bindBleToLan(inputs: BleBindingInputs): BleBinding {
   throw new Error("refusing to bind: needs an aa 14 Wi-Fi MAC match or an explicit user confirmation after a BLE identify flash");
 }
 
-/** Normalizes a MAC for comparison: lowercase, colon separated, null stays null. */
+/** Normalizes a MAC for comparison: lowercase, colon separated, null stays null. Unparseable input returns null so it never matches. */
 export function normalizeMac(mac: string | null): string | null {
   if (mac === null) return null;
-  const hexes = mac.toLowerCase().replace(/[^0-9a-f]/g, "");
+  const cleaned = mac.trim().toLowerCase();
+  const hexes = cleaned.replace(/[:-]/g, "");
 
-  if (hexes.length !== 12) return mac.toLowerCase();
+  if (!/^[0-9a-f]{12}$/.test(hexes)) return null;
   const parts: string[] = [];
 
   for (let i = 0; i < 12; i += 2) parts.push(hexes.slice(i, i + 2));

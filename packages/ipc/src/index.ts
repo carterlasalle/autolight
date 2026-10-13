@@ -13,7 +13,7 @@ export const errorSchema = z.object({
 export type IpcError = z.infer<typeof errorSchema>;
 
 function ok<T extends z.ZodRawShape>(payload: z.ZodObject<T>) {
-  return z.object({ ok: z.literal(true), ...payload.shape });
+  return z.object({ ok: z.literal(true), ...payload.shape }).passthrough();
 }
 
 const v1 = z.literal(1);
@@ -33,11 +33,11 @@ export const channels = {
   },
   "master/intensity": {
     request: z.object({ version: v1, value: z.number().min(0).max(1) }),
-    response: z.union([ok(z.object({ value: z.number() })), errorSchema]),
+    response: z.union([ok(z.object({ value: z.number().min(0).max(1) })), errorSchema]),
   },
   "master/resume": {
     request: z.object({ version: v1, at: z.enum(["beat", "bar", "phrase", "immediate"]) }),
-    response: z.union([ok(z.object({ at: z.string() })), errorSchema]),
+    response: z.union([ok(z.object({ at: z.enum(["beat", "bar", "phrase", "immediate"]) })), errorSchema]),
   },
   "show/live": {
     request: z.object({ version: v1 }),
@@ -78,8 +78,8 @@ export const channels = {
     response: z.union([ok(z.object({ fixtures: z.array(z.unknown()) })), errorSchema]),
   },
   "venue/set-color": {
-    request: z.object({ version: v1, rgb: z.tuple([z.number(), z.number(), z.number()]) }),
-    response: z.union([ok(z.object({ rgb: z.tuple([z.number(), z.number(), z.number()]) })), errorSchema]),
+    request: z.object({ version: v1, rgb: z.tuple([z.number().int().min(0).max(255), z.number().int().min(0).max(255), z.number().int().min(0).max(255)]) }),
+    response: z.union([ok(z.object({ rgb: z.tuple([z.number().int().min(0).max(255), z.number().int().min(0).max(255), z.number().int().min(0).max(255)]) })), errorSchema]),
   },
   "venue/device-action": {
     request: z.object({ version: v1, id: z.string(), action: z.string() }),
@@ -140,7 +140,7 @@ export const channels = {
       value: z.unknown(),
     }),
     response: z.union([
-      ok(z.object({ key: z.string(), scope: z.string(), value: z.unknown(), layer: z.string() })),
+      ok(z.object({ key: z.string(), scope: z.enum(["app", "venue", "device", "style", "session"]), value: z.unknown(), layer: z.string() })),
       errorSchema,
     ]),
   },
@@ -150,7 +150,7 @@ export const channels = {
       scope: z.enum(["app", "venue", "device", "style", "session"]),
       key: z.string(),
     }),
-    response: z.union([ok(z.object({ key: z.string(), scope: z.string() })), errorSchema]),
+    response: z.union([ok(z.object({ key: z.string(), scope: z.enum(["app", "venue", "device", "style", "session"]) })), errorSchema]),
   },
   "config/export": {
     request: z.object({ version: v1 }),
@@ -158,7 +158,7 @@ export const channels = {
   },
   "config/import": {
     request: z.object({ version: v1, json: z.string() }),
-    response: z.union([ok(z.object({ applied: z.number() })), errorSchema]),
+    response: z.union([ok(z.object({ applied: z.number().int().nonnegative() })), errorSchema]),
   },
   "config/schema": {
     request: z.object({ version: v1, key: z.string().optional() }),
@@ -199,19 +199,62 @@ export function channelNames(): Channel[] {
 }
 
 // Renderer-side typed caller: validates the response, never swallows errors
-// into undefined. Throws IpcError-shaped Error on { ok: false }.
+// into undefined. Throws a code-carrying Error on { ok: false } so callers can
+// branch on E_* failures (permission, transport, validation) like the header
+// contract promises.
+export type IpcCallError = Error & { code: string };
+
 export async function callChannel<C extends Channel>(
   invokeFn: (channel: string, payload: unknown) => Promise<unknown>,
   channel: C,
   request: ChannelRequest<C>,
 ): Promise<Extract<ChannelResponse<C>, { ok: true }>> {
-  const parsed = channels[channel].request.parse(request);
-  const raw = await invokeFn(channel, parsed);
-  const res = channels[channel].response.parse(raw) as ChannelResponse<C>;
+  const table = (channels as Record<string, (typeof channels)[Channel] | undefined>)[channel];
+
+  if (table === undefined) {
+    const err = new Error(`E_UNKNOWN_CHANNEL: ${channel}`) as IpcCallError;
+    err.code = "E_UNKNOWN_CHANNEL";
+    throw err;
+  }
+
+  let parsed: ChannelRequest<C>;
+
+  try {
+    parsed = table.request.parse(request) as ChannelRequest<C>;
+  } catch (err) {
+    throw toCallError("E_INVALID_REQUEST", err);
+  }
+
+  let raw: unknown;
+
+  try {
+    raw = await invokeFn(channel, parsed);
+  } catch (err) {
+    throw toCallError("E_INVOKE", err);
+  }
+
+  let res: ChannelResponse<C>;
+
+  try {
+    res = table.response.parse(raw) as ChannelResponse<C>;
+  } catch (err) {
+    throw toCallError("E_INVALID_RESPONSE", err);
+  }
 
   if (!res.ok) {
-    throw new Error(`${(res as IpcError).error.code}: ${(res as IpcError).error.message}`);
+    const err = new Error(`${(res as IpcError).error.code}: ${(res as IpcError).error.message}`) as IpcCallError;
+    err.code = (res as IpcError).error.code;
+    throw err;
   }
 
   return res as Extract<ChannelResponse<C>, { ok: true }>;
+}
+
+function toCallError(code: string, err: unknown): IpcCallError {
+  const message = err instanceof Error ? err.message : String(err);
+  const out = new Error(`${code}: ${message}`) as IpcCallError;
+  out.code = code;
+  if (err instanceof Error && err.stack !== undefined) out.stack = err.stack;
+
+  return out;
 }

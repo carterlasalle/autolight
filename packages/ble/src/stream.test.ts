@@ -93,7 +93,7 @@ describe("ble segment stream (T-BLE-05)", () => {
     expect(decodeHostColor(host.writes[0] ?? new Uint8Array(0))?.payload[0]).toBe(0x83);
   });
 
-  it("blackout is a masked write of black, never power off", () => {
+  it("all-black frames take the single-colour fast path, never power off", () => {
     const frame = bleBlackoutFrame(4);
     expect(frame).toEqual(new Uint8Array(12));
     const streamed = streamBleRendererFrame(frame, { zoneCount: 4, budgetHz: 50 });
@@ -113,20 +113,22 @@ describe("ble segment stream (T-BLE-05)", () => {
       name: "GBK_H6076_51",
       manufacturer: new Uint8Array([0x00, 4, 7]),
       zones: 8,
-      budgetHz: null,
+      budgetHz: 20,
     });
 
     adapter.add(peripheral);
     const link = new BleLink("AA:BB:CC:DD:EE:51", adapter, { writeBudgetHz: 20, writeDrainMs: 0 }, clock);
     await link.open(() => undefined);
     clock.advance(50);
-    let lastFeedback = streamBleRendererFrame(twoColorFrame(8, true), { zoneCount: 8, budgetHz: 20 }).feedback;
 
     for (let frame = 0; frame < 40; frame++) {
       const bytes = twoColorFrame(8, frame % 2 === 0);
       const streamed = streamBleRendererFrame(bytes, { zoneCount: 8, budgetHz: 20 });
-      lastFeedback = streamed.feedback;
-      expect(encodeBleStreamFrame(bytes, { zoneCount: 8, budgetHz: 20 })).toHaveLength(2);
+      expect(streamed.feedback.distinctColours).toBe(2);
+      expect(streamed.feedback.effectiveFps).toBe(10);
+      const expected = encodeBleStreamFrame(bytes, { zoneCount: 8, budgetHz: 20 });
+      expect(streamed.writes.map((w) => Buffer.from(w).toString("hex")))
+        .toEqual(expected.map((w) => Buffer.from(w).toString("hex")));
 
       for (const write of streamed.writes) {
         link.send(write);
@@ -137,10 +139,10 @@ describe("ble segment stream (T-BLE-05)", () => {
       await Promise.resolve();
     }
 
-    expect(lastFeedback.distinctColours).toBe(2);
-    expect(lastFeedback.effectiveFps).toBe(10);
-    expect(peripheral.metrics.stalled).toBe(0);
     expect(link.status().writesSent).toBe(80);
+    expect(peripheral.metrics.writes).toBe(80);
+    expect(peripheral.metrics.acks).toBe(80);
+    expect(peripheral.metrics.stalled).toBe(0);
     await link.close();
   });
 });

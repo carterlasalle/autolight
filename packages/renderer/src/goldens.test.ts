@@ -21,7 +21,9 @@ describe("T-REND-06 renderer goldens", () => {
 
       for (let i = 0; i < fields.count; i++) {
         const sample = sampleSpatial(name, params, shape.beat, i, fields);
+        expect(Number.isFinite(sample.level), `${name} cell ${i} level`).toBe(true);
         const env = envelopeLevel(shape.beat, 4, { attackBeats: 0.05, releaseBeats: 0.5 });
+        expect(Number.isFinite(env), `${name} envelope`).toBe(true);
         const v = Math.round(Math.min(1, Math.max(0, sample.level * env)) * 255);
         levels[i * 3] = v;
         levels[i * 3 + 1] = Math.round(v * 0.6);
@@ -29,18 +31,34 @@ describe("T-REND-06 renderer goldens", () => {
       }
 
       const first = frameHash(new Map([["strip", levels]]));
-      const second = frameHash(new Map([["strip", levels]]));
-      expect(second).toBe(first);
+      // Recompute the buffer from scratch so the pipeline (not just the hash) proves deterministic.
+      const again = new Uint8Array(fields.count * 3);
+
+      for (let i = 0; i < fields.count; i++) {
+        const sample = sampleSpatial(name, params, shape.beat, i, fields);
+        const env = envelopeLevel(shape.beat, 4, { attackBeats: 0.05, releaseBeats: 0.5 });
+        const v = Math.round(Math.min(1, Math.max(0, sample.level * env)) * 255);
+        again[i * 3] = v;
+        again[i * 3 + 1] = Math.round(v * 0.6);
+        again[i * 3 + 2] = Math.round(v * 0.2);
+      }
+
+      expect(frameHash(new Map([["strip", again]]))).toBe(first);
       hashes[name] = first;
     }
 
     expect(Object.keys(hashes)).toHaveLength(SPATIAL_PRIMITIVES.length);
-    expect(new Set(Object.values(hashes)).size).toBeGreaterThan(SPATIAL_PRIMITIVES.length - 3);
+    expect(new Set(Object.values(hashes)).size).toBe(SPATIAL_PRIMITIVES.length);
   });
 
   it("covers every reference room", () => {
-    expect(REFERENCE_ROOMS.map((r) => r.id)).toEqual(
-      expect.arrayContaining(["square-loop", "square-mirrored", "square-chunks", "club-rectangle", "l-room", "curved-room"]),
-    );
+    expect(REFERENCE_ROOMS.map((r) => r.id)).toEqual([
+      "square-loop",
+      "square-mirrored",
+      "square-chunks",
+      "club-rectangle",
+      "l-room",
+      "curved-room",
+    ]);
   });
 });

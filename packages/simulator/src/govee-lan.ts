@@ -57,9 +57,12 @@ const DEFAULT_FAULTS: Required<SimFaults> = {
 function maxHz(zones: number, table?: Record<number, number>): number {
   if (table) {
     let best = 10;
+    let bestKey = -Infinity;
 
     for (const [k, v] of Object.entries(table)) {
-      if (zones >= Number(k)) best = v;
+      const key = Number(k);
+
+      if (zones >= key && key > bestKey) { bestKey = key; best = v; }
     }
 
     return best;
@@ -96,7 +99,7 @@ export class GoveeLanSim {
   private backToBack = 0;
   private packetCount = 0;
   private lastPaintAt = 0;
-  private hold: { msg: string; at: number } | null = null;
+  private hold: { msg: string } | null = null;
   readonly rendered: Array<[number, number, number]>;
   readonly metrics: SimMetrics = {
     datagrams: 0, droppedBackToBack: 0, droppedLoss: 0,
@@ -116,14 +119,25 @@ export class GoveeLanSim {
     return this.armed;
   }
 
+  /** Frames seen since the last arm (including stuttered/settling ones). */
+  get paintsSeen(): number {
+    return this.paintCount;
+  }
+
   get ceilingHz(): number {
     return maxHz(this.profile.zones, this.profile.maxHzByZones);
+  }
+
+  get controlPort(): number {
+    return this.port;
   }
 
   async start(port = 0): Promise<number> {
     const { promise, resolve, reject } = Promise.withResolvers<{ sock: Socket; port: number }>();
     const sock = createSocket("udp4");
-    sock.on("error", (err) => reject(err));
+    sock.on("error", (err) => {
+      if (this.socket === null) reject(err);
+    });
     sock.on("message", (msg, rinfo) => {
       void this.handle(msg, rinfo).catch(() => undefined);
     });
@@ -131,11 +145,20 @@ export class GoveeLanSim {
       const addr = sock.address();
       resolve({ sock, port: typeof addr === "object" ? addr.port : port });
     });
-    const { sock: s, port: p } = await promise;
-    this.socket = s;
-    this.port = p;
+    let boundPort: number;
 
-    return p;
+    try {
+      boundPort = (await promise).port;
+      this.socket = sock;
+    } catch (err) {
+      sock.close();
+      throw err;
+    }
+
+    this.socket.on("error", () => undefined);
+    this.port = boundPort;
+
+    return boundPort;
   }
 
   async stop(): Promise<void> {
@@ -149,12 +172,17 @@ export class GoveeLanSim {
     }
   }
 
-  get controlPort(): number {
-    return this.port;
+  get ipChanged(): boolean {
+    if (this.faults.changedIp === "" || this.gone()) return false;
+    // Without a reappear threshold the new IP applies at once; with one it
+    // takes effect on reappearance (packet counts are shared with gone()).
+    if (this.faults.reappearAt >= 0 && this.packetCount < this.faults.reappearAt) return false;
+
+    return true;
   }
 
   replyIp(): string {
-    if (this.faults.changedIp && this.packetCount >= this.faults.reappearAt && this.faults.reappearAt >= 0) {
+    if (this.ipChanged) {
       return this.faults.changedIp;
     }
 
@@ -212,15 +240,15 @@ export class GoveeLanSim {
       const text = msg.toString();
 
       if (this.hold) {
-        const held = this.hold;
-        this.hold = { msg: text, at: Date.now() };
-        await this.dispatch(held.msg, rinfo);
-        const cur = this.hold;
+        // Real reorder: the just-received datagram goes first, the buffered
+        // one second. Capture both locally so the pending timer (which reads
+        // this.hold later) cannot interleave.
+        const held = this.hold.msg;
         this.hold = null;
-
-        if (cur) await this.dispatch(cur.msg, rinfo);
+        await this.dispatch(text, rinfo);
+        await this.dispatch(held, rinfo);
       } else {
-        this.hold = { msg: text, at: Date.now() };
+        this.hold = { msg: text };
 
         const timer = setTimeout(() => {
           const cur = this.hold;
@@ -286,7 +314,10 @@ export class GoveeLanSim {
       const value = (envelopeMsg.msg.data as { value?: unknown } | undefined)?.value;
       this.on = value === 1;
 
-      if (this.armed && this.faults.turnEndsChannel) this.armed = false;
+      if (this.armed && this.faults.turnEndsChannel) {
+        this.armed = false;
+        this.backToBack = 0;
+      }
 
       return;
     }
@@ -361,13 +392,9 @@ export class GoveeLanSim {
     const pt = (data as { pt?: unknown } | undefined)?.pt;
 
     if (typeof pt !== "string" || pt.length === 0) return;
-    let raw: Uint8Array;
-
-    try {
-      raw = new Uint8Array(Buffer.from(pt, "base64"));
-    } catch {
-      return;
-    }
+    // Node's base64 decoder ignores invalid characters instead of throwing,
+    // so malformed input surfaces as a decodeRaw null below, not here.
+    const raw = new Uint8Array(Buffer.from(pt, "base64"));
 
     const decoded = decodeRaw(raw);
 

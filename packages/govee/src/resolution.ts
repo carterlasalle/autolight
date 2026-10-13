@@ -42,6 +42,9 @@ export interface ResolutionDecision {
 
 export function selectResolution(input: ResolutionInput): ResolutionDecision {
   const mode = input.mode ?? "auto";
+  if (!Number.isFinite(input.targetHz)) {
+    throw new RangeError(`selectResolution needs a finite targetHz, got ${input.targetHz}`);
+  }
   const target = Math.max(1, Math.floor(input.targetHz));
   const byKind: Partial<Record<ResolutionKind, number>> = {};
 
@@ -69,22 +72,25 @@ export function selectResolution(input: ResolutionInput): ResolutionDecision {
   if (byKind.logical === undefined && byKind.grouped === undefined && byKind.native === undefined) {
     throw new RangeError("selectResolution needs at least one confirmed count (logical or native)");
   }
-
   const rows: { kind: ResolutionKind; zones: number }[] = [];
+  const seenZones = new Set<number>();
+  const pushRow = (kind: ResolutionKind, zones: number): void => {
+    if (seenZones.has(zones)) return;
+    seenZones.add(zones);
+    rows.push({ kind, zones });
+  };
 
-  if (byKind.native !== undefined) rows.push({ kind: "native", zones: byKind.native });
+  if (byKind.native !== undefined) pushRow("native", byKind.native);
+
+  // Confirmed counts win zone ties: logical before the grouped head, so an
+  // explicit mode always finds its own kind when that count was confirmed.
+  if (byKind.logical !== undefined) pushRow("logical", byKind.logical);
 
   for (const zones of grouped) {
-    if (zones !== byKind.native && zones !== byKind.logical) rows.push({ kind: "grouped", zones });
+    if (zones !== byKind.native && zones !== byKind.logical) pushRow("grouped", zones);
   }
 
-  if (byKind.grouped !== undefined && !rows.some((r) => r.kind === "grouped")) {
-    rows.push({ kind: "grouped", zones: byKind.grouped });
-  }
-
-  if (byKind.logical !== undefined && !rows.some((r) => r.zones === byKind.logical)) {
-    rows.push({ kind: "logical", zones: byKind.logical });
-  }
+  if (byKind.grouped !== undefined) pushRow("grouped", byKind.grouped);
 
   const candidates: ResolutionCandidate[] = rows.map((row) => {
     const stableFps = input.stableFpsFor(row.zones);
@@ -93,10 +99,7 @@ export function selectResolution(input: ResolutionInput): ResolutionDecision {
   }).sort((a, b) => b.zones - a.zones);
 
   if (mode !== "auto") {
-    const want = byKind[mode];
-
-    const pick = candidates.find((c) => c.kind === mode)
-      ?? (want !== undefined ? candidates.find((c) => c.zones === want) : undefined);
+    const pick = candidates.find((c) => c.kind === mode);
 
     if (!pick) throw new RangeError(`resolution ${mode} has no confirmed zone count`);
 
@@ -114,9 +117,8 @@ export function selectResolution(input: ResolutionInput): ResolutionDecision {
     const top = candidates[0]!;
 
     const context = pick.zones !== top.zones
-      ? ` (native ${top.zones} zones at ${top.stableFps} Hz stable is below target ${target} Hz)`
+      ? ` (${top.kind} ${top.zones} zones at ${top.stableFps} Hz stable is below target ${target} Hz)`
       : "";
-
     return {
       ...pick,
       reason: `${pick.kind} ${pick.zones} zones at ${pick.stableFps} Hz stable meets target ${target} Hz (highest count that does)${context}`,
@@ -129,7 +131,7 @@ export function selectResolution(input: ResolutionInput): ResolutionDecision {
 
   return {
     ...fallback,
-    reason: `native ${top.zones} zones at ${top.stableFps} Hz stable is below target ${target} Hz; picked ${fallback.kind} ${fallback.zones} zones at ${fallback.stableFps} Hz stable instead`,
+    reason: `${top.kind} ${top.zones} zones at ${top.stableFps} Hz stable is below target ${target} Hz${fallback === top ? "" : `; picked ${fallback.kind} ${fallback.zones} zones at ${fallback.stableFps} Hz stable instead`}`,
     candidates,
   };
 }
