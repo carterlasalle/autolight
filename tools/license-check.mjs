@@ -17,7 +17,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 // Denylist: GPL, AGPL, unlicensed. LGPL is NOT denied (OD-08 may bundle the
 // LGPL fpcalc binary; FFmpeg ships as LGPL). "unknown" counts as unlicensed.
-const DENY_RE = [/agpl/i, /\bgpl(?!l)/i, /^unlicensed$/, /^unknown$/];
+const DENY_RE = [/agpl/i, /\bgpl(?!l)/i, /^unlicensed\b/i, /^unknown\b/i];
 
 function normLicense(raw) {
   const s = String(raw ?? "").trim();
@@ -119,8 +119,8 @@ function handList() {
     { name: "uv", kind: "bundled binary", license: "MIT OR Apache-2.0", version: "0.9.4 (pinned in apps/desktop/scripts/fetch-vendor.mjs; astral-sh/setup-uv in CI)" },
     { name: "Python 3.12", kind: "runtime", license: "PSF-2.0", version: "3.12 (setup-python)" },
     { name: "Node.js 22 (Electron bundles its own)", kind: "runtime", license: "MIT", version: "engines >=22.12" },
-    { name: "all-in-one-infer weights", kind: "model weights", license: "UNLICENSED until owner decides (OD-09); not bundled today", version: "not bundled" },
-    { name: "beat-this weights", kind: "model weights", license: "UNLICENSED until owner decides (OD-09); not bundled today", version: "not bundled" },
+    { name: "all-in-one-infer weights", kind: "model weights", license: "UNLICENSED until owner decides (OD-09); not bundled today", version: "not bundled", acknowledged: "vendor publishes no license; nothing is bundled or fetched (OD-09 pending)" },
+    { name: "beat-this weights", kind: "model weights", license: "UNLICENSED until owner decides (OD-09); not bundled today", version: "not bundled", acknowledged: "vendor publishes no license; nothing is bundled or fetched (OD-09 pending)" },
   ];
 }
 
@@ -219,6 +219,9 @@ function selfTest() {
   assert(denied("AGPL-3.0"), "AGPL-3.0 must be denied");
   assert(!denied("LGPL-2.1-or-later"), "LGPL must pass (FFmpeg, fpcalc)");
   assert(denied("UNLICENSED"), "UNLICENSED must be denied");
+  assert(denied("Unlicensed"), "Unlicensed mixed case must be denied (token path)");
+  assert(denied("UNLICENSED (weights, not bundled)"), "tokenized UNLICENSED phrase must be denied (case-insensitive tokens)");
+  assert(denied("UNLICENSED until owner decides (OD-09); not bundled today"), "UNLICENSED phrase with suffix must be denied (word-boundary prefix)");
   assert(denied("UNKNOWN"), "UNKNOWN must be denied");
   assert(denied(""), "empty license must be denied");
   assert(!denied("MIT OR Apache-2.0"), "MIT OR Apache-2.0 must pass (uv)");
@@ -252,6 +255,10 @@ if (process.argv.includes("--self-test")) selfTest();
 // ---------------------------------------------------------------------------
 
 let failures = 0;
+
+// Denylist hits that are recorded, explained, and accepted (kept visible in
+// the report and the summary instead of failing silently or hard).
+const acknowledged = [];
 
 const fail = (m) => { console.error(`license-check FAIL: ${m}`); failures++; };
 
@@ -298,7 +305,13 @@ for (const p of pipRows) {
 }
 
 for (const h of handList()) {
-  if (denied(normLicense(h.license))) fail(`hand-list ${h.name} license=${JSON.stringify(h.license)}`);
+  if (!denied(normLicense(h.license))) continue;
+  if (h.acknowledged) {
+    acknowledged.push(`${h.name}: ${h.acknowledged}`);
+    continue;
+  }
+
+  fail(`hand-list ${h.name} license=${JSON.stringify(h.license)}`);
 }
 
 for (const h of manifestRkbxScan()) fail(`rkbx_link declared: ${h}`);
@@ -317,11 +330,13 @@ const report = {
     return { name: p.Name ?? p.name, version: p.Version ?? p.version, license: known ?? normLicense(p.License ?? p.license) };
   }),
   hand: handList(),
-  policy: { denylist: ["GPL", "AGPL", "unlicensed", "unknown"], rkbx_link: "never a dependency", skipBartSeqLight: "no files, weights, or datasets (research inspiration only)" },
+  policy: { denylist: ["GPL", "AGPL", "unlicensed", "unknown"], acknowledged, rkbx_link: "never a dependency", skipBartSeqLight: "no files, weights, or datasets (research inspiration only)" },
 };
 
 process.stdout.write(JSON.stringify(report, null, 2) + "\n");
 
 if (failures > 0) { console.error(`license-check: ${failures} failure(s)`); process.exit(1); }
+
+if (acknowledged.length > 0) console.error(`license-check: ${acknowledged.length} acknowledged denylist exception(s)`);
 
 console.error(`license-check: OK (${report.yarn.length} yarn, ${report.pip.length} pip, ${report.hand.length} hand-listed)`);

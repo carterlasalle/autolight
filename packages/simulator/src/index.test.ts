@@ -11,7 +11,8 @@ describe("simulator", () => {
     expect(f.cells.map((c) => c.index)).toEqual([0, 1, 2]);
     expect(f.cells.map((c) => c.order)).toEqual([0, 1, 2]);
     expect(f.hardwareId).toBe("f");
-    expect(f.calibration.segmentCount).toBe(3);
+    expect(f.calibration).not.toBeNull();
+    expect(f.calibration?.segmentCount).toBe(3);
   });
   it("gates drops and disconnect windows with exact boundaries", () => {
     expect(gateFrame(4, { dropEvery: 2 })).toBe("drop");
