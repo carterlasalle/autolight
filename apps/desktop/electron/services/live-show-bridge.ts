@@ -94,9 +94,12 @@ export class LiveShowBridge {
    * Merge late-bound options. The singleton is often constructed before the
    * caller that owns the analyzer arrives; previously those options were
    * discarded and every deck stayed on the no-analyzer miss path forever.
+   * The analyzer is single-owner: this only supplies a missing one, so a
+   * seam already wired in survives the app's own re-registration on every
+   * readLiveShow call.
    */
   applyOptions(opts: BridgeOptions): void {
-    this.analyze = opts.analyze ?? this.analyze;
+    this.analyze ??= opts.analyze;
     this.styleId = opts.styleId ?? this.styleId;
 
     if (opts.shareDir !== undefined && opts.shareDir !== this.shareDir) {

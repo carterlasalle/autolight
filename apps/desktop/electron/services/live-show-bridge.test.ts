@@ -189,6 +189,19 @@ describe("live show bridge", () => {
     expect(deck?.track?.beatGrid.beats.length).toBeGreaterThan(100);
   });
 
+  it("an analyzer already wired into the singleton survives later registrations", async () => {
+    const { share } = makeShare([{ name: "track-one" }]);
+    const artifactPath = makeArtifact();
+    // Seams (test harnesses, injected callers) install their analyzer before
+    // the app's own readLiveShow re-registers on every call: the registration
+    // supplies a missing analyzer, it never clobbers one already in place.
+    const injected = getLiveShowBridge({ shareDir: share, analyze: async () => artifactPath });
+    getLiveShowBridge({ analyze: async () => null });
+    const deck = await injected.resolveDeck(1, 10, true, null);
+    expect(deck).not.toBeNull();
+    expect(deck?.track?.beatGrid.beats.length).toBeGreaterThan(100);
+  });
+
   it("an unstarted supervisor surfaces E_SUPERVISOR_NOT_STARTED, never a silent empty", async () => {
     const { AnalysisSupervisor } = await import("./analysis-supervisor.js");
     const supervisor = new AnalysisSupervisor();
