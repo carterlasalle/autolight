@@ -308,7 +308,13 @@ export function hasTable(db: SqlExec, name: string): boolean {
   return row !== undefined;
 }
 
+// PRAGMA cannot take a bound parameter, so the identifier is interpolated:
+// reject anything that is not a bare SQL identifier before it reaches SQL.
+const TABLE_IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
 export function columnsOf(db: SqlExec, table: string): ColumnInfo[] {
+  if (!TABLE_IDENTIFIER.test(table)) throw new Error(`invalid table identifier: ${table}`);
+
   return db.all<ColumnInfo>(`PRAGMA table_info(${table})`).map((row) => ({
     name: String(row.name),
     type: String(row.type),
@@ -332,8 +338,10 @@ function appliedRows(db: SqlExec): { version: number; name: string; applied_at: 
   );
 }
 
+// Read-only: a missing bookkeeping table means "no migrations applied yet"
+// (version 0), never a hidden CREATE TABLE on a read path.
 export function schemaVersion(db: SqlExec): number {
-  ensureBookkeeping(db);
+  if (!hasTable(db, "schema_migrations")) return 0;
   const rows = appliedRows(db);
 
   return rows.reduce((max, row) => Math.max(max, Number(row.version)), 0);
@@ -346,14 +354,13 @@ export interface MigratorStatus {
 }
 
 export function migratorStatus(db: SqlExec): MigratorStatus {
-  ensureBookkeeping(db);
-  const applied = appliedRows(db);
+  const applied = hasTable(db, "schema_migrations") ? appliedRows(db) : [];
   const version = applied.reduce((max, row) => Math.max(max, Number(row.version)), 0);
 
   return {
     version,
     applied,
-    pending: MIGRATIONS.filter((m) => m.version > version).map((m) => m.version),
+    pending: MIGRATIONS.flatMap((m) => (m.version > version ? [m.version] : [])),
   };
 }
 
@@ -364,6 +371,20 @@ export interface MigrateResult {
   adoptedBaseline: boolean;
 }
 
+// Every table migration 1 creates. Adoption is only sound when the whole
+// baseline is present: a partially built database that happens to contain
+// `tracks` would otherwise be stamped at version 1, then migration 2 would
+// fail on the missing tables and leave the database stuck.
+const BASELINE_TABLES = [
+  "tracks",
+  "analysis_artifacts",
+  "show_plans",
+  "devices",
+  "venues",
+  "sessions",
+  "diagnostic_events",
+] as const;
+
 // A database written by the first release has the baseline tables and no
 // bookkeeping: adopt it at version 1 rather than replaying migration 1.
 function adoptLegacyBaseline(db: SqlExec): boolean {
@@ -371,7 +392,7 @@ function adoptLegacyBaseline(db: SqlExec): boolean {
 
   if (appliedRows(db).length > 0) return false;
 
-  if (!hasTable(db, "tracks")) return false;
+  if (!BASELINE_TABLES.every((name) => hasTable(db, name))) return false;
   db.run("INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)", [
     1,
     "baseline",
@@ -398,9 +419,20 @@ export function migrate(db: SqlExec, options: { target?: number } = {}): Migrate
 
   for (const migration of MIGRATIONS) {
     if (migration.version <= from || migration.version > target) continue;
-    db.exec("BEGIN");
+    // BEGIN IMMEDIATE takes the write lock up front; two migrators (app + CLI)
+    // racing on the same file cannot both enter. The applied version is
+    // re-checked inside the transaction so the loser of the race becomes a
+    // clean no-op instead of re-running ALTER/CREATE.
+    db.exec("BEGIN IMMEDIATE");
 
     try {
+      const done = appliedRows(db).some((row) => Number(row.version) === migration.version);
+
+      if (done) {
+        db.exec("ROLLBACK");
+        continue;
+      }
+
       db.exec(migration.sql);
       db.run("INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)", [
         migration.version,
@@ -409,7 +441,15 @@ export function migrate(db: SqlExec, options: { target?: number } = {}): Migrate
       ]);
       db.exec("COMMIT");
     } catch (error) {
-      db.exec("ROLLBACK");
+      try {
+        db.exec("ROLLBACK");
+      } catch {
+        // The driver may have already aborted the transaction; keep the
+        // original error so the real cause is never masked.
+      }
+
+      // SAFETY: the thrown value is always an Error here (db.exec/run and the
+      // migration SQL throw Errors); reading its message is the contract.
       throw new Error(`migration ${migration.version} (${migration.name}) failed: ${(error as Error).message}`);
     }
 

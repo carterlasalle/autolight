@@ -44,11 +44,13 @@ async function waitFor(predicate: () => boolean, timeoutMs = 1000): Promise<void
 function waitForDatagrams(listener: Listener, count: number): Promise<void> {
   if (listener.received.length >= count) return Promise.resolve();
   const { promise, resolve, reject } = Promise.withResolvers<void>();
+
   const check = (): void => {
     if (listener.received.length < count) return;
     listener.socket.off("message", check);
     resolve();
   };
+
   listener.socket.on("message", check);
   listener.socket.once("error", reject);
 

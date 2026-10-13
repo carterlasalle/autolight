@@ -6,7 +6,7 @@
 // names its own file. Settings and diagnostics read presence() only.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { isSecretId, redactSecretText, SECRET_STORED_LABEL, SecretVault, type SafeStoragePort, type SecretBlobStore, type SecretId } from "@autolight/config";
+import { isSecretId, redactSecretText, SECRET_IDS, SECRET_STORED_LABEL, SecretVault, type SafeStoragePort, type SecretBlobStore, type SecretId } from "@autolight/config";
 import { resolveUserDataDir, ServiceTracker, messageOf, type Service, type ServiceStatus } from "./base.js";
 
 export interface SecretsServiceOptions {
@@ -109,9 +109,11 @@ export class SecretsService implements Service {
         decryptString: () => { throw new Error("secret encryption unavailable"); },
         isEncryptionAvailable: () => false,
       };
-
-      this.vault = new SecretVault(crypto ?? fallback, memoryBlobs);
-      this.tracker.set("degraded", "secret persistence unavailable (no keychain path); memory only this session");
+      // Degraded: pass the fallback port (whose isEncryptionAvailable() is
+      // false) so every persistent set goes through SecretVault.flush() and
+      // fails honestly, instead of the real port persisting to a dead path.
+      this.vault = new SecretVault(fallback, memoryBlobs);
+      this.tracker.set("degraded", "OS keychain unavailable: secrets are session-only");
 
       return this.status();
     }
@@ -166,8 +168,14 @@ export class SecretsService implements Service {
     if (!isSecretId(id)) {
       return { ok: false, error: { code: "E_UNKNOWN_SECRET", message: `${id}: unknown secret id` } };
     }
+    let value: string | null;
 
-    const value = this.requireVault().get(id);
+    try {
+      value = this.requireVault().get(id);
+    } catch (err) {
+      return { ok: false, error: { code: "E_SECRET_STORE", message: messageOf(err) } };
+    }
+
 
     if (value === null) {
       return { ok: false, error: { code: "E_SECRET_MISSING", message: `${id}: not stored (fix: set it in Settings)` } };
@@ -181,19 +189,25 @@ export class SecretsService implements Service {
       return { ok: false, error: { code: "E_UNKNOWN_SECRET", message: `${id}: unknown secret id` } };
     }
 
-    this.requireVault().remove(id);
+    try {
+      this.requireVault().remove(id);
+    } catch (err) {
+      return { ok: false, error: { code: "E_SECRET_STORE", message: messageOf(err) } };
+    }
+
     this.tracker.count("removals");
 
     return { ok: true, id };
   }
 
   // Values for redaction at log boundaries. The only sanctioned fetch of raw
-  // values outside a transport call.
+  // values outside a transport call. Iterates SECRET_IDS so a newly added
+  // secret id is redacted by construction.
   liveValues(): string[] {
     const vault = this.requireVault();
     const out: string[] = [];
 
-    for (const id of ["govee.cloud.apiKey", "agent.apiToken"] as const) {
+    for (const id of SECRET_IDS) {
       const v = vault.get(id);
 
       if (v !== null) out.push(v);

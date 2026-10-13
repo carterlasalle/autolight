@@ -32,7 +32,7 @@ export type { SplitDef, ZoneDef, Selector, DerivedGroups, RoleGroups } from "./g
 
 export type { WizardDirection, RunTopology, SimStrip, WizardFit } from "./wizard.js";
 
-export type { Venue as VenueModel, VenueFile, VenueTemplate } from "./venue.js";
+export type { Venue as VenueModel, VenueFile } from "./venue.js";
 
 export type { ReferenceRoom } from "./reference.js";
 

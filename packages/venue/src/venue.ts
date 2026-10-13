@@ -21,24 +21,41 @@ export function emptyVenue(room: Room): Venue {
   return { id: `venue-${room.id}`, name: room.name, room, fixtures: [], logicalZeroS: room.logicalZeroS ?? 0, version: 1 };
 }
 
-export function switchVenue(venue: Venue): { venue: Venue; rerenderVersion: number } {
-  return { venue, rerenderVersion: venue.version + 1 };
+// Result of a venue switch: the bumped venue and the rerender counter derived
+// from the same version, so persistence and rerender stay consistent.
+export interface VenueSwitch {
+  venue: Venue;
+  rerenderVersion: number;
+}
+
+export function switchVenue(venue: Venue): VenueSwitch {
+  const version = venue.version + 1;
+
+  return { venue: { ...venue, version }, rerenderVersion: version };
 }
 
 export function exportVenue(venue: Venue): VenueFile {
   return { format: "autolight-venue", version: 1, venue: structuredClone(venue) };
 }
 
-export function importVenue(file: VenueFile): Venue {
-  if (file.format !== "autolight-venue" || file.version !== 1) {
-    const seen = "version" in file && typeof file.version === "number" ? file.version : "missing";
-    throw new Error(`unsupported venue file version ${String(seen)}`);
+// Null-safe: `file` is an untrusted parsed payload, so a null, undefined or
+// primitive input must produce the descriptive error instead of a TypeError.
+// `file?.` and property reads never throw on primitives (only `in`/direct
+// member access on null would), so the guard is safe for every JSON value.
+export function importVenue(file: VenueFile | null | undefined): Venue {
+  if (file?.format !== "autolight-venue" || file.version !== 1) {
+    throw new Error(`unsupported venue file version ${String(file?.version ?? "missing")}`);
+  }
+
+  if (file.venue == null || file.venue.room == null) {
+    throw new Error("venue file payload is missing or malformed");
   }
 
   return structuredClone(file.venue);
 }
 
 export function setLogicalZero(venue: Venue, s: number): Venue {
+  if (!Number.isFinite(s)) throw new Error(`logical zero must be a finite number, got ${String(s)}`);
   const zero = ((s % 1) + 1) % 1;
 
   return {
@@ -48,18 +65,6 @@ export function setLogicalZero(venue: Venue, s: number): Venue {
     version: venue.version + 1,
   };
 }
-
-export interface VenueTemplate {
-  id: string;
-  name: string;
-  describe: string;
-}
-
-export const VENUE_TEMPLATES: VenueTemplate[] = [
-  { id: "square-loop", name: "Square room with ceiling loop", describe: "5 m square, closed ceiling loop, DJ mid-wall front" },
-  { id: "club-rectangle", name: "Rectangular club", describe: "6 by 10 m, gap over the door, two lamps" },
-  { id: "bedroom", name: "Bedroom", describe: "3 by 4 m, open path strip, one lamp" },
-];
 
 export function outlineRuns(room: Room, z: number): Run[] {
   const outline = normalizeOutline(room.outline);
