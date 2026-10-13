@@ -6,8 +6,8 @@ import { KEYS, defineKey, defaultFor, ConfigStore } from "./index.js";
 import { CONFIG_CHANGED, PersistentConfigStore, validateImportValues } from "./store.js";
 
 describe("config registry", () => {
-  it("holds all 240 catalog keys with receipts", () => {
-    expect(KEYS.length).toBe(240);
+  it("holds all 244 catalog keys with receipts", () => {
+    expect(KEYS.length).toBe(244);
 
     for (const k of KEYS) {
       expect(k.receipt.length, k.key).toBeGreaterThan(0);
@@ -149,13 +149,28 @@ describe("config persistence (T-CFG-02)", () => {
   it("emits config:changed with the diff", () => {
     expect(CONFIG_CHANGED).toBe("config:changed");
     const store = new PersistentConfigStore();
-    const seen: { key: string; before: unknown; after: unknown; liveSafe: boolean; layer: string }[] = [];
-    const off = store.subscribe((c) => { seen.push(c); });
+    const first: { key: string; before: unknown; after: unknown; liveSafe: boolean; layer: string }[] = [];
+    const second: { key: string; before: unknown; after: unknown; liveSafe: boolean; layer: string }[] = [];
+    const offFirst = store.subscribe((c) => { first.push(c); });
+    const offSecond = store.subscribe((c) => { second.push(c); });
     store.set("app", "runtime.snapshot.uiRateHz", 45);
-    expect(seen.length).toBe(1);
-    expect(seen[0]).toMatchObject({ key: "runtime.snapshot.uiRateHz", before: 30, after: 45, liveSafe: true, layer: "app" });
-    off();
+    expect(first.length).toBe(1);
+    expect(second.length).toBe(1);
+    expect(first[0]).toMatchObject({ key: "runtime.snapshot.uiRateHz", before: 30, after: 45, liveSafe: true, layer: "app" });
+    // Successive set: before reflects the previously-set value, not the default.
     store.set("app", "runtime.snapshot.uiRateHz", 50);
-    expect(seen.length).toBe(1);
+    expect(first.length).toBe(2);
+    expect(first[1]).toMatchObject({ key: "runtime.snapshot.uiRateHz", before: 45, after: 50 });
+    expect(second.length).toBe(2);
+    // off() removes only the unsubscribed listener.
+    offFirst();
+    store.set("app", "runtime.snapshot.uiRateHz", 55);
+    expect(first.length).toBe(2);
+    expect(second.length).toBe(3);
+    expect(second[2]).toMatchObject({ before: 50, after: 55 });
+    offSecond();
+    store.set("app", "runtime.snapshot.uiRateHz", 60);
+    expect(first.length).toBe(2);
+    expect(second.length).toBe(3);
   });
 });

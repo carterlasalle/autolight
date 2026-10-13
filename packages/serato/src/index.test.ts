@@ -4,7 +4,8 @@ import { parseCrate, parseBeatGrid, remoteToDeckState, tempoRegionsToBeats } fro
 
 const home = `${process.env.HOME}/Music/_Serato_`;
 
-const hasLibrary = existsSync(`${home}/Subcrates/Recorded.crate`);
+const cratePath = `${home}/Subcrates/Recorded.crate`;
+const mp3Path = `${home}/Imported/Scratch Beats_/ScratchBeat5.mp3`;
 
 const remoteBase = {
   deckId: 1, filepath: "/m/track.mp3", playing: true, playheadSeconds: 30,
@@ -14,12 +15,13 @@ const remoteBase = {
 };
 
 describe("serato", () => {
-  it("parses a real crate", () => {
-    if (!hasLibrary) return; // CI has no ~/Music — synthetic cases below cover parsing
-    const buf = readFileSync(`${home}/Subcrates/Recorded.crate`);
+  it.skipIf(!existsSync(cratePath))("parses a real crate", () => {
+    const buf = readFileSync(cratePath);
     const entries = parseCrate(buf);
     expect(entries.length).toBeGreaterThan(0);
-    expect(entries[0]!.path.length).toBeGreaterThan(0);
+    expect(entries[0]?.path.length).toBeGreaterThan(0);
+    // Structural check: every entry carries a non-empty path, not just the first.
+    for (const entry of entries) expect(entry.path.length).toBeGreaterThan(0);
   });
   it("rejects bad magic", () => {
     expect(() => parseCrate(new Uint8Array([1, 2, 3, 4, 0, 0, 0, 0]))).toThrow();
@@ -48,17 +50,21 @@ describe("serato", () => {
     expect(b4).toHaveLength(1);
     expect(b4[0]!.bpm).toBeCloseTo(85);
     expect(b4[0]!.startSeconds).toBeCloseTo(0.046, 2);
-
-    if (!hasLibrary) return;
-    const buf = readFileSync(`${home}/Imported/Scratch Beats_/ScratchBeat5.mp3`);
+  });
+  it.skipIf(!existsSync(mp3Path))("parses the on-disk BeatGrid region", () => {
+    const buf = readFileSync(mp3Path);
     const at = buf.indexOf("Serato BeatGrid");
     expect(at).toBeGreaterThan(0);
     const o = at + "Serato BeatGrid".length + 1;
-    const payload = new Uint8Array(buf.buffer, buf.byteOffset + o, 15);
-    expect(parseBeatGrid(payload)[0]!.bpm).toBeCloseTo(88);
+    expect(o + 15).toBeLessThanOrEqual(buf.length);
+    const region = buf.subarray(o, o + 15);
+    const payload = new Uint8Array(region.buffer, region.byteOffset, 15);
+    const regions = parseBeatGrid(payload);
+    expect(regions.length).toBeGreaterThan(0);
+    expect(regions[0]!.bpm).toBeCloseTo(88);
   });
   it("rejects corrupt BeatGrid payloads", () => {
-    expect(() => parseBeatGrid(new Uint8Array([2, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0]))).toThrow();
-    expect(() => parseBeatGrid(new Uint8Array([1, 0]))).toThrow();
+    expect(() => parseBeatGrid(new Uint8Array([2, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0]))).toThrow(/version=2/);
+    expect(() => parseBeatGrid(new Uint8Array([1, 0]))).toThrow(/too short/);
   });
 });

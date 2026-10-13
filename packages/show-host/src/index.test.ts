@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { MessageChannel } from "node:worker_threads";
 import {
   HOST_MODES,
@@ -14,16 +14,14 @@ const allowAll: AddonProbe = () => ({ id: "govee-toolkit", available: true, reas
 
 function makeHost() {
   const crashes: string[] = [];
-  let now = 0n;
 
   const host = new ShowHost({
     config: { mode: "worker-thread", tickHz: 60, uiRateHz: 30, maxBytes: 262144 },
     onCrash: (reason) => { crashes.push(reason); },
     addonProbe: allowAll,
-    nowNs: () => now,
   });
 
-  return { host, crashes, advance: (ns: bigint) => { now = ns; } };
+  return { host, crashes };
 }
 
 // In-memory message pump: delivers every posted message to the peer on the
@@ -136,19 +134,20 @@ describe("show-host modes", () => {
     host.attach(wrapMessagePort(channel.port2, true));
     channel.port2.close();
     await closed;
-    await new Promise((resolve) => { setImmediate(resolve); });
     expect(crashes.length).toBe(1);
+    // The crashFired guard makes stop() after the crash a no-op on the hook.
     host.stop();
+    expect(crashes.length).toBe(1);
     channel.port1.close();
   });
-  it("tick clock defaults to the monotonic hrtime source, never the wall clock", () => {
+  it("tick intervals land in the delta window for explicit monotonic ticks", () => {
     const { host } = makeHost();
     host.tick(0n);
     host.tick(16_666_666n);
     const metrics = host.getMetrics();
     expect(metrics.ticks).toBe(2);
     // 16.7ms nominal tick lands in the delta window: proves the tick
-    // pipeline measures with the injected monotonic source.
+    // pipeline measures intervals off the monotonic tick timestamps.
     expect(metrics.intervalP50Ms).toBeGreaterThan(0);
     host.stop();
   });
@@ -158,7 +157,10 @@ describe("show-host modes", () => {
     // a no-op that must not fire it again.
     const crashes: string[] = [];
     const allowEvery: AddonProbe = (id) => ({ id, available: true, reason: null });
-    const handle = startHost("worker-thread", allowEvery);
+    const handle = startHost("worker-thread", {
+      probe: allowEvery,
+      onCrash: (reason) => { crashes.push(reason); },
+    });
     expect(handle.mode).toBe("worker-thread");
     expect(handle.status.available).toBe(true);
     expect(handle.port).toBeDefined();
@@ -187,6 +189,6 @@ describe("show-host modes", () => {
     expect(crashes.length).toBe(0);
     handle.stop();
     handle.port.close();
-    expect(vi.fn().mock.calls.length).toBe(0);
+    expect(crashes.length).toBe(0);
   });
 });

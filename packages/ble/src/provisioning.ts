@@ -19,7 +19,7 @@ export function bleProvisionStop(): Uint8Array {
 
 /** Chunked credential transfer: A1 11 <chunk>. */
 export function bleProvisionChunk(chunk: Uint8Array): Uint8Array {
-  return encodeBleFrame(0xa1, 0x11, chunk);
+  return encodeBleFrame(BLE_PROTYPE.PROVISION, 0x11, chunk);
 }
 
 /** Splits SSID plus password bytes into 17 byte chunks for the A1 11 transfer. */
@@ -81,7 +81,14 @@ export const BLE_PROVISION_CHUNK_PACING_MS = 300;
 
 /** Credential payload: utf8 ssid, one NUL separator, utf8 password. */
 export function bleProvisionPayload(creds: BleProvisionCredentials): Uint8Array {
+  if (typeof creds.ssid !== "string" || typeof creds.password !== "string") {
+    throw new Error("provisioning needs an SSID and password as strings");
+  }
+
   if (creds.ssid.length === 0) throw new Error("provisioning needs an SSID");
+
+  if (creds.password.length === 0) throw new Error("provisioning needs a password");
+
   const enc = new TextEncoder();
   const ssid = enc.encode(creds.ssid);
   const password = enc.encode(creds.password);
@@ -89,6 +96,8 @@ export function bleProvisionPayload(creds: BleProvisionCredentials): Uint8Array 
   out.set(ssid, 0);
   out[ssid.length] = 0x00;
   out.set(password, ssid.length + 1);
+
+  if (out.length > 512) throw new RangeError(`provisioning payload too long: ${out.length} bytes`);
 
   return out;
 }
@@ -99,7 +108,28 @@ export function bleProvisionPayload(creds: BleProvisionCredentials): Uint8Array 
  * only for the transfer and is never stored unless the owner opts in through
  * onPasswordSaved (wired to safeStorage outside this package).
  */
+let provisionFlight: Promise<BleProvisionResult> | null = null;
+
 export async function provisionBleWifi(
+  transport: BleProvisionTransport,
+  creds: BleProvisionCredentials,
+  opts: BleProvisionFlowOptions = {},
+): Promise<BleProvisionResult> {
+  if (provisionFlight !== null) {
+    throw new Error("provisionBleWifi already in flight for this process; serialize calls per transport");
+  }
+
+  const run = runProvision(transport, creds, opts);
+  provisionFlight = run;
+
+  try {
+    return await run;
+  } finally {
+    provisionFlight = null;
+  }
+}
+
+async function runProvision(
   transport: BleProvisionTransport,
   creds: BleProvisionCredentials,
   opts: BleProvisionFlowOptions = {},
@@ -110,27 +140,42 @@ export async function provisionBleWifi(
   if (!(pacing > 0)) throw new RangeError(`provision chunk pacing needs a positive ms value, got ${pacing}`);
 
   if (!(startWait >= 0)) throw new RangeError(`provision start wait needs a non-negative ms value, got ${startWait}`);
-  let password = creds.password;
+  const password = creds.password;
   const payload = bleProvisionPayload({ ssid: creds.ssid, password });
   const chunks = bleProvisionChunks(payload);
-  await transport.write(bleProvisionStart());
-  await transport.sleep(startWait);
 
-  for (let i = 0; i < chunks.length; i++) {
-    await transport.write(bleProvisionChunk(chunks[i] ?? new Uint8Array(0)));
+  try {
+    await transport.write(bleProvisionStart());
+    await transport.sleep(startWait);
 
-    if (i < chunks.length - 1) await transport.sleep(pacing);
+    for (let i = 0; i < chunks.length; i++) {
+      await transport.write(bleProvisionChunk(chunks[i] ?? new Uint8Array(0)));
+
+      if (i < chunks.length - 1) await transport.sleep(pacing);
+    }
+
+    await transport.write(bleProvisionStop());
+  } catch (error) {
+    try {
+      await transport.write(bleProvisionStop());
+    } catch {
+      // Best effort: the stop frame must not mask the original failure.
+    }
+
+    throw error;
+  } finally {
+    // The JS password string itself is immutable and cannot be scrubbed;
+    // zero the encoded copies so the credential does not persist in buffers.
+    payload.fill(0);
+
+    for (const chunk of chunks) chunk.fill(0);
   }
-
-  await transport.write(bleProvisionStop());
   let passwordStored = false;
 
   if (opts.onPasswordSaved !== undefined) {
     await opts.onPasswordSaved(password);
     passwordStored = true;
   }
-
-  password = "";
 
   return {
     ssid: creds.ssid,

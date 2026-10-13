@@ -73,7 +73,19 @@ interface CipherHandle {
     get(params: SqlParams): Record<string, SqlParam> | undefined;
   };
   pragma(stmt: string): unknown;
+  exec(sql: string): void;
   close(): void;
+}
+
+/** Single shared read-back of the query_only lock; both drivers use this so the security check cannot drift. */
+function readQueryOnlyLock(getRow: () => Record<string, unknown> | undefined): unknown {
+  const lockRow = getRow();
+
+  if (lockRow === undefined) return undefined;
+
+  if ("query_only" in lockRow) return lockRow["query_only"];
+
+  return Object.values(lockRow)[0];
 }
 
 // Optional native module: pick its callable constructor without fabricating a
@@ -88,19 +100,21 @@ function ctorOf(mod: unknown): unknown {
 // rebuild list, T-OPS-05) and is absent on machines that never install it; a
 // static import would fail type-check and load without it, so the specifier is
 // a runtime variable.
-async function openWithCipher(dbPath: string, key: string): Promise<ReadOnlyDb | undefined> {
+type CipherOpenResult = { ok: true; db: ReadOnlyDb } | { ok: false; reason: "module-missing" };
+
+async function openWithCipher(dbPath: string, key: string): Promise<CipherOpenResult> {
   const specifier = CIPHER_MODULE;
   let mod: unknown;
 
   try {
     mod = await import(/* @vite-ignore */ specifier);
   } catch {
-    return undefined;
+    return { ok: false, reason: "module-missing" };
   }
 
   const ctor = ctorOf(mod);
 
-  if (typeof ctor !== "function") return undefined;
+  if (typeof ctor !== "function") return { ok: false, reason: "module-missing" };
 
   // Reason for the cast: the module ships no typings this package can import
   // statically while the dependency stays optional.
@@ -117,21 +131,20 @@ async function openWithCipher(dbPath: string, key: string): Promise<ReadOnlyDb |
     // A present-but-unloadable native binding (missing .node build) is the
     // same state as absent: the caller falls through to the typed
     // cipher-module-missing error, never a raw bindings threw.
-    return undefined;
+    return { ok: false, reason: "module-missing" };
   }
 
   try {
     handle.pragma("cipher='sqlcipher'");
     handle.pragma("legacy=4");
-    handle.pragma(`key='${key}'`);
+    handle.pragma(`key='${key.replace(/'/g, "''")}'`);
     // The key must decrypt before the read-only lock lands: a wrong key
     // fails here as a SQLCipher error, never as a silently unreadable handle.
     handle.prepare("SELECT count(*) AS n FROM sqlite_master").get({});
     // Read committed-but-uncheckpointed rows written by Rekordbox's own handle.
     handle.pragma("read_uncommitted=true");
     handle.pragma("query_only=ON");
-    const lockRow = handle.prepare("PRAGMA query_only").get({});
-    const lockValue = lockRow === undefined ? undefined : "query_only" in lockRow ? lockRow["query_only"] : Object.values(lockRow)[0];
+    const lockValue = readQueryOnlyLock(() => handle.prepare("PRAGMA query_only").get({}));
 
     if (lockValue !== 1 && lockValue !== "1") {
       throw new LibraryDbError(`${dbPath} refused the query_only lock`, "driver-failed");
@@ -141,17 +154,23 @@ async function openWithCipher(dbPath: string, key: string): Promise<ReadOnlyDb |
 
     if (error instanceof LibraryDbError) throw error;
 
-    return undefined;
+    // Module is present but the file/key failed: wrong key, corrupt file, or
+    // I/O error. Surfaced as driver-failed with the cause, never conflated
+    // with module-absence so the caller cannot misroute to the sidecar.
+    throw new LibraryDbError(`could not open ${dbPath} with ${CIPHER_MODULE}: ${describe(error)}`, "driver-failed");
   }
 
-  return adapter(
-    "better-sqlite3-multiple-ciphers",
-    (sql) => handle.prepare(sql),
-    () => {
-      handle.close();
-    },
-    handle,
-  );
+  return {
+    ok: true,
+    db: adapter(
+      "better-sqlite3-multiple-ciphers",
+      (sql) => handle.prepare(sql),
+      () => {
+        handle.close();
+      },
+      handle,
+    ),
+  };
 }
 
 function openWithNodeSqlite(dbPath: string): ReadOnlyDb {
@@ -174,8 +193,7 @@ function openWithNodeSqlite(dbPath: string): ReadOnlyDb {
 
   try {
     handle.exec("PRAGMA query_only=ON");
-    const lockRow = prepare("PRAGMA query_only").get({});
-    const lockValue = lockRow === undefined ? undefined : "query_only" in lockRow ? lockRow["query_only"] : Object.values(lockRow)[0];
+    const lockValue = readQueryOnlyLock(() => prepare("PRAGMA query_only").get({}) as Record<string, unknown> | undefined);
 
     if (lockValue !== 1 && lockValue !== "1") {
       throw new LibraryDbError(`${dbPath} refused the query_only lock`, "driver-failed");
@@ -214,7 +232,7 @@ export async function openReadOnly(dbPath: string, key?: string): Promise<ReadOn
   if (key !== undefined) {
     const cipher = await openWithCipher(dbPath, key);
 
-    if (cipher !== undefined) return cipher;
+    if (cipher.ok) return cipher.db;
     throw new LibraryDbError(
       `${CIPHER_MODULE} is not installed; the pyrekordbox reader covers this database`,
       "cipher-module-missing",
@@ -225,7 +243,12 @@ export async function openReadOnly(dbPath: string, key?: string): Promise<ReadOn
     return openWithNodeSqlite(dbPath);
   } catch (error) {
     if (error instanceof LibraryDbError && error.code === "not-a-database") {
-      throw new LibraryDbError(`${dbPath} is encrypted; a SQLCipher driver is required`, "not-a-database");
+      // Preserve the underlying cause: a corrupt/unreadable plain file is not
+      // proof of encryption, so suggest SQLCipher only as a possibility.
+      throw new LibraryDbError(
+        `${dbPath} is not a readable SQLite file (${describe(error)}); if this is an encrypted Rekordbox master.db, a SQLCipher driver is required`,
+        "not-a-database",
+      );
     }
 
     throw error;
@@ -262,7 +285,9 @@ function isExecable(value: unknown): value is ExecableHandle {
  * through the handle's own driver entry point. A read-only open must reject it.
  */
 export function attemptWrite(db: ReadOnlyDb, sql = WRITE_PROBE_SQL): { rejected: boolean; error: string | null } {
-  if (!isExecable(db.raw)) return { rejected: false, error: "driver handle exposes no write entry point" };
+  // Both real handles expose exec, so this branch is unreachable in practice;
+  // it stays as an explicit inconclusive probe (not "write not rejected").
+  if (!isExecable(db.raw)) return { rejected: false, error: "probe inconclusive: driver handle exposes no write entry point" };
 
   try {
     db.raw.exec(sql);
