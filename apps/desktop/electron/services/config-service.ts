@@ -89,13 +89,14 @@ export class ConfigService implements Service {
 
   private subscribeStore(): void {
     this.storeUnsubscribe?.();
+    this.storeUnsubscribe = null;
     this.storeUnsubscribe = this.store?.subscribe((change) => {
       if (this.history.length >= 500) this.history.shift();
       this.history.push(change);
       this.tracker.count("changes");
 
       for (const listener of this.listeners) listener(change);
-    });
+    }) ?? null;
   }
 
   async start(): Promise<ServiceStatus> {
