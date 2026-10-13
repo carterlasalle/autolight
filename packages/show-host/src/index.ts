@@ -375,12 +375,12 @@ export class ShowHost {
   private readonly bus: PortBus;
   private readonly worlds = new Map<number, DeckWorld>();
   private fixtures: Fixture[] = [];
+  private fixturesGeneration = 0;
   private override: OverrideKind = "none";
   private masterIntensity = 1;
   private energyTier: string | null = null;
   private activeDeck: number | null = null;
   private style: { readonly style: string; readonly palette: string } | null = null;
-  private lastTrigger: "build" | "drop" | null = null;
   private lastFrames = new Map<string, Uint8Array>();
   private lastOwner: "a" | "b" | null = null;
   private lastWeights: SnapshotWeights = { a: 0, b: 0 };
@@ -452,11 +452,11 @@ export class ShowHost {
   // Tick pipeline (hrtime clock)
 
   tick(nowNs: bigint): void {
-    const last = this.lastTickNs;
+    const prevTickNs = this.lastTickNs;
     this.lastTickNs = nowNs;
 
-    if (last !== null && nowNs >= last) {
-      const deltaNs = nowNs - last;
+    if (prevTickNs !== null && nowNs >= prevTickNs) {
+      const deltaNs = nowNs - prevTickNs;
       this.tickDeltasMs.push(Number(deltaNs) / 1e6);
 
       if (this.tickDeltasMs.length > this.maxDeltas) this.tickDeltasMs.shift();
@@ -465,7 +465,7 @@ export class ShowHost {
     }
 
     this.tickCount += 1;
-    this.advanceCursors(nowNs);
+    this.advanceCursors(nowNs, prevTickNs);
     const frames = this.composeFrames();
     this.lastFrames = this.applyOverrides(frames);
 
@@ -526,25 +526,33 @@ export class ShowHost {
   }
 
   installFixtures(generation: number, fixtures: Fixture[]): void {
+    // Latest wins: a stale out-of-order payload must not clobber newer state.
+    if (generation < this.fixturesGeneration) return;
+    this.fixturesGeneration = generation;
     this.fixtures = fixtures;
-    void generation;
   }
 
-  private advanceCursors(nowNs: bigint): void {
+  private advanceCursors(nowNs: bigint, prevTickNs: bigint | null): void {
     for (const world of this.worlds.values()) {
       if (world.state === null) continue;
       const state = world.state;
       const bpm = state.effectiveBpm ?? 120;
       const beatPerSecond = bpm / 60;
-      const elapsedNs = this.lastTickNs === null ? 0n : nowNs - this.lastTickNs;
+      // prevTickNs is captured in tick() before lastTickNs is overwritten;
+      // reading the field here would always see nowNs and freeze prediction.
+      const elapsedNs = prevTickNs === null ? 0n : nowNs - prevTickNs;
 
       const predicted =
         world.cursor.beat +
         (elapsedNs < 0n ? 0 : (Number(elapsedNs) / 1e9) * (state.playing ? state.playRate : 0) * beatPerSecond);
 
-      const estimated = estimatePosition(state, nowNs) * beatPerSecond;
+      // The estimator extrapolates the stale provider playhead to now; the
+      // track step compares the predicted cursor against that estimate.
+      const estimatedSeconds = estimatePosition(state, nowNs);
       const gridBeat = (seconds: number): number => seconds * beatPerSecond;
-      const tracked = trackDeck(predicted, state, gridBeat, { seekThresholdBeats: SEEK_THRESHOLD_BEATS });
+      const tracked = trackDeck(predicted, { ...state, playheadSeconds: estimatedSeconds }, gridBeat, {
+        seekThresholdBeats: SEEK_THRESHOLD_BEATS,
+      });
 
       if (tracked.scratchHold) continue;
 
@@ -599,6 +607,7 @@ export class ShowHost {
         blendSpace: "oklab-hue-linear-intensity",
         layers: [],
       };
+      this.lastWeights = { a: 1, b: 0 };
     } else {
       const second = audible[1]!;
       result = mixDown(firstMix, this.deckMixOf(second));
@@ -677,7 +686,19 @@ export class ShowHost {
     const bytes = Buffer.byteLength(JSON.stringify(snapshot));
 
     if (bytes > this.maxBytes) {
-      throw new Error(`snapshot is ${bytes} bytes, over runtime.snapshot.maxBytes ${this.maxBytes}`);
+      // Tick-loop errors must stay protocol-visible: throwing here would
+      // unwind the setInterval callback and rethrow on every later tick.
+      this.bus.send({
+        type: "error",
+        error: {
+          code: "E_SNAPSHOT_TOO_LARGE",
+          message: `snapshot is ${bytes} bytes, over runtime.snapshot.maxBytes ${this.maxBytes}`,
+        },
+      });
+      this.onCrash(`snapshot is ${bytes} bytes, over runtime.snapshot.maxBytes ${this.maxBytes}`);
+      this.lastSnapshotNs = nowNs;
+
+      return;
     }
 
     this.bus.send({ type: "snapshot", snapshot });
@@ -686,6 +707,10 @@ export class ShowHost {
     this.lastPublishedTick = this.tickCount;
     this.snapshotsPublished += 1;
     this.lastSnapshotNs = nowNs;
+    // Rolling window: the next period measures from this publish, not process
+    // start. Reset here (not in getMetrics) so reads stay side-effect free.
+    this.metricsWindowStartNs = nowNs;
+    this.missedTicks = 0;
   }
 
   private buildSnapshot(nowNs: bigint): HostSnapshot {
@@ -790,7 +815,17 @@ export class ShowHost {
     const parsed = schema.safeParse(result);
 
     if (!parsed.success) {
-      throw new Error(`show host response for ${channel} failed its schema: ${parsed.error.message}`);
+      // Port-listener errors must stay protocol-visible: throwing here would
+      // unwind the onMessage callback and wedge the host.
+      this.bus.send({
+        type: "error",
+        error: {
+          code: "E_BAD_RESPONSE",
+          message: `show host response for ${channel} failed its schema: ${parsed.error.message}`,
+        },
+      });
+
+      return;
     }
 
     this.bus.send({ type: "response", channel, response: parsed.data });
@@ -858,13 +893,11 @@ export class ShowHost {
       }
 
       case "show/trigger-build": {
-        this.lastTrigger = "build";
         response = { triggered: true };
         break;
       }
 
       case "show/trigger-drop": {
-        this.lastTrigger = "drop";
         response = { triggered: true };
         break;
       }
@@ -896,6 +929,9 @@ export class ShowHost {
     if (this.crashFired) return;
     this.crashFired = true;
     this.onCrash(reason);
+    // The bus is ended so publishes no-op from here on; stop the interval
+    // so the host does not tick forever when onCrash does not end it.
+    this.stop();
   }
 }
 

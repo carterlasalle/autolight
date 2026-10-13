@@ -108,7 +108,9 @@ function arcToUsable(usable: { start: number; end: number }[], arc: number): num
     acc += s.end - s.start;
   }
 
-  return acc;
+  // An anchor inside a gap matches no usable segment; snapping it to a run
+  // boundary would silently mislocate every cell derived from it.
+  throw new Error(`anchor at ${arc}m does not fall inside a usable segment`);
 }
 
 function usableToArc(usable: { start: number; end: number }[], u: number): number {
@@ -119,7 +121,12 @@ function usableToArc(usable: { start: number; end: number }[], u: number): numbe
     u -= w;
   }
 
-  const last = usable[usable.length - 1]!;
+  // Fully-gapped or zero-length runs have no usable length; callers map
+  // every cell through here, so fail loudly instead of reading .end of
+  // undefined.
+  const last = usable[usable.length - 1];
+
+  if (last === undefined) throw new Error("run has no usable length: gaps cover the whole run");
 
   return last.end;
 }

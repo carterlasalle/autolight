@@ -20,7 +20,8 @@ export type AnalyzeErrorCode =
   | "dsp-fallback"
   | "worker-exited"
   | "worker-timeout"
-  | "spawn-failed";
+  | "spawn-failed"
+  | "cancelled";
 
 export interface AnalyzeResult {
   type: "complete";
@@ -71,8 +72,17 @@ export function parseFrame(line: string): ProtocolFrame {
     throw new Error(`malformed-frame: ${line.slice(0, 120)}`);
   }
 
-  if (typeof msg !== "object" || msg === null) {
+  if (typeof msg !== "object" || msg === null || Array.isArray(msg)) {
     throw new Error(`non-object-frame: ${line.slice(0, 120)}`);
+  }
+  const frame = msg as Record<string, unknown>;
+
+  if (frame["v"] !== PROTOCOL_VERSION) {
+    throw new Error(`protocol-mismatch: expected v${PROTOCOL_VERSION}, got ${String(frame["v"])}`);
+  }
+
+  if (typeof frame["type"] !== "string") {
+    throw new Error(`missing-frame-type: ${line.slice(0, 120)}`);
   }
 
   return msg as ProtocolFrame;
@@ -81,17 +91,18 @@ export function parseFrame(line: string): ProtocolFrame {
 export function frameId(msg: ProtocolFrame): string | undefined {
   const id = msg.id ?? msg.trackId;
 
-  return id === undefined ? undefined : String(id);
-}
+  if (typeof id === "string") return id === "" ? undefined : id;
+  if (typeof id === "number") return Number.isFinite(id) ? String(id) : undefined;
 
-let jobSeq = 0;
+  return undefined;
+}
 
 export function toJob(req: AnalyzeRequest): AnalysisJob {
   const job: AnalysisJob = {
-    id: `job-${++jobSeq}`,
+    id: `job-${randomUUID()}`,
     trackId: req.trackId,
     audioPath: req.audioPath,
-    stages: req.stages ?? ["decode", "ml", "dsp", "events", "fusion"],
+    stages: [...(req.stages ?? ["decode", "ml", "dsp", "events", "fusion"])],
     configHash: req.configHash ?? "",
     priority: req.priority ?? "preanalysis",
     state: "Queued",

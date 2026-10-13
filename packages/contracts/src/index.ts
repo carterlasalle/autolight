@@ -48,8 +48,24 @@ export const deckStateSchema = z.object({
   channelFader: z.number().min(0).max(1).nullable(),
   crossfader: z.number().min(0).max(1).nullable(),
   master: z.boolean().nullable(),
+  // In-process nanosecond clock; the wire form is wireDeckStateSchema below.
   receivedAtNs: z.bigint(),
 });
+
+/** JSON-safe form for IPC/worker boundaries: bigint is not JSON-serializable. */
+export const wireDeckStateSchema = deckStateSchema.extend({
+  receivedAtNs: z.string().regex(/^-?\d+$/, "receivedAtNs must be a decimal integer string"),
+});
+
+export type WireDeckState = z.infer<typeof wireDeckStateSchema>;
+
+export function toWireDeckState(state: DeckState): WireDeckState {
+  return { ...state, receivedAtNs: state.receivedAtNs.toString() };
+}
+
+export function fromWireDeckState(wire: WireDeckState): DeckState {
+  return { ...wire, receivedAtNs: BigInt(wire.receivedAtNs) };
+}
 
 export type DeckState = z.infer<typeof deckStateSchema>;
 
@@ -65,12 +81,14 @@ export type NativeBeat = z.infer<typeof nativeBeatSchema>;
 export const beatGridSchema = z.object({
   beats: z.array(nativeBeatSchema).min(1),
   version: z.number().int().default(1),
-});
+}).strict();
 
 export type BeatGrid = z.infer<typeof beatGridSchema>;
 
 export const adaptiveBeatGridSchema = z.object({
-  beats: z.array(nativeBeatSchema).max(0),
+  // Emptiness is enforced by trackModelSchema's superRefine (with the
+  // coverage-specific diagnostic); the array shape here stays unconstrained.
+  beats: z.array(nativeBeatSchema),
   version: z.number().int().default(1),
 }).strict();
 
@@ -98,7 +116,7 @@ export function sourceSecondsToBeat(grid: BeatGrid, seconds: number): number {
 
   if (span <= 0) return a.index;
 
-  return a.index + (ms - a.sourceTimeMs) / span;
+  return a.index + ((c.index - a.index) * (ms - a.sourceTimeMs)) / span;
 }
 
 export function beatToSourceSeconds(grid: BeatGrid, beat: number): number {
@@ -107,7 +125,9 @@ export function beatToSourceSeconds(grid: BeatGrid, beat: number): number {
   const i = Math.floor(clamped);
   const frac = clamped - i;
   // Linear index lookup; switch to binary search if grids grow large (T-RBL-03).
-  const a = b.find((x) => x.index === i) ?? b[0]!;
+  const a = b.find((x) => x.index === i);
+
+  if (!a) throw new RangeError(`beatToSourceSeconds: no grid anchor for beat ${i}`);
   const c = b.find((x) => x.index === i + 1) ?? a;
 
   return (a.sourceTimeMs + (c.sourceTimeMs - a.sourceTimeMs) * frac) / 1000;
@@ -249,18 +269,28 @@ export const phraseSchema = z.object({
 
 export type Phrase = z.infer<typeof phraseSchema>;
 
+const colorSchema = z.object({ r: z.number(), g: z.number(), b: z.number() }).strict();
+
 const rekordboxCueSchema = z.object({
+  // Legacy aliases kept from earlier decoders; the canonical fields are the
+  // timeMs/loopTimeMs/cueType family the Python extractor emits (native.py).
+  source: z.string().optional(),
   position: z.number().optional(),
+  timeMs: z.number().int().nonnegative().optional(),
   loopEnd: z.number().optional(),
+  loopTimeMs: z.number().int().optional(),
   type: z.string().optional(),
-  hotcue: z.number().optional(),
-  color: z.unknown().optional(),
-  rgb: z.unknown().optional(),
-  colorId: z.number().optional(),
+  cueType: z.string().optional(),
+  hotcue: z.number().int().optional(),
+  hot_cue: z.number().int().optional(),
+  color: colorSchema.optional(),
+  rgb: colorSchema.nullable().optional(),
+  colorId: z.number().int().optional(),
+  colorCode: z.number().int().optional(),
   comment: z.string().optional(),
-  loopNumerator: z.number().optional(),
-  loopDenominator: z.number().optional(),
-}).catchall(z.unknown());
+  loopNumerator: z.number().int().optional(),
+  loopDenominator: z.number().int().optional(),
+}).strict();
 
 export const nativeRekordboxSchema = z.object({
   mood: z.number().optional(),
@@ -285,8 +315,25 @@ export const nativeRekordboxSchema = z.object({
 
 export type NativeRekordbox = z.infer<typeof nativeRekordboxSchema>;
 
+const seratoMarkerSchema = z.object({
+  // Serato markers have no decoder in this repo yet, so the shape mirrors
+  // the rekordbox cue family (position/loop/type/hotcue/color/comment):
+  // mismatched Serato payloads fail here, not in consumers.
+  position: z.number().optional(),
+  timeMs: z.number().int().nonnegative().optional(),
+  startSeconds: z.number().nonnegative().optional(),
+  endSeconds: z.number().nonnegative().optional(),
+  type: z.string().optional(),
+  cueType: z.string().optional(),
+  hotcue: z.number().int().optional(),
+  color: colorSchema.optional(),
+  rgb: colorSchema.nullable().optional(),
+  comment: z.string().optional(),
+  bpm: z.number().positive().optional(),
+}).strict();
+
 export const nativeSeratoSchema = z.object({
-  markers: z.array(z.unknown()).optional(),
+  markers: z.array(seratoMarkerSchema).optional(),
   grid: z.object({
     beats: z.array(nativeBeatSchema).optional(),
   }).strict().optional(),
@@ -359,6 +406,32 @@ export const trackModelSchema = z.object({
     }
   } else if (n === 0) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: `${model.analysisCoverage}: grid must not be empty`, path: ["beatGrid", "beats"] });
+  }
+
+  const lastBeat = n > 0 ? model.beatGrid.beats[n - 1]!.index : 0;
+
+  model.sections.forEach((s, i) => {
+    if (s.endBeat < s.startBeat) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "section endBeat must be >= startBeat", path: ["sections", i, "endBeat"] });
+    }
+  });
+  model.phrases.forEach((p, i) => {
+    if (p.endBeat < p.startBeat) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "phrase endBeat must be >= startBeat", path: ["phrases", i, "endBeat"] });
+    }
+  });
+  model.musicalEvents.forEach((e, i) => {
+    if (e.endBeat !== undefined && e.endBeat < e.beat) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "event endBeat must be >= beat", path: ["musicalEvents", i, "endBeat"] });
+    }
+
+    if (e.beat < 0 || e.beat > lastBeat + 64) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "event beat is outside the grid span", path: ["musicalEvents", i, "beat"] });
+    }
+  });
+
+  if (model.readinessLevel !== model.analysisCoverage2.level) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "readinessLevel must match analysisCoverage2.level", path: ["readinessLevel"] });
   }
 });
 

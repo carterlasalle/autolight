@@ -131,7 +131,9 @@ describe("contract validation properties", () => {
     expect(parsed.success).toBe(true);
 
     if (parsed.success) {
-      expect(JSON.stringify(parsed.data)).toBe(JSON.stringify(JSON.parse(raw)));
+      // Semantic round-trip: zod reorders object keys, so compare parsed
+      // values rather than serialized key order.
+      expect(parsed.data).toEqual(JSON.parse(raw));
     }
   });
 

@@ -12,7 +12,6 @@ import {
   type AnalyzeRequest,
   type AnalyzeResult,
   type AnalysisJob,
-  type AnalysisJobState,
   type ProtocolFrame,
 } from "./protocol.js";
 import { computeReadiness } from "./readiness.js";
@@ -49,6 +48,8 @@ export interface PendingEntry {
   resolve: (r: AnalyzeResult) => void;
   reject: (e: Error) => void;
   timer: ReturnType<typeof setTimeout> | undefined;
+  /** Worker this job was dispatched to; null while queued. */
+  proc: ChildProcess | null;
 }
 
 export interface SupervisorStatus {
@@ -79,6 +80,8 @@ export class AnalysisClient {
   private backoffMs: number;
   private lastHeartbeat: number | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | undefined;
+  private restartTimer: ReturnType<typeof setTimeout> | undefined;
+  private stopped = false;
   private readonly opts: Required<
     Pick<
       SupervisorOptions,
@@ -108,10 +111,17 @@ export class AnalysisClient {
   }
 
   start(): void {
+    if (this.restartTimer !== undefined) {
+      clearTimeout(this.restartTimer);
+      this.restartTimer = undefined;
+    }
+    this.stopped = false;
     if (this.procs.length > 0) return;
 
+    this.lastHeartbeat = Date.now();
     for (let i = 0; i < this.opts.concurrency; i += 1) this.spawnOne();
     this.heartbeatTimer = setInterval(() => this.checkHeartbeat(), 1000);
+    this.drain();
   }
 
   analyze(req: AnalyzeRequest): Promise<AnalyzeResult> {
@@ -121,7 +131,7 @@ export class AnalysisClient {
     else this.queue.push(job);
     const { promise, resolve, reject } = Promise.withResolvers<AnalyzeResult>();
     job.state = "Queued";
-    this.pending.set(job.id, { job, resolve, reject, timer: undefined });
+    this.pending.set(job.id, { job, resolve, reject, timer: undefined, proc: null });
     this.drain();
 
     return promise;
@@ -131,8 +141,10 @@ export class AnalysisClient {
     const entry = this.pending.get(id);
 
     if (!entry) return false;
-    this.send({ v: PROTOCOL_VERSION, id, type: "cancel" });
-    this.failEntry(entry, "worker-timeout", "cancelled by request id");
+    // Route the cancel to the worker holding the job when dispatched, so a
+    // sibling worker never sees a cancel for a job it does not own.
+    this.send({ v: PROTOCOL_VERSION, id, type: "cancel" }, entry.proc ?? undefined);
+    this.failEntry(entry, "cancelled", "cancelled by request id");
 
     return true;
   }
@@ -148,12 +160,13 @@ export class AnalysisClient {
   }): void {
     const frame = msg as ProtocolFrame;
 
-    if (frame.type === "heartbeat" || frame.v === PROTOCOL_VERSION) {
-      if (frame.type === "heartbeat") {
-        this.lastHeartbeat = Date.now();
+    // Any framed line proves the worker loop is alive; the heartbeat
+    // timestamp tracks liveness, not just explicit heartbeat frames.
+    this.lastHeartbeat = Date.now();
+    this.backoffMs = this.opts.restartBackoffMs[0];
 
-        return;
-      }
+    if (frame.type === "heartbeat" || frame.v === PROTOCOL_VERSION) {
+      if (frame.type === "heartbeat") return;
 
       const routed = frameId(frame);
 
@@ -191,6 +204,11 @@ export class AnalysisClient {
     return this.pending.size;
   }
 
+  /** Pending job ids in insertion order — the tests' handle on routing. */
+  jobIds(): string[] {
+    return [...this.pending.keys()];
+  }
+
   requeue(req: AnalyzeRequest): void {
     this.queue.unshift(toJob(req));
   }
@@ -210,8 +228,15 @@ export class AnalysisClient {
   }
 
   stop(): void {
-    if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
-    this.heartbeatTimer = undefined;
+    this.stopped = true;
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = undefined;
+    }
+    if (this.restartTimer !== undefined) {
+      clearTimeout(this.restartTimer);
+      this.restartTimer = undefined;
+    }
 
     for (const proc of this.procs) {
       try {
@@ -222,20 +247,40 @@ export class AnalysisClient {
     }
 
     this.procs = [];
+    // Reject in-flight promises so stop() never resurrects itself through
+    // armed job timers or the exit handlers of the killed workers.
+    for (const entry of this.pending.values()) {
+      if (entry.timer !== undefined) {
+        clearTimeout(entry.timer);
+        entry.timer = undefined;
+      }
+      entry.proc = null;
+      entry.job.state = "Failed";
+      entry.job.lastError = { code: "worker-exited", message: "supervisor stopped" };
+      entry.reject(new Error("supervisor stopped"));
+    }
+
+    this.pending.clear();
+    this.lastHeartbeat = null;
   }
 
   private findEntry(routed: string): PendingEntry | undefined {
-    return (
-      this.pending.get(routed) ??
-      [...this.pending.values()].find((e) => e.job.trackId === routed)
-    );
+    const direct = this.pending.get(routed);
+
+    if (direct !== undefined) return direct;
+    // trackId routing is ambiguous when a track is analyzed twice while the
+    // first job is still pending, so it only resolves when unambiguous.
+    const matches = [...this.pending.values()].filter((e) => e.job.trackId === routed);
+
+    return matches.length === 1 ? matches[0] : undefined;
   }
 
   private routeFrame(
     entry: PendingEntry,
     msg: { type: string; id?: string; artifactPath?: string; error?: string; stage?: string },
   ): void {
-    if (msg.type === "progress" && msg.stage) {
+    if (msg.type === "progress") {
+      if (msg.stage === undefined) return;
       entry.job.state = "Analyzing";
 
       if (this.onProgress) this.onProgress(entry.job, msg.stage);
@@ -243,7 +288,8 @@ export class AnalysisClient {
       return;
     }
 
-    if (msg.type === "complete" && msg.artifactPath) {
+    if (msg.type === "complete") {
+      if (msg.artifactPath === undefined) return;
       entry.job.state = "Ready";
       this.clearEntry(entry);
       entry.resolve({
@@ -256,6 +302,17 @@ export class AnalysisClient {
       return;
     }
 
+    if (msg.type === "cancelled") {
+      // The worker acknowledges our cancel; the local promise already
+      // rejected in cancel(), so a late ack is just queue hygiene.
+      if (!this.pending.has(entry.job.id)) return;
+      this.failEntry(entry, "cancelled", "cancelled by request id");
+      this.drain();
+
+      return;
+    }
+
+    if (msg.type !== "failed" && msg.type !== "error") return;
     const code = classifyError(msg.error ?? "analysis failed");
     entry.job.state = "Failed";
     entry.job.lastError = { code, message: msg.error ?? "analysis failed" };
@@ -264,10 +321,21 @@ export class AnalysisClient {
     this.drain();
   }
 
+  private dequeue(job: AnalysisJob): void {
+    const at = this.queue.findIndex((j) => j.id === job.id);
+
+    if (at >= 0) this.queue.splice(at, 1);
+  }
+
   private clearEntry(entry: PendingEntry): void {
     this.pending.delete(entry.job.id);
+    this.dequeue(entry.job);
 
-    if (entry.timer) clearTimeout(entry.timer);
+    if (entry.timer !== undefined) {
+      clearTimeout(entry.timer);
+      entry.timer = undefined;
+    }
+    entry.proc = null;
   }
 
   private failEntry(entry: PendingEntry, code: AnalyzeErrorCode, message: string): void {
@@ -275,44 +343,58 @@ export class AnalysisClient {
     entry.job.lastError = { code, message };
     this.clearEntry(entry);
     entry.reject(new Error(message));
+    this.drain();
   }
 
   private drain(): void {
-    if (this.procs.length === 0) return;
-    const inFlight = [...this.pending.values()].filter((e) => e.timer !== undefined).length;
-    const capacity = this.procs.length - inFlight;
+    if (this.stopped || this.procs.length === 0) return;
+    const busy = new Set<ChildProcess>();
 
-    for (let i = 0; i < capacity; i += 1) {
+    for (const e of this.pending.values()) {
+      if (e.timer !== undefined && e.proc !== null) busy.add(e.proc);
+    }
+    const idle = this.procs.filter((p) => !busy.has(p));
+
+    for (const proc of idle) {
       const job = this.queue.shift();
 
       if (!job) return;
       const entry = this.pending.get(job.id);
 
-      if (!entry) continue;
+      if (entry === undefined) continue;
+      if (entry.timer !== undefined) {
+        // Already dispatched; a stale shift must not double-dispatch.
+        this.queue.unshift(job);
+        continue;
+      }
       job.state = "Analyzing";
       job.attempts += 1;
+      entry.proc = proc;
       entry.timer = setTimeout(() => {
         this.failEntry(entry, "worker-timeout", `job exceeded ${this.opts.jobTimeoutMs}ms`);
         this.restartWithBackoff();
       }, this.opts.jobTimeoutMs);
-      this.send({
-        v: PROTOCOL_VERSION,
-        id: job.id,
-        type: "analyze",
-        trackId: job.trackId,
-        audioPath: job.audioPath,
-        nativeMetadataPath: job.nativeMetadataPath,
-        stages: job.stages,
-        configHash: job.configHash,
-      });
+      this.send(
+        {
+          v: PROTOCOL_VERSION,
+          id: job.id,
+          type: "analyze",
+          trackId: job.trackId,
+          audioPath: job.audioPath,
+          nativeMetadataPath: job.nativeMetadataPath,
+          stages: job.stages,
+          configHash: job.configHash,
+        },
+        proc,
+      );
     }
   }
 
-  private send(msg: unknown): void {
-    const proc = this.procs[0];
+  private send(msg: unknown, proc?: ChildProcess): void {
+    const target = proc ?? this.procs[0];
 
     try {
-      proc?.stdin?.write(`${JSON.stringify(msg)}\n`);
+      target?.stdin?.write(`${JSON.stringify(msg)}\n`);
     } catch {
       /* a dead pipe surfaces via the exit handler */
     }
@@ -334,6 +416,9 @@ export class AnalysisClient {
     }
 
     this.procs.push(proc);
+    // Fresh workers have not emitted their first heartbeat yet; the spawn
+    // timestamp is the grace window so checkHeartbeat cannot fail them.
+    this.lastHeartbeat = Date.now();
     const rl = createInterface({ input: proc.stdout! });
     rl.on("line", (line: string) => {
       try {
@@ -348,12 +433,18 @@ export class AnalysisClient {
     });
     proc.on("exit", () => {
       this.removeProc(proc);
+      if (this.stopped) return;
       // Interrupted jobs keep identical inputs and go back to the head (spec 109).
-      const interrupted = [...this.pending.values()].filter((e) => e.timer !== undefined);
+      // Only jobs actually dispatched to the exiting worker are requeued;
+      // jobs on surviving siblings keep running.
+      const interrupted = [...this.pending.values()].filter((e) => e.proc === proc);
 
       for (const entry of interrupted) {
-        if (entry.timer) clearTimeout(entry.timer);
-        entry.timer = undefined;
+        if (entry.timer !== undefined) {
+          clearTimeout(entry.timer);
+          entry.timer = undefined;
+        }
+        entry.proc = null;
         entry.job.state = "Queued";
         this.queue.unshift(entry.job);
       }
@@ -368,14 +459,20 @@ export class AnalysisClient {
   }
 
   private restartWithBackoff(): void {
-    this.stop();
+    if (this.stopped || this.restartTimer !== undefined) return;
     this.restarts += 1;
     const wait = Math.min(this.backoffMs, this.opts.restartBackoffMs[1]);
     this.backoffMs = Math.min(this.backoffMs * 2, this.opts.restartBackoffMs[1]);
-    setTimeout(() => this.start(), wait);
+    this.restartTimer = setTimeout(() => {
+      this.restartTimer = undefined;
+      this.start();
+    }, wait);
   }
 
   private checkHeartbeat(): void {
+    if (this.stopped) return;
+    // A fresh worker has not emitted its first heartbeat yet; the spawn
+    // timestamp set in start()/spawnOne() is its grace window, not a failure.
     if (this.lastHeartbeat === null || this.procs.length === 0) return;
 
     if (Date.now() - this.lastHeartbeat > this.opts.heartbeatTimeoutMs) {
