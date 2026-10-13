@@ -40,7 +40,9 @@ const args = new Set(process.argv.slice(2));
 
 const dryRun = args.has("--dry-run");
 
-const rekordboxVersion = process.env.RKBX_REKORDBOX_VERSION ?? "7.2.19";
+const rekordboxVersion = process.env.RKBX_REKORDBOX_VERSION;
+
+if (!rekordboxVersion) fail("set RKBX_REKORDBOX_VERSION to the Rekordbox version in use (e.g. RKBX_REKORDBOX_VERSION=7.2.19); refusing to report on a guessed default");
 
 function fail(message) {
   console.error(`run-rkbx-link: ${message}`);
@@ -51,30 +53,43 @@ function versionsInOffsets(text) {
   return [...new Set(text.split("\n").map((l) => l.trim()).filter((l) => /^\d+\.\d+\.\d+$/.test(l)))];
 }
 
-// Pre-flight: binary + offsets file must exist.
+// Pre-flight: binary + offsets file must exist. The offsets read is guarded
+// (TOCTOU-safe) and skipped entirely under --dry-run, which must not touch
+// disk per the header contract.
 if (!existsSync(BINARY)) fail(`sidecar binary not found at ${BINARY}`);
 
 if (!existsSync(OFFSETS)) fail(`offsets file not found at ${OFFSETS}`);
 
-const offsetsText = readFileSync(OFFSETS, "utf8");
+let offsetsText = "";
+let known = [];
 
-const known = versionsInOffsets(offsetsText);
+if (!dryRun) {
+  try {
+    offsetsText = readFileSync(OFFSETS, "utf8");
+  } catch (err) {
+    fail(`cannot read offsets file at ${OFFSETS}: ${err.message}`);
+  }
 
-console.log(`offsets at ${OFFSETS}: ${known.join(", ") || "(none)"}`);
+  known = versionsInOffsets(offsetsText);
 
-if (!known.some((v) => rekordboxVersion.startsWith(v))) {
-  console.log(`no ${rekordboxVersion} offsets upstream as of 2026-10-12: sidecar will start but likely sends no packets.`);
-} else {
-  console.log(`Rekordbox ${rekordboxVersion} has offsets.`);
+  console.log(`offsets at ${OFFSETS}: ${known.join(", ") || "(none)"}`);
+
+  if (!known.includes(rekordboxVersion)) {
+    console.log(`no ${rekordboxVersion} offsets upstream: sidecar will start but likely sends no packets.`);
+  } else {
+    console.log(`Rekordbox ${rekordboxVersion} has offsets.`);
+  }
 }
 
-const sudoCmd = `sudo "${BINARY}" > "${LOG}" 2>&1`;
+// Shell-quote a path for double-quoted interpolation (escape `"`, `$`, backtick, backslash, `!`).
+const shQuote = (p) => p.replace(/(["$`\\!])/g, "\\$1");
+const sudoCmd = `sudo "${shQuote(BINARY)}" > "${shQuote(LOG)}" 2>&1`;
 
 console.log(`log: ${LOG}`);
+console.log(`owner runs in a terminal: cd "${shQuote(SIDECAR_DIR)}" && ${sudoCmd} &`);
 
 if (dryRun) {
-  console.log(`[dry-run] would check: test -x "${BINARY}" && test -f "${OFFSETS}"`);
-  console.log(`[dry-run] owner runs in a terminal: cd "${SIDECAR_DIR}" && ${sudoCmd} &`);
+  console.log(`[dry-run] would check: test -x "${shQuote(BINARY)}" && test -f "${shQuote(OFFSETS)}"`);
   console.log(`[dry-run] would listen on ${OSC_HOST}:${OSC_PORT} for ${WAIT_MS / 1000}s`);
   process.exit(0);
 }
@@ -83,10 +98,15 @@ const socket = createSocket("udp4");
 
 let received = 0;
 
+let timer;
+
 let lastBytes = 0;
 
 const done = (ok, detail) => {
-  socket.close();
+  clearTimeout(timer);
+  try { socket.close(); } catch {
+    // Socket never bound (e.g. EADDRINUSE): report the real error, not the close.
+  }
   console.log(ok ? `SUCCESS: ${detail}` : `FAILURE: ${detail}`);
   process.exit(ok ? 0 : 1);
 };
@@ -102,7 +122,7 @@ socket.on("error", (err) => done(false, `listener error: ${err.message}`));
 
 socket.bind(OSC_PORT, OSC_HOST);
 
-setTimeout(() => {
+timer = setTimeout(() => {
   done(
     received > 0,
     received > 0

@@ -9,23 +9,24 @@ const ORDER: Scope[] = ["app", "venue", "device", "style", "session"];
 
 const rangeRe = /^\s*(-?\d+(?:\.\d+)?)\s+to\s+(-?\d+(?:\.\d+)?)\s*$/;
 
-// Registry-effective JSON defaults arrive as parsed objects (see defaultFor),
-// but an export/import round trip serializes them through JSON text, so a
-// default that is stored as a raw string still parses back to the same value.
-function jsonValueEquals(a: unknown, b: unknown): boolean {
-  if (Object.is(a, b)) return true;
-
+// Import validation for this store (T-CFG-02). Mirrors `validateImportValues`
+// in store.ts without importing it (store.ts already imports this module, so
+// an import would be a cycle): rejects secrets, unknown keys, NaN and
+// out-of-range numbers, mistyped scalars, and non-serializable `json`-typed
+// values. `json`-typed keys accept any JSON-serializable value (objects,
+// arrays, strings, numbers, booleans): the registry's own defaults include
+// raw strings for shorthand (`"[] (all eligible)"`), so strings cannot be
+// rejected without breaking an export/import round trip.
+function isJsonSerializable(v: unknown): boolean {
   try {
-    return JSON.stringify(a) === JSON.stringify(b);
+    JSON.parse(JSON.stringify(v));
+
+    return true;
   } catch {
     return false;
   }
 }
 
-// Import validation for this store (T-CFG-02). Mirrors `validateImportValues`
-// in store.ts without importing it (store.ts already imports this module, so
-// an import would be a cycle): rejects secrets, unknown keys, NaN and
-// out-of-range numbers, mistyped scalars, and non-JSON `json`-typed values.
 function importValueErrors(values: Record<string, unknown>): string[] {
   const bad: string[] = [];
 
@@ -72,18 +73,8 @@ function importValueErrors(values: Record<string, unknown>): string[] {
       continue;
     }
 
-    if (def.type === "json") {
-      let roundTrips = typeof v === "object" && v !== null;
-
-      if (roundTrips) {
-        try {
-          JSON.parse(JSON.stringify(v));
-        } catch {
-          roundTrips = false;
-        }
-      }
-
-      if (!roundTrips) bad.push(`${k}: expected a JSON object or array in ${def.unit}, got ${Array.isArray(v) ? "array" : typeof v} (fix: use a JSON-serializable object or array)`);
+    if (def.type === "json" && !isJsonSerializable(v)) {
+      bad.push(`${k}: expected a JSON-serializable value in ${def.unit}, got ${typeof v} (fix: use a JSON-serializable object, array, or scalar)`);
     }
   }
 
@@ -99,6 +90,7 @@ export class ConfigStore {
     // Secrets never enter the config layer (T-SEC-01): they live in the
     // SecretVault behind Electron safeStorage, never in the JSON file.
     if (isSecretId(key)) throw new Error(`${key}: is a secret id, use the secrets-service (refusing plain-text write)`);
+
     // `get()`/`layerOf()` both key off Map presence; an explicit `undefined`
     // value would make them disagree, so it is not storable at all.
     if (value === undefined) throw new Error(`${key}: undefined is not a storable value (fix: reset() the key instead)`);
@@ -141,11 +133,15 @@ export class ConfigStore {
 
   exportJson(): string {
     const effective: Record<string, unknown> = {};
+
     const layers: Record<Scope, Record<string, unknown>> = {
       app: {}, venue: {}, device: {}, style: {}, session: {},
     };
 
     for (const k of KEYS) {
+      // Secret ids never enter exported documents (T-SEC-01): importJson
+      // rejects them, so exporting them would break every round trip.
+      if (isSecretId(k.key)) continue;
       const value = this.get(k.key);
       effective[k.key] = value;
       const layer = this.layerOf(k.key);

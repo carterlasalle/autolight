@@ -12,12 +12,10 @@ export interface SimStrip {
   gaps: { fromM: number; toM: number }[];
 }
 
-export function classifyDirection(answer: WizardDirection): RunTopology | "unknown" {
+export function classifyDirection(answer: WizardDirection): RunTopology {
   if (answer === "both") return "split-independent";
 
-  if (answer === "clockwise" || answer === "counterclockwise") return "single";
-
-  return "unknown";
+  return "single";
 }
 
 export function mirrorCheck(observedPlaces: number): {
@@ -68,9 +66,15 @@ export function fitWizardRun(
 }
 
 export function virtualUserAnchors(strip: SimStrip, run: Run, corners: number[]): CellAnchor[] {
+  if (strip.cellCount <= 0 || strip.cellToArcM.length < strip.cellCount) {
+    throw new Error(`strip has ${strip.cellCount} cells but ${strip.cellToArcM.length} arc positions; cannot anchor`);
+  }
+
   const anchors: CellAnchor[] = [
     { cell: 0, run: run.id, atMeters: strip.cellToArcM[0]! },
-    { cell: strip.cellCount - 1, run: run.id, atMeters: strip.cellToArcM[strip.cellCount - 1]! },
+    ...(strip.cellCount > 1
+      ? [{ cell: strip.cellCount - 1, run: run.id, atMeters: strip.cellToArcM[strip.cellCount - 1]! }]
+      : []),
   ];
 
   for (const c of corners) {
@@ -83,7 +87,7 @@ export function virtualUserAnchors(strip: SimStrip, run: Run, corners: number[])
       if (d < bestD) { bestD = d; best = i; }
     }
 
-    if (!anchors.some((a) => a.cell === best)) anchors.push({ cell: best, run: run.id, atMeters: c });
+    if (!anchors.some((a) => a.cell === best)) anchors.push({ cell: best, run: run.id, atMeters: strip.cellToArcM[best]! });
   }
 
   return anchors.sort((a, b) => a.cell - b.cell);
@@ -96,7 +100,10 @@ export function fitErrorCells(fitted: MappedCell[], truthM: number[], runLen: nu
   for (const c of fitted) {
     const p = c.positions[0]!;
     const mid = (p.startM + p.endM) / 2;
-    worst = Math.max(worst, Math.abs(mid - truthM[c.physicalIndex]!) / pitch);
+    const truth = truthM[c.physicalIndex];
+
+    if (truth === undefined) throw new Error(`fit error: no truth arc for cell ${c.physicalIndex}`);
+    worst = Math.max(worst, Math.abs(mid - truth) / pitch);
   }
 
   return worst;
@@ -112,6 +119,8 @@ export function runWizardOnSim(
   const mirror = mirrorCheck(strip.mirrored ? 2 : 1);
   const anchors = virtualUserAnchors(strip, run, corners);
   const runLen = runLength(run);
+
+  if (runLen <= 0) throw new Error(`run ${run.id} has zero length; cannot normalise mid positions`);
   const midS = strip.cellToArcM.map((m) => m / runLen);
   const { cells } = fitWizardRun(run, strip.cellCount, anchors, zeroS, direction, midS);
 
@@ -124,6 +133,10 @@ export function runWizardOnSim(
 }
 
 export function verifyOffset(headS: number[], expectedS: number[], toleranceCells: number): { ok: boolean; suggestShift: number } {
+  if (headS.length === 0 || headS.length !== expectedS.length) {
+    return { ok: false, suggestShift: 0 };
+  }
+
   let err = 0;
 
   for (let i = 0; i < headS.length; i++) {

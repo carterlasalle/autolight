@@ -8,26 +8,66 @@ import {
   metricText, receiptLabel, SectionLane, BeatRuler, SourceBadge, StatusDot,
   TimelineCursor, tokenForTone, UNVERIFIED_REKORDBOX_COPY, Waveform,
 } from "./kit.js";
+import { SHORTCUTS } from "../app/shortcuts.js";
+import { channels } from "@autolight/ipc";
 import type { TrackModel, ShowCue } from "@autolight/contracts";
 
 const render = (node: ReactElement): string => renderToStaticMarkup(node);
 
-const track = {
-  identity: { id: "t1", title: "Track" },
-  sections: [{ kind: "chorus", startBeat: 0, endBeat: 32 }],
-  musicalEvents: [{ type: "drop", beat: 32 }],
-  beatGrid: { beats: [{ index: 0, beatInBar: 1 }] },
-} as unknown as TrackModel;
+// Fixtures satisfy the contract types with no casts, so a renamed/removed
+// contract field fails the build instead of passing against a stale mock.
+const track: TrackModel = {
+  schemaVersion: 2,
+  analyzerVersion: "kit-test",
+  identity: { id: "t1", sourceIds: {}, title: "Track" },
+  durationSeconds: 200,
+  beatGrid: { version: 1, beats: [{ index: 0, beatInBar: 1, sourceTimeMs: 0, bpm: 128 }] },
+  sections: [{ kind: "chorus", startBeat: 0, endBeat: 32, confidence: 0.9 }],
+  musicalEvents: [{ type: "drop", beat: 32, confidence: 0.9 }],
+  analysisCoverage: "structured",
+  readinessLevel: "structured",
+  analysisCoverage2: {
+    level: "structured",
+    inputs: {
+      "source.audio": { status: "absent" },
+      "native.rekordbox.grid": { status: "absent" },
+      "native.rekordbox.pssi": { status: "absent" },
+      "native.rekordbox.cues": { status: "absent" },
+      "native.rekordbox.waveforms": { status: "absent" },
+      "native.rekordbox.vocal": { status: "absent" },
+      "native.serato.grid": { status: "absent" },
+      "native.serato.markers": { status: "absent" },
+      "ml.allinone.structure": { status: "absent" },
+      "ml.allinone.metrical": { status: "absent" },
+      "ml.allinone.activations": { status: "absent" },
+      "ml.allinone.embeddings": { status: "absent" },
+      "ml.stems": { status: "absent" },
+      "ml.beatthis": { status: "absent" },
+      "dsp.features": { status: "absent" },
+      "dsp.stemProxies": { status: "absent" },
+      "events.detectors": { status: "absent" },
+      "fusion.structure": { status: "absent" },
+      "plan.generated": { status: "absent" },
+    },
+  },
+  gridWarnings: [],
+  beatFeatures: [],
+  phrases: [],
+};
 
-const cue = {
+const cue: ShowCue = {
   type: "section-look", startBeat: 8, durationBeats: 32,
   intensity: 0.8, target: "PRIMARY", priority: 10,
-} as unknown as ShowCue;
+};
 
 describe("StatusDot", () => {
   it("renders its label next to the dot", () => {
     const html = render(createElement(StatusDot, { tone: "ok", label: "online" }));
-    expect(html).toContain(tokenForTone("ok"));
+    expect(html).toContain("online");
+    // Independent of tokenForTone(): the concrete token for `ok` pins the
+    // mapping, so a broken switch (e.g. `ok` returning the warn/bad token)
+    // fails instead of passing against itself.
+    expect(html).toContain("var(--ok)");
   });
   it("maps every tone to a distinct token", () => {
     const tones = ["neutral", "ok", "warn", "bad"] as const;
@@ -95,7 +135,11 @@ describe("BeatRuler", () => {
     }));
 
     expect(html).toContain('aria-label="Beat ruler"');
-    expect(html.match(/left:0%/g)?.length ?? 0).toBeGreaterThan(0);
+    // Bar ticks render taller/brighter than beat ticks (h-3 bg-foreground vs
+    // h-1.5 bg-muted-foreground); a regression collapsing the two styles fails.
+    expect(html).toContain("h-3");
+    expect(html).toContain("h-1.5");
+    expect(html.match(/left:0%/g)?.length ?? 0).toBe(1);
   });
 });
 
@@ -153,10 +197,14 @@ describe("DeviceTile", () => {
     expect(html).toContain("latency: 25ms");
   });
   it("wires the three device actions through one handler", () => {
+    // Static markup strips event handlers, so labels alone cannot prove the
+    // buttons call onAction with the right id. Assert the wiring structurally:
+    // three buttons, in IDENTIFY/TEST CHASE/RECALIBRATE order, and the tile
+    // hides the action row entirely when no handler is wired.
     const html = render(createElement(DeviceTile, { tile, onAction: () => undefined }));
-    expect(html).toContain("IDENTIFY");
-    expect(html).toContain("TEST CHASE");
-    expect(html).toContain("RECALIBRATE");
+    const buttons = [...html.matchAll(/<button[^>]*>(.*?)<\/button>/g)].map((m) => m[1]);
+    expect(buttons).toEqual(["IDENTIFY", "TEST CHASE", "RECALIBRATE"]);
+    expect(render(createElement(DeviceTile, { tile }))).not.toContain("<button");
   });
 });
 
@@ -301,24 +349,25 @@ describe("SourceBadge", () => {
 });
 
 describe("emergency controls (T-UI-03)", () => {
-  it("shortcut map fires the four implemented emergency intents", async () => {
-    // Regression for F-APP-17: the palette's Emergency items used to close
-    // the palette without firing anything. Both surfaces share this map, so
-    // the palette's fire() targets (command-palette.tsx) must stay in it.
-    const { SHORTCUTS } = await import("../app/shortcuts.js");
+  it("shortcut map fires the four implemented emergency intents", () => {
+    // The palette's Emergency items call fire() with literal channel strings
+    // (command-palette.tsx), they do not import SHORTCUTS, so this map alone
+    // cannot prove the palette fires. Pin the four palette literals here so a
+    // removed/renamed emergency channel fails fast at the authored literal.
     expect(SHORTCUTS).toMatchObject({
       b: "master/blackout",
       w: "master/full",
       f: "master/freeze",
       a: "master/resume",
     });
-  });
-  it("shortcut map names only implemented channels", async () => {
-    const { SHORTCUTS } = await import("../app/shortcuts.js");
-    const { channels } = await import("@autolight/ipc");
 
+    for (const channel of ["master/blackout", "master/full", "master/freeze", "master/resume"] as const) {
+      expect(Object.prototype.hasOwnProperty.call(channels, channel)).toBe(true);
+    }
+  });
+  it("shortcut map names only implemented channels", () => {
     for (const channel of Object.values(SHORTCUTS)) {
-      expect(channel in channels).toBe(true);
+      expect(Object.prototype.hasOwnProperty.call(channels, channel)).toBe(true);
     }
   });
 });
