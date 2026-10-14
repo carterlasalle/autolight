@@ -1,4 +1,24 @@
 {
+  "batch-14": [
+    {
+      "path": "packages/storage/src/migrate.ts",
+      "line": 380,
+      "verdict": "fixed-earlier",
+      "evidence": "Each migration runs under BEGIN IMMEDIATE with an in-transaction applied-version re-check, so a racing migrator becomes a clean no-op. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/storage/src/migrate.ts",
+      "line": 311,
+      "verdict": "fixed-earlier",
+      "evidence": "columnsOf validates the table against the bare-identifier regex before the PRAGMA interpolation. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/venue/src/venue.ts",
+      "line": 37,
+      "verdict": "fixed-earlier",
+      "evidence": "importVenue null-guards file.venue and file.venue.room before cloning/returning. Verified 2026-10-14."
+    }
+  ],
   "batch-13": [
     {
       "path": "packages/ble/src/provisioning.ts",

@@ -1,7 +1,7 @@
 # OCR audit — batch checklist
 
 Source: `.ocr-audit/worklist/batches` (85 batches, 2324 comments).
-Refreshed against HEAD 5022c8e (2026-10-14) with `node .ocr-audit/worklist/triage.mjs` (sidecar: resolutions.json).
+Refreshed against HEAD 82be861 (2026-10-14) with `node .ocr-audit/worklist/triage.mjs` (sidecar: resolutions.json).
 Legend: [x] all comments resolved+verified, [~] in progress, [ ] not started.
 
 [x] batch-01: open 0, unknown 0, applied 44 of 44
@@ -17,7 +17,7 @@ Legend: [x] all comments resolved+verified, [~] in progress, [ ] not started.
 [x] batch-11: open 0, unknown 0, applied 37 of 37
 [x] batch-12: open 0, unknown 0, applied 40 of 40
 [x] batch-13: open 0, unknown 0, applied 35 of 35
-[~] batch-14: open 3, unknown 0, applied 29 of 32
+[x] batch-14: open 0, unknown 0, applied 32 of 32
 [~] batch-15: open 19, unknown 0, applied 12 of 31
 [ ] batch-16: open 38, unknown 0, applied 0 of 38
 [~] batch-17: open 13, unknown 0, applied 22 of 35
