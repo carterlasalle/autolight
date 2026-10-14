@@ -1902,5 +1902,43 @@
       "verdict": "fixed-earlier",
       "evidence": "start() and spawnOne() stamp lastHeartbeat as the grace window; checkHeartbeat guards null frames/empty procs (HEAD index.ts:119,163,489). Verified 2026-10-14."
     }
+  ],
+  "batch-26": [
+    {
+      "path": "packages/serato/src/remote-provider.ts",
+      "line": 261,
+      "verdict": "fixed-earlier",
+      "evidence": "applyStatusMessage now rejects out-of-range raw indices and addresses absent from DECK_STATUS_ADDRESS before accumulatorFor, with a comment naming the phantom-accumulator rule. Verified 2026-10-14 (working tree)."
+    },
+    {
+      "path": "packages/track-identity/src/hash.ts",
+      "line": 33,
+      "verdict": "fixed-earlier",
+      "evidence": "Both fileHashOf and fileHashOfPath throw on a strategy other than full/sampled before branching, so a mistyped strategy can no longer fall through to sampling. Verified 2026-10-14 (working tree)."
+    },
+    {
+      "path": "packages/track-identity/src/hash.ts",
+      "line": 59,
+      "verdict": "fixed-earlier",
+      "evidence": "The sampled branch of fileHashOfPath stats the file and reads only header/middle/last windows via readSampledWindows; only the full strategy reads the whole file. Verified 2026-10-14 (working tree)."
+    },
+    {
+      "path": "analysis/src/autolight_analysis/allinone.py",
+      "line": 95,
+      "verdict": "fixed-earlier",
+      "evidence": "UNKNOWN_KINDS is consumed by is_unknown_kind, and normalize_ml_label's 'unknown' result is flagged as allin1:unknown-label at :145-146. Verified 2026-10-14."
+    },
+    {
+      "path": "apps/desktop/e2e/normal-night.spec.ts",
+      "line": 37,
+      "verdict": "by-design",
+      "evidence": "Rows deliberately assert the unwired-channel rejection (T-QA-11 red-run contract), so they cannot mutate rig state while the channel rejects; a re-arm step already sits between rows for when it lands. Verified 2026-10-14 (working tree)."
+    },
+    {
+      "path": "apps/desktop/electron/services/audit-log.ts",
+      "line": 92,
+      "verdict": "by-design",
+      "evidence": "auditTail is a diagnostics snapshot consumed by the show-service diagnostics payload; unreadable or missing day files intentionally yield no records, and torn trailing lines are skipped individually with a comment. Verified 2026-10-14 (working tree)."
+    }
   ]
 }
