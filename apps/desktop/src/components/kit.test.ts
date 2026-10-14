@@ -186,6 +186,7 @@ describe("FixturePreview", () => {
 describe("DeviceTile", () => {
   const tile = {
     id: "10.0.0.2", sku: "H6076", ip: "10.0.0.2", firmware: "1.2.3",
+    name: "Lamp", enabled: true,
     segments: 14, fps: 30, sentFrames: 100, supersededFrames: 5,
     latencyMs: 25, health: "online" as const,
   };

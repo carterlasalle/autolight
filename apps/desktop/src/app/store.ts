@@ -14,6 +14,9 @@ export interface LiveState {
   deckB: DeckSnapshot;
   cues: ShowCue[];
   cells: { x: number; color: string }[];
+  // Track palette (section kinds) for the manual lane swatches; empty when
+  // the resolved decks carry no palette, and the lane falls back to basics.
+  palette: [number, number, number][];
 }
 
 
@@ -135,14 +138,16 @@ export const useShell = create<ShellState>((set) => ({
   followMode: "preview",
   style: "house",
   palette: "ND",
-  blinder: true,
-  running: true,
+  // Live lane starts quiet: autoloops, blinder and flash are opt-in moves,
+  // not something a fresh launch asserts at the venue.
+  blinder: false,
+  running: false,
   manual: false,
   blackout: false,
   frozen: false,
   tier: null,
   sensitivity: 1,
-  flashOn: true,
+  flashOn: false,
   flashMode: "static",
   wheelOn: false,
   wheelColor: [255, 255, 255],

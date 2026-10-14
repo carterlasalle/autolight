@@ -91,6 +91,20 @@ export function scaleChannel(v: number, intensity: number, gamma = 2.2): number 
   return Math.round(Math.pow(lin, 1 / gamma) * 255);
 }
 
+// Solid whole-fixture colour for the manual lane (set-color swatches):
+// the same segmented frame the renderer emits, one colour for every zone.
+export function solidPayload(segmentCount: number, r: number, g: number, b: number): Uint8Array {
+  const count = Math.max(0, Math.floor(segmentCount));
+  const out = new Uint8Array(count * 3);
+  const clamp = (v: number): number => Math.min(255, Math.max(0, Math.round(v)));
+
+  for (let i = 0; i < count; i++) {
+    out[i * 3] = clamp(r); out[i * 3 + 1] = clamp(g); out[i * 3 + 2] = clamp(b);
+  }
+
+  return out;
+}
+
 // White hits = RGB(255,255,255) scaled, never CCT mode (§48).
 export function whiteHitPayload(segmentCount: number, intensity: number): Uint8Array {
   const count = Math.max(0, Math.floor(segmentCount));

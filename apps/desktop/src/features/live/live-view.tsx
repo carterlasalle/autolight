@@ -1,6 +1,6 @@
+import { useShallow } from "zustand/shallow";
 import { useShell, invoke } from "../../app/store.js";
 import type { LiveState } from "../../app/store.js";
-import { AudioSyncCard } from "../../components/audio-sync.js";
 import { Button } from "../../components/ui/button.js";
 import { Slider } from "../../components/ui/slider.js";
 import { Switch } from "../../components/ui/switch.js";
@@ -8,20 +8,46 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { BUILT_IN_STYLES } from "@autolight/show-planner";
 import { ALT_PATTERNS } from "../../app/store.js";
 import type { AltPattern } from "../../app/store.js";
-import { trackPalette } from "../../routes/live/manual-intents.js";
 import { nextPhraseBeat } from "../../routes/live/live-fields.js";
 import { CueList, DeckPanel, FixturePreview, MasterControls } from "../../components/kit.js";
+import { AudioSyncCard } from "../../components/audio-sync.js";
 
 // Live, redesigned: the beat leads (big mono clock between the decks), the
 // room preview plus upcoming cues sit side by side, the emergency bar pins to
 // the section bottom so it never scrolls away mid-set. Every prior control
 // survives: decks, style/palette, autoloops, palette swatches, blackout/white
 // hold, flash, manual tiers, build/drop, target, sensitivity, alternating.
+// Every intent also mirrors into the shell store, so MasterControls labels and
+// aria-pressed reflect the active blackout/freeze instead of hardcoded values.
 function masterIntent(intent: "blackout" | "full" | "freeze" | "resume"): void {
-  if (intent === "blackout") void invoke("master/blackout", { version: 1 });
-  else if (intent === "full") void invoke("master/full", { version: 1 });
-  else if (intent === "freeze") void invoke("master/freeze", { version: 1, frozen: true });
-  else void invoke("master/resume", { version: 1, at: "bar" });
+  const sync = useShell.getState().set;
+
+  if (intent === "blackout") {
+    sync({ blackout: true, frozen: false });
+    void invoke("master/blackout", { version: 1 });
+  } else if (intent === "full") {
+    sync({ blackout: false });
+    void invoke("master/full", { version: 1 });
+  } else if (intent === "freeze") {
+    sync({ frozen: true });
+    void invoke("master/freeze", { version: 1, frozen: true });
+  } else {
+    sync({ blackout: false, frozen: false });
+    void invoke("master/resume", { version: 1, at: "bar" });
+  }
+}
+
+function MasterBar({ sticky }: { sticky: boolean }): JSX.Element {
+  const intensity = useShell((s) => s.overridesIntensity);
+  const manual = useShell((s) => s.manual);
+  const frozen = useShell((s) => s.frozen);
+  const blackout = useShell((s) => s.blackout);
+
+  return (
+    <section aria-label="Master" className={`rounded-xl border border-border bg-card px-4 py-3${sticky ? " md:sticky md:bottom-3" : ""}`}>
+      <MasterControls state={{ intensity, frozen, blackout, auto: !manual }} onIntent={masterIntent} />
+    </section>
+  );
 }
 
 function masterClock(bpm: number | null): string {
@@ -30,8 +56,6 @@ function masterClock(bpm: number | null): string {
 
 export function LiveView({ live }: { live: LiveState | null }): JSX.Element {
   const set = useShell((s) => s.set);
-  const manual = useShell((s) => s.manual);
-  const intensity = useShell((s) => s.overridesIntensity);
 
   if (!live) {
     return (
@@ -44,9 +68,7 @@ export function LiveView({ live }: { live: LiveState | null }): JSX.Element {
           </p>
           <Button size="sm" className="mt-3" onClick={() => { set({ route: "setup" }); }}>Open Setup</Button>
         </section>
-        <section aria-label="Master" className="rounded-xl border border-border bg-card px-4 py-3">
-          <MasterControls state={{ intensity, frozen: false, blackout: false, auto: !manual }} onIntent={masterIntent} />
-        </section>
+        <MasterBar sticky={false} />
       </div>
     );
   }
@@ -107,17 +129,52 @@ export function LiveView({ live }: { live: LiveState | null }): JSX.Element {
           </div>
         </div>
       </section>
-      <section aria-label="Master" className="rounded-xl border border-border bg-card px-4 py-3 md:sticky md:bottom-3">
-        <MasterControls state={{ intensity, frozen: false, blackout: false, auto: !manual }} onIntent={masterIntent} />
-      </section>
+      <MasterBar sticky={true} />
     </div>
   );
 }
 
 // Below-fold manual lane: every prior intent, grouped by purpose with one
 // heading each. Same controls and intents, no new behavior.
+const CUSTOM_SWATCHES: [number, number, number][] = [[255, 0, 0], [0, 255, 0], [0, 0, 255], [255, 255, 255]];
+
+function isAltPattern(v: string): v is AltPattern {
+  return ALT_PATTERNS.some((p) => p === v);
+}
+
 export function ControlGrid(): JSX.Element {
-  const s = useShell();
+  const s = useShell(useShallow((st) => ({
+    style: st.style, palette: st.palette, pendingStyle: st.pendingStyle, blinder: st.blinder,
+    running: st.running, customColor: st.customColor, flashOn: st.flashOn, flashMode: st.flashMode,
+    manual: st.manual, tier: st.tier, liveBeat: st.liveBeat, target: st.target,
+    sensitivity: st.sensitivity, altOn: st.altOn, altPattern: st.altPattern, altSpeed: st.altSpeed,
+    set: st.set,
+  })));
+  const livePalette = useShell((st) => st.live?.palette ?? null);
+
+  // Swatches: the resolved track's palette when a show is loaded, the four
+  // basic colours otherwise, custom colours appended behind the switch.
+  const swatches: [number, number, number][] = [];
+  const seenSwatches = new Set<string>();
+  const paletteIsTrack = livePalette !== null && livePalette.length > 0;
+
+  for (const rgb of paletteIsTrack ? livePalette : CUSTOM_SWATCHES) {
+    const key = rgb.join(",");
+
+    if (seenSwatches.has(key)) continue;
+    seenSwatches.add(key);
+    swatches.push(rgb);
+  }
+
+  if (s.customColor) {
+    for (const rgb of CUSTOM_SWATCHES) {
+      const key = rgb.join(",");
+
+      if (seenSwatches.has(key)) continue;
+      seenSwatches.add(key);
+      swatches.push(rgb);
+    }
+  }
 
   return (
     <section aria-label="Manual control" className="mt-4">
@@ -150,31 +207,18 @@ export function ControlGrid(): JSX.Element {
       <div className="min-w-0 rounded-xl border border-border bg-card px-4 py-3">
         <h3 className="text-base font-medium">Colour</h3>
         <div className="mt-2 flex min-w-0 flex-col gap-2">
-          <div role="group" aria-label="Track palette" className="flex flex-wrap gap-2">
-            {trackPalette(null).map((rgb, i) => (
+          <div role="group" aria-label="Colour palette" className="flex flex-wrap gap-2">
+            {swatches.map((rgb, i) => (
               <button
-                key={i} type="button" aria-label={`track colour ${i + 1}`}
+                key={`sw-${i}`} type="button" aria-label={`colour ${i + 1}`}
                 className="size-7 shrink-0 rounded-full border-2 border-white/20"
                 style={{ backgroundColor: `rgb(${rgb[0]},${rgb[1]},${rgb[2]})` }}
                 onClick={() => {
                   s.set({ wheelColor: rgb });
-                  void invoke("venue/set-color", { version: 1, rgb, custom: false });
+                  void invoke("venue/set-color", { version: 1, rgb });
                 }}
               />
             ))}
-            {s.customColor ? (
-              ([[255, 0, 0], [0, 255, 0], [0, 0, 255], [255, 255, 255]] as [number, number, number][]).map((rgb, i) => (
-                <button
-                  key={`c-${i}`} type="button" aria-label={`custom colour ${i + 1}`}
-                  className="size-7 shrink-0 rounded-full border-2 border-white/20"
-                  style={{ backgroundColor: `rgb(${rgb[0]},${rgb[1]},${rgb[2]})` }}
-                  onClick={() => {
-                    s.set({ wheelColor: rgb });
-                    void invoke("venue/set-color", { version: 1, rgb, custom: true });
-                  }}
-                />
-              ))
-            ) : null}
           </div>
           <label className="flex items-center gap-2 text-sm">
             <Switch checked={s.customColor} onCheckedChange={(v) => { s.set({ customColor: v }); }} /> Custom colours
@@ -183,8 +227,9 @@ export function ControlGrid(): JSX.Element {
             <Button size="sm" variant="outline" onClick={() => { void invoke("master/blackout", { version: 1 }); }}>Blackout</Button>
             <Button
               size="sm" variant="outline"
-              onMouseDown={() => { void invoke("master/full", { version: 1 }); }}
-              onMouseUp={() => { void invoke("master/resume", { version: 1, at: "bar" }); }}
+              onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); void invoke("master/full", { version: 1 }); }}
+              onPointerUp={() => { void invoke("master/resume", { version: 1, at: "bar" }); }}
+              onPointerCancel={() => { void invoke("master/resume", { version: 1, at: "bar" }); }}
             >
               White (hold)
             </Button>
@@ -246,10 +291,10 @@ export function ControlGrid(): JSX.Element {
         <h3 className="text-base font-medium">Alternate</h3>
         <div className="mt-2 flex min-w-0 flex-col gap-2">
           <label className="flex items-center gap-2 text-sm">
-            <Switch checked={s.altOn} onCheckedChange={(v) => { s.set({ altOn: v }); void invoke("show/energy", { version: 1, tier: "MED", alternate: v }); }} /> Alternating mode
+            <Switch checked={s.altOn} onCheckedChange={(v) => { s.set({ altOn: v }); void invoke("show/energy", { version: 1, tier: s.tier ?? "MED", alternate: v }); }} /> Alternating mode
           </label>
           <label className="flex min-w-0 items-center gap-2 text-sm">Pattern:
-            <Select value={s.altPattern} onValueChange={(v) => { s.set({ altPattern: v as AltPattern }); void invoke("show/energy", { version: 1, tier: s.tier ?? "MED", alternate: s.altOn, pattern: v }); }}>
+            <Select value={s.altPattern} onValueChange={(v) => { if (!isAltPattern(v)) return; s.set({ altPattern: v }); void invoke("show/energy", { version: 1, tier: s.tier ?? "MED", alternate: s.altOn, pattern: v }); }}>
               <SelectTrigger className="h-8 min-w-0 flex-1"><SelectValue /></SelectTrigger>
               <SelectContent>{ALT_PATTERNS.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
             </Select>

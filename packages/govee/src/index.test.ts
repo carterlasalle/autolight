@@ -4,7 +4,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  blackoutPayload, whiteHitPayload, latencyBeats, encodeRaw, decodeRaw, envelope,
+  blackoutPayload, whiteHitPayload, solidPayload, latencyBeats, encodeRaw, decodeRaw, envelope,
   arm, paint, paintZoned, parseStatus,
   qualificationKey, needsRequalification, LatestStream, DeviceManager,
   parseScanReply, turnCommand, brightnessCommand, colorCommand,
@@ -67,6 +67,11 @@ describe("govee", () => {
     const dim = whiteHitPayload(1, 0.3);
     expect(dim[0]!).toBeGreaterThan(0);
     expect(dim[0]!).toBeLessThan(255);
+  });
+  it("solid colour repeats per zone and clamps channels", () => {
+    expect([...solidPayload(2, 10, 20, 30)]).toEqual([10, 20, 30, 10, 20, 30]);
+    expect([...solidPayload(1, -5, 300, 12.6)]).toEqual([0, 255, 13]);
+    expect([...solidPayload(0, 1, 2, 3)]).toEqual([]);
   });
   it("computes latency offset in beats", () => {
     expect(latencyBeats(500, 120)).toBeCloseTo(1);

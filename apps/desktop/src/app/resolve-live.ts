@@ -8,6 +8,7 @@ import type { DeckState, Fixture } from "@autolight/contracts";
 // import the package barrel here: it re-exports the UDP providers and
 // blank-screens `yarn dev` (node:dgram externalized).
 import { axBeatToPlayhead, combineTransport } from "@autolight/rekordbox-live/follow";
+import { trackPalette } from "../routes/live/manual-intents.js";
 import { useShell, invoke, type LiveState } from "./store.js";
 
 // Live deck resolution (T-TRU-02): production path reads DeckState and
@@ -109,7 +110,29 @@ export function buildLive(decks: LoadedDeck[], fixtures: Fixture[], blinder: boo
     deckB: b ? deckSnapshot(b.track, deckB, sectionB?.kind) : { title: "—", artist: "", readiness: "NEEDS ANALYSIS" as const, bpm: null, section: undefined, countdown: undefined },
     cues: vm.upcoming.map((c) => ({ ...c, durationBeats: 4, intensity: 0.8, priority: 10 })),
     cells: vm.cells,
+    palette: deckPalette(a.track, b?.track ?? null),
   };
+}
+
+// Swatch set for the manual lane: deck A's palette first, deck B fills gaps,
+// deduped by colour; empty leaves the lane on its basic swatches.
+function deckPalette(a: TrackModel, b: TrackModel | null): [number, number, number][] {
+  const out: [number, number, number][] = [];
+  const seen = new Set<string>();
+
+  for (const track of [a, b]) {
+    if (!track) continue;
+
+    for (const rgb of trackPalette(track)) {
+      const key = rgb.join(",");
+
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(rgb);
+    }
+  }
+
+  return out;
 }
 
 async function fetchShowLive(): Promise<ShowLiveResponse | null> {

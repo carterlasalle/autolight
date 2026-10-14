@@ -85,6 +85,14 @@ export const channels = {
     request: z.object({ version: v1, id: z.string(), action: z.string() }),
     response: z.union([ok(z.object({ id: z.string(), action: z.string() })), errorSchema]),
   },
+  "venue/device-rename": {
+    request: z.object({ version: v1, id: z.string(), name: z.string().min(1).max(48) }),
+    response: z.union([ok(z.object({ id: z.string(), name: z.string() })), errorSchema]),
+  },
+  "venue/device-enabled": {
+    request: z.object({ version: v1, id: z.string(), enabled: z.boolean() }),
+    response: z.union([ok(z.object({ id: z.string(), enabled: z.boolean() })), errorSchema]),
+  },
   "venue/scan": {
     request: z.object({ version: v1 }),
     response: z.union([ok(z.object({ devices: z.array(z.unknown()) })), errorSchema]),

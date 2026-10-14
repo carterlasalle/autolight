@@ -4,7 +4,7 @@ import type { MappedCell } from "./placement.js";
 import { computeFields, fieldCellsFromMap, pointCells, projectToOutline, runPointAt } from "./fields.js";
 import type { FieldCell } from "./fields.js";
 import { derivedGroups, resolveSelector, splitWeights, zoneWeights } from "./groups.js";
-import { mirrorCheck, runWizardOnSim } from "./wizard.js";
+import { classifyDirection, mirrorCheck, runWizardOnSim } from "./wizard.js";
 import { exportVenue, importVenue, outlineRuns, setLogicalZero } from "./venue.js";
 import type { Venue } from "./venue.js";
 import { normalizeOutline, perimeterLength, polygonArea, polygonCentroid, rectangleRoom, samplePath, validateRoom } from "./room.js";
@@ -14,7 +14,7 @@ export {
   applyLogicalOrder, fitRunMapping, logicalToPhysical, orderLogical, rotateLogicalZero, topologyForRuns,
   computeFields, fieldCellsFromMap, pointCells, projectToOutline, runPointAt,
   derivedGroups, resolveSelector, splitWeights, zoneWeights,
-  mirrorCheck, runWizardOnSim,
+  classifyDirection, mirrorCheck, runWizardOnSim,
   exportVenue, importVenue, outlineRuns, setLogicalZero,
   normalizeOutline, perimeterLength, polygonArea, polygonCentroid, rectangleRoom, samplePath, validateRoom,
   clubRectangle, curvedRoom, fieldCellsForReference, lRoom, referenceById, squareChunks, squareMirrored, squareRoom, REFERENCE_ROOMS,

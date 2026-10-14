@@ -132,6 +132,12 @@ export class GoveeLanSim {
     return this.port;
   }
 
+  /** Whole-fixture state as the lamp itself holds it: turn, brightness and
+   *  colorwc land here; segmented stream frames land in `rendered`. */
+  get lightState(): { on: boolean; brightness: number; color: [number, number, number]; kelvin: number } {
+    return { on: this.on, brightness: this.brightness, color: [...this.color], kelvin: this.kelvin };
+  }
+
   async start(port = 0): Promise<number> {
     const { promise, resolve, reject } = Promise.withResolvers<{ sock: Socket; port: number }>();
     const sock = createSocket("udp4");

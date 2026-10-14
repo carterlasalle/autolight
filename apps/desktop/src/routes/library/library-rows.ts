@@ -41,9 +41,11 @@ export function libraryTrackRow(opts: {
 
   if (!track) return emptyRow(null, opts, opts.analyzing ? "ANALYZING" : "NEEDS ANALYSIS", null);
 
-  if (opts.analyzing) return emptyRow(track, opts, "ANALYZING", null);
-
+  // A stored model whose source file vanished is a definitive broken state:
+  // it outranks ANALYZING (a queued analysis of a missing file is bogus).
   if (opts.sourceMissing) return emptyRow(track, opts, "SOURCE MISSING", null);
+
+  if (opts.analyzing) return emptyRow(track, opts, "ANALYZING", null);
 
   if (opts.gridWarned) return emptyRow(track, opts, "GRID WARNING", null);
   const ready = coverageOf(track) !== "adaptive";
@@ -87,7 +89,7 @@ export interface LiveDeckSnapshot {
 }
 
 /** Empty-deck title shown when no track is loaded (spec 95). */
-export const EMPTY_DECK_TITLE = "—";
+const EMPTY_DECK_TITLE = "—";
 
 function isDeckPresent(deck: LiveDeckSnapshot | undefined): deck is LiveDeckSnapshot {
   if (!deck) return false;

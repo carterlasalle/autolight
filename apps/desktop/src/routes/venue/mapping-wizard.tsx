@@ -1,8 +1,12 @@
 import { useState } from "react";
-import { mirrorCheck } from "@autolight/venue";
+import { classifyDirection, mirrorCheck } from "@autolight/venue";
 import type { RunTopology } from "@autolight/venue";
 
 export type WizardStep = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
+export type WizardDirectionAnswer = "clockwise" | "counterclockwise" | "both";
+
+const MIN_PLACES = 1;
+const MAX_PLACES = 4;
 
 const STEP_LABELS: Record<WizardStep, string> = {
   1: "Choose the strip and confirm it follows the room outline",
@@ -17,11 +21,52 @@ const STEP_LABELS: Record<WizardStep, string> = {
   10: "Save to device calibrations",
 };
 
-export function MappingWizard({ onDone }: { onDone: (topology: RunTopology) => void }): JSX.Element {
-  const [step, setStep] = useState<WizardStep>(1);
-  const [direction, setDirection] = useState<"clockwise" | "counterclockwise" | "both">("clockwise");
-  const [places, setPlaces] = useState(1);
+// Steps 6 (gaps are optional) and 10 (the save step) carry no confirmation.
+const REQUIRED_STEPS: readonly WizardStep[] = [1, 2, 3, 4, 5, 7, 8, 9];
+
+/** Both bounds of the places input; the HTML `max` attribute cannot clamp typed text. */
+export function clampPlaces(value: string): number {
+  const parsed = Number(value);
+
+  if (!Number.isFinite(parsed)) return MIN_PLACES;
+
+  return Math.min(MAX_PLACES, Math.max(MIN_PLACES, Math.trunc(parsed)));
+}
+
+/** The persisted topology: "both" is a split run, whatever the mirror check counted. */
+export function wizardTopology(direction: WizardDirectionAnswer, places: number): RunTopology {
+  if (direction === "both") return classifyDirection(direction);
+
+  return mirrorCheck(places).topology;
+}
+
+export function MappingWizard({
+  onDone,
+  initialStep = 1,
+  initialDirection = "clockwise",
+  initialConfirmed = [],
+}: {
+  onDone: (topology: RunTopology) => void;
+  initialStep?: WizardStep;
+  initialDirection?: WizardDirectionAnswer;
+  initialConfirmed?: readonly WizardStep[];
+}): JSX.Element {
+  const [step, setStep] = useState<WizardStep>(initialStep);
+  const [direction, setDirection] = useState<WizardDirectionAnswer>(initialDirection);
+  const [places, setPlaces] = useState(MIN_PLACES);
+  const [confirmed, setConfirmed] = useState<readonly WizardStep[]>(initialConfirmed);
   const check = mirrorCheck(places);
+  const topology = wizardTopology(direction, places);
+  const stepConfirmed = confirmed.includes(step);
+  const saveEnabled = REQUIRED_STEPS.every((required) => confirmed.includes(required));
+
+  const setStepConfirmed = (next: boolean) => {
+    setConfirmed((current) => {
+      if (next) return current.includes(step) ? current : [...current, step];
+
+      return current.filter((value) => value !== step);
+    });
+  };
 
   return (
     <section aria-label="Strip mapping wizard" className="flex flex-col gap-2">
@@ -43,11 +88,11 @@ export function MappingWizard({ onDone }: { onDone: (topology: RunTopology) => v
             Places the lit cell appears
             <input
               type="number"
-              min={1}
-              max={4}
+              min={MIN_PLACES}
+              max={MAX_PLACES}
               value={places}
               aria-label="Places the lit cell appears"
-              onChange={(e) => setPlaces(Math.max(1, Number(e.target.value) || 1))}
+              onChange={(e) => setPlaces(clampPlaces(e.target.value))}
               className="ml-2 w-16 rounded border px-1"
             />
           </label>
@@ -55,6 +100,18 @@ export function MappingWizard({ onDone }: { onDone: (topology: RunTopology) => v
           <p className="text-sm">Offered: {check.offered.join(", ")}</p>
         </div>
       ) : null}
+      {REQUIRED_STEPS.includes(step) ? (
+        <label className="flex items-center gap-1.5 text-sm">
+          <input
+            type="checkbox"
+            checked={stepConfirmed}
+            aria-label={`Confirmed step ${step}`}
+            onChange={(e) => setStepConfirmed(e.target.checked)}
+          />
+          Confirmed: this step is done
+        </label>
+      ) : null}
+      {step === 10 ? <p className="text-sm">Saved topology: {topology}</p> : null}
       <div className="flex gap-2">
         <button
           type="button"
@@ -67,13 +124,19 @@ export function MappingWizard({ onDone }: { onDone: (topology: RunTopology) => v
         {step < 10 ? (
           <button
             type="button"
+            disabled={REQUIRED_STEPS.includes(step) && !stepConfirmed}
             onClick={() => setStep((Math.min(10, step + 1)) as WizardStep)}
             className="rounded border px-2 py-1 text-sm"
           >
             Next
           </button>
         ) : (
-          <button type="button" onClick={() => onDone(check.topology)} className="rounded border px-2 py-1 text-sm">
+          <button
+            type="button"
+            disabled={!saveEnabled}
+            onClick={() => onDone(topology)}
+            className="rounded border px-2 py-1 text-sm"
+          >
             Save mapping
           </button>
         )}

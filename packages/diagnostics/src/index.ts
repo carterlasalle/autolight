@@ -68,6 +68,12 @@ export class SessionRecorder {
   toNdjson(): string {
     return this.ordered().map((e) => safeEventLine(e)).join("\n");
   }
+  /** Newest slice for live diagnostics surfaces (receipts). */
+  tail(n: number): SessionEvent[] {
+    const all = this.ordered();
+
+    return all.slice(Math.max(0, all.length - Math.max(0, Math.floor(n))));
+  }
   count(): number {
     return this.events.length;
   }

@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { SessionRecorder, emptyMetrics, type Metrics } from "@autolight/diagnostics";
 import { PersistentConfigStore } from "@autolight/config";
 import { getGoveeManager, optionsFromConfig, registryFilePath } from "./govee-lan.js";
+import type { DeviceEntrySnapshot } from "./govee-lan.js";
 import { getProviderManager, startProlinkWatch } from "./services/provider-manager.js";
 import { getLiveShowBridge } from "./services/live-show-bridge.js";
 import { getAnalysisSupervisor } from "./services/analysis-supervisor.js";
@@ -144,7 +145,7 @@ export function startCompositeFlx4(): void {
   );
 }
 
-export function stopCompositeFlx4(): void {
+function stopCompositeFlx4(): void {
   compositeEpoch += 1;
   compositeStarted = false;
   void import("@autolight/rekordbox-live").then(
@@ -153,7 +154,7 @@ export function stopCompositeFlx4(): void {
   );
 }
 
-export function stopProlink(): void {
+function stopProlink(): void {
   stopProlinkWatch?.();
   stopProlinkWatch = null;
 }
@@ -167,7 +168,7 @@ export function setShowAcceptingUi(accepting: boolean): void {
   acceptingUi = accepting;
 }
 
-export function isShowAcceptingUi(): boolean {
+function isShowAcceptingUi(): boolean {
   return acceptingUi;
 }
 
@@ -197,29 +198,45 @@ export async function scanLanCommand(): Promise<{ ok: true; devices: unknown[] }
 
   svc.recorder.record("venue/scan", { found: found.length });
 
+  return { ok: true, devices: found.map(deviceRecord) };
+}
+
+// One venue device record for scan and list: the tile shows measured status
+// (firmware, health, zones, rtt), never placeholder strings; unknown stays
+// null so the UI prints "?" instead of inventing a measurement.
+function deviceRecord(d: DeviceEntrySnapshot): {
+  id: string; address: string; name: string; sku: string; firmware: string;
+  health: string; enabled: boolean; zones: number | null; rttMs: number | null;
+  rung: string; lastSeenMs: number;
+} {
   return {
-    ok: true,
-    devices: found.map((d) => ({
-      id: d.mac,
-      address: d.ip,
-      name: `${d.sku} — ${d.mac}`,
-      rung: d.rung,
-    })),
+    id: d.mac,
+    address: d.ip,
+    name: d.name,
+    sku: d.sku,
+    firmware: d.firmware,
+    health: d.health,
+    enabled: d.enabled,
+    zones: d.zones,
+    rttMs: d.rttMs,
+    rung: d.rung,
+    lastSeenMs: d.lastSeenMs,
   };
 }
 
 export async function identifyCommand(id: string): Promise<{ ok: true; id: string }> {
   const svc = getShowService();
-  await govee().identify(id);
-  svc.recorder.record("venue/identify", { id });
+  const receipt = await govee().identify(id);
+  // The addressed ip is the routing receipt: which lamp the command reached.
+  svc.recorder.record("venue/identify", { id, address: receipt.address, path: receipt.path, restored: receipt.restored, observedAnswered: receipt.observedAnswered });
 
   return { ok: true, id };
 }
 
 export async function testChaseCommand(id: string): Promise<{ ok: true; id: string }> {
   const svc = getShowService();
-  await govee().testChase(id);
-  svc.recorder.record("venue/test-chase", { id });
+  const receipt = await govee().testChase(id);
+  svc.recorder.record("venue/test-chase", { id, address: receipt.address, path: receipt.path, steps: receipt.steps });
 
   return { ok: true, id };
 }
@@ -282,7 +299,7 @@ export function applyCrashPolicy(opts: CrashPolicyOptions): void {
   const manager = govee();
   // Hold the last frame: streams keep their newest frame, no power commands.
   void (async () => {
-    for (const mac of [...svc.deviceIps.keys()]) {
+    for (const mac of svc.deviceIps.keys()) {
       await manager.setBrightness(mac, 100);
     }
   })().catch((err: unknown) => {
@@ -325,7 +342,7 @@ export function restartShowHost(): void {
   getShowService().recorder.record("crash/host-restarted", {});
 }
 
-export function applyEndingLook(kind: "blackout" | "hold" | "dim"): Promise<void> {
+function applyEndingLook(kind: "blackout" | "hold" | "dim"): Promise<void> {
   const svc = getShowService();
   svc.recorder.record("shutdown/ending-look", { kind });
   const manager = govee();
@@ -474,6 +491,13 @@ export function readDiagnostics(): { ok: true; diagnostics: Record<string, unkno
       // (intervalP50/P99/max ms, missed ticks/hour). Absent until the
       // supervisor spawns the worker on the first master intent.
       ...(hostMetrics !== null ? { showHost: hostMetrics } : {}),
+      // T-ARC-03 step 1 (freeze-ui): false once the app is quitting, so the
+      // renderer can see why its intents stop landing.
+      acceptingUi: isShowAcceptingUi(),
+      // Newest session events (bounded): the receipts behind venue and
+      // manual lanes (addressed ip, identify path, chase steps). tNs is
+      // stringified so the payload stays clone-safe for any JSON consumer.
+      recorderTail: svc.recorder.tail(20).map((e) => ({ kind: e.kind, payload: e.payload, tNs: e.tNs.toString() })),
     },
   };
 }
@@ -507,6 +531,22 @@ export function resetHostIntentForwarderForTest(): void {
   hostForwarder = () => undefined;
 }
 
+// Manual-lane output (T-RUN-07, spec 50): the show host supervisor is not
+// started in this build, so master and venue intents command the LAN
+// manager directly — the same direct path applyCrashPolicy already uses.
+// Failures are recorded per fixture, never left as unhandled rejections.
+function manualCommand(op: string, run: () => Promise<{ ok: string[]; failed: { mac: string; message: string }[] }>): void {
+  void run()
+    .then((receipt) => {
+      if (receipt.failed.length > 0) {
+        getShowService().recorder.record("manual/failed", { op, failed: receipt.failed });
+      }
+    })
+    .catch((err: unknown) => {
+      getShowService().recorder.record("manual/failed", { op, message: err instanceof Error ? err.message : String(err) });
+    });
+}
+
 // T-ARC-02 real handlers: each mutates or reads authoritative service state
 // and records into the session recorder. None echoes its payload.
 export function setMasterBlackout(): { ok: true; blackout: true } {
@@ -515,6 +555,8 @@ export function setMasterBlackout(): { ok: true; blackout: true } {
   svc.overrides.full = false;
   svc.recorder.record("master/blackout", { at: Date.now() });
   hostForwarder("master/blackout", { version: 1 });
+  // Blackout = RGB 0,0,0, never power-off (§47).
+  manualCommand("master/blackout", () => govee().setColorAll(0, 0, 0));
 
   return { ok: true, blackout: true };
 }
@@ -525,6 +567,8 @@ export function setMasterFull(): { ok: true; full: true } {
   svc.overrides.blackout = false;
   svc.recorder.record("master/full", { at: Date.now() });
   hostForwarder("master/full", { version: 1 });
+  // White = RGB(255,255,255), never kelvin (§48).
+  manualCommand("master/full", () => govee().setColorAll(255, 255, 255));
 
   return { ok: true, full: true };
 }
@@ -543,6 +587,9 @@ export function setMasterIntensity(value: number): { ok: true; value: number } {
   svc.overrides.intensity = Math.min(1, Math.max(0, value));
   svc.recorder.record("master/intensity", { value: svc.overrides.intensity });
   hostForwarder("master/intensity", { version: 1, value: svc.overrides.intensity });
+  // Global brightness is the slow master-level tool (§50); the manager's
+  // rate limit owns the pacing, so one slider move never floods the wire.
+  manualCommand("master/intensity", () => govee().setBrightnessAll(Math.round(svc.overrides.intensity * 100)));
 
   return { ok: true, value: svc.overrides.intensity };
 }
@@ -554,6 +601,8 @@ export function resumeMaster(at: "beat" | "bar" | "phrase" | "immediate"): { ok:
   svc.overrides.frozen = false;
   svc.recorder.record("master/resume", { at });
   hostForwarder("master/resume", { version: 1, at });
+  // Resume restores the standing look: the venue colour (white default).
+  manualCommand("master/resume", () => govee().setColorAll(svc.venueColor[0], svc.venueColor[1], svc.venueColor[2]));
 
   return { ok: true, at };
 }
@@ -611,15 +660,32 @@ export function readVenueList(): { ok: true; fixtures: unknown[] } {
 
   for (const d of found) svc.deviceIps.set(d.mac, d.ip);
 
-  return { ok: true, fixtures: found.map((d) => ({ id: d.mac, ip: d.ip })) };
+  return { ok: true, fixtures: found.map(deviceRecord) };
 }
 
 export function setVenueColor(rgb: [number, number, number]): { ok: true; rgb: [number, number, number] } {
   const svc = getShowService();
   svc.venueColor = rgb;
   svc.recorder.record("venue/set-color", { rgb });
+  // The swatch is the standing look: it paints the rig now (manual lane)
+  // and is what master/resume restores after blackout.
+  manualCommand("venue/set-color", () => govee().setColorAll(rgb[0], rgb[1], rgb[2]));
 
   return { ok: true, rgb };
+}
+
+export function renameVenueDevice(id: string, name: string): { ok: true; id: string; name: string } {
+  const res = govee().renameDevice(id, name);
+  getShowService().recorder.record("venue/device-rename", { id: res.mac, name: res.name });
+
+  return { ok: true, id: res.mac, name: res.name };
+}
+
+export function setVenueDeviceEnabled(id: string, enabled: boolean): { ok: true; id: string; enabled: boolean } {
+  const res = govee().setDeviceEnabled(id, enabled);
+  getShowService().recorder.record("venue/device-enabled", { id: res.mac, enabled: res.enabled });
+
+  return { ok: true, id: res.mac, enabled: res.enabled };
 }
 
 export function deviceAction(id: string, action: string): { ok: true; id: string; action: string } {

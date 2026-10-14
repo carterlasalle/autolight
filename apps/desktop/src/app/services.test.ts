@@ -879,9 +879,45 @@ describe("ipc handlers have real effects (T-TRU-03)", () => {
           // SAFETY: venue/scan and venue/list reply with devices/fixtures
           // arrays; the length assertions below fail loudly on shape change.
           expect((scanned["devices"] as unknown[]).length).toBeGreaterThan(0);
+          // SAFETY: device records carry name/enabled/firmware; the tile
+          // rows below read exactly these fields.
+          const devices = scanned["devices"] as { name: string; enabled: boolean; firmware: string }[];
+          expect(devices[0]?.name).toBe("AA:BB:CC:DD:EE:01");
+          expect(devices[0]?.enabled).toBe(true);
+          expect(devices[0]?.firmware).toBe("1.02.03");
           // venue/list reads the same registry snapshot (non-empty now).
           const venue = await call("venue/list", { version: 1 });
           expect((venue["fixtures"] as unknown[]).length).toBeGreaterThan(0);
+
+          // Manual lane end to end (T-RUN-07, spec 50): the IPC handler
+          // drives the manager, the manager drives UDP, the sim is the
+          // witness. Runs before identify/test-chase so no flash-restore
+          // timer can race the assertions.
+          const displayed = (): [number, number, number] =>
+            sim.armedState ? (sim.rendered[0] ?? [0, 0, 0]) : sim.lightState.color;
+
+          await call("venue/set-color", { version: 1, rgb: [10, 20, 30] });
+          await vi.waitFor(() => { expect(displayed()).toEqual([10, 20, 30]); });
+          await call("master/blackout", { version: 1 });
+          await vi.waitFor(() => { expect(displayed()).toEqual([0, 0, 0]); });
+          await call("master/resume", { version: 1, at: "bar" });
+          await vi.waitFor(() => { expect(displayed()).toEqual([10, 20, 30]); });
+
+          // Rename persists in the registry snapshot (the venue tile label).
+          const renamed = await call("venue/device-rename", { version: 1, id: "AA:BB:CC:DD:EE:01", name: "Back left" });
+          expect(renamed).toMatchObject({ ok: true, name: "Back left" });
+          expect(appMgr.registrySnapshot().find((d) => d.mac === "AA:BB:CC:DD:EE:01")?.name).toBe("Back left");
+
+          // A disabled fixture is skipped by the manual all-commands:
+          // the receipt names nothing and the wire stays quiet.
+          await call("venue/device-enabled", { version: 1, id: "AA:BB:CC:DD:EE:01", enabled: false });
+          expect(appMgr.registrySnapshot().find((d) => d.mac === "AA:BB:CC:DD:EE:01")?.enabled).toBe(false);
+          expect(await appMgr.setColorAll(1, 2, 3)).toEqual({ ok: [], failed: [] });
+          expect(displayed()).toEqual([10, 20, 30]);
+          await call("venue/device-enabled", { version: 1, id: "AA:BB:CC:DD:EE:01", enabled: true });
+          expect((await appMgr.setColorAll(4, 5, 6)).ok).toEqual(["AA:BB:CC:DD:EE:01"]);
+          await vi.waitFor(() => { expect(displayed()).toEqual([4, 5, 6]); });
+
           await call("venue/identify", { version: 1, id: "AA:BB:CC:DD:EE:01" });
           await call("venue/test-chase", { version: 1, id: "AA:BB:CC:DD:EE:01" });
           const acted = await call("venue/device-action", { version: 1, id: "AA:BB:CC:DD:EE:01", action: "identify" });

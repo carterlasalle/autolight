@@ -41,7 +41,7 @@ import { dirname, join } from "node:path";
 import {
   MULTICAST, SCAN_REQUEST, parseDevStatus, envelope,
   devStatusCommand, turnCommand, brightnessCommand, colorCommand,
-  arm, paint, blackoutPayload, whiteHitPayload, PacingStream, WALL_SCHEDULER,
+  arm, paint, blackoutPayload, whiteHitPayload, solidPayload, PacingStream, WALL_SCHEDULER,
 } from "@autolight/govee";
 import type {
   LanDeviceStatus, LanInbound, StreamTransport, StreamOptions,
@@ -96,7 +96,8 @@ export interface GoveeManagerOptions {
   wait?: (ms: number) => Promise<void>;
 }
 
-export const GOVEE_DEFAULTS = {
+// Govee LAN defaults: the fallback every config key starts from (govee.lan.*).
+const GOVEE_DEFAULTS = {
   scanPort: 4001,
   replyPort: 4002,
   controlPort: 4003,
@@ -179,6 +180,8 @@ export function optionsFromConfig(get: (key: string) => unknown): GoveeManagerOp
 export interface DeviceEntrySnapshot {
   mac: string;
   sku: string;
+  name: string;
+  enabled: boolean;
   ip: string;
   ipInferred: boolean;
   lastSeenMs: number;
@@ -209,6 +212,7 @@ export interface DevStatusResult {
 
 export interface IdentifyReceipt {
   mac: string;
+  address: string;
   path: "stream" | "colorwc";
   restored: "current-frame" | "blackout-frame" | "observed-state" | "no-read-back";
   observedAnswered: boolean;
@@ -216,8 +220,15 @@ export interface IdentifyReceipt {
 
 export interface ChaseReceipt {
   mac: string;
+  address: string;
   path: "stream" | "brightness-ramp";
   steps: number;
+}
+
+/** Manual-lane batch outcome: fixtures commanded and per-fixture failures. */
+export interface ManualReceipt {
+  ok: string[];
+  failed: { mac: string; message: string }[];
 }
 
 export interface DeviceStream {
@@ -231,6 +242,7 @@ export interface DeviceStream {
 
 interface DeviceEntry extends Omit<DeviceEntrySnapshot, "requested"> {
   name: string;
+  enabled: boolean;
   ipHistory: string[];
   bleHard: string;
   bleSoft: string;
@@ -304,7 +316,7 @@ function sameSubnet(ip: string, ifaceIp: string, netmask: string): boolean {
 // T-GOV-16 network hygiene (spec 111): default bind set is private LAN
 // addresses only (RFC 1918). Anything else (public, CGNAT, unclassified) is
 // never bound: the manager refuses WAN interfaces even if selected.
-export function isPrivateIpv4(ip: string): boolean {
+function isPrivateIpv4(ip: string): boolean {
   const a = ip.split(".").map(Number);
 
   if (a.length !== 4) return false;
@@ -322,7 +334,7 @@ export function isPrivateIpv4(ip: string): boolean {
   return false;
 }
 
-export function subnetAddress(ip: string, netmask: string): string | null {
+function subnetAddress(ip: string, netmask: string): string | null {
   const a = ip.split(".").map(Number);
   const m = netmask.split(".").map(Number);
 
@@ -340,7 +352,7 @@ export function subnetAddress(ip: string, netmask: string): string | null {
   return out.join(".");
 }
 
-export function firewallHints(platform: string = process.platform): string[] {
+function firewallHints(platform: string = process.platform): string[] {
   if (platform === "darwin") {
     return [
       "Allow AutoLight incoming connections: Settings > Network > Firewall.",
@@ -366,10 +378,6 @@ const defaultWait = (ms: number): Promise<void> => {
 
   return promise;
 };
-
-export function createGoveeManager(opts: GoveeManagerOptions = {}): GoveeLanManager {
-  return new GoveeLanManager(opts);
-}
 
 let shared: GoveeLanManager | null = null;
 
@@ -1010,7 +1018,7 @@ export class GoveeLanManager implements StreamTransport {
   async blackoutAll(): Promise<void> {
     await this.start();
 
-    for (const mac of [...this.devices.keys()]) {
+    for (const mac of this.devices.keys()) {
       await this.blackout(mac);
     }
   }
@@ -1091,6 +1099,86 @@ export class GoveeLanManager implements StreamTransport {
     }
   }
 
+  // -- manual lane (T-RUN-07, spec 50): master intents command the rig ------
+
+  /** Solid colour on one fixture: an armed stream paints the segmented frame
+   *  (§51 newest-state-wins); an unarmed fixture takes the one-shot colorwc
+   *  path, the same one identify uses. Blackout rides this as RGB 0,0,0
+   *  (§47), never turn. */
+  async setColor(mac: string, r: number, g: number, b: number): Promise<void> {
+    await this.start();
+    const entry = this.require(mac);
+    const zones = entry.zones ?? (entry.lastFrame ? Math.floor(entry.lastFrame.length / 3) : 0);
+    const stream = entry.stream;
+
+    if (entry.armed && stream && !entry.streamClosed && zones > 0) {
+      const frame = solidPayload(zones, r, g, b);
+      entry.lastFrame = frame.slice();
+
+      try {
+        stream.setAll(frame);
+
+        return;
+      } catch { /* zones raced the stream: the one-shot path below still lands */ }
+    }
+
+    this.sendJson(entry.mac, colorCommand(r, g, b));
+  }
+
+  /** Manual lane over the enabled rig: per-fixture failures are collected,
+   *  never thrown as a batch (one dead lamp must not lose the others). */
+  async setColorAll(r: number, g: number, b: number): Promise<ManualReceipt> {
+    return this.commandEnabled((mac) => this.setColor(mac, r, g, b));
+  }
+
+  async setBrightnessAll(value: number): Promise<ManualReceipt> {
+    return this.commandEnabled((mac) => this.setBrightness(mac, value));
+  }
+
+  private async commandEnabled(run: (mac: string) => Promise<void>): Promise<ManualReceipt> {
+    // The registry is the restart path: a master intent must reach saved
+    // fixtures even when no scan has run in this process yet. loadRegistry
+    // is idempotent; start() (inside each command) re-runs it harmlessly.
+    if (this.devices.size === 0) this.loadRegistry();
+    const ok: string[] = [];
+    const failed: { mac: string; message: string }[] = [];
+
+    for (const entry of this.devices.values()) {
+      if (!entry.enabled) continue;
+
+      try {
+        await run(entry.mac);
+        ok.push(entry.mac);
+      } catch (err) {
+        failed.push({ mac: entry.mac, message: err instanceof Error ? err.message : String(err) });
+      }
+    }
+
+    return { ok, failed };
+  }
+
+  /** Rename a fixture: the registry-owned label the venue screen shows. */
+  renameDevice(mac: string, name: string): { mac: string; name: string } {
+    const entry = this.require(mac);
+    const trimmed = name.trim().slice(0, 48);
+
+    if (trimmed.length === 0) throw new Error("rename needs a non-empty name (fix: type a label)");
+    entry.name = trimmed;
+    this.saveRegistrySoon();
+
+    return { mac: entry.mac, name: entry.name };
+  }
+
+  /** Enable/disable a fixture on the rig: disabled fixtures are skipped by
+   *  the manual all-commands; identify and test chase still address them. */
+  setDeviceEnabled(mac: string, enabled: boolean): { mac: string; enabled: boolean } {
+    const entry = this.require(mac);
+    entry.enabled = enabled;
+    this.saveRegistrySoon();
+
+    return { mac: entry.mac, enabled: entry.enabled };
+  }
+
   // -- registry and health (T-GOV-06) ----------------------------------------------
 
   backoff(mac: string): void {
@@ -1120,6 +1208,10 @@ export class GoveeLanManager implements StreamTransport {
   }
 
   registrySnapshot(): DeviceEntrySnapshot[] {
+    // The saved rig must be readable before any scan or socket work: the
+    // venue screen hydrates from this on mount (restart shows the lights).
+    if (this.devices.size === 0) this.loadRegistry();
+
     return [...this.devices.values()].map((e) => this.snapshot(e));
   }
 
@@ -1176,6 +1268,7 @@ export class GoveeLanManager implements StreamTransport {
 
       return {
         mac,
+        address: entry.ip,
         path: "stream",
         restored: entry.lastFrame ? "current-frame" : "blackout-frame",
         observedAnswered: capture.answered,
@@ -1192,7 +1285,7 @@ export class GoveeLanManager implements StreamTransport {
     await this.wait(flashMs);
 
     if (observed === null) {
-      return { mac, path: "colorwc", restored: "no-read-back", observedAnswered: false };
+      return { mac, address: entry.ip, path: "colorwc", restored: "no-read-back", observedAnswered: false };
     }
 
     await this.enqueue(entry.mac, async () => {
@@ -1207,7 +1300,7 @@ export class GoveeLanManager implements StreamTransport {
       }
     });
 
-    return { mac, path: "colorwc", restored: "observed-state", observedAnswered: true };
+    return { mac, address: entry.ip, path: "colorwc", restored: "observed-state", observedAnswered: true };
   }
 
   async testChase(mac: string, opts?: { stepMs?: number }): Promise<ChaseReceipt> {
@@ -1240,7 +1333,7 @@ export class GoveeLanManager implements StreamTransport {
         await this.wait(stepMs);
       }
 
-      return { mac, path: "stream", steps: order.length };
+      return { mac, address: entry.ip, path: "stream", steps: order.length };
     }
 
     const capture = await this.requestDevStatus(mac, { retryMs: 250, deadlineMs: 250 });
@@ -1261,7 +1354,7 @@ export class GoveeLanManager implements StreamTransport {
       });
     }
 
-    return { mac, path: "brightness-ramp", steps: 3 };
+    return { mac, address: entry.ip, path: "brightness-ramp", steps: 3 };
   }
 
   applyLiveTunables(p: Partial<GoveeManagerOptions>): void {
@@ -1329,6 +1422,7 @@ export class GoveeLanManager implements StreamTransport {
         mac: e.mac,
         sku: e.sku,
         name: e.name,
+        enabled: e.enabled,
         ipHistory: e.ipHistory,
         bleHard: e.bleHard,
         bleSoft: e.bleSoft,
@@ -1337,8 +1431,9 @@ export class GoveeLanManager implements StreamTransport {
         rung: e.rung,
         lastSeenMs: e.lastSeenMs,
       }));
+      const file: LanRegistryFile = { version: 1, devices };
 
-      writeFileSync(path, JSON.stringify({ version: 1, devices }, null, 2), "utf8");
+      writeFileSync(path, JSON.stringify(file, null, 2), "utf8");
     } catch (err) {
       this.warn(`registry save failed: ${err instanceof Error ? err.message : String(err)}`);
     }
@@ -1362,6 +1457,8 @@ export class GoveeLanManager implements StreamTransport {
     return {
       mac: e.mac,
       sku: e.sku,
+      name: e.name,
+      enabled: e.enabled,
       ip: e.ip,
       ipInferred: e.ipInferred,
       lastSeenMs: e.lastSeenMs,
@@ -1888,6 +1985,7 @@ export class GoveeLanManager implements StreamTransport {
       mac,
       sku: data["sku"] as string,
       name: mac,
+      enabled: true,
       ip,
       ipHistory: [ip],
       ipInferred: inferred,
@@ -1982,7 +2080,7 @@ export class GoveeLanManager implements StreamTransport {
     try {
       const raw = JSON.parse(readFileSync(path, "utf8")) as {
         devices?: {
-          mac?: unknown; sku?: unknown; name?: unknown; ipHistory?: unknown;
+          mac?: unknown; sku?: unknown; name?: unknown; enabled?: unknown; ipHistory?: unknown;
           bleHard?: unknown; bleSoft?: unknown; wifiHard?: unknown; wifiSoft?: unknown;
           lastSeenMs?: unknown;
         }[];
@@ -1990,6 +2088,9 @@ export class GoveeLanManager implements StreamTransport {
 
       for (const row of raw.devices ?? []) {
         if (typeof row.mac !== "string" || typeof row.sku !== "string") continue;
+        // Newest-state-wins (§49): the file seeds devices; a row already in
+        // memory (scanned, renamed, enabled) is never clobbered by the file.
+        if (this.devices.has(row.mac)) continue;
 
         const history = Array.isArray(row.ipHistory)
           ? row.ipHistory.filter((h): h is string => typeof h === "string").slice(0, IP_HISTORY)
@@ -1999,6 +2100,7 @@ export class GoveeLanManager implements StreamTransport {
           mac: row.mac,
           sku: row.sku,
           name: typeof row.name === "string" ? row.name : row.mac,
+          enabled: row.enabled !== false,
           ip: history[0] ?? "",
           ipHistory: history,
           ipInferred: false,
@@ -2066,6 +2168,7 @@ export interface LanRegistryFile {
     mac: string;
     sku: string;
     name: string;
+    enabled: boolean;
     ipHistory: string[];
     rung: DiscoveryRung;
     lastSeenMs: number;

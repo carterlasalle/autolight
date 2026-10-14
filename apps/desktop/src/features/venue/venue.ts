@@ -4,6 +4,7 @@ import type { Fixture } from "@autolight/contracts";
 // Device screen (§99): tile per fixture with health + IDENTIFY/TEST CHASE/RECALIBRATE.
 export interface DeviceTile {
   id: string; sku: string; ip: string | null; firmware: string;
+  name: string; enabled: boolean;
   segments: number; fps: number; sentFrames: number; supersededFrames: number;
   latencyMs: number; health: "online" | "degraded" | "offline";
 }
@@ -11,6 +12,7 @@ export interface DeviceTile {
 export function tileForFixture(f: Fixture, stats: { fps: number; sent: number; superseded: number; latencyMs: number; health: DeviceTile["health"]; ip: string | null }): DeviceTile {
   return {
     id: f.id, sku: f.sku, ip: stats.ip, firmware: f.calibration?.firmwareVersion ?? "unknown",
+    name: f.id, enabled: true,
     segments: f.cells.length, fps: stats.fps, sentFrames: stats.sent,
     supersededFrames: stats.superseded, latencyMs: stats.latencyMs, health: stats.health,
   };

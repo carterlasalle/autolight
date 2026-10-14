@@ -7,6 +7,7 @@ import {
   setShowStyle, setEnergyTier, triggerBuild, triggerDrop,
   setMasterBlackout, setMasterFull, setMasterFreeze, setMasterIntensity, resumeMaster,
   readShowState, readVenueList, setVenueColor, deviceAction, pollAxCommand,
+  renameVenueDevice, setVenueDeviceEnabled,
 } from "./../show-service.js";
 import { ServiceTracker, type Service, type ServiceStatus } from "./base.js";
 import { getConfigService } from "./config-service.js";
@@ -16,10 +17,15 @@ import { audit } from "./audit-log.js";
 // registers it before the window is created. Errors return typed
 // { ok: false, error } and surface in UI status, never swallowed.
 
+// Trusted renderer origin (Vite dev server). Compared as an exact parsed
+// origin, never a string prefix: `http://localhost:5173@evil.com` and
+// `http://localhost:5173.evil.com` must not match. Single constant so the
+// ipc-router, navigation guard and permission checks cannot drift.
+export const TRUSTED_DEV_ORIGIN = "http://localhost:5173";
+
 export interface IpcEventLike {
   senderFrame?: { url?: string } | null;
 }
-
 // The router talks to this port instead of ipcMain so the whole channel table
 // is testable without an Electron process.
 
@@ -73,6 +79,8 @@ const handlers: ChannelHandlerTable = {
   "venue/list": () => readVenueList(),
   "venue/set-color": (req) => setVenueColor(req.rgb),
   "venue/device-action": (req) => deviceAction(req.id, req.action),
+  "venue/device-rename": (req) => renameVenueDevice(req.id, req.name),
+  "venue/device-enabled": (req) => setVenueDeviceEnabled(req.id, req.enabled),
   "venue/scan": () => scanLanCommand(),
   "venue/identify": (req) => identifyCommand(req.id),
   "venue/test-chase": (req) => testChaseCommand(req.id),
@@ -147,15 +155,19 @@ export class IpcRouter implements Service {
 
   private senderAllowed(event: IpcEventLike): boolean {
     try {
-      const url = event.senderFrame?.url ?? "";
+      const raw = event.senderFrame?.url;
 
-      if (!url) return true;
+      // Fail closed: an unknown sending frame must not be trusted.
+      if (!raw) return false;
+      const url = new URL(raw);
 
-      return url.startsWith("file://") || url.startsWith("http://localhost:5173");
+      // Exact origin/protocol check, never a prefix match.
+      return url.protocol === "file:" || url.origin === TRUSTED_DEV_ORIGIN;
     } catch {
       return false;
     }
   }
+
   // Hot poll channels log errors only (250ms cadence would flood the file);
   // every other channel logs one line per call with its result. This is the
   // button→response trail: the renderer sends every action through invoke,
@@ -172,14 +184,36 @@ export class IpcRouter implements Service {
       return { ok: false, error: { code: "E_SENDER", message: `sender not allowed for ${name}` } };
     }
 
+    let req: ChannelRequest<Channel>;
+
     try {
-      const req = channels[name].request.parse(raw);
-      // SAFETY: the handler table is invariant in its channel parameter; the
-      // request was just validated against channels[name].request for this
-      // same channel, so the runtime pairing is exact even though TS cannot
-      // call a mapped-type member through this index.
-      const runHandler = handlers[name] as ChannelHandler<Channel>;
-      const res = await runHandler(req);
+      req = channels[name].request.parse(raw);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.tracker.count("errors");
+      audit("ipc.error", { channel: name, ms: Date.now() - t0, error: message.slice(0, 500) });
+
+      return { ok: false, error: { code: "E_REQUEST", message: `${name}: ${message}` } };
+    }
+
+    // SAFETY: the handler table is invariant in its channel parameter; the
+    // request was just validated against channels[name].request for this
+    // same channel, so the runtime pairing is exact even though TS cannot
+    // call a mapped-type member through this index.
+    const runHandler = handlers[name] as ChannelHandler<Channel>;
+    let res: ChannelResponse<Channel>;
+
+    try {
+      res = await runHandler(req);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.tracker.count("errors");
+      audit("ipc.error", { channel: name, ms: Date.now() - t0, error: message.slice(0, 500) });
+
+      return { ok: false, error: { code: "E_HANDLER", message: `${name}: ${message}` } };
+    }
+
+    try {
       // SAFETY: channels[name].response is this channel's response schema;
       // TS cannot invoke .parse across the union of channel schemas.
       const parseResponse = channels[name].response.parse as (value: ChannelResponse<Channel>) => IpcReply;
@@ -200,7 +234,7 @@ export class IpcRouter implements Service {
       this.tracker.count("errors");
       audit("ipc.error", { channel: name, ms: Date.now() - t0, error: message.slice(0, 500) });
 
-      return { ok: false, error: { code: "E_HANDLER", message: `${name}: ${message}` } };
+      return { ok: false, error: { code: "E_RESPONSE", message: `${name}: ${message}` } };
     }
   }
 }
