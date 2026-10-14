@@ -3151,6 +3151,36 @@
       "line": 62,
       "verdict": "fixed",
       "evidence": "capture() owns both unsubscribe functions; the suite finally calls off() before stop()."
+    },
+    {
+      "path": "packages/rekordbox-library/src/identity.test.ts",
+      "line": 0,
+      "verdict": "fixed",
+      "evidence": "storeWithLibrary tests now seed the MemoryAliasStore (full AliasRecord): the store path resolves t-canon with minted===0, and an unknown id mints exactly one fresh id."
+    },
+    {
+      "path": "packages/rekordbox-library/src/identity.test.ts",
+      "line": 0,
+      "verdict": "fixed",
+      "evidence": "not.toBeNull replaced by exact ids (t-canon store path, t1 minted path) with the mint counter observed."
+    },
+    {
+      "path": "packages/rekordbox-library/src/identity.test.ts",
+      "line": 0,
+      "verdict": "fixed",
+      "evidence": "Path branch asserts the exact minted id plus the documented 0.7 confidence; the title branch reuses the attached id (minting once per identity)."
+    },
+    {
+      "path": "packages/rekordbox-library/src/identity.test.ts",
+      "line": 0,
+      "verdict": "fixed",
+      "evidence": "DS-22 confidences asserted per step: lighting-ipc-id 0.95, agent-api 0.9, history-table 0.8, memory-reader-id 1, path-library 0.7, title-path 0.5."
+    },
+    {
+      "path": "packages/rekordbox-library/src/identity.test.ts",
+      "line": 0,
+      "verdict": "fixed",
+      "evidence": "History miss asserts matchedStep null, confidence 0, and the step note 'id not in history table'."
     }
   ],
   "batch-39": [
