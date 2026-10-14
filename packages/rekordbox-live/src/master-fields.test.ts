@@ -61,30 +61,43 @@ describe("master deck, loop, pitch, SYNC, hotcue and roll (T-LIVE-14)", () => {
   it("fuses master from prolink and pitch from rkbx-osc per field authority", () => {
     const clock = freshClock();
     const now = clock.current();
-    const engine = new FusionEngine({ now: clock.now });
+    const engine = new FusionEngine({ now: clock.now, switchHoldMs: 100 });
     const prolink = new ScriptedProvider({ id: "prolink", now: clock.now });
     const rkbx = new ScriptedProvider({ id: "rkbx-osc", now: clock.now });
 
-    prolink.update({
+    // Both providers supply DISAGREEING pitchPercent and sync values, so the
+    // assertions below test authority precedence, not mere field routing.
+    const prolinkState = {
       deckId: 1, track: { id: "rb:1", title: "Same" }, playing: true,
-      playheadSeconds: 10, effectiveBpm: 128, master: true, sync: true, atNs: now,
-    });
-    rkbx.update({
+      playheadSeconds: 10, effectiveBpm: 128, pitchPercent: 9.0, master: true, sync: true,
+    } as const;
+    const rkbxState = {
       deckId: 1, track: { id: "rb:1", title: "Same" }, playing: true,
-      playheadSeconds: 10, effectiveBpm: 128, pitchPercent: 2.0, master: false, atNs: now,
-    });
-    const prolinkDeck = prolink.getDecks()[0];
-    const rkbxDeck = rkbx.getDecks()[0];
+      playheadSeconds: 10, effectiveBpm: 128, pitchPercent: 2.0, master: false, sync: false,
+    } as const;
 
-    if (!prolinkDeck || !rkbxDeck) throw new Error("scripted provider emitted no deck");
-    engine.ingest("prolink", prolinkDeck);
-    engine.ingest("rkbx-osc", rkbxDeck);
+    prolink.update({ ...prolinkState, atNs: now });
+    rkbx.update({ ...rkbxState, atNs: now });
+    engine.ingest("prolink", prolink.getDecks()[0]!);
+    engine.ingest("rkbx-osc", rkbx.getDecks()[0]!);
+    // The incumbent (prolink, ingested first) holds the fields until the
+    // higher-authority challenger stays available for switchHoldMs.
+    expect(engine.fused(1)?.fieldSources.pitchPercent).toBe("prolink");
+
+    // Past the (test-shrunk, 100 ms) hysteresis window while BOTH stay fresh
+    // in the 500 ms freshness window: rkbx-osc outranks prolink, so its
+    // pitch (2.0) and sync (false) take over the conflict.
+    clock.advance(200n * 1_000_000n);
+    prolink.update({ ...prolinkState, atNs: clock.current() });
+    rkbx.update({ ...rkbxState, atNs: clock.current() });
+    engine.ingest("prolink", prolink.getDecks()[0]!);
+    engine.ingest("rkbx-osc", rkbx.getDecks()[0]!);
     const fused = engine.fused(1);
 
     expect(fused?.pitchPercent).toBe(2.0);
     expect(fused?.fieldSources.pitchPercent).toBe("rkbx-osc");
-    expect(fused?.sync).toBe(true);
-    expect(fused?.fieldSources.sync).toBe("prolink");
+    expect(fused?.sync).toBe(false);
+    expect(fused?.fieldSources.sync).toBe("rkbx-osc");
   });
 
   it("keeps FLX4 loop hints at estimated quality below DJ software truth", () => {

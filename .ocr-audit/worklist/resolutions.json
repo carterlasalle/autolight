@@ -3141,6 +3141,102 @@
       "line": 37,
       "verdict": "fixed",
       "evidence": "point and vertical-line rejections asserted for closed-or-independent primitives."
+    },
+    {
+      "path": "packages/rekordbox-live/src/master-fields.test.ts",
+      "line": 59,
+      "verdict": "fixed",
+      "evidence": "Both providers now supply disagreeing pitchPercent/sync; the test crosses the (shrunk) switchHoldMs hysteresis and asserts the higher-authority rkbx-osc takeover for both fields."
+    },
+    {
+      "path": "packages/rekordbox-live/src/prolink.test.ts",
+      "line": 22,
+      "verdict": "fixed",
+      "evidence": "The fixture's own offsets field now drives the raw-byte assertions for every beat/status vector (width from documented magnitude); dead fixture data is live."
+    },
+    {
+      "path": "packages/rekordbox-live/src/prolink.test.ts",
+      "line": 37,
+      "verdict": "fixed",
+      "evidence": "A decodable vector without fields fails instead of silently skipping all assertions."
+    },
+    {
+      "path": "packages/rekordbox-live/src/prolink.test.ts",
+      "line": 187,
+      "verdict": "fixed",
+      "evidence": "Generation pinned to exactly +1 on track change."
+    },
+    {
+      "path": "packages/rekordbox-live/src/prolink.test.ts",
+      "line": 108,
+      "verdict": "fixed",
+      "evidence": "Absolute status bytes at 0x92/0x94 asserted independently of the decoder before the round-trip asserts."
+    },
+    {
+      "path": "packages/rekordbox-live/src/prolink.test.ts",
+      "line": 91,
+      "verdict": "fixed",
+      "evidence": "A rejection while live is asserted to degrade the status with its reason."
+    },
+    {
+      "path": "packages/serato/src/setup.test.ts",
+      "line": 53,
+      "verdict": "fixed",
+      "evidence": "The short deck array follows the same ladder: state no-deck-data with exactly the deck-rate step failing; full remedy pinned."
+    },
+    {
+      "path": "packages/serato/src/setup.test.ts",
+      "line": 37,
+      "verdict": "fixed",
+      "evidence": "Failure remedies pinned as full strings (noConnection, noDecks)."
+    },
+    {
+      "path": "packages/serato/src/setup.test.ts",
+      "line": 35,
+      "verdict": "fixed",
+      "evidence": "Step ids in order and the exact single failing step asserted on failure paths."
+    },
+    {
+      "path": "packages/serato/src/setup.test.ts",
+      "line": 18,
+      "verdict": "fixed",
+      "evidence": "Contradictory-input precedence pinned: remote-disabled beats not-installed beats not-advertising; no-connection beats unauthenticated."
+    },
+    {
+      "path": "packages/serato/src/setup.test.ts",
+      "line": 12,
+      "verdict": "fixed",
+      "evidence": "REMOTE_PORT and REMOTE_SERVICE consts shared by fixture and assertions."
+    },
+    {
+      "path": "packages/show-mixer/src/intro.test.ts",
+      "line": 27,
+      "verdict": "fixed",
+      "evidence": "Priorities inverted against the layer order (exclusive=1 ... base=200): a priority-ordered admission cannot produce the ladder."
+    },
+    {
+      "path": "packages/show-mixer/src/intro.test.ts",
+      "line": 50,
+      "verdict": "fixed",
+      "evidence": "Outgoing side's layer tags pinned too, so a silent side swap fails."
+    },
+    {
+      "path": "packages/show-mixer/src/intro.test.ts",
+      "line": 71,
+      "verdict": "fixed",
+      "evidence": "Rendered BYTES compared per stage (not hashes) plus a lit-cell sanity check."
+    },
+    {
+      "path": "packages/show-mixer/src/intro.test.ts",
+      "line": 78,
+      "verdict": "fixed",
+      "evidence": "Weight scaling asserted for base/spatial/accents/exclusive at their admitted stages, plus staged absence."
+    },
+    {
+      "path": "packages/show-mixer/src/intro.test.ts",
+      "line": 58,
+      "verdict": "fixed",
+      "evidence": "FADER_RAMP const shared by both tests."
     }
   ],
   "batch-40": [

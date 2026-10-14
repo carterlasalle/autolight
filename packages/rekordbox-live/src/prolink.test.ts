@@ -37,8 +37,11 @@ describe("PRO DJ LINK decode (T-LIVE-05)", () => {
       const decoded = decodeProlinkPacket(bytes);
       expect(decoded.kind, vector.name).toBe(vector.kind);
 
-      if (decoded.kind === "malformed" || !vector.fields) continue;
-      const fields = vector.fields;
+      if (decoded.kind === "malformed") continue;
+      // A decodable vector without fields would silently skip every
+      // assertion below: require the fixture to describe what it decodes.
+      expect(vector.fields, `${vector.name} must carry fields`).toBeDefined();
+      const fields = vector.fields!;
 
       if (decoded.kind === "beat") {
         expect(decoded.header.deviceName).toBe(fields["deviceName"]);
@@ -67,23 +70,37 @@ describe("PRO DJ LINK decode (T-LIVE-05)", () => {
   });
 
   it("reads the documented raw offsets, not just the decoded fields", () => {
+    // The vectors self-describe their offsets: each documented byte slot is
+    // read from the hex with a width chosen by the documented magnitude, so
+    // the fixture (not a parallel hand list) drives the raw-byte contract.
+    const readAt = (bytes: Uint8Array, at: number, value: number): number => {
+      const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+
+      if (value > 0xffff) return dv.getUint32(at, true);
+
+      if (value > 0xff) return dv.getUint16(at, true);
+
+      return bytes[at] ?? -1;
+    };
+
+    for (const vector of vectors) {
+      if (vector.kind !== "beat" && vector.kind !== "status") continue;
+
+      const bytes = Uint8Array.from(Buffer.from(vector.hex, "hex"));
+
+      for (const [field, spec] of Object.entries(vector.offsets ?? {})) {
+        expect(readAt(bytes, Number.parseInt(spec.offset, 16), spec.value), `${vector.kind}.${field} at ${spec.offset}`).toBe(spec.value);
+      }
+    }
+
     const beat = vectors.find((v) => v.kind === "beat");
     expect(beat).toBeDefined();
     const bytes = Uint8Array.from(Buffer.from(beat?.hex ?? "", "hex"));
-    const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     expect(Buffer.from(bytes.subarray(0, 10)).toString("latin1")).toBe(PROLINK_MAGIC);
     expect(bytes[10]).toBe(0x06);
-    expect(dv.getUint32(0x24, true)).toBe(50000);
-    expect(dv.getUint32(0x28, true)).toBe(25000);
-    expect(dv.getUint32(0x38, true)).toBe(0x100000);
-    expect(dv.getUint16(0x5a, true)).toBe(12800);
-    expect(bytes[0x5c]).toBe(1);
     const status = vectors.find((v) => v.kind === "status");
     const statusBytes = Uint8Array.from(Buffer.from(status?.hex ?? "", "hex"));
-    const sdv = new DataView(statusBytes.buffer, statusBytes.byteOffset, statusBytes.byteLength);
-    expect(sdv.getUint32(0x2c, true)).toBe(1234567);
-    expect(statusBytes[0x6f]).toBe(3);
-    expect(statusBytes[0x75]).toBe(0x30);
+    expect(statusBytes[10]).toBe(0x0a);
   });
 
   it("rejects a random 60-byte datagram and counts it", () => {
@@ -96,6 +113,16 @@ describe("PRO DJ LINK decode (T-LIVE-05)", () => {
     expect(provider.getStats().rejected).toBe(before + 1);
     expect(provider.getStatus().state).toBe("starting");
     expect(provider.getDecks()).toHaveLength(0);
+
+    // A rejection while live must degrade the status with its reason (the
+    // "starting" assert above passes even when this transition is broken).
+    const live = new ProlinkProvider({ now: () => 0n, sendDatagram: () => {} });
+    live.ingestPacket(buildKeepalivePacket("CDJ-9", 9), 0n);
+    expect(live.getStatus().state).toBe("live");
+    live.ingestPacket(sixty, 0n);
+    const degraded = live.getStatus();
+    expect(degraded.state).toBe("degraded");
+    expect(degraded.state === "degraded" ? degraded.reason : "").toMatch(/magic/i);
   });
 
   it("rejects wrong magic, unknown types and wrong lengths", () => {
@@ -116,6 +143,19 @@ describe("PRO DJ LINK decode (T-LIVE-05)", () => {
     expect(decoded.kind).toBe("beat");
 
     if (decoded.kind === "beat") expect(pitchPercent(decoded.pitch)).toBeCloseTo(6.25, 6);
+    // Absolute bytes for the status bpm/beatInBar slots, independent of the
+    // decoder: a compensating encode/decode regression fails here.
+    const status = buildStatusPacket({ deviceName: "CDJ-1", deviceNumber: 1, trackId: 1, trackSlot: 1, playState: 3, bpm: 128, beatInBar: 3 });
+    const sv = new DataView(status.buffer, status.byteOffset, status.byteLength);
+    expect(sv.getUint16(0x92, true)).toBe(12800);
+    expect(status[0x94]).toBe(3);
+    const statusDecoded = decodeProlinkPacket(status);
+    expect(statusDecoded.kind).toBe("status");
+
+    if (statusDecoded.kind === "status") {
+      expect(statusDecoded.bpm).toBe(128);
+      expect(statusDecoded.beatInBar).toBe(3);
+    }
   });
 });
 
@@ -191,7 +231,9 @@ describe("PRO DJ LINK provider (T-LIVE-05, DS-29)", () => {
     expect(first?.master).toBe(true);
     expect(second?.trackId).toBe("rb:222");
     expect(second?.playing).toBe(false);
-    expect((second?.generation ?? 0) > (first?.generation ?? 0)).toBe(true);
+    // Track change bumps generation by exactly one: a jump or a per-emit
+    // bump both fail this.
+    expect(second?.generation).toBe((first?.generation ?? 0) + 1);
     const latest = provider.getDecks()[0];
     expect(latest?.quality.playheadSeconds).toBe("estimated");
     expect(latest?.pitchPercent).toBe(0);
