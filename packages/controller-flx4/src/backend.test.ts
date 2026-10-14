@@ -153,6 +153,9 @@ describe("flx4 backend selection (DS-13)", () => {
     expect(first.status().backend).toBe("native");
     await first.stop();
     await second.stop();
+    // Shutdown releases every opened port: a leak would leave the closed
+    // count short of the open count (batch-20).
+    expect(driver.closeCount()).toBe(2);
   });
 
   it("matches ports by name, including a custom pattern", async () => {
@@ -182,7 +185,10 @@ describe("flx4 backend selection (DS-13)", () => {
   it("detects unplug and replug through the hotplug poll", async () => {
     const ports: Flx4PortInfo[] = [{ ...flx4Port }];
     const driver = scriptedDriver("native", { ports });
-    const service = new Flx4ControllerService({ mode: "native", drivers: { native: driver }, hotplugPollMs: 2000 });
+    // Injected scheduler: the manual polls drive the test, and no real
+    // 2000 ms interval can fire mid-test on a slow CI run (batch-20).
+    const scheduler = fakeScheduler();
+    const service = new Flx4ControllerService({ mode: "native", drivers: { native: driver }, scheduler, hotplugPollMs: 2000 });
     const transitions: string[] = [];
     service.onStatusChange((status) => transitions.push(status.connection));
     await service.start();
@@ -310,18 +316,13 @@ describe("flx4 platform drivers", () => {
 
     const binding = {
       listInputPorts: () => ["DDJ-FLX4"],
-      openInput: (_name: string, onMessage: (bytes: readonly number[]) => void) => {
-        const listener = onMessage;
-
-        return {
-          close() {
-            closed = true;
-          },
-          send(bytes: number[]) {
-            listener(bytes);
-          },
-        };
-      },
+      // The binding surface has no send function; the driver only wires the
+      // callback (batch-20).
+      openInput: (_name: string, _onMessage: (bytes: readonly number[]) => void) => ({
+        close() {
+          closed = true;
+        },
+      }),
     };
 
     const driver = createWindowsMidiServicesDriver(() => binding, "win32");

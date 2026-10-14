@@ -11,11 +11,14 @@ export type EnvelopeTime =
   | { readonly kind: "ms"; readonly ms: number };
 
 export function envelopeToBeats(e: EnvelopeTime, bpm: number): number {
-  if (e.kind === "beats") return e.beats;
+  // A negative envelope would place a cue before its anchor: malformed times
+  // clamp to zero like a zero-length envelope (batch-20). The bpm guard
+  // stays: without a positive tempo there is no ms-to-beats conversion.
+  if (e.kind === "beats") return Math.max(0, e.beats);
 
   if (!(bpm > 0)) return 0;
 
-  return (e.ms / 1000) * (bpm / 60);
+  return Math.max(0, (e.ms / 1000) * (bpm / 60));
 }
 
 export const CUE_LEVELS = ["track", "section", "phrase", "bar", "beat", "sub-beat"] as const;
@@ -57,29 +60,8 @@ export type SpatialSelector =
   | { readonly kind: "intersection"; readonly of: readonly SpatialSelector[] }
   | { readonly kind: "difference"; readonly of: readonly SpatialSelector[] };
 
-function selectorName(s: SpatialSelector): string {
-  switch (s.kind) {
-    case "group":
-      return s.group;
-    case "split":
-      return `${s.split}:${s.part}`;
-    case "zone":
-      return `zone:${s.zone}`;
-    case "anchor":
-      return `anchor:${s.anchor}`;
-    case "field":
-      return `field:${s.field}`;
-    case "union":
-      return s.of.map(selectorName).join("+");
-    case "intersection":
-      return s.of.map(selectorName).join("&");
-    case "difference":
-      return s.of.map(selectorName).join("-");
-  }
-}
-
 const DEVICE_REF =
-  /(?:[0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}|(?:\d{1,3}\.){3}\d{1,3}|device-id|device_id|segment\s*\d+\s*=|H6076|H1A45|govee\s+(device|lan\s+id)|physical-index|wire-index/i;
+  /(?:[0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}|(?:\d{1,3}\.){3}\d{1,3}|device-id|device_id|segment\s*\d+\s*=|H\d{4}[A-Z0-9]{0,2}\b|govee\s+(device|lan\s+id)|physical-index|wire-index/i;
 
 export function stringHasDeviceRef(s: string): boolean {
   return DEVICE_REF.test(s);
@@ -342,6 +324,10 @@ export function fnv1aHex(s: string): string {
   return h.toString(16).padStart(8, "0");
 }
 
+/** Canonical JSON for hashing: keys sort, arrays keep order. Absent values
+ *  (undefined), NaN and Infinity intentionally canonicalize like null, so a
+ *  record that gained a field does not rehash; inputs reaching the hash are
+ *  validated upstream, and the collapse is the hash's documented contract. */
 export function stableStringify(v: unknown): string {
   if (v === null || v === undefined) return "null";
 
@@ -374,7 +360,13 @@ export function trackFingerprint(track: TrackModel): { value: string; source: "p
 }
 
 export function mulberry32(seedHex: string): () => number {
-  let a = parseInt(seedHex.slice(0, 8), 16) >>> 0;
+  // parseInt stops at the first non-hex character and NaN >>> 0 is 0, so a
+  // prefixed or literal seed ("motif-<hex>", a test override) collapsed every
+  // caller onto the same stream. Non-hex seeds fold through fnv1a instead;
+  // plain hex seeds keep their exact previous value (batch-20).
+  const head = seedHex.slice(0, 8);
+  const parsed = /^[0-9a-fA-F]{1,8}$/.test(head) ? parseInt(head, 16) : parseInt(fnv1aHex(seedHex), 16);
+  let a = parsed >>> 0;
 
   return () => {
     a |= 0;

@@ -239,6 +239,23 @@ export function planEvent(
         moved,
       };
     case "final-hit":
+      if (soft) {
+        // A below-floor final hit must not close the track at full white:
+        // the soft path dims it like the other soft substitutes instead of
+        // skipping it (batch-20).
+        return {
+          beat,
+          endBeat: beat + 2,
+          kind: "final-hit",
+          cueType: "final-hit",
+          intensity: clampIntensity(0.5, style),
+          priority: 100,
+          durationBeats: 2,
+          reason: "low-confidence final hit dimmed below the full finale",
+          moved,
+        };
+      }
+
       return {
         beat,
         endBeat: beat + 2,
@@ -315,8 +332,10 @@ export function planTrackEvents(
       movedTo !== undefined,
     );
 
-    // A confident drop that is not soft is programmed by the drop engine
-    // (contrast.ts), not here; planEvent returns null for it by design.
+    // The drop ENGINE (contrast.ts) programs the white hit, burst and body
+    // for a confident drop; the event layer still emits that drop's
+    // full-colour impact cue (soft drops become reveals in planEvent's drop
+    // case).
     if (planned) out.push(planned);
   }
 

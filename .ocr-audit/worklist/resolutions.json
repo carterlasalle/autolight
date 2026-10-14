@@ -1,4 +1,174 @@
 {
+  "batch-20": [
+    {
+      "path": "packages/controller-flx4/src/backend.test.ts",
+      "line": 145,
+      "verdict": "fixed-earlier",
+      "evidence": "The two-service test asserts both services decode the emitted event; args===2 remains as a supplement. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/controller-flx4/src/backend.test.ts",
+      "line": 177,
+      "verdict": "fixed-by-commit",
+      "evidence": "The unplug test injects fakeScheduler, so no real interval can fire mid-test (batch-20)."
+    },
+    {
+      "path": "packages/controller-flx4/src/backend.test.ts",
+      "line": 311,
+      "verdict": "fixed-by-commit",
+      "evidence": "The Windows binding mock's phantom send() is removed; the surface is close-only per its comment (batch-20)."
+    },
+    {
+      "path": "packages/controller-flx4/src/backend.test.ts",
+      "line": 115,
+      "verdict": "fixed-earlier",
+      "evidence": "Open-throws cases exist (held-port tests) and the two-service case proves concurrent open; closeCount is asserted after both stops now (batch-20)."
+    },
+    {
+      "path": "packages/controller-flx4/src/backend.test.ts",
+      "line": 147,
+      "verdict": "fixed-by-commit",
+      "evidence": "closeCount is asserted in the two-service case and the single-service case (batch-20)."
+    },
+    {
+      "path": "packages/failover/src/transports.ts",
+      "line": 194,
+      "verdict": "fixed-by-commit",
+      "evidence": "An unverified pin selects nothing; banner/reason keep the holds wording (batch-20, commit)."
+    },
+    {
+      "path": "packages/failover/src/transports.ts",
+      "line": 204,
+      "verdict": "fixed-by-commit",
+      "evidence": "An unreachable pin selects nothing, matching the stays-dark reason (batch-20, commit)."
+    },
+    {
+      "path": "packages/failover/src/transports.ts",
+      "line": 127,
+      "verdict": "fixed-by-commit",
+      "evidence": "modeAvailability requires verified AND reachable (batch-20, commit)."
+    },
+    {
+      "path": "packages/failover/src/transports.ts",
+      "line": 248,
+      "verdict": "fixed-by-commit",
+      "evidence": "Strict policy flags whole-fixture carriers degraded with a banner (batch-20, commit)."
+    },
+    {
+      "path": "packages/failover/src/transports.ts",
+      "line": 329,
+      "verdict": "fixed-by-commit",
+      "evidence": "routeFrame refuses never-class transports before routing (batch-20, commit)."
+    },
+    {
+      "path": "packages/govee/src/actions.ts",
+      "line": 238,
+      "verdict": "fixed-earlier",
+      "evidence": "The single-zone chase's finally restores the preceding look (white is never left lit). Verified 2026-10-14."
+    },
+    {
+      "path": "packages/govee/src/actions.ts",
+      "line": 273,
+      "verdict": "fixed-earlier",
+      "evidence": "testChase floors zones before sizing frames. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/govee/src/actions.ts",
+      "line": 139,
+      "verdict": "fixed-earlier",
+      "evidence": "The restore path checks restoreFrame length equals zones * 3 before painting. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/show-planner/src/events.ts",
+      "line": 311,
+      "verdict": "fixed-by-commit",
+      "evidence": "The event-layer comment now states planEvent's real drop behavior (impact cue; soft drops become reveals) (batch-20)."
+    },
+    {
+      "path": "packages/show-planner/src/events.ts",
+      "line": 64,
+      "verdict": "by-design",
+      "evidence": "span || default repairs endBeat==beat to the type's default duration; zero-length events are malformed input."
+    },
+    {
+      "path": "packages/show-planner/src/events.ts",
+      "line": 237,
+      "verdict": "fixed-by-commit",
+      "evidence": "final-hit consults soft: a below-floor hit dims to 0.5 instead of closing at full white (batch-20)."
+    },
+    {
+      "path": "packages/show-planner/src/events.ts",
+      "line": 61,
+      "verdict": "by-design",
+      "evidence": "confidence is a 0..1 contract value; with floor 0 the gate correctly admits everything and soft is never true."
+    },
+    {
+      "path": "packages/show-planner/src/events.ts",
+      "line": 299,
+      "verdict": "by-design",
+      "evidence": "movedEvents keys follow the edits-UI convention type@beat; two identical events share the move by construction of that format."
+    },
+    {
+      "path": "packages/show-planner/src/types.ts",
+      "line": 364,
+      "verdict": "fixed-by-commit",
+      "evidence": "mulberry32 folds non-hex seeds through fnv1a; the motif-<hex> prefix no longer collapses every stream to 0 (batch-20)."
+    },
+    {
+      "path": "packages/show-planner/src/types.ts",
+      "line": 13,
+      "verdict": "fixed-by-commit",
+      "evidence": "envelopeToBeats clamps negative beats/ms to zero; the bpm guard stays (batch-20)."
+    },
+    {
+      "path": "packages/show-planner/src/types.ts",
+      "line": 340,
+      "verdict": "documented",
+      "evidence": "stableStringify's null-collapse of undefined/NaN/Infinity is the documented canonicalization; inputs are validated upstream (batch-20 comment)."
+    },
+    {
+      "path": "packages/show-planner/src/types.ts",
+      "line": 68,
+      "verdict": "fixed-by-commit",
+      "evidence": "The dead selectorName helper (and its collision-prone concatenation) is deleted (batch-20)."
+    },
+    {
+      "path": "packages/show-planner/src/types.ts",
+      "line": 77,
+      "verdict": "fixed-by-commit",
+      "evidence": "DEVICE_REF matches any H-model id (H\\d{4}[A-Z0-9]{0,2}) instead of two hardcoded SKUs (batch-20)."
+    },
+    {
+      "path": "packages/storage/src/consent.ts",
+      "line": 78,
+      "verdict": "fixed-by-commit",
+      "evidence": "A running set refuses duplicate starts and suppresses phantom stops; revoke clears it (batch-20, commit)."
+    },
+    {
+      "path": "packages/storage/src/consent.ts",
+      "line": 86,
+      "verdict": "fixed-by-commit",
+      "evidence": "grant/get/entries return copies instead of live internals (batch-20, commit)."
+    },
+    {
+      "path": "packages/storage/src/consent.ts",
+      "line": 52,
+      "verdict": "fixed-by-commit",
+      "evidence": "startHelper re-verifies textHash against consentHashOf(helperId); stale consent refuses with re-consent-required (batch-20, commit)."
+    },
+    {
+      "path": "packages/storage/src/consent.ts",
+      "line": 74,
+      "verdict": "by-design",
+      "evidence": "The at parameter is the test seam; production callers omit it and get the local clock, matching every other store in this package."
+    },
+    {
+      "path": "packages/storage/src/consent.ts",
+      "line": 49,
+      "verdict": "by-design",
+      "evidence": "The store is the in-memory model; the diagnostics/settings flows own persistence, and its docs scope it to session-level consent bookkeeping."
+    }
+  ],
   "batch-19": [
     {
       "path": "packages/venue/src/wizard.ts",
