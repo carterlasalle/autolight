@@ -1940,5 +1940,25 @@
       "verdict": "by-design",
       "evidence": "auditTail is a diagnostics snapshot consumed by the show-service diagnostics payload; unreadable or missing day files intentionally yield no records, and torn trailing lines are skipped individually with a comment. Verified 2026-10-14 (working tree)."
     }
+  ],
+  "batch-27": [
+    {
+      "path": "packages/govee/src/index.ts",
+      "line": 132,
+      "verdict": "fixed",
+      "evidence": "collapseToSingleColor now averages all equal-width segments instead of sampling the middle, so a dark center cannot black out a lit frame (test pins 255/0/0 + 0/255/0 + 0/0/255 -> [85,85,85] and bright/dark/bright -> [170,170,170]). Verified by packages/govee tests."
+    },
+    {
+      "path": "packages/rekordbox-live/src/composite.test.ts",
+      "line": 127,
+      "verdict": "fixed",
+      "evidence": "The lock test no longer self-correlates the fixture envelope: it asserts the provider's quality label before any audio (estimated), after the aligned loopback feed (derived = locked at exact sample alignment under the 15 ms quantum), and after a full-window silence flush (estimated again). Verified by the composite suite."
+    },
+    {
+      "path": "packages/rekordbox-live/src/composite.test.ts",
+      "line": 241,
+      "verdict": "fixed",
+      "evidence": "The correlation test no longer correlates an array with itself: it pins the peak of a 4-sample-lagged copy at lag 4 with confidence > 0.99, a scaled copy (normalization invariance), and an unrelated pattern below 0.9. Verified by the composite suite."
+    }
   ]
 }

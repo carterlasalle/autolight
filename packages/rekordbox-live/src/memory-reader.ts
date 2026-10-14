@@ -339,7 +339,9 @@ export class MemoryCleanroomProvider extends ProviderBase {
     if (this.capability() !== "READY" || !this.offsets || !this.accessor) return;
     const found = readMemorySample(this.accessor, this.offsets, (deck) => `deck${deck}`);
 
-    for (const deck of [...this.samples.keys()]) {
+    // Map iterators tolerate deleting the entry under the cursor, so the
+    // no-longer-found samples can be pruned during the walk.
+    for (const deck of this.samples.keys()) {
       if (!found.has(deck)) this.samples.delete(deck);
     }
 

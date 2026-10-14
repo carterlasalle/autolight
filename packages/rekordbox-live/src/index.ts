@@ -1,7 +1,6 @@
 import { z } from "zod";
 import type { DeckState } from "@autolight/contracts";
 import { deckStateSchema } from "@autolight/contracts";
-import { axFractionalBeat } from "./ax.js";
 
 // Library row identity inline (§12 resolution starts at native ID plus path).
 // Inlined here so the live package never imports the file-reading library

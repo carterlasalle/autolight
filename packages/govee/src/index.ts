@@ -3,7 +3,6 @@
 // and are re-exported here, so every existing import from "@autolight/govee"
 // keeps resolving (T-GOV-01/02/03). Provenance: govee-toolkit MIT
 // (Damien Thery, v0.5.0).
-import { encodeRaw } from "./razer.js";
 
 export {
   OPCODE, encodeRaw, decodeRaw, envelope, arm, paint, paintZoned,
@@ -37,11 +36,6 @@ export { NativeStreamEngine, SocketTransport } from "./engines/native-ts.js";;;
 
 export { stripeFrame } from "./qualification.js";
 
-
-// Legacy alias kept until T-GOV-02 deletes encodeFrame (M1): maps to encodeRaw.
-function encodeFrame(opcode: number, payload: Uint8Array): Uint8Array {
-  return encodeRaw(opcode, payload);
-}
 
 // Newest-state-wins: keep only latest pending frame (§51, §149).
 export class FrameCoalescer {
@@ -136,8 +130,6 @@ export function latencyBeats(latencyMs: number, bpm: number): number {
 // Transport contract: Electron main owns UDP sockets; renderer owns desired
 // state (§149). LAN first with read-back verify; BLE last-resort single-color;
 // cloud REST never for frames (10/min/device ceiling).
-type LanTransport = "lan" | "ble" | "cloud";
-
 interface SegmentStream {
   setAll(frame: Uint8Array): void;
   flush(): void;
@@ -172,16 +164,25 @@ export interface ToolkitStreamFactory {
   openStream(deviceIp: string, zones: number): Promise<SegmentStream>;
 }
 
-// Single-zone fallback for the BLE/cloud last-resort path (T-GOV-10): samples
-// the middle segment so a symmetric multi-zone frame collapses to its visual
-// center. Per-unit probe decides LAN colorwc versus segmented paint.
+// Single-zone fallback for the BLE/cloud last-resort path (T-GOV-10):
+// averages every (equal-width) segment so a dark center cannot black out a
+// lit frame; a symmetric frame collapses to its visual mean.
+// Per-unit probe decides LAN colorwc versus segmented paint.
 export function collapseToSingleColor(frame: Uint8Array): [number, number, number] {
   const n = Math.floor(frame.length / 3);
 
   if (n <= 0) return [0, 0, 0];
-  const mid = Math.floor(n / 2) * 3;
+  let r = 0;
+  let g = 0;
+  let b = 0;
 
-  return [frame[mid] ?? 0, frame[mid + 1] ?? 0, frame[mid + 2] ?? 0];
+  for (let i = 0; i < n; i++) {
+    r += frame[i * 3] ?? 0;
+    g += frame[i * 3 + 1] ?? 0;
+    b += frame[i * 3 + 2] ?? 0;
+  }
+
+  return [Math.round(r / n), Math.round(g / n), Math.round(b / n)];
 }
 
 // LAN manager (§46, §106-107): discovery → arm → stream; per-device FPS

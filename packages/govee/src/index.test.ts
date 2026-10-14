@@ -53,10 +53,12 @@ describe("govee", () => {
     expect(s).toMatchObject({ onOff: true, brightness: 100 });
     expect(parseDevStatus({})).toBeNull();
   });
-  it("single-zone fallback picks the middle color (T-GOV-10 verified fallback, not the default path)", () => {
+  it("single-zone fallback averages segments (T-GOV-10 verified fallback, not the default path)", () => {
     // The default path is the segmented razer paint (B0/B4) proven byte-exact above.
     // collapseToSingleColor survives only for the verified single-zone fallback until T-GOV-10 removes it.
-    expect(collapseToSingleColor(new Uint8Array([255, 0, 0, 0, 255, 0, 0, 0, 255]))).toEqual([0, 255, 0]);
+    expect(collapseToSingleColor(new Uint8Array([255, 0, 0, 0, 255, 0, 0, 0, 255]))).toEqual([85, 85, 85]);
+    // A dark middle segment must not black out lit outer zones.
+    expect(collapseToSingleColor(new Uint8Array([255, 255, 255, 0, 0, 0, 255, 255, 255]))).toEqual([170, 170, 170]);
     expect(collapseToSingleColor(new Uint8Array([]))).toEqual([0, 0, 0]);
   });
   it("blackout is zeros, not power-off", () => {

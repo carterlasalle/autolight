@@ -135,6 +135,9 @@ describe("composite-flx4 provider (T-LIVE-07)", () => {
     now += 5_000_000n;
     provider.ingestControllerEvent({ deck: 1, control: "play", value: 1, pad: null, atNs: now });
     const deck = () => provider.getDecks().find((d) => d.deckId === 1);
+    // Discriminator: before any audio the estimate is not locked, so the
+    // "derived" label below carries lock information rather than always-on.
+    expect(deck()?.quality.playheadSeconds).toBe("estimated");
     const envelope = resolution("rb:lock", true).onsetEnvelope ?? [];
     const rateHz = 50;
     const windowSamples = 128;
@@ -153,18 +156,22 @@ describe("composite-flx4 provider (T-LIVE-07)", () => {
       provider.tick(now);
     }
 
+    // At 50 Hz the 15 ms threshold quantizes to lockSamples = 0, so the
+    // "derived" label means the provider locked at exact sample alignment:
+    // residual 0 ms <= the 15 ms target. The label tracks the provider's
+    // lock computation (proven "estimated" before the feed above), not the
+    // correlation helper in isolation.
     expect(deck()?.quality.playheadSeconds).toBe("derived");
 
-    // The lock contract is a residual inside the threshold with confidence:
-    // an aligned loopback must correlate near 1 at zero lag.
-    const locked = correlateEnvelopes(
-      envelope.slice(0, windowSamples),
-      envelope.slice(0, windowSamples),
-      8,
-    );
-
-    expect(locked.lagSamples).toBe(0);
-    expect(locked.confidence).toBeGreaterThan(0.99);
+    // Losing the matching feed must unlock again. The flush must cover the
+    // whole correlation window (windowSamples here is the 128-sample push;
+    // the provider window is correlationWindowMs * rateHz = 200 samples and
+    // it keeps aligning on any surviving tail): a partial mute still locks
+    // at confidence >= minLockConfidence, a full flush drops it to zero.
+    provider.pushAudio(Array.from({ length: windowSamples * 4 }, () => 0));
+    now += 100_000_000n;
+    provider.tick(now);
+    expect(deck()?.quality.playheadSeconds).toBe("estimated");
   });
 
   it("resolves master to the louder deck and keeps faders exact", () => {
@@ -288,10 +295,23 @@ describe("composite-flx4 provider (T-LIVE-07)", () => {
 
   it("correlates envelopes and mixes references by fader weight", () => {
     const ref = [1, 0.1, 0.2, 0.1, 0.9, 0.15, 0.3, 0.1, 0.8, 0.2, 0.1, 0.4, 0.7, 0.1, 0.2, 0.1];
-    const live = ref.slice(0);
-    const { lagSamples, confidence } = correlateEnvelopes(live, ref, 8);
-    expect(lagSamples).toBe(0);
-    expect(confidence).toBeGreaterThan(0.99);
+
+    // A zero-padded copy of ref is shifted by 4 samples: the peak must be
+    // found at that lag, not at the trivial zero-shift.
+    const lagged = [0, 0, 0, 0, ...ref];
+    const found = correlateEnvelopes(lagged, ref, 8);
+    expect(found.lagSamples).toBe(4);
+    expect(found.confidence).toBeGreaterThan(0.99);
+
+    // Scaling is correlation-invariant only because the score is normalized:
+    // an un-normalized dot product could exceed 1 here and fail the bound.
+    const scaled = ref.map((v) => v * 3);
+    expect(correlateEnvelopes(scaled, ref, 8).confidence).toBeGreaterThan(0.99);
+
+    // An uncorrelated pattern must not score near 1.
+    const unrelated = [0.5, 0.9, 0.1, 0.7, 0.3, 0.8, 0.05, 0.95, 0.4, 0.6, 0.2, 0.85, 0.15, 0.75, 0.45, 0.55];
+    expect(correlateEnvelopes(unrelated, ref, 8).confidence).toBeLessThan(0.9);
+
     const mixed = mixReferences([ref, ref.map((v) => v * 2)], [1, 0]);
     expect(mixed[0]).toBeCloseTo(1, 6);
     const silent = mixReferences([ref], [0]);
