@@ -47,6 +47,8 @@ import {
 import type {
   LanDeviceStatus, LanInbound, StreamTransport, StreamOptions,
 } from "@autolight/govee";
+import { partyFrame } from "./party-effects.js";
+import type { PartyEffect, Rgb } from "./party-effects.js";
 
 const GLOBAL_BROADCAST = "255.255.255.255";
 
@@ -255,6 +257,10 @@ export interface AlternateOptions {
   mode: AlternateMode;
   speedMs: number;
   colours: AlternateColours;
+  /** Party effect to run instead of the plain A/B swap (LED_PARTY port). */
+  effect?: PartyEffect;
+  /** Palette driving pulse/jump/strobe, e.g. PARTY_PALETTES.Neon. */
+  palette?: Rgb[];
 }
 
 export interface AlternateReceipt {
@@ -262,11 +268,13 @@ export interface AlternateReceipt {
   speedMs: number;
   fixtures: number;
   colours: AlternateColours;
+  effect?: PartyEffect;
 }
 
 interface AlternateStateInternal extends AlternateOptions {
   timer: NodeJS.Timeout;
   phase: boolean;
+  tick: number;
 }
 
 export interface DeviceStream {
@@ -1154,13 +1162,13 @@ export class GoveeLanManager implements StreamTransport {
       timer.unref?.();
     } catch { /* loop lifetime owns the timer */ }
 
-    const state: AlternateStateInternal = { ...opts, speedMs, timer, phase: false };
+    const state: AlternateStateInternal = { ...opts, speedMs, timer, phase: false, tick: 0 };
     this.alternate = state;
     // Engage immediately: waiting one interval before the first swap makes
     // the button feel dead.
     void this.alternateStep();
 
-    return { mode: opts.mode, speedMs, fixtures: enabled.length, colours: opts.colours };
+    return { mode: opts.mode, speedMs, fixtures: enabled.length, colours: opts.colours, ...(opts.effect !== undefined ? { effect: opts.effect } : {}) };
   }
 
   /** Stop the alternation and settle every enabled fixture back on the
@@ -1192,6 +1200,7 @@ export class GoveeLanManager implements StreamTransport {
     return {
       mode: cur.mode, speedMs: cur.speedMs, colours: cur.colours,
       fixtures: [...this.devices.values()].filter((e) => e.enabled).length,
+      ...(cur.effect !== undefined ? { effect: cur.effect } : {}),
     };
   }
 
@@ -1204,6 +1213,7 @@ export class GoveeLanManager implements StreamTransport {
     if (this.alternateBusy) return;
     this.alternateBusy = true;
     cur.phase = !cur.phase;
+    cur.tick += 1;
 
     void this.alternateApply(cur).finally(() => { this.alternateBusy = false; });
   }
@@ -1214,6 +1224,41 @@ export class GoveeLanManager implements StreamTransport {
       const { a, b } = cur.colours;
       const colourFor = (groupA: boolean): [number, number, number] => (groupA !== cur.phase ? a : b);
       const enabled = [...this.devices.values()].filter((e) => e.enabled);
+
+      // Party effects repaint from a palette each tick instead of swapping
+      // the two flash colours (LED_PARTY's mode catalog, client-side).
+      if (cur.effect !== undefined) {
+        const groups = cur.mode === "halves" ? 2 : enabled.length;
+        const frame = partyFrame(cur.effect, cur.tick, { groups, a, b, palette: cur.palette ?? [] });
+        const colourAt = (i: number): Rgb => frame[i] ?? a;
+
+        if (cur.mode === "lamps") {
+          for (let i = 0; i < enabled.length; i++) {
+            const entry = enabled[i];
+
+            if (entry === undefined) continue;
+            const colour = colourAt(i);
+
+            await this.setColor(entry.mac, colour[0], colour[1], colour[2]);
+          }
+
+          return;
+        }
+
+        for (const entry of enabled) {
+          const zones = entry.zonesSaved ?? 0;
+
+          if (zones < 2) continue;
+          const mid = Math.floor(zones / 2);
+          const low = colourAt(0);
+          const high = colourAt(1);
+
+          await this.paintRange(entry.mac, 0, mid - 1, low[0], low[1], low[2]);
+          await this.paintRange(entry.mac, mid, zones - 1, high[0], high[1], high[2]);
+        }
+
+        return;
+      }
 
       if (cur.mode === "lamps") {
         for (let i = 0; i < enabled.length; i++) {

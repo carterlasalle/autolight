@@ -137,7 +137,7 @@ export function LiveView({ live }: { live: LiveState | null }): JSX.Element {
 // controls, grouped by purpose with one heading each. Controls whose effect
 // needs the show runtime (style, energy, build/drop, flash) are disabled
 // with that stated — a button that records an intent nobody consumes is a
-// dead button. Alternate is a real manual effect (see AlternateCard).
+// dead button. The Party card is a real manual effect (see AlternateCard).
 const RUNTIME_NOTE = "Needs the show runtime (not built yet): acts when a show is loaded.";
 
 export function ControlGrid(): JSX.Element {

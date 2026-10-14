@@ -4,6 +4,8 @@ import { SessionRecorder, emptyMetrics, type Metrics } from "@autolight/diagnost
 import { PersistentConfigStore } from "@autolight/config";
 import { getGoveeManager, optionsFromConfig, registryFilePath } from "./govee-lan.js";
 import type { DeviceEntrySnapshot } from "./govee-lan.js";
+import { PARTY_PALETTES } from "./party-effects.js";
+import type { ChannelRequest } from "@autolight/ipc";
 import { getProviderManager, startProlinkWatch } from "./services/provider-manager.js";
 import { getLiveShowBridge } from "./services/live-show-bridge.js";
 import { getAnalysisSupervisor } from "./services/analysis-supervisor.js";
@@ -692,14 +694,19 @@ export function setVenueColor(rgb: [number, number, number], targets?: string[])
   return { ok: true, rgb };
 }
 
-export function setVenueAlternate(req: { enabled: boolean; mode: "lamps" | "halves"; speedMs: number; rgbA: [number, number, number]; rgbB: [number, number, number] }): { ok: true; enabled: boolean; mode: string } {
+export function setVenueAlternate(req: ChannelRequest<"venue/alternate">): { ok: true; enabled: boolean; mode: string } {
   const svc = getShowService();
 
   if (req.enabled) {
     // Starting a looping effect is an explicit takeover: it cannot fight a
     // blackout, so it clears the master overrides first (recorded).
     takeManualWheel("venue/alternate");
-    const receipt = govee().startAlternate({ mode: req.mode, speedMs: req.speedMs, colours: { a: req.rgbA, b: req.rgbB } });
+    const receipt = govee().startAlternate({
+      mode: req.mode, speedMs: req.speedMs, colours: { a: req.rgbA, b: req.rgbB },
+      ...(req.effect !== undefined ? { effect: req.effect } : {}),
+      // The channel carries the palette by name; the colour table lives here.
+      ...(req.palette !== undefined ? { palette: PARTY_PALETTES[req.palette] } : {}),
+    });
 
     svc.recorder.record("venue/alternate", { enabled: true, ...receipt });
 

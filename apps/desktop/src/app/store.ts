@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { callChannel, type Channel, type ChannelRequest, type ChannelResponse } from "@autolight/ipc";
+import { callChannel, partyPaletteNames, type Channel, type ChannelRequest, type ChannelResponse, type PartyPaletteName } from "@autolight/ipc";
 import type { ShowCue } from "@autolight/contracts";
 import type { DeviceTile } from "../features/venue/venue.js";
 
@@ -101,9 +101,11 @@ export type Route = "live" | "library" | "inspector" | "venue" | "setup" | "diag
 
 export type EnergyTier = "LOW" | "MED" | "HIGH";
 
-export const PARTY_PALETTES = ["ND", "Warm", "Cool", "Neon", "Fire", "Ocean", "UV"] as const;
+// One source: the channel schema in @autolight/ipc owns the palette names;
+// the main process owns their colour values.
+export const PARTY_PALETTES = partyPaletteNames;
 
-export type PartyPalette = (typeof PARTY_PALETTES)[number];
+export type PartyPalette = PartyPaletteName;
 
 export type LightTarget = "A" | "B" | "Both";
 

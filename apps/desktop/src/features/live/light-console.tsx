@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
-import { useShell, typedInvoke } from "../../app/store.js";
+import { partyEffectNames, type PartyEffectName } from "@autolight/ipc";
+import { PARTY_PALETTES, useShell, typedInvoke, type PartyPalette } from "../../app/store.js";
 import { Button } from "../../components/ui/button.js";
 import { Input } from "../../components/ui/input.js";
 import { Slider } from "../../components/ui/slider.js";
@@ -14,13 +15,29 @@ import type { DeviceTile } from "../venue/venue.js";
 // channel names and payloads are checked against the IPC table at compile
 // time (the no-string-ipc ratchet).
 
-const BASIC_SWATCHES: [number, number, number][] = [
-  [255, 0, 0], [0, 255, 0], [0, 0, 255], [255, 255, 255],
+// LED_PARTY's named preset colours: Red/Green/Blue/White open the list, then
+// its Warm / ND Blue / Gold / Purple / Cyan / Amber. Shown until a track
+// palette replaces them.
+const BASIC_SWATCHES: { name: string; rgb: [number, number, number] }[] = [
+  { name: "Red", rgb: [255, 0, 0] },
+  { name: "Green", rgb: [0, 255, 0] },
+  { name: "Blue", rgb: [0, 0, 255] },
+  { name: "White", rgb: [255, 255, 255] },
+  { name: "Warm", rgb: [255, 180, 120] },
+  { name: "ND Blue", rgb: [12, 36, 150] },
+  { name: "Gold", rgb: [255, 200, 0] },
+  { name: "Purple", rgb: [170, 0, 255] },
+  { name: "Cyan", rgb: [0, 255, 255] },
+  { name: "Amber", rgb: [255, 120, 0] },
 ];
 
 // Candidate band counts for the segment probe: the wizard's sweep values,
 // offered as quick picks. The count is confirmed by eye on the unit.
 const SEGMENT_CANDIDATES: readonly number[] = [8, 12, 14, 16, 20];
+
+const EFFECT_LABELS: Record<PartyEffectName | "alternate", string> = {
+  alternate: "Swap A/B", pulse: "Pulse", strobe: "Strobe", jump: "Jump", wash: "Wash", spot: "Spot",
+};
 
 function toHex(rgb: [number, number, number]): string {
   return `#${rgb.map((v) => Math.min(255, Math.max(0, Math.round(v))).toString(16).padStart(2, "0")).join("")}`;
@@ -148,15 +165,18 @@ export function LightConsoleCard(): JSX.Element {
     window.setTimeout(() => paint(previous), 140);
   };
 
-  const swatches: [number, number, number][] = [];
+  const swatches: { name: string; rgb: [number, number, number] }[] = [];
   const seen = new Set<string>();
+  const source = livePalette !== null && livePalette.length > 0
+    ? livePalette.map((rgb, i) => ({ name: `Track ${i + 1}`, rgb }))
+    : BASIC_SWATCHES;
 
-  for (const rgb of livePalette !== null && livePalette.length > 0 ? livePalette : BASIC_SWATCHES) {
-    const key = rgb.join(",");
+  for (const swatch of source) {
+    const key = swatch.rgb.join(",");
 
     if (seen.has(key)) continue;
     seen.add(key);
-    swatches.push(rgb);
+    swatches.push(swatch);
   }
 
   return (
@@ -202,12 +222,12 @@ export function LightConsoleCard(): JSX.Element {
               />
             </label>
             <div role="group" aria-label="Colour palette" className="flex flex-wrap items-center gap-2">
-              {swatches.map((rgb, i) => (
+              {swatches.map((swatch, i) => (
                 <button
-                  key={`sw-${i}`} type="button" aria-label={`colour ${i + 1}`}
+                  key={`sw-${i}`} type="button" aria-label={swatch.name} title={swatch.name}
                   className="size-7 shrink-0 rounded-full border-2 border-white/20"
-                  style={{ backgroundColor: `rgb(${rgb[0]},${rgb[1]},${rgb[2]})` }}
-                  onClick={() => { setWheelHue(hueOf(rgb)); paint(rgb); }}
+                  style={{ backgroundColor: `rgb(${swatch.rgb[0]},${swatch.rgb[1]},${swatch.rgb[2]})` }}
+                  onClick={() => { setWheelHue(hueOf(swatch.rgb)); paint(swatch.rgb); }}
                 />
               ))}
               <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -245,10 +265,10 @@ export function LightConsoleCard(): JSX.Element {
   );
 }
 
-/** Alternate runner (manual lane): flashes between the two lamps, or between
- *  each strip's halves, with two explicit colours. Presets fill the second
- *  colour (off / inverse), and a manual pick makes it a custom pair.
- *  LED_PARTY's AB swap / single spot, on the real rig. */
+/** Party runner (manual lane): flashes between the two lamps, or between
+ *  each strip's halves, at the chosen speed. Swap A/B alternates the two
+ *  explicit colours; pulse, strobe, jump, wash and spot are LED_PARTY's
+ *  effects re-created over the razer stream (palette-driven). */
 export function AlternateCard(): JSX.Element {
   const altOn = useShell((st) => st.altOn);
   const altSpeed = useShell((st) => st.altSpeed);
@@ -256,21 +276,33 @@ export function AlternateCard(): JSX.Element {
   const [mode, setMode] = useState<"lamps" | "halves">("lamps");
   const [colourA, setColourA] = useState<[number, number, number]>(wheelColour);
   const [colourB, setColourB] = useState<[number, number, number]>([0, 0, 0]);
+  const [effect, setEffect] = useState<PartyEffectName | "alternate">("alternate");
+  const [palette, setPalette] = useState<PartyPalette>("ND");
   const tiles = useShell((st) => st.tiles);
   const halvesReady = tiles.filter((t) => t.enabled).every((t) => t.segments >= 2);
   const bIsInverse = colourB.every((v, i) => v === 255 - (colourA[i] ?? 0));
   const bIsOff = colourB.every((v) => v === 0);
+  const usesPalette = effect === "pulse" || effect === "strobe" || effect === "jump";
 
-  const send = (enabled: boolean): void => {
+  // Overrides let a running effect switch the moment the picker changes,
+  // without waiting a render: the same reason the speed slider re-sends.
+  const send = (enabled: boolean, over: { effect?: PartyEffectName | "alternate"; palette?: PartyPalette } = {}): void => {
+    const fx = over.effect ?? effect;
+    const pal = over.palette ?? palette;
+
     useShell.getState().set({ altOn: enabled });
-    void typedInvoke("venue/alternate", { version: 1, enabled, mode, speedMs: altSpeed, rgbA: colourA, rgbB: colourB }).then((res) => {
+    void typedInvoke("venue/alternate", {
+      version: 1, enabled, mode, speedMs: altSpeed, rgbA: colourA, rgbB: colourB,
+      ...(fx !== "alternate" ? { effect: fx } : {}),
+      ...(fx === "pulse" || fx === "strobe" || fx === "jump" ? { palette: pal } : {}),
+    }).then((res) => {
       if (res === null && enabled) useShell.getState().set({ altOn: false });
     });
   };
 
   return (
     <div className="min-w-0 rounded-xl border border-border bg-card px-4 py-3">
-      <h3 className="text-base font-medium">Alternate</h3>
+      <h3 className="text-base font-medium">Party</h3>
       <div className="mt-2 flex min-w-0 flex-col gap-2">
         <div className="flex flex-wrap items-center gap-1" role="radiogroup" aria-label="Alternate target">
           {(["lamps", "halves"] as const).map((m) => (
@@ -279,6 +311,30 @@ export function AlternateCard(): JSX.Element {
             </Button>
           ))}
         </div>
+        <div className="flex flex-wrap items-center gap-1" role="radiogroup" aria-label="Party effect">
+          {(["alternate", ...partyEffectNames] as const).map((e) => (
+            <Button
+              key={e} size="sm" variant={effect === e ? "default" : "outline"}
+              onClick={() => { setEffect(e); if (altOn) send(true, { effect: e }); }}
+              aria-pressed={effect === e}
+            >
+              {EFFECT_LABELS[e]}
+            </Button>
+          ))}
+        </div>
+        {usesPalette ? (
+          <div className="flex flex-wrap items-center gap-1" role="radiogroup" aria-label="Party palette">
+            {PARTY_PALETTES.map((p) => (
+              <Button
+                key={p} size="sm" variant={palette === p ? "default" : "outline"}
+                onClick={() => { setPalette(p); if (altOn) send(true, { palette: p }); }}
+                aria-pressed={palette === p}
+              >
+                {p}
+              </Button>
+            ))}
+          </div>
+        ) : null}
         <div className="flex flex-wrap items-center gap-3">
           <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
             Colour A
@@ -339,7 +395,9 @@ export function AlternateCard(): JSX.Element {
             onClick={() => {
               // Strobe = white <-> off at a fast flip rate over the razer
               // stream (the stream is what makes it snap; a lamp without a
-              // saved count would smear instead).
+              // saved count would smear instead). This is the plain A/B
+              // swap, so the effect picker resets with it.
+              setEffect("alternate");
               setColourA([255, 255, 255]);
               setColourB([0, 0, 0]);
               useShell.getState().set({ altSpeed: 80 });
@@ -352,11 +410,11 @@ export function AlternateCard(): JSX.Element {
             Strobe (white/off)
           </Button>
           {altOn
-            ? <Button size="sm" variant="destructive" onClick={() => send(false)}>Stop alternate</Button>
-            : <Button size="sm" onClick={() => send(true)}>Start alternate</Button>}
+            ? <Button size="sm" variant="destructive" onClick={() => send(false)}>Stop party</Button>
+            : <Button size="sm" onClick={() => send(true)}>Start party</Button>}
         </div>
         <p className="text-xs text-muted-foreground">
-          Flashes {mode === "lamps" ? "the two lamps" : "each strip's two halves"} at {altSpeed}ms between colour A and colour B. The razer path makes both snap; a lamp without a saved segment count cross-fades instead.
+          Runs {mode === "lamps" ? "across the two lamps" : "across each strip's two halves"} at {altSpeed}ms: Swap A/B alternates colours A and B; pulse, strobe, jump, wash and spot are palette effects. The razer path makes both snap; a lamp without a saved segment count cross-fades instead.
         </p>
         {mode === "halves" && !halvesReady ? (
           <p className="text-xs text-muted-foreground">Strip halves need a saved segment count on every lamp (Segments card).</p>

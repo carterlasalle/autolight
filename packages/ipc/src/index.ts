@@ -12,6 +12,21 @@ export const configScopes = ["app", "venue", "device", "style", "session"] as co
 
 export type ConfigScope = (typeof configScopes)[number];
 
+// Party palettes (LED_PARTY's PALETTES): the names are owned here so the
+// channel schema, the renderer's style picker, and the main-process colour
+// table all consume one list. Colour values live in the main process
+// (electron/party-effects.ts), which resolves a name to RGB.
+export const partyPaletteNames = ["ND", "Warm", "Cool", "Neon", "Fire", "Ocean", "UV"] as const;
+
+export type PartyPaletteName = (typeof partyPaletteNames)[number];
+
+// Party effects (LED_PARTY's mode catalog, re-created client-side). Names
+// live here so the channel schema, the renderer's effect picker and the
+// main-process frame generator consume one list.
+export const partyEffectNames = ["pulse", "strobe", "jump", "wash", "spot"] as const;
+
+export type PartyEffectName = (typeof partyEffectNames)[number];
+
 const scopeSchema = z.enum(configScopes);
 
 const errorSchema = z.object({
@@ -119,6 +134,11 @@ export const channels = {
       // any second colour the operator chooses).
       rgbA: z.tuple([z.number().int().min(0).max(255), z.number().int().min(0).max(255), z.number().int().min(0).max(255)]),
       rgbB: z.tuple([z.number().int().min(0).max(255), z.number().int().min(0).max(255), z.number().int().min(0).max(255)]),
+      // Party effect from the LED_PARTY port; absent means the plain A/B
+      // swap the card has always sent. The palette name drives pulse,
+      // strobe and jump; the main process resolves it to colours.
+      effect: z.enum(partyEffectNames).optional(),
+      palette: z.enum(partyPaletteNames).optional(),
     }),
     response: z.union([ok(z.object({ enabled: z.boolean(), mode: z.string() })), errorSchema]),
   },
@@ -260,8 +280,9 @@ export function channelNames(): Channel[] {
 // Renderer-side typed caller: validates the response, never swallows errors
 // into undefined. Throws a code-carrying Error on { ok: false } so callers can
 // branch on E_* failures (permission, transport, validation) like the header
-// contract promises.
-export type IpcCallError = Error & { code: string };
+// contract promises. Not exported: typedInvoke stringifies the message, so no
+// consumer references the type.
+type IpcCallError = Error & { code: string };
 
 export async function callChannel<C extends Channel>(
   invokeFn: (channel: string, payload: unknown) => Promise<unknown>,

@@ -210,8 +210,10 @@ describe("govee registry (venue hydration)", () => {
       const receipt = mgr.startAlternate({ mode: "lamps", speedMs: 200, colours: { a: [10, 20, 30], b: [30, 20, 10] } });
       expect(receipt).toMatchObject({ mode: "lamps", fixtures: 2, colours: { a: [10, 20, 30], b: [30, 20, 10] } });
       expect(mgr.alternateStatus()).not.toBeNull();
-      // A second start replaces the runner instead of stacking timers.
-      mgr.startAlternate({ mode: "lamps", speedMs: 100, colours: { a: [10, 20, 30], b: [0, 0, 0] } });
+      // A second start replaces the runner instead of stacking timers, and
+      // the party effect survives into the status receipt.
+      mgr.startAlternate({ mode: "lamps", speedMs: 100, colours: { a: [10, 20, 30], b: [0, 0, 0] }, effect: "jump", palette: [[1, 2, 3], [4, 5, 6]] });
+      expect(mgr.alternateStatus()).toMatchObject({ effect: "jump" });
       expect(await mgr.stopAlternate()).toBe(true);
       expect(mgr.alternateStatus()).toBeNull();
       expect(await mgr.stopAlternate()).toBe(false);
