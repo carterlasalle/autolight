@@ -32,10 +32,6 @@ export interface TestDeck {
   playing: boolean;
 }
 
-export interface TestLibraryTrack {
-  id: string;
-  readiness: string;
-}
 
 export interface TestFixtureInfo {
   id: string;

@@ -147,9 +147,7 @@ export class MidiService implements Service {
   }
 }
 
-export const FLX4_CC = CC;
 
-export const FLX4_NOTE = NOTE;
 
 let instance: MidiService | null = null;
 
@@ -157,12 +155,3 @@ function resetMidiService(): void {
   instance = null;
 }
 
-export function getMidiService(opts: MidiServiceOptions = {}): MidiService {
-  if (instance !== null && opts.openBackend !== undefined) {
-    throw new Error("midi-service already configured: call resetMidiService() first to reconfigure");
-  }
-
-  instance ??= new MidiService(opts);
-
-  return instance;
-}

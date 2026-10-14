@@ -9,14 +9,11 @@
 
 export namespace tokens {
   // Surface: dense order, deep neutral background, minimal chrome.
-  export const surface = "bg-background text-foreground";
   export const panel = "rounded-xl border border-border bg-card text-card-foreground text-sm";
   export const subtle = "text-muted-foreground";
-  export const card = "bg-card text-card-foreground";
 
   // The one restrained accent family.
   export const accent = "text-primary";
-  export const accentSoft = "text-primary/80";
 
   // Semantic status colours never carry meaning alone: icons and text
   // accompany every dot (spec 88, rule: no colour-only states).
@@ -34,8 +31,6 @@ export namespace tokens {
     timing: "font-timing tabular-nums",
     timingLarge: "font-timing text-5xl font-semibold tabular-nums",
   } as const;
-  export const fontBody = "text-sm";
-  export const fontTiming = "font-timing tabular-nums";
 
   // Spacing: dense.
   export const space = {

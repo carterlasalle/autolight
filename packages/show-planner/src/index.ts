@@ -49,16 +49,6 @@ function toPlannerStyle(style: ShowStyle): PlannerStyle {
 }
 
 // Legacy seed: fingerprint-aware when the identity carries one, else the id.
-export function seedFor(trackId: string, plannerVersion: string, styleId: string): string {
-  let h = 0x811c9dc5;
-
-  for (const c of `${trackId}|${plannerVersion}|${styleId}`) {
-    h ^= c.codePointAt(0) ?? 0;
-    h = Math.imul(h, 0x01000193) >>> 0;
-  }
-
-  return h.toString(16).padStart(8, "0");
-}
 
 // Legacy entry point: every existing consumer keeps compiling. Delegates to
 // compileShow with the default venue class and registry-mirrored config, and
@@ -122,13 +112,6 @@ interface TrackIdentity2 {
   accentHue: number;
 }
 
-export function trackIdentity(seedHex: string, rand: () => number): TrackIdentity2 {
-  void seedHex;
-  const h1 = Math.floor(rand() * 360);
-  const h2 = (h1 + 120 + Math.floor(rand() * 120)) % 360;
-
-  return { coreHues: [h1, h2], accentHue: (h1 + 180) % 360 };
-}
 
 // Legacy corrections: index-based, kept for the existing unit test. New code
 // uses regenerateWithLocks with stable cue IDs.

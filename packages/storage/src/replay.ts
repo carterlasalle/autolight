@@ -344,15 +344,3 @@ interface FixtureLintSummary {
   problems: LintProblem[];
 }
 
-export function lintFixtures(
-  fixtures: readonly { name: string; raw: unknown }[],
-  decoderId: string,
-): FixtureLintSummary {
-  const problems: LintProblem[] = [];
-
-  for (const fixture of fixtures) {
-    problems.push(...lintFixture(fixture.raw, { fixture: fixture.name, decoderId }));
-  }
-
-  return { fixtures: fixtures.length, problems };
-}

@@ -143,24 +143,6 @@ async function fetchShowLive(): Promise<ShowLiveResponse | null> {
   return raw;
 }
 
-export async function resolveLiveDecks(): Promise<{ live: LiveState; bpm: number | null } | null> {
-  const snap = await fetchShowLive();
-
-  if (!snap) return null;
-  const loaded: LoadedDeck[] = [];
-
-  for (const d of snap.decks) {
-    if (d.track && d.plan) loaded.push({ track: d.track, plan: d.plan, state: d.state });
-  }
-
-  if (loaded.length === 0) return null;
-  const st = useShell.getState();
-  const live = buildLive(loaded, snap.fixtures, st.blinder);
-
-  if (!live) return null;
-
-  return { live, bpm: live.bpm };
-}
 
 // Live cursor: re-render both decks every 250ms from the combined transport.
 // AX poll (~1Hz via follow/ax IPC) maps elapsed to grid beat; prolink beats

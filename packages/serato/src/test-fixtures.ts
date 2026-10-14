@@ -44,7 +44,7 @@ export interface FixtureScrate {
   textRule?: string;
 }
 
-function utf16be(text: string): Buffer {
+export function utf16be(text: string): Buffer {
   const le = Buffer.from(text, "utf16le");
   const out = Buffer.alloc(le.length);
 
@@ -138,17 +138,3 @@ function makeSeratoFixtureLibrary(dir: string, library: FixtureLibrary): string 
   return root;
 }
 
-export function demoLibrary(): FixtureLibrary {
-  const tracks: FixtureTrack[] = [
-    { filePath: "/music/house-a.mp3", title: "House A", artist: "DJ Test", album: "Fixture", genre: "House", bpm: 124 },
-    { filePath: "/music/house-b.mp3", title: "House B", artist: "DJ Test", album: "Fixture", genre: "House", bpm: 126 },
-    { filePath: "/music/hiphop-c.mp3", title: "Hip Hop C", artist: "MC Test", album: "Fixture", genre: "Hip-Hop", bpm: 95 },
-  ];
-
-  return {
-    root: "",
-    tracks,
-    crates: [{ name: "Evening", trackPaths: ["/music/house-b.mp3", "/music/house-a.mp3"] }],
-    scrates: [{ name: "Smart House", trackPaths: [], textRule: "genre is House" }],
-  };
-}

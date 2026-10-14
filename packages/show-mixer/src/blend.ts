@@ -56,7 +56,7 @@ function linearToRgb(linear: [number, number, number]): Rgb {
 }
 
 // Ottosson's OKLab (sRGB D65 primaries), the same matrices the planner uses.
-export function linearToOklab(linear: [number, number, number]): Lab {
+function linearToOklab(linear: [number, number, number]): Lab {
   const [r, g, b] = linear;
   const l = 0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b;
   const m = 0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b;
@@ -72,7 +72,7 @@ export function linearToOklab(linear: [number, number, number]): Lab {
   };
 }
 
-export function oklabToLinear(lab: Lab): [number, number, number] {
+function oklabToLinear(lab: Lab): [number, number, number] {
   const l_ = lab.L + 0.3963377774 * lab.a + 0.2158037573 * lab.b;
   const m_ = lab.L - 0.1055613458 * lab.a - 0.0638541728 * lab.b;
   const s_ = lab.L - 0.0894841775 * lab.a - 1.291485548 * lab.b;

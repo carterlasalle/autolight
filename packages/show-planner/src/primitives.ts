@@ -232,10 +232,6 @@ export const SPEC_PRIMITIVES: PrimitiveName[] = [
   "RollPattern", "DropPattern", "BreakdownLook", "VocalFocus", "OutroRelease",
 ];
 
-export const MOVEMENT_VOCABULARY = [
-  "rise", "fall", "cross", "fan", "converge", "diverge", "chase",
-  "outside-in", "inside-out", "vertical-scan", "rotation",
-] as const;
 
 const COORD: Record<PrimitiveName, SpatialCoordinate> = {
   Orbit: "s", PerimeterOrbit: "s", Ripple: "distance", RadialPulse: "distance",

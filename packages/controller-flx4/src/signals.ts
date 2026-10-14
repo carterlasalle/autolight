@@ -32,27 +32,6 @@ import {
   type Flx4Quality,
 } from "./state.js";
 
-export type Flx4SignalKind =
-  | "scratch-start"
-  | "scratch-end"
-  | "cue-hold"
-  | "hot-cue"
-  | "pad-press"
-  | "pad-release"
-  | "pad-roll-start"
-  | "pad-roll-stop"
-  | "loop-in"
-  | "loop-out"
-  | "loop-halve"
-  | "loop-double"
-  | "loop-exit"
-  | "reloop"
-  | "beat-loop"
-  | "beat-jump"
-  | "sync"
-  | "load"
-  | "fader"
-  | "crossfader";
 
 interface SignalBase {
   atNs: bigint;

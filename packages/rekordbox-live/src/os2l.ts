@@ -77,25 +77,14 @@ const os2lCommandSchema = z.object({
   param: z.number(),
 }).catchall(z.unknown());
 
-export const os2lFeedbackSchema = z.object({
-  evt: z.literal("feedback"),
-  name: z.string().optional(),
-  page: z.string().optional(),
-  state: z.enum(["on", "off"]).optional(),
-  id: z.number().optional(),
-  param: z.number().optional(),
-}).catchall(z.unknown());
 
 // Inbound frames from DJ software: beat, button and command only. Feedback
 // is the one message WE send (formatOs2lFeedback / sendFeedback); a client
 // echoing it back is not processed input.
 const os2lMessageSchema = z.union([os2lBeatSchema, os2lButtonSchema, os2lCommandSchema]);
 
-export type Os2lBeat = z.infer<typeof os2lBeatSchema>;
 
-export type Os2lButton = z.infer<typeof os2lButtonSchema>;
 
-export type Os2lCommand = z.infer<typeof os2lCommandSchema>;
 
 export type Os2lMessage = z.infer<typeof os2lMessageSchema>;
 

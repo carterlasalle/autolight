@@ -198,12 +198,4 @@ function defaultWatchRoot(root: string, onEvent: (file: string) => void): Librar
 
 let instance: LibraryService | null = null;
 
-export function getLibraryService(opts: LibraryServiceOptions = {}): LibraryService {
-  instance ??= new LibraryService(opts);
 
-  return instance;
-}
-
-export function resetLibraryService(): void {
-  instance = null;
-}

@@ -174,7 +174,6 @@ const hostInboundMessageSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("close"), reason: z.string() }),
 ]);
 
-export type HostInboundMessage = z.infer<typeof hostInboundMessageSchema>;
 
 const OVERRIDE_KINDS = ["none", "blackout", "white", "freeze", "force-low", "force-high"] as const;
 
@@ -232,7 +231,6 @@ export const hostOutboundMessageSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("response"), channel: z.string(), response: z.unknown() }),
 ]);
 
-export type HostOutboundMessage = z.infer<typeof hostOutboundMessageSchema>;
 
 // ---------------------------------------------------------------------------
 // Port plumbing

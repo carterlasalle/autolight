@@ -41,9 +41,6 @@ export function mirrorCheck(observedPlaces: number): {
   };
 }
 
-export function bisectCorner(cornerArcM: number, litArcM: number): "before" | "after" {
-  return litArcM < cornerArcM ? "before" : "after";
-}
 
 export interface WizardFit {
   cells: MappedCell[];

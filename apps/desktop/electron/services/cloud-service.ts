@@ -131,12 +131,3 @@ function resetCloudService(): void {
   instance = null;
 }
 
-export function getCloudService(opts: CloudServiceOptions = {}): CloudService {
-  if (instance !== null && (opts.enabled !== undefined || opts.apiKey !== undefined || opts.transport !== undefined)) {
-    throw new Error("cloud-service already configured: call resetCloudService() first to reconfigure");
-  }
-
-  instance ??= new CloudService(opts);
-
-  return instance;
-}

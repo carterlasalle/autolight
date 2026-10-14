@@ -58,7 +58,7 @@ export function planIdentity(
   const core = ensureMinDistance(
     generateCorePalette(rand, style.colorSaturation, mean, third),
     config.paletteMinDistance,
-  );
+  ).palette;
 
   const accent = neutralWhite();
   const heads = 1 + Math.floor(rand() * 3);
@@ -89,13 +89,3 @@ export function planIdentity(
 // True when a colour change at this beat is musically justified: a section or
 // phrase boundary, or a motif return. The planner only changes colour at
 // those points; the evaluator measures it.
-export function colourChangeAllowed(
-  beat: number,
-  sectionStarts: readonly number[],
-  phraseStarts: readonly number[],
-  motifReturnBeats: readonly number[],
-): boolean {
-  return (
-    sectionStarts.includes(beat) || phraseStarts.includes(beat) || motifReturnBeats.includes(beat)
-  );
-}

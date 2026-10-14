@@ -296,6 +296,3 @@ function lampS(room: Room, p: { x: number; y: number }): number {
   return best;
 }
 
-export function lampCells(fixtureId: string, positions: { x: number; y: number; z: number }[]): FieldCell[] {
-  return pointCells(fixtureId, positions);
-}

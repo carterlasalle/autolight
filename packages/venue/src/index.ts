@@ -21,15 +21,13 @@ export {
 export { Room } from "./room.js";;;;;;;;;;;
 
 
-export { VenueFields, FieldCell as VenueFieldCell } from "./fields.js";;
+export { VenueFields } from "./fields.js";;
 
 
 export { RunTopology } from "./wizard.js";;;;
 
-export { Venue as VenueModel } from "./venue.js";;
 
 
-export const DEFAULT_GROUPS = ["ALL","LEFT","RIGHT","CENTER","BACK","FRONT","VERTICALS","HORIZONTALS","PRIMARY","SECONDARY","ACCENT","AMBIENT"] as const;
 
 export interface OrderedCell { fixtureId: string; cellIndex: number }
 
@@ -59,14 +57,6 @@ export function resolveTarget(fixtures: Fixture[], target: string): FixtureCellR
     .flatMap((f) => f.cells.map((c) => ({ fixtureId: f.id, cellIndex: c.index })));
 }
 
-export function placeFixtures(fixtures: Fixture[]): PlacedCell[] {
-  return globalCellOrder(fixtures).map((ref) => {
-    const f = fixtures.find((x) => x.id === ref.fixtureId)!;
-    const c = f.cells.find((x) => x.index === ref.cellIndex)!;
-
-    return { ...ref, x: c.position.x, y: c.position.y ?? 0 };
-  });
-}
 
 export function applyOrientation(cells: FixtureCellRef[], orientation: "forward" | "reverse"): FixtureCellRef[] {
   return orientation === "forward" ? [...cells] : [...cells].reverse();

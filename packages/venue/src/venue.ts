@@ -28,11 +28,6 @@ interface VenueSwitch {
   rerenderVersion: number;
 }
 
-export function switchVenue(venue: Venue): VenueSwitch {
-  const version = venue.version + 1;
-
-  return { venue: { ...venue, version }, rerenderVersion: version };
-}
 
 export function exportVenue(venue: Venue): VenueFile {
   return { format: "autolight-venue", version: 1, venue: structuredClone(venue) };
@@ -73,6 +68,3 @@ export function outlineRuns(room: Room, z: number): Run[] {
   return [{ id: "ceiling-loop", polyline: pts, closed: true, mirroredOf: null }];
 }
 
-export function roomPerimeterM(room: Room): number {
-  return perimeterLength(normalizeOutline(room.outline));
-}

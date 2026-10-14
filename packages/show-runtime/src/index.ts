@@ -974,6 +974,3 @@ export function trackDeck(
   return { beat: observed, scratchHold: false, seeked: jumped, scratch };
 }
 
-export function cursorBeat(state: CursorState): number {
-  return state.beat;
-}

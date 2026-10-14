@@ -298,7 +298,7 @@ export function isAudioWindow(url: string): boolean {
   return audioWindowUrls.has(url);
 }
 
-export async function boot(): Promise<void> {
+async function boot(): Promise<void> {
   await app.whenReady();
   // T-ARC-02: handlers register before the window exists so the renderer's
   // first requests never race registration.

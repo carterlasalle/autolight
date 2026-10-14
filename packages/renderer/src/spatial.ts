@@ -4,7 +4,6 @@ export type { PrimitiveName, PrimitiveParams } from "./primitive-params.js";
 
 import type { VenueFields } from "@autolight/venue";
 
-export type EnvelopeKind = "attack-release" | "adsr";
 
 export interface Envelope {
   attackBeats: number;
@@ -74,16 +73,12 @@ export function sampleSpatial(
   const g = fields.gDj[i] ?? 0;
   const split = fields.signedSplit[i] ?? 0;
   const chainN = fields.count > 1 ? (fields.chain[i] ?? 0) / Math.max(1, fields.count - 1) : 0;
-  const ext0 = (fields.extent[i * 6] ?? 0) + (fields.extent[i * 6 + 3] ?? 0);
-  void ext0;
 
   switch (name) {
     case "Orbit":
     case "PerimeterOrbit": {
       const p = params as PrimitiveParams["Orbit"];
       const head = (((localBeat / Math.max(1e-9, p.beatsPerRevolution) + p.phase) % 1) + 1) % 1;
-      const dir = p.direction === "clockwise" ? 1 : -1;
-      void dir;
       let best = 0;
 
       for (let hd = 0; hd < p.heads; hd++) {
@@ -128,10 +123,12 @@ export function sampleSpatial(
       const p = params as PrimitiveParams["OpposedPulse"];
       const prog = p.meetBeat > 0 ? Math.min(1.5, localBeat / p.meetBeat) : 1.5;
       const front = prog * 0.5;
-      const d1 = Math.abs(g * 0.5 - front);
-      const d2 = Math.abs((1 - g * 0.5) - (1 - front));
-      void d2;
-      const v = gauss(Math.min(d1, Math.abs(g * 0.5 - (1 - front))), p.width);
+      // Anchor to originS (default 0 preserves prior output): shift the field
+      // coordinate so the fronts meet at the configured origin.
+      const pos = g * 0.5 - p.originS * 0.5;
+      const d1 = Math.abs(pos - front);
+      const d2 = Math.abs(pos - (1 - front));
+      const v = gauss(Math.min(d1, d2), p.width);
 
       return { level: p.passThrough || prog <= 1 ? v : v * Math.max(0, 1.5 - prog), hueShift: 0.5 };
     }
@@ -140,11 +137,17 @@ export function sampleSpatial(
     case "Diverge": {
       const p = params as PrimitiveParams["Converge"];
       const prog = Math.min(1, p.meetBeat > 0 ? localBeat / p.meetBeat : 1);
-      const dirOut = name === "Converge" ? 1 : -1;
-      const from = name === "Converge" ? p.originS : (p.originS + 0.5) % 1;
-      const head = (from + dirOut * prog * 0.5 + 1) % 1;
-      const head2 = (from - dirOut * prog * 0.5 + 1) % 1;
       const tail = p.tailCells / Math.max(1, fields.count);
+
+      // Distinct semantics: Converge heads start at originS +/- 0.5 and meet
+      // at originS; Diverge heads start together at originS and spread apart.
+      const head = name === "Converge"
+        ? (p.originS + 0.5 - prog * 0.5 + 1) % 1
+        : (p.originS + prog * 0.5) % 1;
+
+      const head2 = name === "Converge"
+        ? (p.originS - 0.5 + prog * 0.5 + 1) % 1
+        : (p.originS - prog * 0.5 + 1) % 1;
 
       return { level: Math.max(gauss(wrapDist(s, head), Math.max(1e-3, tail)), gauss(wrapDist(s, head2), Math.max(1e-3, tail))), hueShift: 0 };
     }
@@ -161,11 +164,15 @@ export function sampleSpatial(
 
     case "SplitAlternate": {
       const p = params as PrimitiveParams["SplitAlternate"];
-      const half = Math.floor(localBeat / Math.max(1e-9, p.rateBeats)) % 2;
+      const step = Math.max(1e-9, p.rateBeats);
+      const half = Math.floor(localBeat / step) % 2;
       const side = split >= 0 ? 0 : 1;
       const on = half === side ? 1 : 0;
+      // Duty gates the lit fraction of each rateBeats step via the
+      // intra-step phase (duty=0.5 preserves the prior on/off output).
+      const phase = ((localBeat / step) % 1 + 1) % 1;
 
-      return { level: on >= p.duty ? 1 : 0, hueShift: 0 };
+      return { level: on === 1 && phase < p.duty ? 1 : 0, hueShift: 0 };
     }
 
     case "QuadrantRotate": {
@@ -250,7 +257,6 @@ export function sampleSpatial(
     case "GroupHandoff": {
       const p = params as PrimitiveParams["GroupHandoff"];
       const t = Math.min(1, Math.max(0, (localBeat - (p.handoffBeat - p.overlapBeats)) / Math.max(1e-9, p.overlapBeats * 2)));
-      void p;
 
       return { level: 0.4 + 0.6 * (chainN * (1 - t) + (1 - chainN) * t), hueShift: 0 };
     }
@@ -275,26 +281,4 @@ export function sampleSpatial(
   }
 }
 
-export function subCellLevels(
-  name: PrimitiveName,
-  params: PrimitiveParams[PrimitiveName],
-  localBeat: number,
-  i: number,
-  fields: VenueFields,
-): number {
-  // Note: 3-tap box over neighbours approximates integrating the motion
-  // over the cell extent; exact arc-length integration if fields gain density.
-  const at = (j: number): number => sampleSpatial(name, params, localBeat, Math.min(fields.count - 1, Math.max(0, j)), fields).level;
 
-  if (fields.count === 0) return 0;
-
-  return (at(i - 1) + at(i) * 2 + at(i + 1)) / 4;
-}
-
-export const SPATIAL_ENVELOPES: Record<string, Envelope> = {
-  Impact: { attackBeats: 0.04, releaseBeats: 0.5 },
-  WhiteHit: { attackBeats: 0.02, releaseBeats: 0.25 },
-  DecayHit: { attackBeats: 0.04, releaseBeats: 1 },
-  Ripple: { attackBeats: 0.1, releaseBeats: 0.5 },
-  FinalHit: { attackBeats: 0.02, releaseBeats: 4 },
-};

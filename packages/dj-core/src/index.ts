@@ -95,8 +95,11 @@ export class BeatEstimator {
   /** Hard reset: a seek is random access, never a correction (T-RUN-03). */
   reset(beat: number, nowNs: bigint | null = null): void {
     this.beat = beat;
-
-    if (nowNs !== null) this.lastNs = nowNs;
+    // Re-anchor: without a time the next advance()/observe() must not
+    // extrapolate from the post-seek beat over the stale pre-seek interval.
+    // Leaving `lastNs` null forces the next observe() to re-adopt the
+    // observation's position, rate and playing state outright.
+    this.lastNs = nowNs;
   }
 
   observe(obs: BeatObservation): EstimateResult {
@@ -118,10 +121,11 @@ export class BeatEstimator {
 
     const errorMs = obs.beatsPerSecond > 0
       ? (Math.abs(errorBeats) / obs.beatsPerSecond) * MS_PER_SECOND
-      : Number.POSITIVE_INFINITY;
+      : 0;
 
     const seek =
-      Math.abs(errorBeats) > this.opts.seekThresholdBeats || errorMs > this.opts.seekThresholdMs;
+      Math.abs(errorBeats) > this.opts.seekThresholdBeats ||
+      (obs.beatsPerSecond > 0 && errorMs > this.opts.seekThresholdMs);
 
     if (seek) {
       this.beat = obs.beat;
@@ -190,7 +194,6 @@ export function exceedsSeekThreshold(
 // Provider priority (§7): Lighting → Composite FLX4 → adaptive fallback.
 export const PROVIDER_ORDER = ["lighting", "composite-flx4", "adaptive"] as const;
 
-export type ProviderId = (typeof PROVIDER_ORDER)[number];
 
 // ---------------------------------------------------------------------------
 // Audible weight (§63, T-MIX-01)

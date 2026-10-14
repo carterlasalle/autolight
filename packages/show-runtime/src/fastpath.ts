@@ -20,7 +20,6 @@ export type UpgradeBoundary = "section" | "phrase" | "bar";
 export const DEFAULT_UPGRADE_BOUNDARY: UpgradeBoundary = "phrase";
 
 /** runtime.fastPath.budgetMs default: load event to installed plan. */
-export const DEFAULT_FAST_PATH_BUDGET_MS = 100;
 
 interface FastPathLoad {
   track: TrackModel | null;

@@ -5,7 +5,6 @@ import type { PlannerStyle } from "./types.js";
 
 const STYLE_IDS = ["club", "house", "festival", "lounge", "pop", "dark", "minimal"] as const;
 
-export type BuiltInStyleId = (typeof STYLE_IDS)[number];
 
 function style(
   id: string,
@@ -123,9 +122,6 @@ export const BUILT_IN_STYLES: Record<string, PlannerStyle> = {
 
 const DEFAULT_STYLE_ID = "club";
 
-export function resolveStyle(id: string): PlannerStyle {
-  return BUILT_IN_STYLES[id] ?? BUILT_IN_STYLES[DEFAULT_STYLE_ID]!;
-}
 
 export const STYLE_PROPERTIES = [
   "intensityRange",
@@ -141,4 +137,3 @@ export const STYLE_PROPERTIES = [
   "reactiveAmount",
 ] as const;
 
-export type StyleProperty = (typeof STYLE_PROPERTIES)[number];

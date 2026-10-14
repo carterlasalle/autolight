@@ -18,7 +18,6 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { TestApi, TestApiChannel, TestApiChannelArg, TestApiChannelResult, TestApiResult } from "../electron/test-api-contract.js";
 
-export const TEST_IPC_CHANNEL = "qa/recording-frames";
 
 type RecordedFrame = TestApiResult<"frames">[number];
 

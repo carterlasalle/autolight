@@ -92,7 +92,7 @@ function configDriver(config: StorageConfig | undefined): DriverPreference {
 
 // userData comes from Electron; the E2E harness passes the same directory as
 // AUTOLIGHT_USER_DATA_DIR, which wins so tests can pin a temp profile.
-export function resolveUserDataDir(): string {
+function resolveUserDataDir(): string {
   const override = process.env["AUTOLIGHT_USER_DATA_DIR"];
 
   if (override !== undefined && override.length > 0) return override;

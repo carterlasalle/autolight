@@ -52,8 +52,3 @@ export function RoomCanvas({ room, onPatch }: { room: Room; onPatch: (room: Room
   );
 }
 
-export function useRoomState(initial?: Room): { room: Room; setRoom: (room: Room) => void; resetSquare: () => void } {
-  const [room, setRoom] = useState<Room>(() => initial ?? rectangleRoom(5, 5));
-
-  return { room, setRoom, resetSquare: () => setRoom(rectangleRoom(5, 5)) };
-}

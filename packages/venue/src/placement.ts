@@ -79,11 +79,6 @@ export function runLength(run: Run, toleranceM = 0.005): number {
   return polylineLength(pts, run.geom, toleranceM);
 }
 
-export function gapLength(gaps: { fromM: number; toM: number }[] | undefined): number {
-  if (!gaps) return 0;
-
-  return gaps.reduce((a, g) => a + Math.max(0, g.toM - g.fromM), 0);
-}
 
 function subtractGaps(len: number, gaps: { fromM: number; toM: number }[]): { start: number; end: number }[] {
   const sorted = [...gaps].sort((a, b) => a.fromM - b.fromM);
@@ -186,11 +181,6 @@ export function fitRunMapping(
   return cells;
 }
 
-export function cellMidM(cell: MappedCell): number {
-  const p = cell.positions[0]!;
-
-  return (p.startM + p.endM) / 2;
-}
 
 export function orderLogical(midS: number[], zeroS: number, direction: "clockwise" | "counterclockwise"): number[] {
   const n = midS.length;
@@ -245,34 +235,3 @@ export function topologyForRuns(runs: Run[]): Topology {
   return "split-independent";
 }
 
-export function migrateFixture(f: Fixture): VenueFixture {
-  const cells: MappedCell[] = f.cells.map((c) => ({
-    physicalIndex: c.index,
-    logicalIndex: c.order,
-    positions: [],
-  }));
-
-  const topology: Topology = f.cells.length <= 1 ? "point" : "open-path";
-
-  const placement: Placement =
-    f.cells.length === 1
-      ? { kind: "point", position: { x: f.cells[0]!.position.x, y: f.cells[0]!.position.y ?? 0, z: f.cells[0]!.position.z ?? 0 } }
-      : {
-          kind: "path",
-          runs: [
-            {
-              id: `${f.id}-run0`,
-              polyline: f.cells.map((c) => ({ x: c.position.x, y: c.position.y ?? 0, z: c.position.z ?? 0 })),
-              closed: false,
-              mirroredOf: null,
-            },
-          ],
-        };
-
-  return {
-    fixture: f,
-    placement,
-    cellMap: { resolution: "native", zones: f.cells.length, anchors: [], gaps: [], cells },
-    topology,
-  };
-}

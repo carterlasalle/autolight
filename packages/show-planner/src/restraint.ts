@@ -44,11 +44,6 @@ export type RestraintVerdict =
   | { readonly decision: "substitute"; readonly substitute: string; readonly reason: string }
   | { readonly decision: "reject"; readonly reason: string };
 
-export interface RestraintRecord {
-  readonly beat: number;
-  readonly requested: string;
-  readonly verdict: RestraintVerdict;
-}
 
 export function observeSection(state: RestraintState, sectionStartBeat: number): void {
   state.sectionStartBeat = sectionStartBeat;

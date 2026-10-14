@@ -299,9 +299,6 @@ export class ConfigService implements Service {
   }
 }
 
-export function createConfigService(opts: ConfigServiceOptions = {}): ConfigService {
-  return new ConfigService(opts);
-}
 
 let instance: ConfigService | null = null;
 

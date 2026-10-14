@@ -36,7 +36,6 @@ const snapshotCursorSchema = z.object({
   scratchHold: z.boolean(),
 });
 
-export type SnapshotCursor = z.infer<typeof snapshotCursorSchema>;
 
 const snapshotSectionSchema = z.object({
   kind: z.string().min(1),

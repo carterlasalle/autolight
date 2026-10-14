@@ -59,13 +59,7 @@ const wireDeckStateSchema = deckStateSchema.extend({
 
 type WireDeckState = z.infer<typeof wireDeckStateSchema>;
 
-export function toWireDeckState(state: DeckState): WireDeckState {
-  return { ...state, receivedAtNs: state.receivedAtNs.toString() };
-}
 
-export function fromWireDeckState(wire: WireDeckState): DeckState {
-  return { ...wire, receivedAtNs: BigInt(wire.receivedAtNs) };
-}
 
 export type DeckState = z.infer<typeof deckStateSchema>;
 
@@ -76,7 +70,6 @@ const nativeBeatSchema = z.object({
   bpm: z.number().positive(),
 });
 
-export type NativeBeat = z.infer<typeof nativeBeatSchema>;
 
 export const beatGridSchema = z.object({
   beats: z.array(nativeBeatSchema).min(1),
@@ -92,7 +85,6 @@ const adaptiveBeatGridSchema = z.object({
   version: z.number().int().default(1),
 }).strict();
 
-export type AdaptiveBeatGrid = z.infer<typeof adaptiveBeatGridSchema>;
 
 // Binary search over native grid anchors, piecewise interpolation (§74).
 export function sourceSecondsToBeat(grid: BeatGrid, seconds: number): number {
@@ -149,7 +141,6 @@ const sectionKindSchema = z.enum([
   "unknown",
 ]);
 
-export type SectionKind = z.infer<typeof sectionKindSchema>;
 
 const musicalEventTypeSchema = z.enum([
   "major-section-transition",
@@ -173,7 +164,6 @@ const musicalEventTypeSchema = z.enum([
   "outro-release",
 ]);
 
-export type MusicalEventType = z.infer<typeof musicalEventTypeSchema>;
 
 const gridWarningSchema = z.object({
   source: z.string(),
@@ -192,13 +182,11 @@ const gridWarningSchema = z.object({
   ),
 }).strict();
 
-export type GridWarning = z.infer<typeof gridWarningSchema>;
 
 const beatFeatureSchema = z.object({
   beat: z.number().int().positive(),
 }).catchall(z.number());
 
-export type BeatFeature = z.infer<typeof beatFeatureSchema>;
 
 const frameFeaturesRefSchema = z.object({
   artifactPath: z.string(),
@@ -206,7 +194,6 @@ const frameFeaturesRefSchema = z.object({
   activationFps: z.number().optional(),
 }).strict();
 
-export type FrameFeaturesRef = z.infer<typeof frameFeaturesRefSchema>;
 
 const musicalKeySchema = z.object({
   key: z.string(),
@@ -214,7 +201,6 @@ const musicalKeySchema = z.object({
   confidence: z.number().min(0).max(1),
 }).strict();
 
-export type MusicalKey = z.infer<typeof musicalKeySchema>;
 
 const inputEntrySchema = z.object({
   status: z.enum(["present", "absent", "failed", "skipped"]),
@@ -313,7 +299,6 @@ const nativeRekordboxSchema = z.object({
   ),
 }).strict();
 
-export type NativeRekordbox = z.infer<typeof nativeRekordboxSchema>;
 
 const seratoMarkerSchema = z.object({
   // Serato markers have no decoder in this repo yet, so the shape mirrors
@@ -339,7 +324,6 @@ const nativeSeratoSchema = z.object({
   }).strict().optional(),
 }).strict();
 
-export type NativeSerato = z.infer<typeof nativeSeratoSchema>;
 
 const readinessLevelSchema = z.enum(["full", "structured", "adaptive"]);
 
@@ -477,7 +461,6 @@ const fixtureCellSchema = z.object({
   tags: z.array(z.string()),
 });
 
-export type FixtureCell = z.infer<typeof fixtureCellSchema>;
 
 const fixtureCalibrationSchema = z.object({
   segmentCount: z.number().int().positive(),
@@ -490,7 +473,6 @@ const fixtureCalibrationSchema = z.object({
   firmwareVersion: z.string(),
 });
 
-export type FixtureCalibration = z.infer<typeof fixtureCalibrationSchema>;
 
 export const fixtureSchema = z.object({
   id: z.string().min(1),
@@ -504,14 +486,4 @@ export const fixtureSchema = z.object({
 
 export type Fixture = z.infer<typeof fixtureSchema>;
 
-export type FixtureInput = z.input<typeof fixtureSchema>;
 
-export interface DJLiveProvider {
-  readonly id: string;
-  readonly source: DeckSource;
-  start(): Promise<void>;
-  stop(): Promise<void>;
-  getDecks(): readonly DeckState[];
-  onDeckState(listener: (state: DeckState) => void): () => void;
-  onConnection(listener: (up: boolean) => void): () => void;
-}

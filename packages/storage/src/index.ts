@@ -67,10 +67,6 @@ export function loadSchema(): string {
 // Cache versioning (§82): analyzer bumps invalidate analysis artifacts only;
 // planner bumps reuse TrackModel and regenerate ShowPlan; venue changes reuse
 // semantic plans. Invalidation is per-table, never wipe-all.
-export interface CacheVersions {
-  analyzer: string;
-  planner: string;
-}
 
 export interface StoreOptions {
   path?: string;

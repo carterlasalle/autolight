@@ -58,7 +58,6 @@ type HighVariantTemplate = z.infer<typeof highVariantTemplateSchema>;
 
 type HighVariantRules = z.infer<typeof highVariantRulesSchema>;
 
-export type PssiCase = z.infer<typeof labelTableSchema>["cases"][number];
 
 export type PssiLabelTable = z.infer<typeof labelTableSchema>;
 
@@ -80,9 +79,6 @@ export function loadPssiLabels(path: string = process.env["AUTOLIGHT_PSSI_LABELS
 // the lookups, and the suite must not see a stale table across cases.
 const cachedByPath = new Map<string, PssiLabelTable>();
 
-export function resetPssiLabelsForTest(): void {
-  cachedByPath.clear();
-}
 
 function table(path?: string): PssiLabelTable {
   const key = path ?? process.env["AUTOLIGHT_PSSI_LABELS"] ?? DEFAULT_LABELS_PATH;

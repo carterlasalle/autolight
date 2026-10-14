@@ -18,7 +18,6 @@
 type FingerprintMode = "pcm-hash" | "acoustic" | "both";
 
 /** identity.fingerprint.mode default: the DS-34 combined mode. */
-export const DEFAULT_FINGERPRINT_MODE: FingerprintMode = "both";
 
 /** identity.fingerprint.acousticThreshold default. */
 const DEFAULT_ACOUSTIC_THRESHOLD = 0.9;

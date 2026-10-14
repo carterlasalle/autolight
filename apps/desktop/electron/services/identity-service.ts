@@ -115,8 +115,3 @@ export class IdentityService implements Service {
 
 let instance: IdentityService | null = null;
 
-export function getIdentityService(): IdentityService {
-  instance ??= new IdentityService();
-
-  return instance;
-}

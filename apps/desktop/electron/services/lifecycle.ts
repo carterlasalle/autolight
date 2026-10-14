@@ -265,8 +265,3 @@ export class LifecycleService implements Service {
 
 let instance: LifecycleService | null = null;
 
-export function getLifecycleService(opts: LifecycleServiceOptions = {}): LifecycleService {
-  instance ??= new LifecycleService(opts);
-
-  return instance;
-}

@@ -1,8 +1,5 @@
 import type { DeckState, Fixture } from "@autolight/contracts";
 
-export function* replay(events: DeckState[]): Generator<DeckState> {
-  for (const e of events) yield e;
-}
 
 export function makeDeck(over: Partial<DeckState> = {}): DeckState {
   return {
