@@ -3,8 +3,14 @@
   "includeEntryExports": true,
   "workspaces": {
     ".": {
-      "entry": ["tools/**/*.mjs", "scripts/**/*.mjs"],
-      "project": ["tools/**/*.mjs", "scripts/**/*.mjs"]
+      "entry": [
+        "tools/**/*.mjs",
+        "scripts/**/*.mjs"
+      ],
+      "project": [
+        "tools/**/*.mjs",
+        "scripts/**/*.mjs"
+      ]
     },
     "apps/desktop": {
       "entry": [
@@ -23,11 +29,16 @@
       ]
     },
     "packages/*": {
-      "project": ["src/**/*.ts!"]
+      "project": [
+        "src/**/*.ts!"
+      ]
     }
   },
-  "ignoreBinaries": ["osascript", "uv", "tail"],
-  "ignore": [".ocr-audit/**"],
+  "ignoreBinaries": [
+    "osascript",
+    "uv",
+    "tail"
+  ],
   "ignoreDependencies": [
     "@knip/language-server",
     "@oxlint/plugins",

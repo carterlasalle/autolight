@@ -5,7 +5,7 @@
 // pre-impact darkness, palette evolution, foreshadowing and second-drop
 // variation.
 import type { TrackModel } from "@autolight/contracts";
-import { envelopeToBeats, type Oklch, type PlannerConfigSnapshot, type PlannerStyle } from "./types.js";
+import { type Oklch, type PlannerConfigSnapshot, type PlannerStyle } from "./types.js";
 
 export type HierarchyLevel = "track" | "section" | "phrase" | "bar" | "beat" | "sub-beat";
 
@@ -163,7 +163,7 @@ export function stagedBuild(
   return cues;
 }
 
-export function phraseStartsIn(
+function phraseStartsIn(
   sectionStart: number,
   sectionEnd: number,
   phraseBeats = 8,
