@@ -453,6 +453,7 @@ export class GoveeLanManager implements StreamTransport {
   private refusedWan: { name: string; address: string }[] = [];
   private multicastOk = new Map<string, boolean>();
   private alternate: AlternateStateInternal | null = null;
+  private alternateBusy = false;
 
   constructor(opts: GoveeManagerOptions = {}) {
     const d = GOVEE_DEFAULTS;
@@ -1180,11 +1181,20 @@ export class GoveeLanManager implements StreamTransport {
     };
   }
 
-  private async alternateStep(): Promise<void> {
+  private alternateStep(): void {
     const cur = this.alternate;
 
     if (cur === null) return;
+    // A slow step (arming, UDP stalls) must not let the next interval stack
+    // on top of it: ticks are skipped, never queued (newest-state-wins).
+    if (this.alternateBusy) return;
+    this.alternateBusy = true;
     cur.phase = !cur.phase;
+
+    void this.alternateApply(cur).finally(() => { this.alternateBusy = false; });
+  }
+
+  private async alternateApply(cur: AlternateStateInternal): Promise<void> {
 
     try {
       const base = cur.base;
@@ -1352,35 +1362,37 @@ export class GoveeLanManager implements StreamTransport {
 
   // -- manual lane (T-RUN-07, spec 50): master intents command the rig ------
 
-  /** Solid colour on one fixture: a confirmed segmented stream paints the
-   *  frame (§51 newest-state-wins); anything else — unarmed, or a probe
-   *  armed at an unconfirmed count — takes the one-shot colorwc path, so a
-   *  colour pick always covers the whole strip. Blackout rides this as
-   *  RGB 0,0,0 (§47), never turn. */
+  /** Solid colour on one fixture. The razer stream is the primary path:
+   *  segmented paints snap instantly, where the one-shot colorwc path
+   *  cross-fades slowly on these units (owner call, 2026-10-13). Count
+   *  priority: the operator-saved count, else the live stream's own size
+   *  (whatever the strip is showing now, probe included). Only a fixture
+   *  with neither a saved count nor an armed stream falls back to colorwc —
+   *  and the fallback is warned with its fix, never silent. Blackout rides
+   *  this as RGB 0,0,0 (§47), never turn. */
   async setColor(mac: string, r: number, g: number, b: number): Promise<void> {
     await this.start();
     const entry = this.require(mac);
-    const saved = entry.zonesSaved;
     const stream = entry.stream;
+    const count = entry.zonesSaved ?? (stream && !entry.streamClosed ? stream.zones : null);
 
     entry.lastColor = [r, g, b];
 
-    if (saved !== null && entry.armed && stream && !entry.streamClosed && stream.zones === saved) {
-      const frame = solidPayload(saved, r, g, b);
-      entry.lastFrame = frame.slice();
-
+    if (count !== null && count > 0) {
       try {
-        stream.setAll(frame);
+        await this.ensureStreamAt(entry.mac, count);
+        const live = this.require(entry.mac);
+        const frame = solidPayload(count, r, g, b);
+
+        live.lastFrame = frame.slice();
+        live.stream?.setAll(frame);
 
         return;
-      } catch { /* zones raced the stream: the one-shot path below still lands */ }
-    }
-
-    // A probe stream armed at an unconfirmed count would keep its stripes
-    // on the wire and shadow this colour: tear it down first.
-    if (stream && !entry.streamClosed && stream.zones !== saved) {
-      this.teardownStream(entry);
-      entry.streamDesired = false;
+      } catch (err) {
+        this.warn(`razer paint failed for ${entry.mac}, using colorwc: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    } else {
+      this.warn(`no segment count for ${entry.mac}: colorwc fades slowly (fix: count the segments in the console to arm the instant razer path)`);
     }
 
     this.sendJson(entry.mac, colorCommand(r, g, b));
