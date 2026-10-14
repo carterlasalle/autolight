@@ -360,7 +360,10 @@ const DEFAULT_TICK_HZ = 60;
 
 const DEFAULT_UI_RATE_HZ = 30;
 
-const DEFAULT_MAX_BYTES = 262144;
+/** Default for runtime.snapshot.maxBytes (docs/finish/03-config-and-decisions):
+ * the single code mirror of the config default. snapshot.ts re-exports it as
+ * SNAPSHOT_MAX_BYTES for measurement callers. */
+export const DEFAULT_SNAPSHOT_MAX_BYTES = 262144;
 
 const SEEK_THRESHOLD_BEATS = 8;
 
@@ -404,7 +407,7 @@ export class ShowHost {
   constructor(options: ShowHostOptions) {
     this.mode = options.config.mode;
     this.tickHz = options.config.tickHz ?? DEFAULT_TICK_HZ;
-    this.maxBytes = options.config.maxBytes ?? DEFAULT_MAX_BYTES;
+    this.maxBytes = options.config.maxBytes ?? DEFAULT_SNAPSHOT_MAX_BYTES;
     this.nominalTickNs = BigInt(Math.round(1e9 / this.tickHz));
     this.snapshotIntervalNs = BigInt(Math.round(1e9 / (options.config.uiRateHz ?? DEFAULT_UI_RATE_HZ)));
     this.nowNsFn = options.nowNs ?? process.hrtime.bigint;

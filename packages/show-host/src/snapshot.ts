@@ -16,6 +16,7 @@ import { Buffer } from "node:buffer";
 import { z } from "zod";
 import {
   deckSnapshotSchema,
+  DEFAULT_SNAPSHOT_MAX_BYTES,
   hostMetricsSchema,
   hostSnapshotSchema,
   type HostMetrics,
@@ -26,7 +27,9 @@ import type { ShowPlan, TrackModel } from "@autolight/contracts";
 // runtime.snapshot defaults from docs/finish/03-config-and-decisions.md.
 export const SNAPSHOT_VERSION = 1;
 
-export const SNAPSHOT_MAX_BYTES = 262144;
+// The single literal lives with the host's config resolution in ./index.js;
+// re-exported under the snapshot-module name for measurement callers.
+export const SNAPSHOT_MAX_BYTES = DEFAULT_SNAPSHOT_MAX_BYTES;
 
 const UPCOMING_CUE_LIMIT = 8;
 

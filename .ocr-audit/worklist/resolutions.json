@@ -1960,5 +1960,55 @@
       "verdict": "fixed",
       "evidence": "The correlation test no longer correlates an array with itself: it pins the peak of a 4-sample-lagged copy at lag 4 with confidence > 0.99, a scaled copy (normalization invariance), and an unrelated pattern below 0.9. Verified by the composite suite."
     }
+  ],
+  "batch-28": [
+    {
+      "path": "packages/rekordbox-live/src/os2l.test.ts",
+      "line": 85,
+      "verdict": "fixed-earlier",
+      "evidence": "The TCP test runs its body in try/finally: sender.destroy(), await closed, await provider.stop(). Verified 2026-10-14."
+    },
+    {
+      "path": "packages/rekordbox-live/src/os2l.test.ts",
+      "line": 61,
+      "verdict": "fixed-earlier",
+      "evidence": "Boundary covered: pos 42 -> beatInBar 3 and pos 40 (bar line) -> beatInBar 1 are both asserted. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/serato/src/library.ts",
+      "line": 123,
+      "verdict": "fixed-earlier",
+      "evidence": "detectSeratoRoots' doc comment now states the real priority order (configured root, default Music folder, then mounted volumes), matching the code. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/serato/src/library.ts",
+      "line": 309,
+      "verdict": "fixed-earlier",
+      "evidence": "Operator routing is per field type: NUMERIC_OPERATORS admits only >,<,>=,<=,is,equals, so bpm contains 12 is rejected at parse and retained as an unsupported record; the === fallthrough is exactly the is/equals semantics. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/serato/src/library.ts",
+      "line": 314,
+      "verdict": "fixed-earlier",
+      "evidence": "TEXT_OPERATORS admits only is,equals,contains, so title > House is rejected at parse and recorded unsupported instead of silently degrading. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/serato/src/readonly.test.ts",
+      "line": 11,
+      "verdict": "fixed-earlier",
+      "evidence": "The single crateFixture caller destructures and consumes bytes in the write-safety equality check (readFileSync equals bytes), so the field is live. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/show-host/src/clock.ts",
+      "line": 129,
+      "verdict": "fixed-earlier",
+      "evidence": "The interval loop guards an early timer: scheduledNext is computed and an early fire returns before any emit, so no future tick is ever emitted with floored jitter. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/show-host/src/snapshot.ts",
+      "line": 28,
+      "verdict": "fixed",
+      "evidence": "The duplicated 262144 is unified: DEFAULT_SNAPSHOT_MAX_BYTES is the single literal next to the host's config resolution in index.ts, and snapshot.ts binds SNAPSHOT_MAX_BYTES from it. knip clean, show-host tests and typecheck pass."
+    }
   ]
 }
