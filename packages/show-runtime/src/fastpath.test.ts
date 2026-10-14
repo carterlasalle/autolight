@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { showPlanSchema, trackModelSchema } from "@autolight/contracts";
 import { MemoryAliasStore } from "@autolight/track-identity";
 import { clearFastPathCache, configSnapshotHash, Store, styleHash, venueClassHash } from "@autolight/storage";
@@ -25,14 +25,8 @@ afterEach(() => {
 function seedStore(store: Store, trackId: string): {
   analyzerVersion: string; plannerVersion: string; styleHash: string; venueClass: string; configHash: string; sourceFingerprint: string;
 } {
-  const key = {
-    analyzerVersion: trackModel.analyzerVersion,
-    plannerVersion: showPlan.plannerVersion,
-    styleHash: styleHash({ id: showPlan.styleId }),
-    venueClass: venueClassHash(["segments"]),
-    configHash: configSnapshotHash({ "runtime.fastPath.budgetMs": 100 }),
-    sourceFingerprint: "fp-1",
-  };
+  // One key derivation for both the database rows and the probe load.
+  const key = seedKey();
 
   const dir = mkdtempSync(join(tmpdir(), "autolight-run08-"));
   created.push(dir);
@@ -66,6 +60,11 @@ const byId = (id: string): { rekordboxId: string; canonicalPath: string } | unde
   id === "101" ? { rekordboxId: "101", canonicalPath: "/Music/Aurora.mp3" } : undefined;
 
 describe("track load fast path (T-RUN-08, P-138)", () => {
+  // The fast-path LRU is process-global: reset it per test so order and
+  // leftovers from earlier tests cannot select a cached model.
+  beforeEach(() => {
+    clearFastPathCache();
+  });
   it("resolves identity and installs cached model plus plan as objects", () => {
     const store = new Store();
     const aliases = new MemoryAliasStore();
@@ -84,7 +83,6 @@ describe("track load fast path (T-RUN-08, P-138)", () => {
     const trackId = probe.resolution.trackId!;
     const key = seedStore(store, trackId);
     const world = createDeckWorld(1);
-    const before = performance.now();
 
     const loaded = loadGeneration(
       world,
@@ -102,8 +100,9 @@ describe("track load fast path (T-RUN-08, P-138)", () => {
     expect(loaded.plan?.trackId).toBe(trackId);
     expect(world.plan?.trackId).toBe(trackId);
     expect(world.generation).toBe(2);
+    // The instrumented budget is the contract; a wall-clock bound here only
+    // measured CI load.
     expect(loaded.totalMs).toBeLessThan(100);
-    expect(performance.now() - before).toBeLessThan(1000);
   });
   it("installs the model and compiles when the plan is missing, analyzes when nothing is cached", () => {
     const store = new Store();
@@ -122,7 +121,7 @@ describe("track load fast path (T-RUN-08, P-138)", () => {
     const trackId = probe.resolution.trackId!;
     const key = seedStore(store, trackId);
     clearFastPathCache();
-    store.exec("DELETE FROM show_plans");
+    store.deleteAllShowPlans();
     const world = createDeckWorld(1);
     let compiled = 0;
 
@@ -135,6 +134,8 @@ describe("track load fast path (T-RUN-08, P-138)", () => {
       aliases,
     );
 
+    // The cached model still installs; only the plan is missing.
+    expect(miss.installed).toBe(true);
     expect(miss.track).not.toBeNull();
     expect(miss.plan).toBeNull();
     expect(miss.miss).toBe("no-plan");
@@ -162,7 +163,11 @@ describe("track load fast path (T-RUN-08, P-138)", () => {
     const atBoundary = upgradeAtBoundary({ plan: showPlan, beat: 64, boundary: "phrase", phraseBoundaries: [32, 64, 96], sectionBoundaries: [0, 128] });
     expect(atBoundary.waitBeats).toBe(0);
     const noFuture = upgradeAtBoundary({ plan: showPlan, beat: 200, boundary: "phrase", phraseBoundaries: [32, 64], sectionBoundaries: [] });
+    // Past every boundary: install immediately (no wait would ever end) and
+    // keep the requested boundary kind on the decision.
     expect(noFuture.installAtBeat).toBe(200);
+    expect(noFuture.waitBeats).toBe(0);
+    expect(noFuture.boundary).toBe("phrase");
   });
   it("installs the decided upgrade into the world on the boundary tick", () => {
     const world = worldWithPlan(1, 1, trackModel, showPlan);

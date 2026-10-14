@@ -215,6 +215,12 @@ export class Store implements SqlExec {
     );
   }
 
+  /** Drops every cached show plan (cache-reset paths and test isolation):
+   *  the table name stays owned by this class, never by callers' SQL. */
+  deleteAllShowPlans(): void {
+    this.driver.run("DELETE FROM show_plans", []);
+  }
+
   saveShowPlan(
     trackId: string,
     styleId: string,

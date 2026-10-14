@@ -5,12 +5,17 @@ import { fileURLToPath } from "node:url";
 import { trackModelSchema, showStyleSchema, type Fixture } from "@autolight/contracts";
 import { planShow, validatePlan, BUILT_IN_STYLES } from "@autolight/show-planner";
 import { renderFrame, frameHash } from "@autolight/renderer";
-import { makeFixture } from "@autolight/simulator";
+import { makeDeck, makeFixture } from "@autolight/simulator";
 import { Store } from "@autolight/storage";
 import { loadFastPath, impactOwner, mixDown, type MixResult } from "./index.js";
-import { makeDeck } from "@autolight/simulator";
 
 const dir = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "test-fixtures", "analysis");
+
+/** Fixture loads are schema-parsed once here; a missing or legacy fixture
+ *  fails with its path in the ENOENT message, never a silent substitute. */
+function loadFixture(name: string): ReturnType<typeof trackModelSchema.parse> {
+  return trackModelSchema.parse(JSON.parse(readFileSync(join(dir, name), "utf8")));
+}
 
 function groupedFixture(id: string, x: number, groups: string[]): Fixture {
   const f = makeFixture(id, 14, x, x);
@@ -20,7 +25,7 @@ function groupedFixture(id: string, x: number, groups: string[]): Fixture {
 
 describe("pipeline", () => {
   it("plans a valid show from the real track", () => {
-    const track = trackModelSchema.parse(JSON.parse(readFileSync(join(dir, "real-track-1.trackmodel.json"), "utf8")));
+    const track = loadFixture("real-track-1.trackmodel.json");
     const style = showStyleSchema.parse(BUILT_IN_STYLES.club);
     const plan = planShow(track, style);
     expect(plan.cues.length).toBeGreaterThan(0);
@@ -30,10 +35,11 @@ describe("pipeline", () => {
   });
   it("loads cached track+plan on the fast path (§138)", () => {
     const store = new Store();
-    const raw = readFileSync(join(dir, "real-track-1.trackmodel.json"), "utf8");
+    const track = loadFixture("real-track-1.trackmodel.json");
     store.saveArtifact("real-track-1", "0.1.0", "/cache/real.json", "fp1");
-    store.saveTrack("real-track-1", raw.slice(0, 200), 247.2);
-    const track = trackModelSchema.parse(JSON.parse(raw));
+    // The real identity JSON, not a truncated fragment: a stored row must be
+    // what a reader could actually parse.
+    store.saveTrack("real-track-1", JSON.stringify(track.identity), track.durationSeconds);
     const style = showStyleSchema.parse(BUILT_IN_STYLES.club);
     const plan = planShow(track, style);
     store.saveShowPlan("real-track-1", "club", plan.plannerVersion, plan.seed, JSON.stringify(plan));
@@ -44,25 +50,36 @@ describe("pipeline", () => {
     store.close();
   });
   it("gives drop impact to the incoming deck", () => {
-    const track = trackModelSchema.parse(JSON.parse(readFileSync(join(dir, "real-track-1.trackmodel.json"), "utf8")));
+    const track = loadFixture("real-track-1.trackmodel.json");
     const style = showStyleSchema.parse(BUILT_IN_STYLES.club);
     const plan = planShow(track, style);
     const a = makeDeck({ deckId: 1, channelFader: 0.2, crossfader: 1, track: { id: "old", sourceIds: {} } });
     const b = makeDeck({ deckId: 2, channelFader: 1, crossfader: 1, track: { id: "real-track-1", sourceIds: {} } });
-    expect(impactOwner({ state: a, strength: 0.4 }, { state: b, strength: 0.9 })).toBe("b");
-    const frames = renderFrame(plan, 120, [groupedFixture("left", 0, ["PRIMARY"]), groupedFixture("right", 1, ["SECONDARY"])]);
+    const owner = impactOwner({ state: a, strength: 0.4 }, { state: b, strength: 0.9 });
+    expect(owner).toBe("b");
+    // The render follows the elected owner: B's plan cues are the ones that
+    // light the rig at the drop.
+    const ownerPlan = owner === "b" ? plan : { ...plan, cues: [] };
+    const frames = renderFrame(ownerPlan, 120, [groupedFixture("left", 0, ["PRIMARY"]), groupedFixture("right", 1, ["SECONDARY"])]);
     expect([...frames.get("left")!].some((v) => v > 0)).toBe(true);
   });
   it("moves ownership across a crossfade (§62-67)", () => {
-    const track = trackModelSchema.parse(JSON.parse(readFileSync(join(dir, "real-track-1.trackmodel.json"), "utf8")));
+    const track = loadFixture("real-track-1.trackmodel.json");
     const style = showStyleSchema.parse(BUILT_IN_STYLES.club);
     const planB = planShow(track, style);
-    const planA = { ...planB, trackId: "old", cues: planB.cues.map((c) => ({ ...c, startBeat: c.startBeat })) };
+    // A genuinely different plan for deck A (the outgoing track): its cues
+    // are half intensity, so crossfade checks can tell the sides apart.
+    const planA = { ...planB, trackId: "old", cues: planB.cues.map((c) => ({ ...c, intensity: Math.min(1, c.intensity * 0.5) })) };
     const beat = 120;
+    const inWindow = (cues: typeof planB.cues): typeof planB.cues => cues.filter((c) => beat >= c.startBeat && beat < c.startBeat + c.durationBeats);
+
+    // Precondition of this scenario: the fixture plan has cues at beat 120,
+    // so an empty window would fail here instead of vacuously passing below.
+    expect(inWindow(planB.cues).length).toBeGreaterThan(0);
 
     const at = (xa: number, xb: number): MixResult => mixDown(
-      { state: makeDeck({ deckId: 1, channelFader: 1, crossfader: xa, track: { id: "old", sourceIds: {} } }), beat, cues: planA.cues.filter((c) => beat >= c.startBeat && beat < c.startBeat + c.durationBeats), impactStrength: 0.5 },
-      { state: makeDeck({ deckId: 2, channelFader: 1, crossfader: xb, track: { id: "real-track-1", sourceIds: {} } }), beat, cues: planB.cues.filter((c) => beat >= c.startBeat && beat < c.startBeat + c.durationBeats), impactStrength: 0.9 },
+      { state: makeDeck({ deckId: 1, channelFader: 1, crossfader: xa, track: { id: "old", sourceIds: {} } }), beat, cues: inWindow(planA.cues), impactStrength: 0.5 },
+      { state: makeDeck({ deckId: 2, channelFader: 1, crossfader: xb, track: { id: "real-track-1", sourceIds: {} } }), beat, cues: inWindow(planB.cues), impactStrength: 0.9 },
     );
 
     // A full left: A owns, B silent. Full right: B owns with scaled cues.
@@ -70,7 +87,15 @@ describe("pipeline", () => {
     const right = at(0, 1);
     expect(right.owner).toBe("b");
     expect(right.cues.length).toBeGreaterThan(0);
-    expect(right.cues.every((c) => c.intensity <= 1)).toBe(true);
+    // The survivors are exactly B's in-window cues (types and order), each
+    // scaled by B's weight — nothing of A's leaks in.
+    const bWindow = inWindow(planB.cues);
+
+    expect(right.cues.map((c) => c.type)).toEqual(bWindow.map((c) => c.type));
+
+    const w = right.weights.b;
+
+    expect(right.cues.every((c, i) => Math.abs(c.intensity - Math.min(1, bWindow[i]!.intensity * w)) < 1e-9)).toBe(true);
     // Rendered mixed cues light the rig (section-look targets PRIMARY → left).
     const mixedPlan = { ...planB, cues: right.cues };
     const frames = renderFrame(mixedPlan, beat, [groupedFixture("left", 0, ["PRIMARY"]), groupedFixture("right", 1, ["SECONDARY"])]);

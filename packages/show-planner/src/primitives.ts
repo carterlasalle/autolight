@@ -187,7 +187,7 @@ export function parsePrimitiveParams<T extends PrimitiveName>(name: T, params: u
   const out: Record<string, unknown> = { ...defaults };
 
   for (const [key, value] of Object.entries(input)) {
-    if (!(key in defaults)) throw new Error(`unknown param ${key} for ${name}`);
+    if (!Object.hasOwn(defaults, key)) throw new Error(`unknown param ${key} for ${name}`);
     const spec = specs[key];
     const def = defaults[key];
 
@@ -283,6 +283,20 @@ const SUITABLE: Record<PrimitiveName, string[]> = {
   DropPattern: ["drop"], BreakdownLook: ["breakdown"], VocalFocus: ["verse"], OutroRelease: ["outro"],
 };
 
+// Table lookups instead of nested ternaries: one place to extend when a new
+// high-restraint or high-rate primitive lands.
+const RESTRAINT_COST: Partial<Record<PrimitiveName, number>> = {
+  StrobeBurst: 2,
+  SplitAlternate: 2,
+  WhiteHit: 3,
+  Impact: 3,
+};
+
+const REQUIRED_RATE_HZ: Partial<Record<PrimitiveName, number>> = {
+  StrobeBurst: 24,
+  SplitAlternate: 24,
+};
+
 export const PRIMITIVE_REGISTRY: Record<PrimitiveName, PrimitiveMeta> = Object.fromEntries(
   (Object.keys(COORD) as PrimitiveName[]).map((name) => [
     name,
@@ -291,15 +305,17 @@ export const PRIMITIVE_REGISTRY: Record<PrimitiveName, PrimitiveMeta> = Object.f
       coordinate: COORD[name],
       energy: ENERGY[name],
       sections: SUITABLE[name] ?? ["verse"],
-      restraintCost: name === "StrobeBurst" || name === "SplitAlternate" ? 2 : name === "WhiteHit" || name === "Impact" ? 3 : 1,
+      restraintCost: RESTRAINT_COST[name] ?? 1,
       needsClosedOrIndependent: name === "Orbit" || name === "PerimeterOrbit",
-      needsFixtureRateHz: name === "StrobeBurst" || name === "SplitAlternate" ? 24 : null,
+      needsFixtureRateHz: REQUIRED_RATE_HZ[name] ?? null,
     } satisfies PrimitiveMeta,
   ]),
 ) as Record<PrimitiveName, PrimitiveMeta>;
 
+// Own-property lookups only: `value in registry` is true for inherited keys
+// like "toString", which would resolve a prototype member as a primitive.
 export function isPrimitiveName(value: string): value is PrimitiveName {
-  return value in PRIMITIVE_REGISTRY;
+  return Object.hasOwn(PRIMITIVE_REGISTRY, value);
 }
 
 function kebab(name: string): string {
@@ -313,9 +329,9 @@ const ALIAS_TO_CANONICAL: Record<string, PrimitiveName> = Object.fromEntries([
 ]) as Record<string, PrimitiveName>;
 
 function resolvePrimitiveName(value: string): PrimitiveName | null {
-  if (value in PRIMITIVE_REGISTRY) return value as PrimitiveName;
+  if (Object.hasOwn(PRIMITIVE_REGISTRY, value)) return value as PrimitiveName;
 
-  return ALIAS_TO_CANONICAL[value] ?? null;
+  return Object.hasOwn(ALIAS_TO_CANONICAL, value) ? ALIAS_TO_CANONICAL[value]! : null;
 }
 
 export function isKnownCueType(value: string): boolean {
@@ -350,8 +366,16 @@ export function checkTopology(name: PrimitiveName, topology: string): string | n
 export function checkFixtureRate(name: PrimitiveName, rateHz: number | null): string | null {
   const meta = PRIMITIVE_REGISTRY[name]!;
 
-  if (meta.needsFixtureRateHz !== null && rateHz !== null && rateHz < meta.needsFixtureRateHz) {
-    return `${name} needs fixture rate at least ${meta.needsFixtureRateHz} Hz, have ${rateHz}`;
+  if (meta.needsFixtureRateHz !== null) {
+    if (rateHz === null) {
+      // An unknown fixture rate cannot prove a 24 Hz primitive safe: fail
+      // loudly instead of passing an unverifiable requirement.
+      return `${name} needs fixture rate at least ${meta.needsFixtureRateHz} Hz; fixture rate is unknown`;
+    }
+
+    if (rateHz < meta.needsFixtureRateHz) {
+      return `${name} needs fixture rate at least ${meta.needsFixtureRateHz} Hz, have ${rateHz}`;
+    }
   }
 
   return null;

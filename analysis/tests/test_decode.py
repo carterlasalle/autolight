@@ -40,8 +40,10 @@ def _tone(path, sr=44100, secs=1.0, freq=440.0):
 
 def _transcode(src, dst, *extra):
     exe = shutil.which("ffmpeg") or "ffmpeg"
-    subprocess.run(  # noqa: S603 - test-only local ffmpeg transcoding fixed flags
-        [exe, "-v", "error", "-y", "-i", str(src), *extra, str(dst)], check=True
+    return subprocess.run(  # noqa: S603 - test-only local ffmpeg transcoding fixed flags
+        [exe, "-v", "error", "-y", "-i", str(src), *extra, str(dst)],
+        check=True,
+        capture_output=True,
     )
 
 
@@ -57,9 +59,13 @@ def test_same_signal_all_codecs_align(tmp_path):
         out = tmp_path / f"tone.{name if name != 'aac' else 'm4a'}"
         try:
             _transcode(src, out, *args)
-        except subprocess.CalledProcessError:
+        except subprocess.CalledProcessError as err:
+            # Only a missing encoder may skip; a real transcode failure (bad
+            # flags, unreadable source) must fail the test instead.
+            stderr = err.stderr.decode(errors="replace") if err.stderr else ""
+            if "Unknown encoder" not in stderr and "not found" not in stderr:
+                raise
             pytest.skip(f"codec {name} unavailable")
-            continue
         variants[name] = out
     metas = {}
     for name, path in variants.items():
@@ -70,7 +76,10 @@ def test_same_signal_all_codecs_align(tmp_path):
         assert "startOffsetSeconds" in meta
         assert "ffmpegVersion" in meta
     durs = [m["durationSeconds"] for m in metas.values()]
+    # Both relative agreement AND the absolute length of the 1.0 s tone: a
+    # pipeline that consistently returns a wrong duration fails the second.
     assert max(durs) - min(durs) < 0.05, metas
+    assert all(abs(d - 1.0) < 0.05 for d in durs), metas
 
 
 def test_cache_key_content_not_path(tmp_path):

@@ -9,6 +9,7 @@ and fed to build detection.
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -45,14 +46,22 @@ KRUMHANSL_MINOR = (
 )
 
 
+@dataclass(frozen=True)
+class CqtBands:
+    """Constant-Q band layout: lowest frequency, resolution and span."""
+
+    fmin: float = 55.0
+    bins_per_octave: int = 12
+    octaves: int = 6
+
+
 def cqt_chroma(
     mono: np.ndarray,
+    *,
     rate: int = 44100,
     frame: int = 4096,
     hop: int = 2048,
-    fmin: float = 55.0,
-    bins_per_octave: int = 12,
-    octaves: int = 6,
+    bands: CqtBands = CqtBands(),
 ) -> np.ndarray:
     """Constant-Q style chroma: sparse-kernel magnitude to pitch classes.
 
@@ -62,16 +71,21 @@ def cqt_chroma(
     if mono.size < frame:
         return np.zeros((1, 12), dtype=np.float64)
     n_frames = 1 + (mono.size - frame) // hop
-    freqs = fmin * 2.0 ** (np.arange(bins_per_octave * octaves) / bins_per_octave)
+    bin_count = bands.bins_per_octave * bands.octaves
+    freqs = bands.fmin * 2.0 ** (np.arange(bin_count) / bands.bins_per_octave)
     t = np.arange(frame) / rate
     window = np.hanning(frame)
+    # The cos/sin basis depends only on frequency and time: build it once
+    # instead of evaluating two transcendentals per bin per frame.
+    phases = 2.0 * math.pi * np.outer(freqs, t)
+    basis_cos = np.cos(phases)
+    basis_sin = np.sin(phases)
+    classes = np.arange(len(freqs)) % 12
     chroma = np.zeros((n_frames, 12), dtype=np.float64)
     for n in range(n_frames):
         seg = mono[n * hop : n * hop + frame].astype(np.float64) * window
-        for k, f in enumerate(freqs):
-            re = float(np.dot(seg, np.cos(2.0 * math.pi * f * t)))
-            im = float(np.dot(seg, np.sin(2.0 * math.pi * f * t)))
-            chroma[n, k % 12] += math.hypot(re, im)
+        mags = np.hypot(basis_cos @ seg, basis_sin @ seg)
+        np.add.at(chroma[n], classes, mags)
     row_max = chroma.max(axis=1, keepdims=True)
     row_max[row_max <= 0] = 1.0
     return chroma / row_max
@@ -114,6 +128,9 @@ def harmonic_tension(chroma: np.ndarray, key: dict) -> np.ndarray:
     norms[norms <= 0] = 1.0
     unit = chroma / norms
     distance = 1.0 - unit.dot(centre)
-    dissonant = [1, 6, 8] if major else [1, 6, 10]
+    # Root-relative dissonance: semitone, tritone and the raised fourth /
+    # minor seventh above the KEY ROOT, not absolute C-based pitch classes.
+    offsets = (1, 6, 8) if major else (1, 6, 10)
+    dissonant = [(root + offset) % 12 for offset in offsets]
     diss = chroma[:, dissonant].sum(axis=1) / (chroma.sum(axis=1) + 1e-9)
     return (0.6 * distance + 0.4 * diss).astype(np.float64)

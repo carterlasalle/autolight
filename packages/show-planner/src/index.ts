@@ -30,7 +30,8 @@ export { blendRgb } from "./color.js";
 export * from "./primitives.js";
 
 function toPlannerStyle(style: ShowStyle): PlannerStyle {
-  const base = NEW_STYLES[style.id] ?? NEW_STYLES["club"]!;
+  const named = Object.hasOwn(NEW_STYLES, style.id) ? NEW_STYLES[style.id] : undefined;
+  const base = named ?? NEW_STYLES["club"]!;
 
   return {
     ...base,
@@ -93,7 +94,9 @@ const SECTION_ENERGY: Record<string, number> = {
 };
 
 export function sectionEnergy(kind: string): number {
-  return SECTION_ENERGY[kind] ?? 0.5;
+  // Own-property lookup: a section kind like "toString" must not resolve a
+  // prototype member as an energy value.
+  return Object.hasOwn(SECTION_ENERGY, kind) ? SECTION_ENERGY[kind]! : 0.5;
 }
 
 export function motifVariant(kind: string, occurrence: number): "forward" | "reverse" {

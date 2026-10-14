@@ -1,14 +1,8 @@
 import type { Fixture } from "@autolight/contracts";
-import { applyLogicalOrder, fitRunMapping, logicalToPhysical, orderLogical, rotateLogicalZero, topologyForRuns } from "./placement.js";
-import type { MappedCell } from "./placement.js";
-import { computeFields, fieldCellsFromMap, pointCells, projectToOutline, runPointAt } from "./fields.js";
-import type { FieldCell } from "./fields.js";
-import { derivedGroups, resolveSelector, splitWeights, zoneWeights } from "./groups.js";
-import { classifyDirection, mirrorCheck, runWizardOnSim } from "./wizard.js";
-import { exportVenue, importVenue, outlineRuns, setLogicalZero } from "./venue.js";
-import type { Venue } from "./venue.js";
-import { normalizeOutline, perimeterLength, polygonArea, polygonCentroid, rectangleRoom, samplePath, validateRoom } from "./room.js";
-import { REFERENCE_ROOMS, clubRectangle, curvedRoom, fieldCellsForReference, lRoom, referenceById, squareChunks, squareMirrored, squareRoom } from "./reference.js";
+import { computeFields } from "./fields.js";
+import { classifyDirection, mirrorCheck } from "./wizard.js";
+import { normalizeOutline, perimeterLength, polygonArea, polygonCentroid, rectangleRoom, validateRoom } from "./room.js";
+import { REFERENCE_ROOMS, fieldCellsForReference, referenceById, squareMirrored } from "./reference.js";
 
 export {
   computeFields,
@@ -40,17 +34,18 @@ export function globalCellOrder(fixtures: Fixture[]): OrderedCell[] {
 
 export interface FixtureCellRef { fixtureId: string; cellIndex: number }
 
-interface PlacedCell extends FixtureCellRef { x: number; y: number }
-
 export function resolveTarget(fixtures: Fixture[], target: string): FixtureCellRef[] {
   if (target === "ALL") return globalCellOrder(fixtures);
   const order = globalCellOrder(fixtures);
+  const third = Math.ceil(order.length / 3);
 
-  if (target === "LEFT") return order.filter((_, i) => i < Math.ceil(order.length / 3));
+  if (target === "LEFT") return order.filter((_, i) => i < third);
 
-  if (target === "RIGHT") return order.filter((_, i) => i >= order.length - Math.ceil(order.length / 3));
+  // The right third never starts before the left third ends: with fewer
+  // than three cells, Left and Right must not share the same cell.
+  if (target === "RIGHT") return order.filter((_, i) => i >= order.length - third && i >= third);
 
-  if (target === "CENTER") return order.filter((_, i) => i >= Math.ceil(order.length / 3) && i < order.length - Math.ceil(order.length / 3));
+  if (target === "CENTER") return order.filter((_, i) => i >= third && i < order.length - third);
 
   return fixtures
     .filter((f) => (f.groups ?? []).includes(target))

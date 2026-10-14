@@ -89,7 +89,7 @@ def test_harmonic_tension_rises_on_dominant():
     c = chord([261.63, 329.63, 392.00])
     g = chord([196.00, 246.94, 293.66, 349.23])
     seq = np.concatenate([c, g, c])
-    chroma = cqt_chroma(seq, sr)
+    chroma = cqt_chroma(seq, rate=sr)
     key = estimate_key(chroma)
     assert key["confidence"] > 0
     tension = harmonic_tension(chroma, key)

@@ -32,6 +32,10 @@ describe("T-PLAN-04 primitive library", () => {
   it("rejects unknown primitive types with a typed error, not a silent skip", () => {
     expect(() => requirePrimitive("Nope")).toThrow(UnknownPrimitiveError);
     expect(isPrimitiveName("Nope")).toBe(false);
+    // Prototype members are not primitives: "toString" must never resolve.
+    expect(isPrimitiveName("toString")).toBe(false);
+    expect(isPrimitiveName("constructor")).toBe(false);
+    expect(() => requirePrimitive("toString")).toThrow(UnknownPrimitiveError);
   });
 
   it("gates orbits on topology and strobes on fixture rate", () => {
@@ -40,5 +44,7 @@ describe("T-PLAN-04 primitive library", () => {
     expect(checkTopology("Breathe", "split-mirrored")).toBeNull();
     expect(checkFixtureRate("StrobeBurst", 10)).toMatch(/at least 24/);
     expect(checkFixtureRate("StrobeBurst", 30)).toBeNull();
+    // An unknown rate cannot prove a 24 Hz primitive: it must fail loudly.
+    expect(checkFixtureRate("StrobeBurst", null)).toMatch(/unknown/);
   });
 });

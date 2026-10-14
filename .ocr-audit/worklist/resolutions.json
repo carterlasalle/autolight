@@ -2840,5 +2840,145 @@
       "verdict": "documented-precondition",
       "evidence": "DEFERRED: same sibling renderer work; see above."
     }
+  ],
+  "batch-36": [
+    {
+      "path": "packages/show-mixer/src/pipeline.test.ts",
+      "line": 59,
+      "verdict": "fixed",
+      "evidence": "planA's cues are genuinely different (half intensity) instead of a value-identical map."
+    },
+    {
+      "path": "packages/show-mixer/src/pipeline.test.ts",
+      "line": 70,
+      "verdict": "fixed",
+      "evidence": "The tautology is replaced by provenance: survivor types equal B's in-window cues and intensities equal cue.weight-scaled values exactly."
+    },
+    {
+      "path": "packages/show-mixer/src/pipeline.test.ts",
+      "line": 34,
+      "verdict": "fixed",
+      "evidence": "saveTrack persists the real identity JSON and duration from the fixture."
+    },
+    {
+      "path": "packages/show-mixer/src/pipeline.test.ts",
+      "line": 52,
+      "verdict": "fixed",
+      "evidence": "The render follows the elected owner (ownerPlan), connecting impactOwner to the frames."
+    },
+    {
+      "path": "packages/show-mixer/src/pipeline.test.ts",
+      "line": 11,
+      "verdict": "fixed",
+      "evidence": "Single simulator import."
+    },
+    {
+      "path": "packages/show-mixer/src/pipeline.test.ts",
+      "line": 13,
+      "verdict": "fixed",
+      "evidence": "One loadFixture helper (schema-parsed) + an explicit beat-120 precondition assert."
+    },
+    {
+      "path": "packages/show-planner/src/primitives.ts",
+      "line": 308,
+      "verdict": "fixed",
+      "evidence": "All name/key lookups use Object.hasOwn: toString/constructor can no longer resolve prototype members as primitives or params. Pinned by tests."
+    },
+    {
+      "path": "packages/show-planner/src/primitives.ts",
+      "line": 286,
+      "verdict": "fixed",
+      "evidence": "RESTRAINT_COST and REQUIRED_RATE_HZ tables replace the nested ternaries."
+    },
+    {
+      "path": "packages/show-planner/src/primitives.ts",
+      "line": 339,
+      "verdict": "fixed",
+      "evidence": "checkFixtureRate fails loudly on a null rate for rate-requiring primitives; test added."
+    },
+    {
+      "path": "packages/show-runtime/src/fastpath.test.ts",
+      "line": 96,
+      "verdict": "fixed",
+      "evidence": "The wall-clock bound is gone; the instrumented totalMs contract remains."
+    },
+    {
+      "path": "packages/show-runtime/src/fastpath.test.ts",
+      "line": 68,
+      "verdict": "fixed",
+      "evidence": "beforeEach clears the process-global fast-path LRU."
+    },
+    {
+      "path": "packages/show-runtime/src/fastpath.test.ts",
+      "line": 114,
+      "verdict": "fixed",
+      "evidence": "Store.deleteAllShowPlans() owns the table name; the test no longer runs schema SQL."
+    },
+    {
+      "path": "packages/show-runtime/src/fastpath.test.ts",
+      "line": 48,
+      "verdict": "fixed",
+      "evidence": "seedStore reuses seedKey: one key derivation."
+    },
+    {
+      "path": "packages/show-runtime/src/fastpath.test.ts",
+      "line": 149,
+      "verdict": "fixed",
+      "evidence": "The no-future fallback also asserts waitBeats 0 and the boundary kind."
+    },
+    {
+      "path": "packages/show-runtime/src/fastpath.test.ts",
+      "line": 127,
+      "verdict": "fixed",
+      "evidence": "miss.installed is asserted true: the model really installs on the no-plan path."
+    },
+    {
+      "path": "packages/venue/src/index.ts",
+      "line": 47,
+      "verdict": "fixed",
+      "evidence": "The right third never starts before the left third ends: Left and Right cannot share the single cell at n=1; partition stays complete."
+    },
+    {
+      "path": "packages/venue/src/venue.test.ts",
+      "line": 13,
+      "verdict": "fixed",
+      "evidence": "Two cases, one deviation each (wrong format with valid version; right format with wrong version)."
+    },
+    {
+      "path": "packages/venue/src/venue.test.ts",
+      "line": 7,
+      "verdict": "fixed",
+      "evidence": "The round trip goes through JSON.parse(JSON.stringify(...)), so a non-serializing passthrough fails."
+    },
+    {
+      "path": "packages/venue/src/venue.test.ts",
+      "line": 19,
+      "verdict": "fixed",
+      "evidence": "One evaluation; plus the 1.3 wraps-to-0.3 case."
+    },
+    {
+      "path": "analysis/src/autolight_analysis/harmony.py",
+      "line": 117,
+      "verdict": "fixed",
+      "evidence": "Dissonance indices are root-relative; a non-C key now measures its own semitone/tritone classes."
+    },
+    {
+      "path": "analysis/src/autolight_analysis/harmony.py",
+      "line": 69,
+      "verdict": "fixed",
+      "evidence": "The cos/sin basis is built once (outer of freqs x t); per frame only two matvecs. cqt_chroma took kwargs-only window shape (CqtBands) to clear PLR0913/0917; both callers updated."
+    },
+    {
+      "path": "analysis/tests/test_decode.py",
+      "line": 60,
+      "verdict": "fixed",
+      "evidence": "Only a missing encoder skips (classified from captured stderr); other transcode failures raise. Dead continue removed."
+    },
+    {
+      "path": "analysis/tests/test_decode.py",
+      "line": 72,
+      "verdict": "fixed",
+      "evidence": "Absolute ~1.0 s duration asserted alongside the mutual agreement."
+    }
   ]
 }

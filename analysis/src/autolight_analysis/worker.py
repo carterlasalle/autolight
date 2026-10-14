@@ -236,7 +236,7 @@ def analyze_job(
         )
         frames["stem_source"] = stem_source  # recorded, stripped before artifact
         _mark(inputs, "dsp.features", "present", "22 spec-18 features")
-        chroma = cqt_chroma(mono, rate)
+        chroma = cqt_chroma(mono, rate=rate)
         key = estimate_key(chroma)
         tension_frames = harmonic_tension(chroma, key)
         subdivisions = int(cfg.get("analysis.aggregate.subdivisions", 4))
