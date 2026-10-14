@@ -3521,6 +3521,18 @@
       "line": 29,
       "verdict": "documented-precondition",
       "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "apps/desktop/src/routes/library/library-rows.test.ts",
+      "line": 17,
+      "verdict": "fixed-earlier",
+      "evidence": "NEEDS ANALYSIS is asserted for both branches (track:null without analysis; adaptive non-ready model) in 'grades every spec status without guessing'. Verified 2026-10-14."
+    },
+    {
+      "path": "apps/desktop/src/routes/library/library-rows.test.ts",
+      "line": 45,
+      "verdict": "fixed-earlier",
+      "evidence": "Boundary cases now pinned: active-but-started reads 'now', startBeat===beat reads 'now', one beat out reads 'in 1 beats', and the limit slices per deck. Verified 2026-10-14."
     }
   ],
   "batch-44": [
@@ -3668,6 +3680,12 @@
       "line": 40,
       "verdict": "documented-precondition",
       "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "packages/serato/package.json",
+      "line": 13,
+      "verdict": "fixed",
+      "evidence": "zod ^3.23.8 declared as a direct runtime dependency (replay.ts imports it); yarn.lock gained the one workspace entry by hand (a full install would have absorbed a sibling's pending ast-grep bump). Serato suite green."
     }
   ],
   "batch-49": [

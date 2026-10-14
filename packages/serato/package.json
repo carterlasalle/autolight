@@ -14,7 +14,8 @@
     "@autolight/contracts": "^0.1.0",
     "@autolight/rekordbox-library": "^0.1.0",
     "@autolight/rekordbox-live": "^0.1.0",
-    "serato-connect": "^1.4.6"
+    "serato-connect": "^1.4.6",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@autolight/storage": "^0.1.0",

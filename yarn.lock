@@ -321,6 +321,7 @@ __metadata:
     serato-connect: "npm:^1.4.6"
     typescript: "npm:^5.6.3"
     vitest: "npm:^4.1.11"
+    zod: "npm:^3.23.8"
   languageName: unknown
   linkType: soft
 
