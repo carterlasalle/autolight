@@ -1,4 +1,66 @@
 {
+  "batch-07": [
+    {
+      "path": "packages/rekordbox-live/src/prolink-provider.ts",
+      "line": 114,
+      "verdict": "fixed-earlier",
+      "evidence": "The prolink socket enables broadcast before any 255.255.255.255 keepalive (setBroadcast(true) with comment). Verified 2026-10-14."
+    },
+    {
+      "path": "packages/rekordbox-live/src/providers.ts",
+      "line": 250,
+      "verdict": "fixed-earlier",
+      "evidence": "A generation bump deletes the cached beat and qualities ('A new generation starts clean'). Verified 2026-10-14."
+    },
+    {
+      "path": "packages/storage/src/session.ts",
+      "line": 62,
+      "verdict": "fixed-earlier",
+      "evidence": "recordBytes uses Buffer.byteLength utf8 with a comment on the UTF-16 undercount. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/storage/src/session.ts",
+      "line": 46,
+      "verdict": "fixed-earlier",
+      "evidence": "stableHash hashes canonicalJson (recursively sorted keys), so insertion order cannot change hashes. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/storage/src/session.ts",
+      "line": 175,
+      "verdict": "fixed-earlier",
+      "evidence": "verifyFrames skips missing tick-inputs and reports them as mismatched instead of rendering undefined. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/track-identity/src/fingerprint.ts",
+      "line": 51,
+      "verdict": "fixed-earlier",
+      "evidence": "AcousticOptions is declared once. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/track-identity/src/fingerprint.ts",
+      "line": 83,
+      "verdict": "fixed-earlier",
+      "evidence": "landmarkHashes validates windowSize/hopSize positive-finite with a RangeError before the loop. Verified 2026-10-14."
+    },
+    {
+      "path": "analysis/tests/test_config_bridge.py",
+      "line": 37,
+      "verdict": "fixed-earlier",
+      "evidence": "test_defaults_match_schema now compares each schema default against the registry value, not just key sets. Verified 2026-10-14."
+    },
+    {
+      "path": "apps/desktop/src/app/resolve-live.ts",
+      "line": 211,
+      "verdict": "fixed-earlier",
+      "evidence": "The follow/ax poll is guarded by a refetching flag, so round-trips cannot overlap. Verified 2026-10-14."
+    },
+    {
+      "path": "apps/desktop/src/app/resolve-live.ts",
+      "line": 22,
+      "verdict": "fixed-earlier",
+      "evidence": "LoadedDeck no longer carries deckId; literals build only track/plan/state. Verified 2026-10-14."
+    }
+  ],
   "batch-06": [
     {
       "path": "apps/desktop/electron/services/library-service.ts",
