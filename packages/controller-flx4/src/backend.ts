@@ -25,7 +25,7 @@ export type Flx4BackendName = "native" | "windows-midi-services" | "webmidi";
 export type Flx4BackendMode = "auto" | Flx4BackendName;
 
 /** DS-13 order for auto. */
-export const AUTO_BACKEND_ORDER: readonly Flx4BackendName[] = ["native", "windows-midi-services", "webmidi"];
+const AUTO_BACKEND_ORDER: readonly Flx4BackendName[] = ["native", "windows-midi-services", "webmidi"];
 
 export interface Flx4PortInfo {
   id: string;
@@ -113,7 +113,10 @@ export class Flx4MessageRing {
   }
 
   recent(limit = 32): Flx4TimedMessage[] {
-    return this.items.slice(-limit);
+    // slice(-0) is slice(0): a zero limit used to return the whole buffer.
+    if (!Number.isFinite(limit) || limit <= 0) return [];
+
+    return this.items.slice(-Math.floor(limit));
   }
 
   get dropped(): number {
@@ -154,9 +157,9 @@ export interface Flx4ServiceOptions {
   eventCapacity?: number;
 }
 
-export const DEFAULT_PORT_MATCH = "DDJ-FLX4";
+const DEFAULT_PORT_MATCH = "DDJ-FLX4";
 
-export const DEFAULT_HOTPLUG_POLL_MS = 2000;
+const DEFAULT_HOTPLUG_POLL_MS = 2000;
 
 const WINDOWS_HELD_REMEDY =
   "Rekordbox is holding the FLX4 input; install Windows MIDI Services or use a Rekordbox source that does not need the controller";
@@ -184,6 +187,11 @@ export class Flx4ControllerService {
   private remedy: string | null = null;
   private lastMessageAtNs: bigint | null = null;
   private messagesReceived = 0;
+  // The interval fires poll() without awaiting it; without a guard two slow
+  // passes overlap. The generation counts stop() calls: a poll suspended on
+  // an await must not reopen the port after teardown.
+  private polling = false;
+  private generation = 0;
 
   constructor(opts: Flx4ServiceOptions = {}) {
     this.mode = opts.mode ?? "auto";
@@ -211,6 +219,9 @@ export class Flx4ControllerService {
   }
 
   async stop(): Promise<void> {
+    this.generation += 1;
+    this.polling = false;
+
     if (this.timer !== null) {
       this.scheduler.clearInterval(this.timer);
       this.timer = null;
@@ -224,20 +235,44 @@ export class Flx4ControllerService {
 
   /** One hotplug pass: closes a vanished port, reconnects a returning one. */
   async poll(): Promise<void> {
-    if (this.driver !== null && this.input !== null) {
-      const ports = await this.driver.listPorts().catch(() => [] as Flx4PortInfo[]);
+    if (this.polling) return;
+    this.polling = true;
+    const generation = this.generation;
 
-      if (ports.some((port) => port.id === this.input?.port.id)) return;
-      this.closeInput();
-      this.connection = "lost";
-      this.reason = "the controller port disappeared";
-      this.remedy = "reconnect the DDJ-FLX4; AutoLight reopens it automatically";
-      this.notifyStatus();
+    try {
+      if (this.driver !== null && this.input !== null) {
+        const known = this.input;
+        let ports: Flx4PortInfo[];
 
-      return;
+        try {
+          ports = await this.driver.listPorts();
+        } catch (error) {
+          // A failed listPorts is not a vanished port: keep the live input
+          // and report the cause instead of a false `lost` transition.
+          if (generation !== this.generation) return;
+          this.reason = error instanceof Error ? error.message : String(error);
+          this.remedy = "the MIDI backend errored while listing ports; check the driver";
+          this.notifyStatus();
+
+          return;
+        }
+
+        if (generation !== this.generation) return;
+
+        if (ports.some((port) => port.id === known.port.id)) return;
+        this.closeInput();
+        this.connection = "lost";
+        this.reason = "the controller port disappeared";
+        this.remedy = "reconnect the DDJ-FLX4; AutoLight reopens it automatically";
+        this.notifyStatus();
+
+        return;
+      }
+      if (generation !== this.generation) return;
+      await this.selectAndOpen();
+    } finally {
+      this.polling = false;
     }
-
-    await this.selectAndOpen();
   }
 
   status(): Flx4ControllerStatus {
@@ -260,7 +295,10 @@ export class Flx4ControllerService {
   }
 
   recentEvents(limit = 32): Flx4Event[] {
-    return this.events.slice(-limit);
+    // Same slice(-0) trap as the ring: a zero limit must return nothing.
+    if (!Number.isFinite(limit) || limit <= 0) return [];
+
+    return this.events.slice(-Math.floor(limit));
   }
 
   recentMessages(limit = 32): Flx4TimedMessage[] {
@@ -309,10 +347,12 @@ export class Flx4ControllerService {
 
   private async selectAndOpen(): Promise<void> {
     if (this.input !== null) return;
+    const startGeneration = this.generation;
     const candidates = this.mode === "auto" ? [...AUTO_BACKEND_ORDER] : [this.mode];
     const attempts: Flx4BackendAttempt[] = [];
     let lastUnavailable: { reason: string; remedy: string } | null = null;
     let sawPort = false;
+    let probeFailed = false;
 
     for (const name of candidates) {
       const driver = this.driverFor(name);
@@ -322,13 +362,30 @@ export class Flx4ControllerService {
         reason: error instanceof Error ? error.message : String(error),
       }));
 
+      if (startGeneration !== this.generation) return;
+
       if (!probe.ok) {
         attempts.push({ backend: name, ok: false, reason: probe.reason });
+        // A backend that cannot even load on this machine is unavailable
+        // here: the remedy is that backend's own note (install
+        // @julusian/midi), never the Windows port-held remedy.
+        probeFailed = true;
         lastUnavailable = { reason: probe.reason, remedy: remedyFor(name) };
         continue;
       }
 
-      const ports = await driver.listPorts().catch(() => [] as Flx4PortInfo[]);
+      let ports: Flx4PortInfo[];
+
+      try {
+        ports = await driver.listPorts();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        attempts.push({ backend: name, ok: false, reason: `port listing failed: ${message}` });
+        probeFailed = true;
+        continue;
+      }
+
+      if (startGeneration !== this.generation) return;
       const port = this.matchPort(ports);
 
       if (port === null) {
@@ -343,6 +400,18 @@ export class Flx4ControllerService {
           this.acceptBytes(bytes);
         });
 
+        if (startGeneration !== this.generation) {
+          // stop() ran while the open was in flight: close what we just
+          // opened instead of leaving the service connected after teardown.
+          try {
+            input.close();
+          } catch {
+            // Teardown never throws.
+          }
+
+          return;
+        }
+
         this.driver = driver;
         this.input = input;
         this.attempts = attempts;
@@ -353,6 +422,7 @@ export class Flx4ControllerService {
 
         return;
       } catch (error) {
+        if (startGeneration !== this.generation) return;
         const message = error instanceof Error ? error.message : String(error);
         attempts.push({ backend: name, ok: false, reason: message });
         const heldSingleClient = driver.sharing === "single-client" && this.platform === "win32";
@@ -360,15 +430,20 @@ export class Flx4ControllerService {
       }
     }
 
+    if (startGeneration !== this.generation) return;
     this.attempts = attempts;
 
     if (lastUnavailable !== null) {
       this.connection = "unavailable-on-this-device";
       this.reason = lastUnavailable.reason;
       this.remedy = lastUnavailable.remedy;
-    } else if (sawPort) {
-      this.connection = "failed";
-      this.reason = "the matched port could not be opened by any backend";
+    } else if (sawPort || probeFailed) {
+      // A matched-but-unopenable port is failed; backends that never probed
+      // are failed too (nothing installed), never "held by another client".
+      this.connection = sawPort ? "failed" : "searching";
+      this.reason = sawPort
+        ? "the matched port could not be opened by any backend"
+        : `no backend probed successfully (${attempts.map((a) => `${a.backend}: ${a.reason}`).join("; ")})`;
       this.remedy = null;
     } else {
       this.connection = "searching";

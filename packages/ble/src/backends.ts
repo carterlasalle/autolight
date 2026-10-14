@@ -50,6 +50,18 @@ export class BleBackendUnavailableError extends Error {
   }
 }
 
+/**
+ * The device already holds a connection through this process. This is not a
+ * backend failure: the other backend cannot help, so the selector rethrows
+ * it instead of masking the reason behind a fallback attempt.
+ */
+export class BleDeviceBusyError extends Error {
+  constructor(detail: string) {
+    super(detail);
+    this.name = "BleDeviceBusyError";
+  }
+}
+
 function reasonLabel(reasonClass: BleUnavailableReason): string {
   switch (reasonClass) {
     case "load": return "ble backend failed to load";
@@ -115,7 +127,7 @@ export class BackendSelector {
   report(): { kind: BleBackendKind; available: boolean; reason?: string } {
     const out: { kind: BleBackendKind; available: boolean; reason?: string } = {
       kind: this.deps.primaryKind,
-      available: true,
+      available: this.deps.primaryReason === null,
     };
 
     if (this.deps.primaryReason !== null) out.reason = this.deps.primaryReason;
@@ -126,7 +138,12 @@ export class BackendSelector {
   /** Scan on primary; a throwing scan retries once on the other backend. */
   async scan(timeoutMs: number): Promise<BleAdvertisement[]> {
     try {
-      return await this.deps.primary.scan(timeoutMs);
+      const found = await this.deps.primary.scan(timeoutMs);
+      // A successful primary scan clears a stale failure cause; per-device
+      // overrides keep their own reasons.
+      this.deps.primaryReason = null;
+
+      return found;
     } catch (err) {
       const secondary = this.deps.secondary;
 
@@ -150,6 +167,9 @@ export class BackendSelector {
     try {
       return await this.deps.primary.connect(address);
     } catch (err) {
+      // A busy device is not a backend failure: the same device is already
+      // connected through this backend, so the other backend cannot help.
+      if (err instanceof BleDeviceBusyError) throw err;
       const secondary = this.deps.secondary;
 
       if (secondary === null) throw err;
@@ -165,15 +185,26 @@ export class BackendSelector {
   noteFallback(address: string, reason: string): void {
     const other = this.deps.secondary;
 
-    if (other === null) return;
+    // No secondary: record the failure against the primary so the tile still
+    // shows the typed reason instead of silently dropping it.
+    if (other === null) {
+      this.overrides.set(address, { kind: this.deps.primaryKind, reason });
+
+      return;
+    }
+
     this.overrides.set(address, { kind: other.kind, reason });
   }
 
   async close(): Promise<void> {
-    await this.deps.primary.close();
     const secondary = this.deps.secondary;
+    const targets = [this.deps.primary.close()];
 
-    if (secondary !== null && secondary !== this.deps.primary) await secondary.close();
+    if (secondary !== null && secondary !== this.deps.primary) targets.push(secondary.close());
+    const results = await Promise.allSettled(targets);
+    const failed = results.find((r) => r.status === "rejected");
+
+    if (failed !== undefined && failed.status === "rejected") throw failed.reason;
   }
 }
 
@@ -295,7 +326,9 @@ export class LatestWinsChannel {
 
   send(frame: Uint8Array): void {
     if (this.pending !== null) this.drops += 1;
-    this.pending = frame.slice();
+    // Buffer.prototype.slice shares memory; copy explicitly so later
+    // mutation of the caller's buffer cannot change what take() returns.
+    this.pending = Uint8Array.from(frame);
   }
 
   take(): Uint8Array | null {

@@ -6,7 +6,7 @@ import { baseWeights, crossfaderGainOf, deckWeightOf } from "./index.js";
 
 // P-63-crossfader: hard left gives A 1, B 0; hard right gives A 0, B 1 for the
 // default assignment; the centre follows the curve; THRU ignores the
-// crossfader; and the DS-26 source decides where curve and position come from.
+// crossfader; and the DS-26 source decides where the position comes from.
 
 const track = { id: "t", sourceIds: {} } satisfies TrackIdentity;
 
@@ -15,6 +15,12 @@ function deck(over: Partial<DeckState> = {}): DeckState {
 }
 
 describe("audible weight (P-63)", () => {
+  it("weighs 0 when stopped or with no track loaded", () => {
+    expect(deckWeightOf(deck({ playing: false }), { position: 0 })).toBe(0);
+    expect(deckWeightOf(deck({ track: null }), { position: 0 })).toBe(0);
+    expect(deckWeightOf(deck({ playing: false, track: null }), { position: 1 })).toBe(0);
+  });
+
   it("gives A the hard left and B the hard right for the default assignment", () => {
     expect(deckWeightOf(deck({ deckId: 1 }), { position: 0 })).toBe(1);
     expect(deckWeightOf(deck({ deckId: 2 }), { position: 0 })).toBe(0);
@@ -49,6 +55,12 @@ describe("audible weight (P-63)", () => {
       expect(deckWeightOf(deck({ deckId: 3 }), { position })).toBe(1);
     }
 
+    // THRU gain is 1, but the channel fader and master factor still apply:
+    // 0.5 * 1 * 1.1 = 0.55. At fader 1 the product is 1.1, clamped to 1.
+    expect(deckWeightOf(deck({ deckId: 3, channelFader: 0.5 }), { position: 0.5 })).toBe(0.5);
+    expect(deckWeightOf(deck({ deckId: 3, channelFader: 0.5, master: true }), { position: 0.5 })).toBeCloseTo(0.55, 6);
+    expect(deckWeightOf(deck({ deckId: 3, channelFader: 1, master: true }), { position: 0.5 })).toBe(1);
+
     // A custom assignment moves the deck to the other side.
     const assignment: Record<string, CrossfaderSide> = { "1": "B", "2": "A" };
     expect(deckWeightOf(deck({ deckId: 1 }), { position: 1, crossfader: { assignment } })).toBe(1);
@@ -59,9 +71,11 @@ describe("audible weight (P-63)", () => {
   it("adds the master bonus on top of the curve gain", () => {
     expect(deckWeightOf(deck({ deckId: 2, master: false }), { position: 1 })).toBe(1);
     expect(deckWeightOf(deck({ deckId: 2, channelFader: 0.5, master: true }), { position: 1 })).toBeCloseTo(0.55, 6);
+    // 1 * 1 * 1.1 would be 1.1 without the [0, 1] clamp in deckWeight.
+    expect(deckWeightOf(deck({ deckId: 2, channelFader: 1, master: true }), { position: 1 })).toBe(1);
   });
 
-  it("chooses the curve and position source per DS-26", () => {
+  it("chooses the position source per DS-26", () => {
     expect(resolveCrossfader("auto", { software: 0.2, controller: 0.9 })).toMatchObject({ position: 0.2, source: "software", fellBack: false });
     expect(resolveCrossfader("auto", { controller: 0.9, configured: 0.4 })).toMatchObject({ position: 0.9, source: "controller" });
     expect(resolveCrossfader("auto", { configured: 0.4 })).toMatchObject({ position: 0.4, source: "configured" });
@@ -72,31 +86,30 @@ describe("audible weight (P-63)", () => {
   });
 
   it("stays inside [0, 1] and monotone over a fader sweep (property)", () => {
-    let seed = 12345;
+    // A constant weight would satisfy bounds and monotonicity, so every fader
+    // level also asserts hard-left vs hard-right movement.
+    for (const fader of [0, 0.5, 1]) {
+      let previousA = Number.POSITIVE_INFINITY;
+      let previousB = -1;
 
-    const rand = (): number => {
-      seed = (seed * 1664525 + 1013904223) >>> 0;
+      for (let i = 0; i < 200; i += 1) {
+        const position = (i + 0.5) / 200;
+        const a = deckWeightOf(deck({ deckId: 1, channelFader: fader }), { position });
+        const b = deckWeightOf(deck({ deckId: 2, channelFader: fader }), { position });
+        expect(a).toBeGreaterThanOrEqual(0);
+        expect(a).toBeLessThanOrEqual(1);
+        expect(b).toBeGreaterThanOrEqual(0);
+        expect(b).toBeLessThanOrEqual(1);
+        expect(a).toBeLessThanOrEqual(previousA + 1e-9);
+        expect(b).toBeGreaterThanOrEqual(previousB - 1e-9);
+        previousA = a;
+        previousB = b;
+      }
 
-      return seed / 0x100000000;
-    };
-
-    const fader = rand();
-    const bMaster = rand() > 0.5;
-    let previousA = Number.POSITIVE_INFINITY;
-    let previousB = -1;
-
-    for (let i = 0; i < 200; i += 1) {
-      const position = (i + 0.5) / 200;
-      const a = deckWeightOf(deck({ deckId: 1, channelFader: fader }), { position });
-      const b = deckWeightOf(deck({ deckId: 2, channelFader: fader, master: bMaster }), { position });
-      expect(a).toBeGreaterThanOrEqual(0);
-      expect(a).toBeLessThanOrEqual(1);
-      expect(b).toBeGreaterThanOrEqual(0);
-      expect(b).toBeLessThanOrEqual(1);
-      expect(a).toBeLessThanOrEqual(previousA + 1e-9);
-      expect(b).toBeGreaterThanOrEqual(previousB - 1e-9);
-      previousA = a;
-      previousB = b;
+      expect(deckWeightOf(deck({ deckId: 1, channelFader: fader }), { position: 0 })).toBe(fader);
+      expect(deckWeightOf(deck({ deckId: 1, channelFader: fader }), { position: 1 })).toBe(0);
+      expect(deckWeightOf(deck({ deckId: 2, channelFader: fader }), { position: 0 })).toBe(0);
+      expect(deckWeightOf(deck({ deckId: 2, channelFader: fader }), { position: 1 })).toBe(fader);
     }
   });
 

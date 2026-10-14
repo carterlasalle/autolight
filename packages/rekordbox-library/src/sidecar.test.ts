@@ -5,7 +5,7 @@
 // fixture, including a SQLCipher-encrypted copy of it. Row counts must agree
 // with the TypeScript reader and a write attempt must be rejected.
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -110,7 +110,7 @@ describe("sidecar client", () => {
   });
 
   it("builds a reader from an injected dump without an interpreter", async () => {
-    const { dbPath, sharePath } = fixture();
+    const { dbPath } = fixture();
     const payload = readFixturePayload(dbPath);
 
     const reader = await SidecarReader.open({
@@ -124,13 +124,15 @@ describe("sidecar client", () => {
     expect(reader.dbVersion()).toBe("6000");
     expect(reader.trackRows({ limit: 2 }).map((row) => row["ID"])).toEqual(["101", "102"]);
     expect(reader.trackRows({ limit: 10 }).map((row) => row["Title"])).toEqual(["Aurora", "Basalt", "Cinder", "Delta"]);
-    expect(reader.songPlaylistRows("p2").map((entry) => entry.trackNo)).toEqual([1, 1]);
+    // TrackNo mirrors real Rekordbox sequential numbering (batch-33), so the
+    // ORDER BY TrackNo flow is pinned: s3 (content 103) first, s4 (101) second.
+    expect(reader.songPlaylistRows("p2").map((entry) => [entry.rekordboxId, entry.trackNo])).toEqual([["103", 1], ["101", 2]]);
   });
 });
 
 describe.skipIf(!UV)("sidecar against the real interpreter", () => {
   it("agrees with the TypeScript reader row for row and rejects a write", async () => {
-    const { root, dbPath, sharePath, summary } = fixture();
+    const { dbPath, sharePath, summary } = fixture();
     const sidecar = await SidecarReader.open({ dbPath, encrypted: false, probeWrite: true });
     const reader = await RekordboxReader.open({ dbPath, sharePath });
 

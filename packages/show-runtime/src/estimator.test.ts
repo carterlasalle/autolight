@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BeatEstimator, ESTIMATOR_DEFAULTS, QUALITY_WEIGHT, type ObservationQuality } from "@autolight/dj-core";
+import { BeatEstimator, ESTIMATOR_DEFAULTS, QUALITY_WEIGHT, exceedsSeekThreshold, type ObservationQuality } from "@autolight/dj-core";
 
 // P-57-estimator: noisy 30 Hz observations with jitter and loss give a beat
 // trace with error below runtime.estimator.maxErrorMs (20 ms) and zero
@@ -108,8 +108,12 @@ describe("estimator (P-57)", () => {
     const result = run(samples);
     const settled = result.errorsMs.slice(30);
     expect(result.seeks).toBe(0);
-    expect(Math.max(...settled)).toBeLessThan(MAX_ERROR_MS);
+    expect(settled.length).toBeGreaterThan(0);
     expect(result.backward).toBe(0);
+    for (let i = 1; i < result.beats.length; i += 1) {
+      expect(result.beats[i]!).toBeGreaterThanOrEqual(result.beats[i - 1]! - 1e-9);
+    }
+    expect(Math.max(...settled)).toBeLessThan(MAX_ERROR_MS);
   });
 
   it("tracks pitch changes of plus or minus 8 and 16 percent", () => {
@@ -128,15 +132,17 @@ describe("estimator (P-57)", () => {
         rate: (nowNs) => (nowNs < changeNs ? BEATS_PER_SECOND : BEATS_PER_SECOND * pitch),
       });
 
+      const tail = result.errorsMs.slice(-120);
+      expect(tail.length, `pitch ${pitch}`).toBeGreaterThan(0);
       expect(result.seeks, `pitch ${pitch}`).toBe(0);
-      expect(Math.max(...result.errorsMs.slice(-120)), `pitch ${pitch}`).toBeLessThan(MAX_ERROR_MS);
+      expect(Math.max(...tail), `pitch ${pitch}`).toBeLessThan(MAX_ERROR_MS);
       expect(result.backward, `pitch ${pitch}`).toBe(0);
     }
   });
 
   it("weights the correction by observation quality", () => {
     // A 5 ms phase step at frame 15: the same error, corrected by both
-    // qualities, and the exact time corrects twice as fast.
+    // qualities, and the exact weight corrects proportionally faster.
     const samples = trace({ seed: 23, seconds: 2, jitterMs: 0, pitch: () => 1, lossEvery: 0 });
     const stepAt = 15;
     const stepBeat = 0.01;
@@ -151,9 +157,12 @@ describe("estimator (P-57)", () => {
     expect(estimated.seeks).toBe(0);
     expect(QUALITY_WEIGHT.exact).toBeGreaterThan(QUALITY_WEIGHT.estimated);
     expect(exact.corrected[stepAt]!).toBeGreaterThan(0);
-    expect(exact.corrected[stepAt]!).toBeCloseTo(estimated.corrected[stepAt]! * 2, 3);
+    const expectedRatio = QUALITY_WEIGHT.exact / QUALITY_WEIGHT.estimated;
+    expect(exact.corrected[stepAt]!).toBeCloseTo(estimated.corrected[stepAt]! * expectedRatio, 3);
     expect(exact.errorsMs[stepAt + 2]!).toBeLessThan(estimated.errorsMs[stepAt + 2]!);
-    expect(Math.max(...estimated.errorsMs.slice(-20))).toBeLessThan(MAX_ERROR_MS);
+    const tail = estimated.errorsMs.slice(-20);
+    expect(tail.length).toBeGreaterThan(0);
+    expect(Math.max(...tail)).toBeLessThan(MAX_ERROR_MS);
   });
 
   it("turns a large error into a transport event, not a correction", () => {
@@ -171,7 +180,10 @@ describe("estimator (P-57)", () => {
 
     expect(seek.seeked).toBe(true);
     expect(seek.beat).toBe(300);
-    // 150 ms of error at 2 beats/s (0.3 beats) stays a smooth correction.
+    // A small error stays a smooth correction: after the reset the estimator
+    // has already advanced ~1 frame (~0.067 beats), so the error here is
+    // 0.3 - 0.067 ~= 0.233 beats (~117 ms), below both thresholds. The
+    // inclusive boundary itself is pinned on exceedsSeekThreshold below.
     estimator.reset(0, 0n);
 
     const small = estimator.observe({
@@ -184,15 +196,32 @@ describe("estimator (P-57)", () => {
 
     expect(small.seeked).toBe(false);
     expect(small.corrected).toBeGreaterThan(0);
+    // exceedsSeekThreshold is inclusive on both axes: exactly 150 ms at
+    // 2 beats/s is not a seek, one ulp over is. The time bound corresponds
+    // to 0.3 beats at this rate, so the beats boundary is pinned with a
+    // wide time bound: the OR axes are independent, and at 2 beats/s a
+    // 0.5-beat error measures 250 ms which the default 150 ms axis would
+    // (correctly) flag as a seek on its own.
+    expect(exceedsSeekThreshold(0, 0.3, BEATS_PER_SECOND)).toBe(false);
+    expect(exceedsSeekThreshold(0, 0.3 + 1e-9, BEATS_PER_SECOND)).toBe(true);
+    const beatsOnly = { beats: ESTIMATOR_DEFAULTS.seekThresholdBeats, ms: 1000 };
+
+    expect(exceedsSeekThreshold(0, ESTIMATOR_DEFAULTS.seekThresholdBeats, BEATS_PER_SECOND, beatsOnly)).toBe(false);
+    expect(exceedsSeekThreshold(0, ESTIMATOR_DEFAULTS.seekThresholdBeats + 1e-9, BEATS_PER_SECOND, beatsOnly)).toBe(true);
   });
 
   it("holds a paused deck and corrects it in place", () => {
     const estimator = new BeatEstimator(64, ESTIMATOR_DEFAULTS);
     const paused = { quality: "exact" as const, playing: false, beatsPerSecond: BEATS_PER_SECOND };
     expect(estimator.observe({ beat: 64, nowNs: 0n, ...paused }).beat).toBe(64);
-    estimator.observe({ beat: 64, nowNs: 30_000_000n, ...paused });
+    // No nudge: a paused deck holds exactly in place.
+    expect(estimator.observe({ beat: 64, nowNs: 30_000_000n, ...paused }).beat).toBe(64);
+    // A 0.2-beat nudge one frame later is slew-capped, not adopted outright:
+    // maxSlewBeatsPerSec (0.08) * 0.03 s = 0.0024 beats of correction.
+    const intervalS = 0.03;
+    const expected = 64 + ESTIMATOR_DEFAULTS.maxSlewBeatsPerSec * intervalS;
     const nudged = estimator.observe({ beat: 64.2, nowNs: 60_000_000n, ...paused });
-    expect(nudged.beat).toBeGreaterThan(64);
-    expect(nudged.beat).toBeLessThanOrEqual(64.2);
+    expect(nudged.seeked).toBe(false);
+    expect(nudged.beat).toBeCloseTo(expected, 9);
   });
 });

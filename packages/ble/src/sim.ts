@@ -16,12 +16,12 @@ import {
   decodeBleFrame,
   decodeHostColor,
   encodeBleFrame,
-  encodeHostColor,
   parseBleAck,
 } from "./commands.js";
 import { parseBleAdvertisement, type BleAdvertisement, type BleScanInput } from "./scan.js";
 import type { BleAdapter, BleBackendKind, BleConnection, BleNotifyHandler } from "./backends.js";
-import { bleV2Decrypt, type BleV2Key } from "./encrypted.js";
+import { BleDeviceBusyError } from "./backends.js";
+import type { BleV2Key } from "./encrypted.js";
 
 /** Decodes a 20-byte E7 handshake frame locally; null on any other shape. */
 function decodeHandshakeFrame(frame: Uint8Array): { cmd: number; payload: Uint8Array } | null {
@@ -126,7 +126,7 @@ export class SimPeripheral {
   handleConnect(): void {
     if (this.options.failConnect === true) throw new Error(`sim ${this.options.address} refused the connection`);
 
-    if (this.connected) throw new Error(`sim ${this.options.address} allows one connection at a time`);
+    if (this.connected) throw new BleDeviceBusyError(`sim ${this.options.address} allows one connection at a time`);
     this.connected = true;
     this.metrics.connects += 1;
   }
@@ -410,7 +410,7 @@ export class SimBleAdapter implements BleAdapter {
     peripheral.handleConnect();
     const kind = this.kind;
     const clock = this.clock;
-    const adapter = this;
+    const closed = this.closed;
 
     return {
       address,
@@ -423,7 +423,7 @@ export class SimBleAdapter implements BleAdapter {
       },
       async disconnect(): Promise<void> {
         peripheral.handleDisconnect();
-        adapter.closed.push(address);
+        closed.push(address);
       },
     };
   }
