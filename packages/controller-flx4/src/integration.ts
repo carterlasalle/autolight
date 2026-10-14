@@ -39,9 +39,9 @@ import { confirmAudible } from "./index.js";
 import type { Flx4Event } from "./map.js";
 import type { Flx4Signal } from "./signals.js";
 
-export type Flx4FeedDeck = 1 | 2;
+type Flx4FeedDeck = 1 | 2;
 
-export type Flx4FeedControl =
+type Flx4FeedControl =
   | "play"
   | "cue"
   | "sync"
@@ -74,7 +74,7 @@ export interface Flx4FeedOptions {
   capacity?: number;
 }
 
-export const FLX4_FEED_DEFAULT_CAPACITY = 256;
+const FLX4_FEED_DEFAULT_CAPACITY = 256;
 
 // Structural conversion from the deck-aware decoder: deck comes from the
 // MIDI channel via the map (`event.deck`), never from the value. Jog deltas
@@ -344,7 +344,7 @@ export function subscribeServiceToComposite(
   };
 }
 
-export type ExpressiveHintKind =
+type ExpressiveHintKind =
   | "fader-rise"
   | "filter-sweep"
   | "transport"
@@ -374,7 +374,7 @@ export interface HintDetectorOptions {
   enabled?: readonly ExpressiveHintKind[];
 }
 
-export const HINT_DEFAULTS = {
+const HINT_DEFAULTS = {
   filterWindowMs: 1500,
   restraintWindowMs: 8000,
   enabled: ["fader-rise", "filter-sweep", "transport", "loop-change", "roll", "eq-kill"] as const,

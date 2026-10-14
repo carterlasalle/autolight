@@ -249,7 +249,7 @@ export interface WeightOptions {
 }
 
 // mixer.weight.masterBonus default.
-export const DEFAULT_MASTER_BONUS = 0.1;
+const DEFAULT_MASTER_BONUS = 0.1;
 
 // Weight per deck from channel fader, crossfader position through assignment
 // and curve, playing state, and master status (spec 63).

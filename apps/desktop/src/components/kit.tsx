@@ -417,7 +417,7 @@ export function ConfigField({ def }: { def: ConfigValue }): JSX.Element {
 }
 
 // ---------------------------------------------------------------- decision switch
-export type DecisionMode = { id: string; label: string; measurement: string };
+type DecisionMode = { id: string; label: string; measurement: string };
 
 export interface Decision {
   id: string;

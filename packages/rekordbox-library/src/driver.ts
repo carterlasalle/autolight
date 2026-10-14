@@ -45,7 +45,7 @@ export interface ReadOnlyDb {
   readonly raw: unknown;
 }
 
-export const CIPHER_MODULE = "better-sqlite3-multiple-ciphers";
+const CIPHER_MODULE = "better-sqlite3-multiple-ciphers";
 
 interface StatementLike {
   all(params: SqlParams): SqlRow[];

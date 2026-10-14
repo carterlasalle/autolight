@@ -12,14 +12,14 @@
 import { statSync } from "node:fs";
 import { dirname, isAbsolute, join } from "node:path";
 
-export interface FileFacts {
+interface FileFacts {
   path: string;
   exists: boolean;
   sizeBytes: number | null;
   mtimeMs: number | null;
 }
 
-export type TrackFileStatus = "audio-ok" | "audio-missing" | "anlz-ok" | "anlz-missing" | "anlz-partial";
+type TrackFileStatus = "audio-ok" | "audio-missing" | "anlz-ok" | "anlz-missing" | "anlz-partial";
 
 export interface AnlzResolution {
   /** ANLZ directory (share-relative path resolved to absolute), when the row has one. */

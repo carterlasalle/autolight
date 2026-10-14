@@ -8,7 +8,7 @@ import { ServiceTracker, messageOf, type Service, type ServiceStatus } from "./b
 // (DS-15). Reader adapters do the parsing; this service only probes roots,
 // watches them and reports what is actually readable.
 
-export type LibraryProvider = "rekordbox" | "serato";
+type LibraryProvider = "rekordbox" | "serato";
 
 export interface LibraryRoot {
   provider: LibraryProvider;
@@ -41,7 +41,7 @@ export interface LibraryServiceOptions {
 // Default roots per provider: rekordbox keeps its library under
 // Pioneer/rekordbox (macOS puts it under ~/Library), Serato under
 // ~/Music/_Serato_. Candidates are probed, never assumed to exist.
-export function defaultLibraryRoots(
+function defaultLibraryRoots(
   home = homedir(),
   platform = process.platform,
 ): { provider: LibraryProvider; path: string }[] {

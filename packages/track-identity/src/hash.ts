@@ -6,16 +6,16 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 
-export type FileHashStrategy = "full" | "sampled";
+type FileHashStrategy = "full" | "sampled";
 
 /** library.fileHash.strategy default. */
-export const DEFAULT_FILE_HASH_STRATEGY: FileHashStrategy = "full";
+const DEFAULT_FILE_HASH_STRATEGY: FileHashStrategy = "full";
 
 /** Byte windows read by the sampled strategy. First, middle and last. */
 export const SAMPLED_WINDOW_BYTES = 64 * 1024;
 
 /** Sampled cap: files larger than this still hash the same windows. */
-export const SAMPLED_MAX_BYTES = 256 * 1024 * 1024;
+const SAMPLED_MAX_BYTES = 256 * 1024 * 1024;
 
 export interface FileHashInput {
   /** Raw file bytes (tests and callers that already read the file). */

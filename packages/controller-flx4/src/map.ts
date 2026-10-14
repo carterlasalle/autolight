@@ -16,7 +16,7 @@
 
 export type Flx4Deck = 1 | 2;
 
-export type Flx4ControlGroup = "deck" | "mixer" | "effect" | "browse" | "pad";
+type Flx4ControlGroup = "deck" | "mixer" | "effect" | "browse" | "pad";
 
 export type Flx4PadMode =
   | "hot-cue"
@@ -52,19 +52,19 @@ export interface Flx4ControlDef {
 
 // --- status byte helpers ---------------------------------------------------
 
-export const DECK_NOTE_STATUS: Record<Flx4Deck, number> = { 1: 0x90, 2: 0x91 };
+const DECK_NOTE_STATUS: Record<Flx4Deck, number> = { 1: 0x90, 2: 0x91 };
 
-export const DECK_CC_STATUS: Record<Flx4Deck, number> = { 1: 0xb0, 2: 0xb1 };
+const DECK_CC_STATUS: Record<Flx4Deck, number> = { 1: 0xb0, 2: 0xb1 };
 
-export const MIXER_CC_STATUS = 0xb6;
+const MIXER_CC_STATUS = 0xb6;
 
-export const MIXER_NOTE_STATUS = 0x96;
+const MIXER_NOTE_STATUS = 0x96;
 
-export const EFFECT_FX1_STATUS = 0x94;
+const EFFECT_FX1_STATUS = 0x94;
 
-export const EFFECT_FX2_STATUS = 0x95;
+const EFFECT_FX2_STATUS = 0x95;
 
-export const EFFECT_LEVEL_STATUS = 0xb4;
+const EFFECT_LEVEL_STATUS = 0xb4;
 
 export const PAD_STATUS: Record<Flx4Deck, readonly [number, number]> = {
   1: [0x97, 0x98],
@@ -72,7 +72,7 @@ export const PAD_STATUS: Record<Flx4Deck, readonly [number, number]> = {
 };
 
 /** Pad Data 1 bases per mode, from the official list (pad 1 = base). */
-export const PAD_MODE_BASE: Record<Flx4PadMode, number> = {
+const PAD_MODE_BASE: Record<Flx4PadMode, number> = {
   "hot-cue": 0x00,
   "pad-fx-1": 0x10,
   "beat-jump": 0x20,
@@ -259,11 +259,11 @@ export const FLX4_CONTROLS: readonly Flx4ControlDef[] = [
 ];
 
 /** Static lookup table keyed `status:data1`, the pair that identifies a control. */
-export const FLX4_CONTROL_INDEX: Readonly<Record<string, Flx4ControlDef>> = Object.fromEntries(
+const FLX4_CONTROL_INDEX: Readonly<Record<string, Flx4ControlDef>> = Object.fromEntries(
   FLX4_CONTROLS.map((control) => [`${control.status}:${control.data1}`, control]),
 );
 
-export function controlFor(status: number, data1: number): Flx4ControlDef | undefined {
+function controlFor(status: number, data1: number): Flx4ControlDef | undefined {
   return FLX4_CONTROL_INDEX[`${status & 0xff}:${data1 & 0x7f}`];
 }
 
@@ -296,7 +296,7 @@ export interface Flx4ControlEvent {
   receivedAtNs: bigint;
 }
 
-export interface Flx4UnknownEvent {
+interface Flx4UnknownEvent {
   type: "unknown";
   raw: readonly [number, number, number];
   receivedAtNs: bigint;
@@ -305,7 +305,7 @@ export interface Flx4UnknownEvent {
 export type Flx4Event = Flx4ControlEvent | Flx4UnknownEvent;
 
 /** Jog centre per the official list: 0x40 is no movement. */
-export const JOG_CENTER = 0x40;
+const JOG_CENTER = 0x40;
 
 export class Flx4Decoder {
   private readonly msb = new Map<string, number>();

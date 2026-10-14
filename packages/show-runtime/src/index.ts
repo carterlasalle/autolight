@@ -28,7 +28,7 @@ export { estimatePosition };
 // This module owns the ingest, estimate, evaluate and override stages; the
 // director, mixer, renderer and output handoff live in their own packages.
 
-export const DEFAULT_BPM = 120;
+const DEFAULT_BPM = 120;
 
 export const MAX_DECKS = 4;
 
@@ -78,11 +78,11 @@ export type LoopVariation = "none" | "alternate-ab" | "rotate-3";
 export type RollDegrade = "full" | "pulse" | "contraction" | "impact";
 
 /** runtime.loop.variation default. */
-export const DEFAULT_LOOP_VARIATION: LoopVariation = "alternate-ab";
+const DEFAULT_LOOP_VARIATION: LoopVariation = "alternate-ab";
 
 /** runtime.roll.degradeOrder default: brightness pulse, spatial contraction,
  * single impact, in that order (spec 60). */
-export const DEFAULT_DEGRADE_ORDER: readonly RollDegrade[] = ["pulse", "contraction", "impact"];
+const DEFAULT_DEGRADE_ORDER: readonly RollDegrade[] = ["pulse", "contraction", "impact"];
 
 /** Samples the fixture must manage per roll toggle to show it un-degraded. */
 const SAMPLES_PER_TOGGLE = 3;
@@ -144,7 +144,7 @@ export type OverrideKind = "none" | "blackout" | "white" | "freeze" | "force-low
 
 export type ResumeAt = "beat" | "bar" | "phrase" | "immediate";
 
-export interface ScratchOptions {
+interface ScratchOptions {
   /** runtime.scratch.rateDeviation. */
   rateDeviation: number;
   /** runtime.scratch.minReversalsPerSec. */
@@ -153,7 +153,7 @@ export interface ScratchOptions {
   resyncAt: ResumeAt;
 }
 
-export const SCRATCH_DEFAULTS: ScratchOptions = { rateDeviation: 0.5, minReversalsPerSec: 2, resyncAt: "bar" };
+const SCRATCH_DEFAULTS: ScratchOptions = { rateDeviation: 0.5, minReversalsPerSec: 2, resyncAt: "bar" };
 
 const REVERSAL_WINDOW_SECONDS = 1;
 
@@ -173,11 +173,11 @@ export interface ScratchState {
   lastRate: number;
 }
 
-export function initialScratchState(beat = 0): ScratchState {
+function initialScratchState(beat = 0): ScratchState {
   return { holding: false, reversals: [], heldBeat: beat, resyncBeat: null, lastRate: 1 };
 }
 
-export function recentReversals(scratch: ScratchState, nowNs: bigint): number {
+function recentReversals(scratch: ScratchState, nowNs: bigint): number {
   const windowNs = BigInt(Math.round(REVERSAL_WINDOW_SECONDS * 1e9));
 
   return scratch.reversals.filter((ns) => nowNs - ns <= windowNs).length;
@@ -214,10 +214,10 @@ export function observeRate(scratch: ScratchState, state: DeckState): ScratchSta
 // Manual overrides (T-RUN-07, spec 134)
 
 /** runtime.override.resumeDefault. */
-export const DEFAULT_RESUME_AT: ResumeAt = "bar";
+const DEFAULT_RESUME_AT: ResumeAt = "bar";
 
 /** runtime.override.whiteIntensity. */
-export const DEFAULT_WHITE_INTENSITY = 1;
+const DEFAULT_WHITE_INTENSITY = 1;
 
 export interface ResumeGrid {
   /** Native grid beat indices. */
@@ -365,9 +365,9 @@ export function advanceOverride(state: OverrideState, beat: number): { state: Ov
 export type ClockHealth = "live" | "extrapolating" | "holding" | "degraded";
 
 /** runtime.health.extrapolateMs / runtime.health.holdMs. */
-export const HEALTH_EXTRAPOLATE_MS = 500;
+const HEALTH_EXTRAPOLATE_MS = 500;
 
-export const HEALTH_HOLD_MS = 2000;
+const HEALTH_HOLD_MS = 2000;
 
 export function clockHealth(
   msSinceLastUpdate: number,
@@ -400,12 +400,12 @@ export function motionFactor(health: ClockHealth, msSinceLastUpdate: number): nu
 }
 
 /** Where the beat of a tick came from (T-RUN-06). */
-export type ClockSource = "provider" | "hold" | "adaptive";
+type ClockSource = "provider" | "hold" | "adaptive";
 
 export type AdaptiveClockMode = "dj-bpm" | "audio-onset" | "blend";
 
 /** DS-23 default: blend of the DJ tempo and the live audio tempo. */
-export const ADAPTIVE_CLOCK_DEFAULT: AdaptiveClockMode = "blend";
+const ADAPTIVE_CLOCK_DEFAULT: AdaptiveClockMode = "blend";
 
 export interface AdaptiveClockInputs {
   /** Last known DJ tempo and phase (`dj-bpm`). */
@@ -654,11 +654,11 @@ export function installModel(world: DeckWorld, generation: number, model: TrackM
   world.generation = generation;
 }
 
-export function beatsPerSecondOf(state: DeckState): number {
+function beatsPerSecondOf(state: DeckState): number {
   return (state.effectiveBpm ?? DEFAULT_BPM) / 60;
 }
 
-export function gridBeatOf(world: DeckWorld, seconds: number): number {
+function gridBeatOf(world: DeckWorld, seconds: number): number {
   if (world.model !== null) return sourceSecondsToBeat(world.model.beatGrid, seconds);
 
   return seconds * (world.state?.effectiveBpm ?? DEFAULT_BPM) / 60;
@@ -689,7 +689,7 @@ export function seekWorld(
 
 const EXCLUSIVE_TYPES: Record<string, true> = { "white-hit": true, impact: true, strobe: true, blackout: true };
 
-export function exclusiveOf(cues: ShowCue[]): ShowCue[] {
+function exclusiveOf(cues: ShowCue[]): ShowCue[] {
   return cues.filter((c) => EXCLUSIVE_TYPES[c.type] === true);
 }
 

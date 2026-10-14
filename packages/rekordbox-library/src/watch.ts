@@ -23,7 +23,7 @@ export type WatchEngine = "auto" | "native-events" | "polling";
 
 export type WatchSource = "native" | "poll" | "manual";
 
-export type WatchedKind = "db" | "wal" | "anlz" | "audio";
+type WatchedKind = "db" | "wal" | "anlz" | "audio";
 
 export interface WatchedFile {
   path: string;
@@ -48,9 +48,9 @@ export interface WatchChange {
 
 export type InvalidationScope = "row" | "identity" | "native-analysis" | "model" | "plan" | "audio-derived";
 
-export const DEFAULT_DEBOUNCE_MS = 2000;
+const DEFAULT_DEBOUNCE_MS = 2000;
 
-export const DEFAULT_POLL_MS = 60_000;
+const DEFAULT_POLL_MS = 60_000;
 
 /** Best-effort canonical path: falls back to the raw path when missing. */
 function canonicalPath(path: string): string {
@@ -411,7 +411,7 @@ export function invalidationForDiff(diff: LibraryRowDiff): InvalidationScope[] {
   return (Object.keys(scopes) as InvalidationScope[]).sort();
 }
 
-export const PARCEL_WATCHER_MODULE = "@parcel/watcher";
+const PARCEL_WATCHER_MODULE = "@parcel/watcher";
 
 type ParcelSubscription = { unsubscribe(): Promise<void> };
 
@@ -426,7 +426,7 @@ interface ParcelWatcherModule {
 // OS event engine. @parcel/watcher is an optional native dependency, so the
 // specifier is a runtime variable; without it fs.watch delivers the same OS
 // events for the handful of files this watcher holds.
-export async function createNativeWatch(): Promise<NativeWatch> {
+async function createNativeWatch(): Promise<NativeWatch> {
   const specifier = PARCEL_WATCHER_MODULE;
 
   try {

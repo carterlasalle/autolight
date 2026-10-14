@@ -77,7 +77,7 @@ export function crossfaderGainOf(position: number, deckId: number, cfg: Partial<
 // ---------------------------------------------------------------------------
 // T-MIX-03 Exclusive impact ownership (spec 65)
 
-export interface OwnerFactorWeights {
+interface OwnerFactorWeights {
   weight: number;
   master: number;
   confidence: number;
@@ -86,7 +86,7 @@ export interface OwnerFactorWeights {
 }
 
 /** mixer.owner.factorWeights default. */
-export const DEFAULT_OWNER_FACTORS: OwnerFactorWeights = {
+const DEFAULT_OWNER_FACTORS: OwnerFactorWeights = {
   weight: 1,
   master: 0.3,
   confidence: 0.5,
@@ -95,7 +95,7 @@ export const DEFAULT_OWNER_FACTORS: OwnerFactorWeights = {
 };
 
 /** mixer.owner.hysteresis default. */
-export const DEFAULT_OWNER_HYSTERESIS = 0.1;
+const DEFAULT_OWNER_HYSTERESIS = 0.1;
 
 // Structural significance of an exclusive cue type; the planner's own
 // significance figure wins when it supplies one.
@@ -170,10 +170,10 @@ export function impactOwner(a: OwnerInput, b: OwnerInput, opts: OwnerOptions = {
 
 export type BlackoutPolicy = "full" | "deck-spatial-dip" | "deck-side-blackout" | "global-partial-dip" | "auto";
 
-export type StructuralState = "pre-drop" | "section-end" | null;
+type StructuralState = "pre-drop" | "section-end" | null;
 
 /** mixer.blackout.otherDeckThreshold default. */
-export const DEFAULT_BLACKOUT_THRESHOLD = 0.3;
+const DEFAULT_BLACKOUT_THRESHOLD = 0.3;
 
 /** auto: side blackout for the loudest other deck, a global dip above mid. */
 const AUTO_SIDE_BLACKOUT_AT = 0.8;
@@ -203,13 +203,13 @@ export interface BlackoutDecision {
 
 // WP05 splits give each deck a side of the room; LEFT is DJ-relative physical
 // left, which is deck A's side.
-export function deckSideTarget(side: "a" | "b"): string {
+function deckSideTarget(side: "a" | "b"): string {
   return side === "a" ? "LEFT" : "RIGHT";
 }
 
 // The structural context: a build in flight means the track is at a pre-drop,
 // and a look ending on the blackout beat means it is at a section end.
-export function structuralState(cues: ShowCue[], beat: number): StructuralState {
+function structuralState(cues: ShowCue[], beat: number): StructuralState {
   if (cues.some((c) => c.type === "build-ramp")) return "pre-drop";
 
   if (cues.some((c) => Math.abs(c.startBeat + c.durationBeats - beat) < 1)) return "section-end";
@@ -290,7 +290,7 @@ export interface IntroThresholds {
   impactsAt: number;
 }
 
-export const INTRO_DEFAULTS: IntroThresholds = { paletteAt: 0.05, rhythmAt: 0.3, impactsAt: 0.7 };
+const INTRO_DEFAULTS: IntroThresholds = { paletteAt: 0.05, rhythmAt: 0.3, impactsAt: 0.7 };
 
 export type IntroStage = "silent" | "palette" | "rhythm" | "impacts";
 
@@ -329,13 +329,13 @@ export interface DeckMix {
   significance?: number;
 }
 
-export interface MixedLayer {
+interface MixedLayer {
   tag: LayerTag;
   side: "a" | "b";
   cues: ShowCue[];
 }
 
-export interface DroppedCue {
+interface DroppedCue {
   side: "a" | "b";
   cue: ShowCue;
   reason: string;

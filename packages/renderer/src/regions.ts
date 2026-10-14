@@ -48,7 +48,7 @@ export function writeDense(
   }
 }
 
-export function selectorCacheKey(version: number, target: string): string {
+function selectorCacheKey(version: number, target: string): string {
   return `${version}:${target}`;
 }
 

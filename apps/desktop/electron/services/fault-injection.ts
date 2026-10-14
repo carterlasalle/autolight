@@ -6,7 +6,7 @@
 // file never imports the simulator package.
 import { ServiceTracker, type Service, type ServiceStatus } from "./base.js";
 
-export type FaultKind =
+type FaultKind =
   | "dj-silence"
   | "device-disconnect"
   | "latency"
@@ -21,7 +21,7 @@ export type FaultKind =
   | "host-kill"
   | "renderer-reload";
 
-export interface FaultScenario {
+interface FaultScenario {
   id: string;
   kind: FaultKind;
   deviceId?: string;
@@ -46,7 +46,7 @@ export interface FaultSuiteOptions {
   throttleEvery?: number;
 }
 
-export interface FaultMeasurement {
+interface FaultMeasurement {
   scenarioId: string;
   kind: FaultKind;
   framesDuringFault: number;

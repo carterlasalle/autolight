@@ -120,7 +120,7 @@ export interface RkbxSetupInput {
   lastAddress: string | null;
 }
 
-export interface RkbxSetupStep {
+interface RkbxSetupStep {
   id: string;
   ok: boolean;
   detail: string;

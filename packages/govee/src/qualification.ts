@@ -87,7 +87,7 @@ export const SEGMENT_CANDIDATES: readonly number[] = [2, 4, 6, 8, 12, 16, 20, 30
 
 /** Descending rate sweep for step 13; the first rate that does not stutter is
  *  the unit's stable rate (spec 54 `maxStableFps`). */
-export const RATE_SWEEP_HZ: readonly number[] = [60, 50, 40, 30, 25, 20, 15, 10];
+const RATE_SWEEP_HZ: readonly number[] = [60, 50, 40, 30, 25, 20, 15, 10];
 
 export interface QualificationAttempt {
   step: number;
@@ -145,7 +145,7 @@ export interface CalibrationRecord {
 }
 
 /** The repo store's calibration shape (@autolight/storage `Store`). */
-export interface CalibrationStore {
+interface CalibrationStore {
   save(hardwareId: string, sku: string, firmware: string, calibrationJson: string): void;
   load(hardwareId: string): { sku: string; firmware: string; calibrationJson: string | null } | null;
 }

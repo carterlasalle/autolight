@@ -49,7 +49,7 @@ export const PROBE_DEFAULTS = {
 
 /** B0 and B4 both carry the zone count in one byte (razer.ts `paint`), so this
  *  is the protocol's zone ceiling: more zones make `paint` throw. */
-export const PROTOCOL_MAX_ZONES = 255;
+const PROTOCOL_MAX_ZONES = 255;
 
 /** The undocumented `status` command; its reply carries the B2 armed frame. */
 export const STATUS_COMMAND = JSON.stringify({ msg: { cmd: "status", data: {} } });
@@ -61,11 +61,11 @@ export const SINGLE_ZONE_BADGE = "SINGLE-ZONE (fallback)";
 export const LAN_UNAVAILABLE_BADGE = "LAN unavailable on this firmware";
 
 /** Whole-fixture modes a verified fallback may use (T-GOV-10). */
-export type FallbackMode = "lan-json-colorwc" | "ble-single" | "matter";
+type FallbackMode = "lan-json-colorwc" | "ble-single" | "matter";
 
 /** Alternative transports offered when LAN is absent (config
  *  `govee.device.<fixtureId>.transportOrder` order, spec 148). */
-export type AlternativeTransport = "ble-segmented" | "ble-single" | "matter";
+type AlternativeTransport = "ble-segmented" | "ble-single" | "matter";
 
 /** T-GOV-16 SignalRGB checklist, shown with the LAN-unavailable flag. */
 export const LAN_TROUBLESHOOTING: readonly string[] = [
@@ -82,7 +82,7 @@ export const LAN_TROUBLESHOOTING: readonly string[] = [
 
 /** Replies are routed by sender: the manager hands back the text that arrived
  *  from that device, or null when the deadline passes. */
-export interface ReplySource {
+interface ReplySource {
   reply(deviceId: string, timeoutMs: number): Promise<string | null>;
 }
 
@@ -410,7 +410,7 @@ export type ProbeVerdict =
     };
 
 /** Half red, half blue for the B0 paint: two colours a user can tell apart. */
-export function twoColourFrame(zones: number): Uint8Array {
+function twoColourFrame(zones: number): Uint8Array {
   const n = Math.max(1, Math.floor(zones));
   const frame = new Uint8Array(n * 3);
   const mid = Math.floor(n / 2);
@@ -426,7 +426,7 @@ export function twoColourFrame(zones: number): Uint8Array {
 }
 
 /** Zoned B4 probe: first zone red, last zone blue. */
-export function zonedProbeEntries(zones: number): { r: number; g: number; b: number; zone: number }[] {
+function zonedProbeEntries(zones: number): { r: number; g: number; b: number; zone: number }[] {
   const n = Math.max(1, Math.floor(zones));
 
   return [
@@ -583,7 +583,7 @@ export async function probeSegmentedCapability(
 }
 
 /** Tile label for a probe result. A fallback is labelled, not hidden. */
-export function probeLabel(verdict: ProbeVerdict): string {
+function probeLabel(verdict: ProbeVerdict): string {
   if (verdict.kind === "segmented") {
     return `SEGMENTED (${verdict.zones} zones, user confirmed)`;
   }

@@ -31,7 +31,7 @@ function slope(xs, ys) {
   return den === 0 ? 0 : num / den;
 }
 
-export function analyzeSoak(samples, opts = {}) {
+function analyzeSoak(samples, opts = {}) {
   const maxMemSlope = opts.maxMemSlopeMbPerHour ?? 5;
   const maxLatencySlope = opts.maxLatencySlopeMsPerHour ?? 1;
   const warmup = opts.warmupSamples ?? 6;

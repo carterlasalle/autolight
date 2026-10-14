@@ -33,7 +33,7 @@ export interface FixtureTrack {
   extraTags?: { tag: string; text: string }[];
 }
 
-export interface FixtureCrate {
+interface FixtureCrate {
   name: string;
   trackPaths: string[];
 }
@@ -114,14 +114,14 @@ export function writeScrate(scrate: FixtureScrate): Buffer {
   return Buffer.concat(parts);
 }
 
-export interface FixtureLibrary {
+interface FixtureLibrary {
   root: string;
   tracks: FixtureTrack[];
   crates: FixtureCrate[];
   scrates: FixtureScrate[];
 }
 
-export function makeSeratoFixtureLibrary(dir: string, library: FixtureLibrary): string {
+function makeSeratoFixtureLibrary(dir: string, library: FixtureLibrary): string {
   const root = join(dir, "fixture-serato");
   mkdirSync(join(root, "Subcrates"), { recursive: true });
   mkdirSync(join(root, "SmartCrates"), { recursive: true });

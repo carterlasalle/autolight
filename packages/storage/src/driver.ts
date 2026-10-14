@@ -37,7 +37,7 @@ function loadModule(id: string): unknown {
   throw new Error(`storage cannot load ${id}: this runtime exposes no module loader`);
 }
 
-export type DriverName = "better-sqlite3" | "node-sqlite";
+type DriverName = "better-sqlite3" | "node-sqlite";
 
 export type DriverPreference = "auto" | DriverName;
 

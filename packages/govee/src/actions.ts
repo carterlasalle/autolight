@@ -52,7 +52,7 @@ export interface ActionFixture {
   currentFrame?: Uint8Array | null;
 }
 
-export interface ActionOptions {
+interface ActionOptions {
   /** govee.lan.command.minSpacingMs. */
   minSpacingMs?: number;
   /** One read-back attempt window. Short on purpose: an armed or absent unit

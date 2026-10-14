@@ -48,7 +48,7 @@ export * from "./validation.js";
 // migration parity test. The path resolves lazily: importing this module must
 // never throw in the esbuild CommonJS bundle of the Electron main process,
 // where import.meta is empty and the snapshot file is not shipped.
-export function schemaPath(): string | null {
+function schemaPath(): string | null {
   const metaUrl = esmModuleUrl();
 
   return metaUrl === null ? null : fileURLToPath(new URL("../schema.sql", metaUrl));

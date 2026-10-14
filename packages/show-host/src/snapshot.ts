@@ -28,9 +28,9 @@ export const SNAPSHOT_VERSION = 1;
 
 export const SNAPSHOT_MAX_BYTES = 262144;
 
-export const UPCOMING_CUE_LIMIT = 8;
+const UPCOMING_CUE_LIMIT = 8;
 
-export const snapshotCursorSchema = z.object({
+const snapshotCursorSchema = z.object({
   beat: z.number(),
   loopPass: z.number().int(),
   scratchHold: z.boolean(),
@@ -38,16 +38,16 @@ export const snapshotCursorSchema = z.object({
 
 export type SnapshotCursor = z.infer<typeof snapshotCursorSchema>;
 
-export const snapshotSectionSchema = z.object({
+const snapshotSectionSchema = z.object({
   kind: z.string().min(1),
   rawLabel: z.string().optional(),
   startBeat: z.number(),
   endBeat: z.number(),
 });
 
-export type SnapshotSection = z.infer<typeof snapshotSectionSchema>;
+type SnapshotSection = z.infer<typeof snapshotSectionSchema>;
 
-export const upcomingCueSchema = z.object({
+const upcomingCueSchema = z.object({
   type: z.string().min(1),
   startBeat: z.number(),
   beatsUntil: z.number(),
@@ -59,15 +59,15 @@ export const upcomingCueSchema = z.object({
 
 export type UpcomingCue = z.infer<typeof upcomingCueSchema>;
 
-export const snapshotDeckSchema = deckSnapshotSchema.extend({
+const snapshotDeckSchema = deckSnapshotSchema.extend({
   cursor: snapshotCursorSchema,
   section: snapshotSectionSchema.nullable(),
   upcomingCues: z.array(upcomingCueSchema),
 });
 
-export type SnapshotDeck = z.infer<typeof snapshotDeckSchema>;
+type SnapshotDeck = z.infer<typeof snapshotDeckSchema>;
 
-export const deviceHealthSchema = z.object({
+const deviceHealthSchema = z.object({
   hardwareId: z.string().min(1),
   health: z.enum(["online", "degraded", "offline"]),
   fps: z.number(),
@@ -96,7 +96,7 @@ export interface UiSnapshotContext {
 }
 
 // Current section at a beat, or null when the model has no coverage there.
-export function currentSection(model: TrackModel | null | undefined, beat: number): SnapshotSection | null {
+function currentSection(model: TrackModel | null | undefined, beat: number): SnapshotSection | null {
   if (!model) return null;
   const found = model.sections.find((s) => beat >= s.startBeat && beat < s.endBeat);
 

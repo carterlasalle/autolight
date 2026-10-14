@@ -74,7 +74,7 @@ export type Flx4Signal =
   | (SignalBase & { kind: "fader"; deck: Flx4Deck; value: number })
   | (SignalBase & { kind: "crossfader"; value: number });
 
-export type DjSoftwareName = "rekordbox" | "serato";
+type DjSoftwareName = "rekordbox" | "serato";
 
 export interface SignalOptions {
   /** Which DJ software is live; Roll pads only exist in Serato (manual citation above). */

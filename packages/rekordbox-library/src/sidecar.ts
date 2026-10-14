@@ -63,11 +63,11 @@ export interface SidecarRun {
 
 export type SidecarRunner = (command: SidecarCommand, stdin: string) => Promise<SidecarRun>;
 
-export const SIDECAR_TIMEOUT_MS = 30_000;
+const SIDECAR_TIMEOUT_MS = 30_000;
 
-export const SIDECAR_MAX_OUTPUT_BYTES = 64 * 1024 * 1024;
+const SIDECAR_MAX_OUTPUT_BYTES = 64 * 1024 * 1024;
 
-export const SIDECAR_SCRIPT = String.raw`"""Read-only Rekordbox library reader (autolight sidecar protocol)."""
+const SIDECAR_SCRIPT = String.raw`"""Read-only Rekordbox library reader (autolight sidecar protocol)."""
 import json
 import sys
 from urllib.parse import quote
@@ -164,14 +164,14 @@ if __name__ == "__main__":
 
 // The uv project is resolved against the repository layout, not the process
 // working directory: the packaged app and the test runner start elsewhere.
-export const ANALYSIS_PROJECT = fileURLToPath(new URL("../../../analysis", import.meta.url));
+const ANALYSIS_PROJECT = fileURLToPath(new URL("../../../analysis", import.meta.url));
 
-export const DEFAULT_SIDECAR_COMMAND: SidecarCommand = {
+const DEFAULT_SIDECAR_COMMAND: SidecarCommand = {
   command: "uv",
   args: ["run", "--project", ANALYSIS_PROJECT, "python", "-c", SIDECAR_SCRIPT],
 };
 
-export function runSidecarProcess(command: SidecarCommand, stdin: string, timeoutMs = SIDECAR_TIMEOUT_MS): Promise<SidecarRun> {
+function runSidecarProcess(command: SidecarCommand, stdin: string, timeoutMs = SIDECAR_TIMEOUT_MS): Promise<SidecarRun> {
   return new Promise<SidecarRun>((resolve, reject) => {
     const child = spawn(command.command, command.args, { stdio: ["pipe", "pipe", "pipe"] });
     let stdout = "";

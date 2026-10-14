@@ -26,7 +26,7 @@ export function goldenHex(opcode: number, payload: readonly number[]): string {
   return Buffer.from([...out, xor & 0xff]).toString("hex");
 }
 
-export type FakeBehaviour = "segmented" | "ignores-paints" | "lan-absent";
+type FakeBehaviour = "segmented" | "ignores-paints" | "lan-absent";
 
 export interface FakeLampOptions {
   device: string;
@@ -391,7 +391,7 @@ export function armLamp(lamp: FakeLamp, on = true): void {
 
 /** Number of contiguous runs of the same non-black colour: what a user counts
  *  as distinct bands. */
-export function countDistinctBands(painted: readonly (readonly [number, number, number])[]): number {
+function countDistinctBands(painted: readonly (readonly [number, number, number])[]): number {
   let bands = 0;
   let previous: string | null = null;
 

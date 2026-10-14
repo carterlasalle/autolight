@@ -8,11 +8,11 @@ import { z } from "zod";
  */
 export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 
-export const deckSourceSchema = z.enum(["rekordbox", "serato"]);
+const deckSourceSchema = z.enum(["rekordbox", "serato"]);
 
-export type DeckSource = z.infer<typeof deckSourceSchema>;
+type DeckSource = z.infer<typeof deckSourceSchema>;
 
-export const loopStateSchema = z.object({
+const loopStateSchema = z.object({
   active: z.boolean(),
   startSeconds: z.number().nullable(),
   endSeconds: z.number().nullable(),
@@ -21,7 +21,7 @@ export const loopStateSchema = z.object({
 
 export type LoopState = z.infer<typeof loopStateSchema>;
 
-export const trackIdentitySchema = z.object({
+const trackIdentitySchema = z.object({
   id: z.string().min(1),
   sourceIds: z.object({
     rekordboxId: z.string().optional(),
@@ -57,7 +57,7 @@ export const wireDeckStateSchema = deckStateSchema.extend({
   receivedAtNs: z.string().regex(/^-?\d+$/, "receivedAtNs must be a decimal integer string"),
 });
 
-export type WireDeckState = z.infer<typeof wireDeckStateSchema>;
+type WireDeckState = z.infer<typeof wireDeckStateSchema>;
 
 export function toWireDeckState(state: DeckState): WireDeckState {
   return { ...state, receivedAtNs: state.receivedAtNs.toString() };
@@ -69,7 +69,7 @@ export function fromWireDeckState(wire: WireDeckState): DeckState {
 
 export type DeckState = z.infer<typeof deckStateSchema>;
 
-export const nativeBeatSchema = z.object({
+const nativeBeatSchema = z.object({
   index: z.number().int().nonnegative(),
   beatInBar: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
   sourceTimeMs: z.number().nonnegative(),
@@ -85,7 +85,7 @@ export const beatGridSchema = z.object({
 
 export type BeatGrid = z.infer<typeof beatGridSchema>;
 
-export const adaptiveBeatGridSchema = z.object({
+const adaptiveBeatGridSchema = z.object({
   // Emptiness is enforced by trackModelSchema's superRefine (with the
   // coverage-specific diagnostic); the array shape here stays unconstrained.
   beats: z.array(nativeBeatSchema),
@@ -133,7 +133,7 @@ export function beatToSourceSeconds(grid: BeatGrid, beat: number): number {
   return (a.sourceTimeMs + (c.sourceTimeMs - a.sourceTimeMs) * frac) / 1000;
 }
 
-export const sectionKindSchema = z.enum([
+const sectionKindSchema = z.enum([
   "intro",
   "verse",
   "prechorus",
@@ -175,7 +175,7 @@ export const musicalEventTypeSchema = z.enum([
 
 export type MusicalEventType = z.infer<typeof musicalEventTypeSchema>;
 
-export const gridWarningSchema = z.object({
+const gridWarningSchema = z.object({
   source: z.string(),
   medianOffsetMs: z.number(),
   p95OffsetMs: z.number(),
@@ -194,13 +194,13 @@ export const gridWarningSchema = z.object({
 
 export type GridWarning = z.infer<typeof gridWarningSchema>;
 
-export const beatFeatureSchema = z.object({
+const beatFeatureSchema = z.object({
   beat: z.number().int().positive(),
 }).catchall(z.number());
 
 export type BeatFeature = z.infer<typeof beatFeatureSchema>;
 
-export const frameFeaturesRefSchema = z.object({
+const frameFeaturesRefSchema = z.object({
   artifactPath: z.string(),
   stemSource: z.string(),
   activationFps: z.number().optional(),
@@ -208,7 +208,7 @@ export const frameFeaturesRefSchema = z.object({
 
 export type FrameFeaturesRef = z.infer<typeof frameFeaturesRefSchema>;
 
-export const musicalKeySchema = z.object({
+const musicalKeySchema = z.object({
   key: z.string(),
   mode: z.enum(["major", "minor"]),
   confidence: z.number().min(0).max(1),
@@ -216,7 +216,7 @@ export const musicalKeySchema = z.object({
 
 export type MusicalKey = z.infer<typeof musicalKeySchema>;
 
-export const inputEntrySchema = z.object({
+const inputEntrySchema = z.object({
   status: z.enum(["present", "absent", "failed", "skipped"]),
   reason: z.string().optional(),
   version: z.string().optional(),
@@ -225,7 +225,7 @@ export const inputEntrySchema = z.object({
 
 export type InputEntry = z.infer<typeof inputEntrySchema>;
 
-export const analysisInputsSchema = z.object({
+const analysisInputsSchema = z.object({
   "source.audio": inputEntrySchema,
   "native.rekordbox.grid": inputEntrySchema,
   "native.rekordbox.pssi": inputEntrySchema,
@@ -249,7 +249,7 @@ export const analysisInputsSchema = z.object({
 
 export type AnalysisInputs = z.infer<typeof analysisInputsSchema>;
 
-export const phraseSchema = z.object({
+const phraseSchema = z.object({
   kind: sectionKindSchema,
   rawLabel: z.string().optional(),
   startBeat: z.number(),
@@ -292,7 +292,7 @@ const rekordboxCueSchema = z.object({
   loopDenominator: z.number().int().optional(),
 }).strict();
 
-export const nativeRekordboxSchema = z.object({
+const nativeRekordboxSchema = z.object({
   mood: z.number().optional(),
   bank: z.number().optional(),
   endBeatNative: z.number().optional(),
@@ -332,7 +332,7 @@ const seratoMarkerSchema = z.object({
   bpm: z.number().positive().optional(),
 }).strict();
 
-export const nativeSeratoSchema = z.object({
+const nativeSeratoSchema = z.object({
   markers: z.array(seratoMarkerSchema).optional(),
   grid: z.object({
     beats: z.array(nativeBeatSchema).optional(),
@@ -341,7 +341,7 @@ export const nativeSeratoSchema = z.object({
 
 export type NativeSerato = z.infer<typeof nativeSeratoSchema>;
 
-export const readinessLevelSchema = z.enum(["full", "structured", "adaptive"]);
+const readinessLevelSchema = z.enum(["full", "structured", "adaptive"]);
 
 export type ReadinessLevel = z.infer<typeof readinessLevelSchema>;
 
@@ -448,7 +448,7 @@ export const showStyleSchema = z.object({
 
 export type ShowStyle = z.infer<typeof showStyleSchema>;
 
-export const showCueSchema = z.object({
+const showCueSchema = z.object({
   type: z.string().min(1),
   startBeat: z.number(),
   durationBeats: z.number().nonnegative(),
@@ -470,7 +470,7 @@ export const showPlanSchema = z.object({
 
 export type ShowPlan = z.infer<typeof showPlanSchema>;
 
-export const fixtureCellSchema = z.object({
+const fixtureCellSchema = z.object({
   index: z.number().int().nonnegative(),
   position: z.object({ x: z.number(), y: z.number(), z: z.number().optional() }),
   order: z.number().int(),
@@ -479,7 +479,7 @@ export const fixtureCellSchema = z.object({
 
 export type FixtureCell = z.infer<typeof fixtureCellSchema>;
 
-export const fixtureCalibrationSchema = z.object({
+const fixtureCalibrationSchema = z.object({
   segmentCount: z.number().int().positive(),
   maxStableFps: z.number().positive(),
   expectedLatencyMs: z.number().nonnegative(),

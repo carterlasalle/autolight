@@ -6,7 +6,7 @@
 // inform the owner's choice. The Decision switches tab, the status bar
 // indicator and the diagnostics comparison panel all read this table.
 
-export interface DecisionOption {
+interface DecisionOption {
   id: string;
   /** Short explanation of what the mode does. */
   summary: string;

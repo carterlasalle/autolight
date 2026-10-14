@@ -339,7 +339,7 @@ export function lintFixture(raw: unknown, options: FixtureLintOptions): LintProb
   return problems;
 }
 
-export interface FixtureLintSummary {
+interface FixtureLintSummary {
   fixtures: number;
   problems: LintProblem[];
 }

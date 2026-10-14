@@ -16,7 +16,7 @@ export interface SeedInput {
   nativeId?: string;
 }
 
-export interface SeedPick {
+interface SeedPick {
   value: string;
   source: SeedSource;
   weak: boolean;

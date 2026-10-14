@@ -50,11 +50,11 @@ export type HostMode = (typeof HOST_MODES)[number];
 // ---------------------------------------------------------------------------
 // Native addon probing (T-ARC-01: verify per mode, report unavailable)
 
-export const PROBE_IDS = ["govee-toolkit", "ble-toolkit-ble", "ble-noble"] as const;
+const PROBE_IDS = ["govee-toolkit", "ble-toolkit-ble", "ble-noble"] as const;
 
-export type ProbeId = (typeof PROBE_IDS)[number];
+type ProbeId = (typeof PROBE_IDS)[number];
 
-export interface ProbeResult {
+interface ProbeResult {
   readonly id: ProbeId;
   readonly available: boolean;
   readonly reason: string | null;
@@ -69,7 +69,7 @@ export interface ModeStatus {
   readonly probes: ProbeResult[];
 }
 
-export const modeProbeIds: Record<HostMode, readonly ProbeId[]> = {
+const modeProbeIds: Record<HostMode, readonly ProbeId[]> = {
   "worker-thread": PROBE_IDS,
   "utility-process": PROBE_IDS,
   "utility-process-worker": PROBE_IDS,
@@ -93,7 +93,7 @@ function available(id: ProbeId): ProbeResult {
 // static import cannot work; createRequire keeps the probe lazy and loud.
 const requireNativeAddon = createRequire(import.meta.url);
 
-export function defaultAddonProbe(id: ProbeId): ProbeResult {
+function defaultAddonProbe(id: ProbeId): ProbeResult {
   try {
     if (id === "govee-toolkit") {
       const toolkit = requireNativeAddon("govee-toolkit") as unknown;
@@ -149,7 +149,7 @@ const wireDeckStateSchema = deckStateSchema.extend({
   receivedAtNs: z.string().regex(/^-?\d+$/, "receivedAtNs must be a decimal integer string"),
 });
 
-export const hostInboundMessageSchema = z.discriminatedUnion("type", [
+const hostInboundMessageSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("deck"),
     deckId: z.number().int(),
@@ -193,13 +193,13 @@ export const deckSnapshotSchema = z.object({
 
 export type DeckSnapshot = z.infer<typeof deckSnapshotSchema>;
 
-export const cellSnapshotSchema = z.object({
+const cellSnapshotSchema = z.object({
   fixtureId: z.string(),
   cellIndex: z.number().int(),
   color: z.tuple([z.number(), z.number(), z.number()]),
 });
 
-export type CellSnapshot = z.infer<typeof cellSnapshotSchema>;
+type CellSnapshot = z.infer<typeof cellSnapshotSchema>;
 
 export const hostSnapshotSchema = z.object({
   tick: z.number().int(),
@@ -328,7 +328,7 @@ export class PortBus {
 // ---------------------------------------------------------------------------
 // Show host
 
-export interface ShowHostConfig {
+interface ShowHostConfig {
   readonly mode: HostMode;
   readonly tickHz?: number;
   readonly uiRateHz?: number;

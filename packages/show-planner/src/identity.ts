@@ -12,7 +12,7 @@ import {
   type PlannerStyle,
 } from "./types.js";
 
-export const MOVEMENT_FAMILIES = [
+const MOVEMENT_FAMILIES = [
   "rise",
   "fall",
   "cross",
@@ -26,7 +26,7 @@ export const MOVEMENT_FAMILIES = [
   "rotation",
 ] as const;
 
-export function vocabularyForEnergy(mean: number, movementDensity: number): string[] {
+function vocabularyForEnergy(mean: number, movementDensity: number): string[] {
   const count = 2 + Math.round(Math.min(1, Math.max(0, movementDensity)) * 4);
   const ranked = [...MOVEMENT_FAMILIES];
   const start = Math.floor(Math.min(1, Math.max(0, mean)) * ranked.length) % ranked.length;
@@ -37,7 +37,7 @@ export function vocabularyForEnergy(mean: number, movementDensity: number): stri
   return out;
 }
 
-export function sectionEnergies(
+function sectionEnergies(
   track: TrackModel,
   energy: Readonly<Record<string, number>>,
 ): number[] {

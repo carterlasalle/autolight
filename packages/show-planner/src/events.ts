@@ -5,7 +5,7 @@
 import type { TrackModel } from "@autolight/contracts";
 import type { PlannerConfigSnapshot, PlannerStyle } from "./types.js";
 
-export type PlannedEventKind =
+type PlannedEventKind =
   | "section-transition"
   | "build-ramp"
   | "intensify"

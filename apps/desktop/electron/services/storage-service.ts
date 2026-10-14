@@ -16,7 +16,7 @@ import {
 // separate from Rekordbox and Serato data.
 
 // The layered config store from T-CFG-02. Only reads happen here.
-export interface StorageConfig {
+interface StorageConfig {
   get(key: string): unknown;
 }
 

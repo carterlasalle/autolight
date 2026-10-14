@@ -4,7 +4,7 @@ export interface Point3 { x: number; y: number; z: number }
 
 export type Units = "m" | "ft";
 
-export const METERS_PER_FOOT = 0.3048;
+const METERS_PER_FOOT = 0.3048;
 
 export interface Opening {
   wall: number;
@@ -28,7 +28,7 @@ export type PerimeterZero = "dj-nearest" | "front-center" | "controller" | "cust
 
 export type PerimeterDirection = "clockwise" | "counterclockwise";
 
-export interface RoomBackground {
+interface RoomBackground {
   imageRef: string;
   scale: number;
   offset: Point2;
@@ -76,7 +76,7 @@ export function polygonArea(outline: Point2[]): number {
   return Math.abs(signedArea(outline));
 }
 
-export function isClockwiseFromAbove(outline: Point2[]): boolean {
+function isClockwiseFromAbove(outline: Point2[]): boolean {
   return signedArea(outline) < 0;
 }
 
@@ -259,7 +259,7 @@ export function rectangleRoom(widthM: number, lengthM: number, name?: string): R
   };
 }
 
-export type SplineKind = "polyline" | "catmull-rom";
+type SplineKind = "polyline" | "catmull-rom";
 
 export interface SplineGeom {
   kind: Exclude<SplineKind, "polyline">;
@@ -316,6 +316,6 @@ export function polylineLength(points: Point3[], geom?: SplineGeom, toleranceM =
   return len;
 }
 
-export const MARKER_KINDS = ["seam", "logical-zero", "dj", "center", "audience", "custom"] as const;
+const MARKER_KINDS = ["seam", "logical-zero", "dj", "center", "audience", "custom"] as const;
 
 export type MarkerKind = (typeof MARKER_KINDS)[number];

@@ -99,7 +99,7 @@ export async function typedInvoke<C extends Channel>(channel: C, request: Channe
 
 export type Route = "live" | "library" | "inspector" | "venue" | "setup" | "diagnostics" | "settings";
 
-export type EnergyTier = "LOW" | "MED" | "HIGH";
+type EnergyTier = "LOW" | "MED" | "HIGH";
 
 // One source: the channel schema in @autolight/ipc owns the palette names;
 // the main process owns their colour values.
@@ -107,7 +107,7 @@ export const PARTY_PALETTES = partyPaletteNames;
 
 export type PartyPalette = PartyPaletteName;
 
-export type LightTarget = "A" | "B" | "Both";
+type LightTarget = "A" | "B" | "Both";
 
 // Follow mode: preview = designer tool (resolved grid + plan, no playhead
 // chase). ax-beat = coarse AX poll (1Hz, ±1 beat). prolink = Virtual-CDJ

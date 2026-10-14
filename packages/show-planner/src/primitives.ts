@@ -1,4 +1,4 @@
-export type SpatialCoordinate = "uv" | "s" | "theta" | "h" | "distance" | "split" | "chain";
+type SpatialCoordinate = "uv" | "s" | "theta" | "h" | "distance" | "split" | "chain";
 
 export interface PrimitiveMeta {
   name: string;
@@ -316,7 +316,7 @@ const ALIAS_TO_CANONICAL: Record<string, PrimitiveName> = Object.fromEntries([
   ["chase-flip", "Chase"],
 ]) as Record<string, PrimitiveName>;
 
-export function resolvePrimitiveName(value: string): PrimitiveName | null {
+function resolvePrimitiveName(value: string): PrimitiveName | null {
   if (value in PRIMITIVE_REGISTRY) return value as PrimitiveName;
 
   return ALIAS_TO_CANONICAL[value] ?? null;

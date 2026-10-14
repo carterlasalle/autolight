@@ -11,7 +11,7 @@ import type {
 } from "./types.js";
 import { CUE_LEVEL_ATTRIBUTES } from "./hierarchy.js";
 
-export const KNOWN_CUE_TYPES: Record<string, true> = {
+const KNOWN_CUE_TYPES: Record<string, true> = {
   "static-look": true,
   "section-look": true,
   "gradient-look": true,

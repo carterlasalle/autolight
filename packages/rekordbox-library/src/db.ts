@@ -34,7 +34,7 @@ export interface LibraryTrack {
   raw: SqlRow;
 }
 
-export type PlaylistKind = "playlist" | "folder" | "smart";
+type PlaylistKind = "playlist" | "folder" | "smart";
 
 export interface LibraryPlaylist {
   id: string;
@@ -131,11 +131,11 @@ export const TRACK_SELECT = `SELECT c.*,
 
 const SEARCH_WHERE = " WHERE c.Title LIKE :search OR ar.Name LIKE :search OR c.FolderPath LIKE :search";
 
-export function numberOrNull(value: unknown): number | null {
+function numberOrNull(value: unknown): number | null {
   return typeof value === "number" ? value : null;
 }
 
-export function stringOrNull(value: unknown): string | null {
+function stringOrNull(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 

@@ -21,7 +21,7 @@ export interface Rgb {
   b: number;
 }
 
-export interface Lab {
+interface Lab {
   L: number;
   a: number;
   b: number;
@@ -47,11 +47,11 @@ export function linearToSrgb(value: number): number {
   return Math.round((v <= 0.0031308 ? v * 12.92 : 1.055 * Math.pow(v, 1 / 2.4) - 0.055) * 255);
 }
 
-export function rgbToLinear(rgb: Rgb): [number, number, number] {
+function rgbToLinear(rgb: Rgb): [number, number, number] {
   return [srgbToLinear(rgb.r), srgbToLinear(rgb.g), srgbToLinear(rgb.b)];
 }
 
-export function linearToRgb(linear: [number, number, number]): Rgb {
+function linearToRgb(linear: [number, number, number]): Rgb {
   return { r: linearToSrgb(linear[0]), g: linearToSrgb(linear[1]), b: linearToSrgb(linear[2]) };
 }
 

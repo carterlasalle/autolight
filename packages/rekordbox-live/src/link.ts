@@ -52,7 +52,7 @@ export interface LinkState {
   readonly playing: boolean | null;
 }
 
-export interface LinkTransport {
+interface LinkTransport {
   readonly mode: LinkMode;
   start(): Promise<void>;
   stop(): Promise<void>;

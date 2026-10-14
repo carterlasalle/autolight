@@ -49,7 +49,7 @@ export function globalCellOrder(fixtures: Fixture[]): OrderedCell[] {
 
 export interface FixtureCellRef { fixtureId: string; cellIndex: number }
 
-export interface PlacedCell extends FixtureCellRef { x: number; y: number }
+interface PlacedCell extends FixtureCellRef { x: number; y: number }
 
 export function resolveTarget(fixtures: Fixture[], target: string): FixtureCellRef[] {
   if (target === "ALL") return globalCellOrder(fixtures);
@@ -90,7 +90,7 @@ export const QUALIFICATION_STEPS = [
   "segment-count", "segment-order", "arm-settle", "fps", "latency", "reconnect",
 ] as const;
 
-export type QualificationStep = (typeof QUALIFICATION_STEPS)[number];
+type QualificationStep = (typeof QUALIFICATION_STEPS)[number];
 
 export interface QualificationResult {
   passed: Record<QualificationStep, boolean>;

@@ -1,7 +1,7 @@
 // T-TRU-12 runtime invariants. Cheap checks safe to run in production:
 // checkInvariants never throws; violations are reported, never raised.
 
-export const INVARIANT_CODES = [
+const INVARIANT_CODES = [
   "pending-frames",
   "armed-power",
   "segment-zones",
@@ -13,16 +13,16 @@ export const INVARIANT_CODES = [
   "invariant-error",
 ] as const;
 
-export type InvariantCode = (typeof INVARIANT_CODES)[number];
+type InvariantCode = (typeof INVARIANT_CODES)[number];
 
-export interface InvariantCommand {
+interface InvariantCommand {
   deviceId: string;
   kind: string;
   on?: boolean;
   kelvin?: number;
 }
 
-export interface InvariantTransport {
+interface InvariantTransport {
   deviceId: string;
   transport: string;
 }

@@ -23,7 +23,7 @@ export function emptyVenue(room: Room): Venue {
 
 // Result of a venue switch: the bumped venue and the rerender counter derived
 // from the same version, so persistence and rerender stay consistent.
-export interface VenueSwitch {
+interface VenueSwitch {
   venue: Venue;
   rerenderVersion: number;
 }

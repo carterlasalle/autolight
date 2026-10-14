@@ -19,7 +19,7 @@ import { pathToFileURL } from "node:url";
 /** Where a profile number came from. `hardware-measured` is the only source
  *  that counts as a measurement of `unit` hardware; nothing in this repo has
  *  one yet. */
-export type ProfileSource =
+type ProfileSource =
   | "unmeasured"
   | "product-material"
   | "toolkit-default"
@@ -93,7 +93,7 @@ export interface DeviceCatalog {
 // outside the subset throws instead of being guessed at.
 // ---------------------------------------------------------------------------
 
-export type YamlScalar = string | number | boolean | null;
+type YamlScalar = string | number | boolean | null;
 
 export type YamlNode = YamlScalar | YamlNode[] | { [key: string]: YamlNode };
 

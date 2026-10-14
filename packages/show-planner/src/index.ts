@@ -176,7 +176,7 @@ export function motifVariant(kind: string, occurrence: number): "forward" | "rev
   return occurrence % 2 === 0 ? "forward" : "reverse";
 }
 
-export interface TrackIdentity2 {
+interface TrackIdentity2 {
   coreHues: [number, number];
   accentHue: number;
 }

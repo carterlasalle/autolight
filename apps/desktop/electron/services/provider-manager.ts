@@ -68,7 +68,7 @@ function pollHelper(port = 45994, timeoutMs = 3000): Promise<HelperDeck[] | null
   return promise;
 }
 
-export async function pollAxDecks(): Promise<AxDeckReading[]> {
+async function pollAxDecks(): Promise<AxDeckReading[]> {
   // Helper first: the signed ax-decks-helper serves decks the dev binary
   // can never read itself. osascript stays as the fallback for packaged
   // builds where the app itself carries the Automation approval.
@@ -188,7 +188,7 @@ export function startProlinkWatch(onBeat: (beat: number, bpm: number | null) => 
 // cause instead of showing a silent "no link peer".
 let prolinkBindError: string | null = null;
 
-export function prolinkBindFailure(): string | null {
+function prolinkBindFailure(): string | null {
   return prolinkBindError;
 }
 

@@ -57,7 +57,7 @@ export const SHUTDOWN_ORDER = [
   "exit",
 ] as const;
 
-export type ShutdownStep = (typeof SHUTDOWN_ORDER)[number];
+type ShutdownStep = (typeof SHUTDOWN_ORDER)[number];
 
 export type ShutdownPorts = {
   [step in ShutdownStep]?: () => Promise<void> | void;

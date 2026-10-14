@@ -19,7 +19,7 @@ export type CaptureHost = "audio-window" | "renderer";
 export type CaptureHostMode = CaptureHost | "audio-window-with-renderer-fallback";
 
 /** audio.capture.host default (DS-14). */
-export const DEFAULT_CAPTURE_HOST_MODE: CaptureHostMode = "audio-window";
+const DEFAULT_CAPTURE_HOST_MODE: CaptureHostMode = "audio-window";
 
 export type CapturePermission = "granted" | "denied" | "not-requested";
 

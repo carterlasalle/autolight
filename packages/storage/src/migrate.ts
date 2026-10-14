@@ -302,7 +302,7 @@ export function tableNames(db: SqlExec): string[] {
     .map((row) => row.name);
 }
 
-export function hasTable(db: SqlExec, name: string): boolean {
+function hasTable(db: SqlExec, name: string): boolean {
   const row = db.get<{ name: string }>("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?", [name]);
 
   return row !== undefined;

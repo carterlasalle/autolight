@@ -51,7 +51,7 @@ export interface BindingStream {
   close(): Promise<unknown>;
 }
 
-export interface BindingHealth {
+interface BindingHealth {
   state: string;
   failures: number;
   available: boolean;

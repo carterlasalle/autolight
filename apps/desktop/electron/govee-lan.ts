@@ -254,9 +254,9 @@ export interface ManualReceipt {
   failed: { mac: string; message: string }[];
 }
 
-export type AlternateMode = "lamps" | "halves";
+type AlternateMode = "lamps" | "halves";
 
-export interface AlternateColours {
+interface AlternateColours {
   a: [number, number, number];
   b: [number, number, number];
 }
@@ -2598,7 +2598,7 @@ export class GoveeLanManager implements StreamTransport {
   }
 }
 
-export interface LanRegistryFile {
+interface LanRegistryFile {
   version: 1;
   devices: {
     mac: string;

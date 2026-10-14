@@ -43,7 +43,7 @@ export type ReaderMode = "rekordbox-connect" | "pyrekordbox" | "auto";
 export type ActiveReader = "rekordbox-connect" | "pyrekordbox";
 
 /** Rows the service reads for snapshots and diagnostics. */
-export const SNAPSHOT_LIMIT = 5000;
+const SNAPSHOT_LIMIT = 5000;
 
 const DEFAULT_ENGINE: WatchEngine = "auto";
 

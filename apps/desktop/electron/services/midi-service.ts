@@ -153,7 +153,7 @@ export const FLX4_NOTE = NOTE;
 
 let instance: MidiService | null = null;
 
-export function resetMidiService(): void {
+function resetMidiService(): void {
   instance = null;
 }
 

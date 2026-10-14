@@ -38,7 +38,7 @@ export const LAYER_ORDER: readonly RenderLayer[] = [
   "master",
 ];
 
-export type BlendMode = "replace" | "over" | "multiply" | "add" | "max";
+type BlendMode = "replace" | "over" | "multiply" | "add" | "max";
 
 /** `add` never exceeds this ceiling (spec 33). */
 export const ADD_CEILING = 1;
@@ -146,7 +146,7 @@ const LAYER_LOOKUP: Record<RenderLayer, true> = {
   master: true,
 };
 
-export function isRenderLayer(value: string): value is RenderLayer {
+function isRenderLayer(value: string): value is RenderLayer {
   return LAYER_LOOKUP[value as RenderLayer] === true;
 }
 

@@ -14,7 +14,7 @@ export interface FastPathRequest extends ArtifactKeyParts, PlanKeyParts {}
 
 export type FastPathMiss = "no-artifact" | "invalid-artifact" | "no-plan" | "invalid-plan";
 
-export interface FastPathTimings {
+interface FastPathTimings {
   totalMs: number;
   lookupMs: number;
   parseMs: number;

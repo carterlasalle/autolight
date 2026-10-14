@@ -50,7 +50,7 @@ export { stripeFrame } from "./qualification.js";
 export type { DeviceHealthState, DeviceMetricsRow, MetricsSample } from "./metrics.js";
 
 // Legacy alias kept until T-GOV-02 deletes encodeFrame (M1): maps to encodeRaw.
-export function encodeFrame(opcode: number, payload: Uint8Array): Uint8Array {
+function encodeFrame(opcode: number, payload: Uint8Array): Uint8Array {
   return encodeRaw(opcode, payload);
 }
 
@@ -87,7 +87,7 @@ export function blackoutPayload(segmentCount: number): Uint8Array {
 }
 
 // Linear-light channel scale (§49). Shared with renderer math.
-export function scaleChannel(v: number, intensity: number, gamma = 2.2): number {
+function scaleChannel(v: number, intensity: number, gamma = 2.2): number {
   const lin = Math.pow(Math.min(255, Math.max(0, v)) / 255, gamma) * Math.min(1, Math.max(0, intensity));
 
   return Math.round(Math.pow(lin, 1 / gamma) * 255);

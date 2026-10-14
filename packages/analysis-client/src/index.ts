@@ -64,7 +64,7 @@ function packageRoot(): string {
   return dirname(fileURLToPath(new URL(".", import.meta.url)));
 }
 
-export function resolveProjectDir(input?: string): string {
+function resolveProjectDir(input?: string): string {
   if (input && isAbsolute(input)) return input;
 
   if (input) return resolve(process.cwd(), input);

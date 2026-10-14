@@ -26,7 +26,7 @@ declare const __AUTOLIGHT_TEST_BUILD__: boolean;
 
 // Startup sequence (§132): DB → show worker → Govee → DJ adapter →
 // library watcher → analysis worker → venue → tracks → plans → arm → READY.
-export type StartupStage =
+type StartupStage =
   | "db" | "show-worker" | "govee" | "dj-adapter" | "library"
   | "analysis" | "venue" | "tracks" | "plans" | "arm" | "ready";
 
@@ -460,7 +460,7 @@ function recordShutdownStep(step: string, ms: number): void {
   } catch { /* never block teardown on logging */ }
 }
 
-export function markShuttingDown(): void {
+function markShuttingDown(): void {
   shuttingDownNow = true;
   setShowAcceptingUi(false);
 }

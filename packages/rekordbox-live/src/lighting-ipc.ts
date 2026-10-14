@@ -30,7 +30,7 @@ import {
   type QualityLabel,
 } from "./providers.js";
 
-export const LIGHTING_PROVIDER_ID = "lighting-ipc" as const satisfies ProviderId;
+const LIGHTING_PROVIDER_ID = "lighting-ipc" as const satisfies ProviderId;
 
 // Capture container framing. A capture is a byte stream of frames:
 // u32be length N, then N bytes of UTF-8 JSON for one lighting event.
@@ -61,7 +61,7 @@ const lightingEventSchema = z.object({
 
 export type LightingEvent = z.infer<typeof lightingEventSchema>;
 
-export interface LightingFrame {
+interface LightingFrame {
   readonly event: LightingEvent;
   readonly raw: Record<string, unknown>;
 }
@@ -194,9 +194,9 @@ export const LIGHTING_MATRIX_CONDITIONS = [
   "crossfader-extremes", "tempo-mismatch", "tempo-sync",
 ] as const;
 
-export type LightingMatrixAction = (typeof LIGHTING_MATRIX_ACTIONS)[number];
+type LightingMatrixAction = (typeof LIGHTING_MATRIX_ACTIONS)[number];
 
-export type LightingMatrixCondition = (typeof LIGHTING_MATRIX_CONDITIONS)[number];
+type LightingMatrixCondition = (typeof LIGHTING_MATRIX_CONDITIONS)[number];
 
 export interface LightingMatrixCell {
   readonly action: LightingMatrixAction;
@@ -227,7 +227,7 @@ export const LIGHTING_SURFACES = [
   "ipc-pipes", "file-descriptors", "rekordbox-logs", "soundswitch-logs",
 ] as const;
 
-export type LightingSurface = (typeof LIGHTING_SURFACES)[number];
+type LightingSurface = (typeof LIGHTING_SURFACES)[number];
 
 export interface LightingSurfaceInventory {
   readonly rekordboxVersion: string;

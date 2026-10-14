@@ -20,7 +20,7 @@ export function tileForFixture(f: Fixture, stats: { fps: number; sent: number; s
 
 // Setup wizard steps (§100): dj → controller → library → lights → identify →
 // placement → orientation → qualification → analysis → preview → ready.
-export const SETUP_STEPS = [
+const SETUP_STEPS = [
   "dj", "controller", "library", "lights", "identify",
   "placement", "orientation", "qualification", "analysis", "preview",
 ] as const;

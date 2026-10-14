@@ -15,13 +15,13 @@
 // OD-08: fpcalc stays out of the installer unless the owner accepts the LGPL
 // binary; the acoustic path here needs no external binary.
 
-export type FingerprintMode = "pcm-hash" | "acoustic" | "both";
+type FingerprintMode = "pcm-hash" | "acoustic" | "both";
 
 /** identity.fingerprint.mode default: the DS-34 combined mode. */
 export const DEFAULT_FINGERPRINT_MODE: FingerprintMode = "both";
 
 /** identity.fingerprint.acousticThreshold default. */
-export const DEFAULT_ACOUSTIC_THRESHOLD = 0.9;
+const DEFAULT_ACOUSTIC_THRESHOLD = 0.9;
 
 /** Canonical samples quantized to 16-bit before hashing (one channel pair). */
 export function quantize16(samples: Float32Array | readonly number[]): Int16Array {

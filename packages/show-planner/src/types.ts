@@ -28,7 +28,7 @@ export function isCueLevel(v: string): v is CueLevel {
 
 // Spec 33 layer names, shared spelling with the renderer layer stack so an
 // explicit planner tag wins over the renderer's per-type fallback.
-export const PLAN_LAYERS = [
+const PLAN_LAYERS = [
   "base",
   "spatial",
   "rhythm",
@@ -309,7 +309,7 @@ export const EMPTY_EDITS: PlanEdits = {
   sectionStyles: {},
 };
 
-export interface FingerprintOf {
+interface FingerprintOf {
   readonly value: string;
   readonly source: "pcm" | "file" | "id";
 }

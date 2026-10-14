@@ -20,13 +20,13 @@ import {
 
 export type Flx4Quality = "observed" | "estimated";
 
-export interface ButtonState {
+interface ButtonState {
   on: boolean;
   atNs: bigint | null;
   quality: Flx4Quality;
 }
 
-export type LoopAction = "in" | "out" | "halve" | "double" | "exit" | "reloop" | "beat-loop";
+type LoopAction = "in" | "out" | "halve" | "double" | "exit" | "reloop" | "beat-loop";
 
 export interface LoopState {
   /** Last observed loop state; null until a loop control was touched. */
@@ -38,7 +38,7 @@ export interface LoopState {
   quality: Flx4Quality;
 }
 
-export interface JogState {
+interface JogState {
   touched: boolean;
   /** Last jog delta, positive clockwise. */
   velocity: number;
@@ -72,7 +72,7 @@ export interface DeckControllerState {
   loads: { count: number; lastAtNs: bigint | null };
 }
 
-export interface Flx4MixerState {
+interface Flx4MixerState {
   crossfader: { position: number; atNs: bigint } | null;
   masterLevel: number | null;
   headMix: number | null;
@@ -430,7 +430,7 @@ export class Flx4StateModel {
 export type TempoRangeSetting = "source" | "6" | "10" | "16" | "wide";
 
 /** Fixed ranges in percent, from the Rekordbox setting labels (`flx4.tempoRange`). */
-export const FIXED_TEMPO_RANGE_PERCENT: Readonly<Record<"6" | "10" | "16", number>> = { 6: 6, 10: 10, 16: 16 };
+const FIXED_TEMPO_RANGE_PERCENT: Readonly<Record<"6" | "10" | "16", number>> = { 6: 6, 10: 10, 16: 16 };
 
 export interface TempoFitSample {
   deck: Flx4Deck;

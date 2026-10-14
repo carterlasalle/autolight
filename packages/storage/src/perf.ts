@@ -63,7 +63,7 @@ export function percentile(samples: readonly number[], target: number): number {
   return lo + (hi - lo) * (rank - lower);
 }
 
-export type Statistic = "p50" | "p95" | "p99" | "max";
+type Statistic = "p50" | "p95" | "p99" | "max";
 
 export interface Measurement {
   name: string;
@@ -216,7 +216,7 @@ export function stallDetected(samples: readonly number[], stallMs: number): bool
   return samples.some((sample) => sample > floor);
 }
 
-export interface MachineDescription {
+interface MachineDescription {
   platform: string;
   release: string;
   arch: string;
@@ -225,7 +225,7 @@ export interface MachineDescription {
   totalMemMb: number;
 }
 
-export function describeMachine(): MachineDescription {
+function describeMachine(): MachineDescription {
   return {
     platform: platform(),
     release: release(),

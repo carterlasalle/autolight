@@ -25,7 +25,7 @@ const STEP_LABELS: Record<WizardStep, string> = {
 const REQUIRED_STEPS: readonly WizardStep[] = [1, 2, 3, 4, 5, 7, 8, 9];
 
 /** Both bounds of the places input; the HTML `max` attribute cannot clamp typed text. */
-export function clampPlaces(value: string): number {
+function clampPlaces(value: string): number {
   const parsed = Number(value);
 
   if (!Number.isFinite(parsed)) return MIN_PLACES;
@@ -34,7 +34,7 @@ export function clampPlaces(value: string): number {
 }
 
 /** The persisted topology: "both" is a split run, whatever the mirror check counted. */
-export function wizardTopology(direction: WizardDirectionAnswer, places: number): RunTopology {
+function wizardTopology(direction: WizardDirectionAnswer, places: number): RunTopology {
   if (direction === "both") return classifyDirection(direction);
 
   return mirrorCheck(places).topology;

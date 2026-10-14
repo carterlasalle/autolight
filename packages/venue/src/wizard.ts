@@ -50,7 +50,7 @@ export interface WizardFit {
   maxErrCells: number;
 }
 
-export function fitWizardRun(
+function fitWizardRun(
   run: Run,
   cellCount: number,
   anchors: CellAnchor[],
@@ -65,7 +65,7 @@ export function fitWizardRun(
   return { cells: ordered, gaps };
 }
 
-export function virtualUserAnchors(strip: SimStrip, run: Run, corners: number[]): CellAnchor[] {
+function virtualUserAnchors(strip: SimStrip, run: Run, corners: number[]): CellAnchor[] {
   if (strip.cellCount <= 0 || strip.cellToArcM.length < strip.cellCount) {
     throw new Error(`strip has ${strip.cellCount} cells but ${strip.cellToArcM.length} arc positions; cannot anchor`);
   }
@@ -93,7 +93,7 @@ export function virtualUserAnchors(strip: SimStrip, run: Run, corners: number[])
   return anchors.sort((a, b) => a.cell - b.cell);
 }
 
-export function fitErrorCells(fitted: MappedCell[], truthM: number[], runLen: number, cellCount: number): number {
+function fitErrorCells(fitted: MappedCell[], truthM: number[], runLen: number, cellCount: number): number {
   const pitch = runLen / Math.max(1, cellCount);
   let worst = 0;
 

@@ -13,7 +13,7 @@ export interface GoveeCloudDevice {
   firmware?: string;
 }
 
-export interface GoveeCloudTransport {
+interface GoveeCloudTransport {
   name: string;
   devices(apiKey: string): Promise<GoveeCloudDevice[]>;
 }
@@ -127,7 +127,7 @@ export class CloudService implements Service {
 
 let instance: CloudService | null = null;
 
-export function resetCloudService(): void {
+function resetCloudService(): void {
   instance = null;
 }
 

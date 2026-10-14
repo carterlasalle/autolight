@@ -9,13 +9,13 @@
 // `analysis.frame.hop` 512); callers pass the resolved configuration, these
 // are the fallbacks.
 
-export const DEFAULT_FFT_SIZE = 2048;
+const DEFAULT_FFT_SIZE = 2048;
 
-export const DEFAULT_MEL_BANDS = 24;
+const DEFAULT_MEL_BANDS = 24;
 
-export const DEFAULT_ONSET_THRESHOLD = 1.5;
+const DEFAULT_ONSET_THRESHOLD = 1.5;
 
-export const DEFAULT_HOP_SIZE = 512;
+const DEFAULT_HOP_SIZE = 512;
 
 export interface AgcState {
   gain: number;
@@ -152,7 +152,7 @@ export function hzToMel(hz: number): number {
   return 2595 * Math.log10(1 + hz / 700);
 }
 
-export function melToHz(mel: number): number {
+function melToHz(mel: number): number {
   return 700 * (10 ** (mel / 2595) - 1);
 }
 
@@ -208,9 +208,9 @@ export function melEnergies(power: Float64Array, filters: readonly Float64Array[
 
 export type LiveBand = "bass" | "lowMid" | "mid" | "high";
 
-export const LIVE_BAND_ORDER: readonly LiveBand[] = ["bass", "lowMid", "mid", "high"];
+const LIVE_BAND_ORDER: readonly LiveBand[] = ["bass", "lowMid", "mid", "high"];
 
-export const LIVE_BANDS: Record<LiveBand, readonly [number, number]> = {
+const LIVE_BANDS: Record<LiveBand, readonly [number, number]> = {
   bass: [20, 150],
   lowMid: [150, 500],
   mid: [500, 2000],

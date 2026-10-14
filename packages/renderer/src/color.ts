@@ -27,7 +27,7 @@ export interface Oklab {
 export type LinearRgb = [number, number, number];
 
 /** render.gammaDefault: spec 49 approximation before per-device calibration. */
-export const DEFAULT_GAMMA = 2.2;
+const DEFAULT_GAMMA = 2.2;
 
 export interface FixtureCalibrationInput {
   /** Per-device gamma from qualification; defaults to render.gammaDefault. */

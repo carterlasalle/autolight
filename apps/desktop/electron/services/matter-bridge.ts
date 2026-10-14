@@ -152,7 +152,7 @@ export class MatterBridge implements Service {
 
 let instance: MatterBridge | null = null;
 
-export function getMatterBridge(opts: MatterBridgeOptions = {}): MatterBridge {
+function getMatterBridge(opts: MatterBridgeOptions = {}): MatterBridge {
   // Options merge on every call so a later caller passing spawn/maxRestarts is
   // honored instead of silently ignored.
   if (instance === null) instance = new MatterBridge(opts);

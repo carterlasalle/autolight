@@ -52,7 +52,7 @@ export interface LiveTrackInput {
   titleIndex?: (title: string, artist?: string) => string[];
 }
 
-export interface ResolverStepOutcome {
+interface ResolverStepOutcome {
   step: ResolverStepId;
   matched: boolean;
   confidence: number;

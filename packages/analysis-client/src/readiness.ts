@@ -26,7 +26,7 @@ export const INPUT_KEYS = [
 
 export type InputKey = (typeof INPUT_KEYS)[number];
 
-export type InputStatus = "present" | "absent" | "failed" | "skipped";
+type InputStatus = "present" | "absent" | "failed" | "skipped";
 
 export interface InputEntry {
   status: InputStatus;

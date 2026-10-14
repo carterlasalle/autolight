@@ -46,7 +46,7 @@ import {
   type QualityLabel,
 } from "./providers.js";
 
-export const OS2L_PROVIDER_ID = "os2l" as const satisfies ProviderId;
+const OS2L_PROVIDER_ID = "os2l" as const satisfies ProviderId;
 
 export const OS2L_SERVICE_TYPE = "_os2l._tcp";
 
@@ -54,7 +54,7 @@ export const OS2L_PORT_MIN = 8010;
 
 export const OS2L_PORT_MAX = 8060;
 
-export const OS2L_MAX_BUFFER = 1024 * 1024;
+const OS2L_MAX_BUFFER = 1024 * 1024;
 
 const os2lBeatSchema = z.object({
   evt: z.literal("beat"),

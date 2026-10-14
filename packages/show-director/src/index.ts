@@ -22,7 +22,7 @@
 // counter, recent motif history, palette, recent effects, cooldowns, darkness
 // state, spatial direction.
 
-export type DirectorEngine = "rules" | "audio-informed" | "combined";
+type DirectorEngine = "rules" | "audio-informed" | "combined";
 
 /** runtime.adaptive.phraseBeats default. */
 export const DEFAULT_PHRASE_BEATS = 32;
@@ -33,12 +33,12 @@ export const DEFAULT_COOLDOWN_PHRASES = 2;
 /** runtime.adaptive.minLooks default: the library never shrinks below this. */
 export const DEFAULT_MIN_LOOKS = 24;
 
-export type EnergyLevel = "low" | "mid" | "high";
+type EnergyLevel = "low" | "mid" | "high";
 
-export type SpatialDirection = "left" | "right" | "center" | "alternate";
+type SpatialDirection = "left" | "right" | "center" | "alternate";
 
 /** Structural hint; FLX4 expressive hints match this shape without an import. */
-export type DirectorHint =
+type DirectorHint =
   | { kind: "fader-rise"; channel: 1 | 2; value: number }
   | { kind: "filter-sweep"; channel: 1 | 2; value: number }
   | { kind: "transport"; control: string; on: boolean };
@@ -214,7 +214,7 @@ function advisedEnergy(base: EnergyLevel, input: DirectorInput, engine: Director
 // the advised energy; among candidates prefer an unused motif and palette,
 // skip cooled-down looks and the current look, and never pick a strobe look
 // twice in a row. Deterministic: phrase counter breaks ties, no randomness.
-export function pickPhraseLook(library: PhraseLook[], state: DirectorState, energy: EnergyLevel): PhraseLook {
+function pickPhraseLook(library: PhraseLook[], state: DirectorState, energy: EnergyLevel): PhraseLook {
   const atEnergy = library.filter((l) => l.energy === energy);
   const pool = atEnergy.length > 0 ? atEnergy : library;
   const last = state.effects[state.effects.length - 1];

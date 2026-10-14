@@ -54,9 +54,9 @@ const labelTableSchema = z.object({
   }).strict()),
 }).strict();
 
-export type HighVariantTemplate = z.infer<typeof highVariantTemplateSchema>;
+type HighVariantTemplate = z.infer<typeof highVariantTemplateSchema>;
 
-export type HighVariantRules = z.infer<typeof highVariantRulesSchema>;
+type HighVariantRules = z.infer<typeof highVariantRulesSchema>;
 
 export type PssiCase = z.infer<typeof labelTableSchema>["cases"][number];
 

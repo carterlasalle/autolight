@@ -6,7 +6,7 @@ import type { TrackModel } from "@autolight/contracts";
 // custom flag (the IPC schema strips it), so the ControlGrid's Custom switch
 // chooses which swatches to offer, not the payload. Flash/flop coverage lives
 // in live-view, which always pairs a resume with its own preceding freeze.
-export type ManualChannel =
+type ManualChannel =
   | "show/energy" | "show/trigger-build" | "show/trigger-drop"
   | "venue/set-color" | "master/intensity" | "master/resume" | "master/freeze";
 

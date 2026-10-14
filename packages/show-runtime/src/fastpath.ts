@@ -22,7 +22,7 @@ export const DEFAULT_UPGRADE_BOUNDARY: UpgradeBoundary = "phrase";
 /** runtime.fastPath.budgetMs default: load event to installed plan. */
 export const DEFAULT_FAST_PATH_BUDGET_MS = 100;
 
-export interface FastPathLoad {
+interface FastPathLoad {
   track: TrackModel | null;
   plan: ShowPlan | null;
   miss: FastPathMiss | null;

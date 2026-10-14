@@ -44,7 +44,7 @@ export interface VenueFields {
 
 export const SIDE_LEFT = 0;
 
-export const SIDE_CENTER = 1;
+const SIDE_CENTER = 1;
 
 export const SIDE_RIGHT = 2;
 
