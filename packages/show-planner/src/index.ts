@@ -10,45 +10,23 @@ import { DEFAULT_VENUE_CLASS } from "./types.js";
 import { BUILT_IN_STYLES as NEW_STYLES } from "./styles.js";
 import type { PlannerStyle } from "./types.js";
 
-export { compileShow, PLANNER_VERSION };
+export { PLANNER_VERSION };
 
-export { DEFAULT_CONFIG, resolveConfig, configHash } from "./config.js";
 
-export { BUILT_IN_STYLES, DEFAULT_STYLE_ID, resolveStyle, STYLE_IDS } from "./styles.js";
+export { BUILT_IN_STYLES } from "./styles.js";;;;
 
-export { compileShow as compile } from "./compile.js";
 
-export { validateCompiledPlan, evaluateCompiledPlan, diagnosticsOutOfBounds, countPaletteChanges } from "./validate.js";
 
-export { freshRestraint, restrain, requestBlinder, observeSection } from "./restraint.js";
 
-export { planRecurrence, sectionSimilarity, summarizeSections } from "./recurrence.js";
 
-export { planTrackEvents, planEvent } from "./events.js";
 
-export { dropProgram, breakdownCues, fakeDropHold } from "./contrast.js";
 
-export { pickCandidate, registerEvaluator, evaluatorNames, scoreCandidate, vetoCandidate } from "./scoring.js";
 
-export { cueId, regenerateWithLocks, applyEdits, inLockedRegion } from "./corrections.js";
 
-export { PlanCache, cacheKeyFor, spliceSection } from "./cache.js";
 
-export { blendOklch, blendRgb, oklchDistance, oklabDistance, ensureMinDistance } from "./color.js";
+export { blendRgb } from "./color.js";;;;;
 
-export { planIdentity, colourChangeAllowed } from "./identity.js";
 
-export {
-  trackArcPosition,
-  findDropPlans,
-  stagedBuild,
-  phraseCues,
-  barCues,
-  beatCues,
-  subBeatCues,
-  LEVEL_ATTRIBUTES,
-  CUE_LEVEL_ATTRIBUTES,
-} from "./hierarchy.js";
 
 export type {
   Beat,
@@ -60,10 +38,7 @@ export type {
   PlanCue,
   GlobalDesign,
   SectionPlan,
-  MotifEntry,
   MotifMap,
-  ShowConstraints,
-  DeterminismRecord,
   CompiledShowPlan,
   VenueCapabilityClass,
   PlannerConfigSnapshot,
@@ -75,21 +50,6 @@ export type {
   CompileResult,
 } from "./types.js";
 
-export {
-  DEFAULT_VENUE_CLASS,
-  EMPTY_EDITS,
-  envelopeToBeats,
-  fnv1aHex,
-  hashValue,
-  isCueLevel,
-  isPlanLayer,
-  mulberry32,
-  selectorHasDeviceRef,
-  selectorName,
-  stableStringify,
-  stringHasDeviceRef,
-  trackFingerprint,
-} from "./types.js";
 
 export * from "./primitives.js";
 

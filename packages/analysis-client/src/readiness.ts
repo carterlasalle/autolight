@@ -2,7 +2,7 @@
 // Mirror of analysis/src/autolight_analysis/readiness.py: same key order and
 // level rules. Keep both sides in step by hand; the drift test
 // (analysis/tests/test_readiness.py::test_ts_mirror_in_sync) fails otherwise.
-export const INPUT_KEYS = [
+const INPUT_KEYS = [
   "source.audio",
   "native.rekordbox.grid",
   "native.rekordbox.pssi",

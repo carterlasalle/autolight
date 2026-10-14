@@ -6,7 +6,7 @@
 import { encodeRaw } from "./razer.js";
 
 export {
-  OPCODE, PORTS, encodeRaw, decodeRaw, envelope, arm, paint, paintZoned,
+  OPCODE, encodeRaw, decodeRaw, envelope, arm, paint, paintZoned,
   parseStatus, MULTICAST, SCAN_REQUEST, parseScanReply,
   turnCommand, brightnessCommand, colorCommand, devStatusCommand, parseDevStatus,
   PacingStream, WALL_SCHEDULER,
@@ -19,31 +19,27 @@ export type {
 } from "./razer.js";
 
 // DS-02 engine switch (T-GOV-03): toolkit primary, native-ts fallback.
-export { EngineSelector, createEngineSelector, ToolkitLoadFailure } from "./engines/index.js";
+export { createEngineSelector, ToolkitLoadFailure } from "./engines/index.js";;
 
 export type { EngineSummary, DeviceEngineDecision, EngineSelectorOptions } from "./engines/index.js";
 
-export { ToolkitEngine, defaultToolkitLoader, isUnavailableError, ToolkitUnavailableError, unavailable, resolutionFor } from "./engines/toolkit.js";
+export { ToolkitEngine } from "./engines/toolkit.js";;;;;;
 
 export type { BindingModule, BindingDevice, BindingDeviceStatus, BindingStream, BindingSdk, BindingDeviceHandle, ToolkitLoader, ToolkitLoadResult, UnavailableReasonClass } from "./engines/toolkit.js";
 
-export { NativeStreamEngine, SocketTransport, hasStatus, hasDiscover } from "./engines/native-ts.js";
+export { NativeStreamEngine, SocketTransport } from "./engines/native-ts.js";;;
 
 export type { NativeEngineOptions, StatusCapable, DiscoverCapable } from "./engines/native-ts.js";
 
-export { selectResolution } from "./resolution.js";
 
 export type { ResolutionKind, ResolutionMode, ResolutionInput, ResolutionCandidate, ResolutionDecision } from "./resolution.js";
 
-export { FirmwarePolicy } from "./firmware.js";
 
 export type { FirmwarePolicyOptions, StreamGate, FirmwareDecision } from "./firmware.js";
 
-export { ptRealCommand, parsePtRealCommand, sceneFromCatalog, listScenes, sceneCommand } from "./scenes.js";
 
 export type { SceneCatalog, SceneMoment, SceneRequest } from "./scenes.js";
 
-export { DeviceMetrics } from "./metrics.js";
 
 export { stripeFrame } from "./qualification.js";
 
@@ -147,9 +143,9 @@ export function latencyBeats(latencyMs: number, bpm: number): number {
 // Transport contract: Electron main owns UDP sockets; renderer owns desired
 // state (§149). LAN first with read-back verify; BLE last-resort single-color;
 // cloud REST never for frames (10/min/device ceiling).
-export type LanTransport = "lan" | "ble" | "cloud";
+type LanTransport = "lan" | "ble" | "cloud";
 
-export interface SegmentStream {
+interface SegmentStream {
   setAll(frame: Uint8Array): void;
   flush(): void;
   close(): void;

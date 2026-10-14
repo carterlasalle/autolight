@@ -57,7 +57,7 @@ export type SpatialSelector =
   | { readonly kind: "intersection"; readonly of: readonly SpatialSelector[] }
   | { readonly kind: "difference"; readonly of: readonly SpatialSelector[] };
 
-export function selectorName(s: SpatialSelector): string {
+function selectorName(s: SpatialSelector): string {
   switch (s.kind) {
     case "group":
       return s.group;
@@ -165,7 +165,7 @@ export interface SectionPlan {
   };
 }
 
-export interface MotifEntry {
+interface MotifEntry {
   readonly id: string;
   readonly baseLook: string;
   readonly sections: readonly number[];
@@ -187,12 +187,12 @@ export interface MotifMap {
   readonly motifs: readonly MotifEntry[];
 }
 
-export interface ShowConstraints {
+interface ShowConstraints {
   readonly budgetsUsed: Readonly<Record<string, number>>;
   readonly budgetsRemaining: Readonly<Record<string, number>>;
 }
 
-export interface DeterminismRecord {
+interface DeterminismRecord {
   readonly fingerprint: string;
   readonly fingerprintSource: "pcm" | "file" | "id";
   readonly plannerVersion: string;

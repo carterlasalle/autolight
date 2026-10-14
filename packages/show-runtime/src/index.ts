@@ -162,7 +162,7 @@ const SCRATCH_MODULATION_BEATS = 0.25;
 
 const SCRATCH_MODULATION_GAIN = 0.25;
 
-export interface ScratchState {
+interface ScratchState {
   holding: boolean;
   /** Recent direction reversals, as observation timestamps in ns. */
   reversals: bigint[];
@@ -187,7 +187,7 @@ function recentReversals(scratch: ScratchState, nowNs: bigint): number {
 // another input to the same state, folded in by the caller. A steady reverse
 // rate with no reversals is a reverse effect, which follows the timeline
 // backward instead of holding (spec 61).
-export function scratchDetected(
+function scratchDetected(
   state: DeckState,
   scratch: ScratchState,
   opts: ScratchOptions = SCRATCH_DEFAULTS,
@@ -199,7 +199,7 @@ export function scratchDetected(
   return reversals >= opts.minReversalsPerSec;
 }
 
-export function observeRate(scratch: ScratchState, state: DeckState): ScratchState {
+function observeRate(scratch: ScratchState, state: DeckState): ScratchState {
   const previous = scratch.lastRate;
   const reversed = Math.sign(state.playRate) !== Math.sign(previous) && previous !== 0 && state.playRate !== 0;
   // Prune to the reversal window on every tick so a long session between

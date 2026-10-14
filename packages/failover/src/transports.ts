@@ -30,7 +30,7 @@ export const TRANSPORTS = [
 
 export type TransportId = (typeof TRANSPORTS)[number];
 
-export type FailoverPolicy = "strict" | "auto" | "hybrid";
+type FailoverPolicy = "strict" | "auto" | "hybrid";
 
 export type DeviceTransportMode =
   | "auto"
@@ -42,7 +42,7 @@ export type DeviceTransportMode =
   | "matter-basic"
   | "cloud-basic";
 
-export const DEVICE_MODES: readonly DeviceTransportMode[] = [
+const DEVICE_MODES: readonly DeviceTransportMode[] = [
   "auto",
   "hybrid",
   "lan-segmented",
@@ -76,7 +76,7 @@ export const FRAME_CLASS: Record<TransportId, FrameClass> = {
 };
 
 /** Explicit modes pin exactly one transport; the policy never overrides. */
-export const MODE_PINNED: Record<Exclude<DeviceTransportMode, "auto" | "hybrid">, TransportId> = {
+const MODE_PINNED: Record<Exclude<DeviceTransportMode, "auto" | "hybrid">, TransportId> = {
   "lan-segmented": "lan-razer",
   "lan-basic": "lan-json",
   "ble-segmented": "ble-segmented",

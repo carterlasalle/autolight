@@ -15,7 +15,6 @@ import { DEFAULT_BLEND_SPACE, type BlendSpace } from "./blend.js";
 
 export type { CrossfaderConfig, CrossfaderSide, DeckState };
 
-export { DEFAULT_BLEND_SPACE };
 
 // Show mixer (T-MIX-01 to T-MIX-06).
 //
@@ -313,7 +312,7 @@ const ADMITTED: Record<IntroStage, readonly LayerTag[]> = {
 
 // Palette and secondary spatial layer, then rhythm layers, then exclusive
 // impacts (spec 67), decided by layer tag, never by cue priority.
-export function admits(stage: IntroStage, layer: LayerTag): boolean {
+function admits(stage: IntroStage, layer: LayerTag): boolean {
   return ADMITTED[stage].includes(layer);
 }
 

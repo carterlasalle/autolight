@@ -11,7 +11,7 @@ export type HierarchyLevel = "track" | "section" | "phrase" | "bar" | "beat" | "
 
 // Attributes each level may change (spec 30). The validator rejects a cue
 // that changes a forbidden attribute at its level.
-export const LEVEL_ATTRIBUTES: Record<HierarchyLevel, readonly string[]> = {
+const LEVEL_ATTRIBUTES: Record<HierarchyLevel, readonly string[]> = {
   track: ["identity", "progression"],
   section: ["brightness-range", "palette", "density", "movement-family", "ceiling", "darkness"],
   phrase: ["variation", "direction", "progression", "participation"],
@@ -278,6 +278,5 @@ export function subBeatCues(
   ];
 }
 
-export { envelopeToBeats };
 
 export type { Oklch };

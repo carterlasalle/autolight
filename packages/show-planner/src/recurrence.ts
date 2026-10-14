@@ -135,4 +135,3 @@ export function planRecurrence(
   return { motifOf, motifIds: groups.map((g) => g.id), map, motifReturnBeats };
 }
 
-export { oklchDistance };

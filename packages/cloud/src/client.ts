@@ -18,7 +18,7 @@ export const CLOUD_BASE = "https://openapi.api.govee.com";
 
 export const DEVICES_PATH = "/router/api/v1/user/devices";
 
-export const SCENES_PATH = "/router/api/v1/device/scenes";
+const SCENES_PATH = "/router/api/v1/device/scenes";
 
 export const API_KEY_HEADER = "Govee-API-Key";
 
@@ -58,7 +58,7 @@ export interface RawDeviceEntry {
 
 /** Declared capability parsed from one entry. Null means the cloud claims
  *  no segment count and the measured value stands (T-CLD-02). */
-export interface DeclaredCapabilities {
+interface DeclaredCapabilities {
   declaredSegmentCount: number | null;
   instances: string[];
   controllable: boolean;
@@ -132,7 +132,7 @@ export class CloudApiError extends Error {
 
 /** Rejects any metadata call scheduled from the show clock. Cloud never
  *  carries frames and never serves beat-critical use (spec 148). */
-export function ensureNotShowTick(fromShowTick: boolean | undefined): void {
+function ensureNotShowTick(fromShowTick: boolean | undefined): void {
   if (fromShowTick === true) {
     throw new CloudFrameRejectedError(
       "Cloud call from the show tick is rejected: cloud never carries frames (spec 148).",

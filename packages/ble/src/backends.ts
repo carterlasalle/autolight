@@ -72,7 +72,7 @@ function reasonLabel(reasonClass: BleUnavailableReason): string {
 }
 
 /** Tile text for a device that fell back: kind plus the typed reason. */
-export function bleReasonText(reasonClass: BleUnavailableReason, detail: string): string {
+function bleReasonText(reasonClass: BleUnavailableReason, detail: string): string {
   return `${reasonLabel(reasonClass)}: ${detail}`;
 }
 
@@ -278,7 +278,7 @@ async function tryLoadToolkit(opts: BackendSelectorOptions): Promise<
 // ---------------------------------------------------------------------------
 
 /** Where the BLE link manager runs. */
-export type BleHost = "worker-thread" | "utility-process" | "main";
+type BleHost = "worker-thread" | "utility-process" | "main";
 
 /** What the current process proved it can do. Set by a live capability check. */
 export interface BlePlacementCaps {

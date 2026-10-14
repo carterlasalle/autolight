@@ -94,7 +94,7 @@ export function toScanEntry(ad: BleAdvertisement, missing = false): BleScanEntry
 }
 
 /** How a BLE address was bound to a LAN device record. */
-export type BleBindingBasis = "wifi-mac-match" | "user-confirmed-identify";
+type BleBindingBasis = "wifi-mac-match" | "user-confirmed-identify";
 
 /** The binding record: never merge by SKU, name or address suffix. */
 export interface BleBinding {
@@ -137,7 +137,7 @@ export function bindBleToLan(inputs: BleBindingInputs): BleBinding {
 }
 
 /** Normalizes a MAC for comparison: lowercase, colon separated, null stays null. Unparseable input returns null so it never matches. */
-export function normalizeMac(mac: string | null): string | null {
+function normalizeMac(mac: string | null): string | null {
   if (mac === null) return null;
   const cleaned = mac.trim().toLowerCase();
   const hexes = cleaned.replace(/[:-]/g, "");

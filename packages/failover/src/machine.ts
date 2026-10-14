@@ -250,7 +250,7 @@ function withUnreachable(
  *  range, then LAN recovery at a bar boundary. Each step feeds one health
  *  signal at one instant. Multicast loss alone never fails over (unicast
  *  discovery keeps the LAN path alive); unicast silence past lanLossMs does. */
-export type CampusFault =
+type CampusFault =
   | "multicast-blocked"
   | "client-isolation"
   | "router-restart"

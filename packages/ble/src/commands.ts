@@ -262,7 +262,7 @@ export function bleRead(cmd: number, extra: Uint8Array = new Uint8Array(0)): Uin
   return encodeBleFrame(BLE_PROTYPE.READ, cmd, extra);
 }
 
-export const BLE_READS = {
+const BLE_READS = {
   POWER: 0x01,
   BRIGHTNESS: 0x04,
   SUB_MODE: 0x05,
@@ -290,7 +290,7 @@ export function bleHostColorOne(color: BleRgb): Uint8Array {
 // Dialect record (T-BLE-04: recorded per device in its profile)
 // ---------------------------------------------------------------------------
 
-export type BleColorMode = "single-0d" | "masked-15-01" | "legacy-02";
+type BleColorMode = "single-0d" | "masked-15-01" | "legacy-02";
 
 export interface BleDialect {
   brightnessScale: BleBrightnessScale;

@@ -45,7 +45,7 @@ export function agcStep(
   return { gain: Math.min(4, Math.max(0.25, gain)), smoothed };
 }
 
-export function hannWindow(size: number): Float64Array {
+function hannWindow(size: number): Float64Array {
   const window = new Float64Array(size);
 
   for (let i = 0; i < size; i += 1) window[i] = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / size);
@@ -56,7 +56,7 @@ export function hannWindow(size: number): Float64Array {
 // In-place iterative radix-2 FFT (Cooley-Tukey), forward transform. The
 // inputs are the real and imaginary parts; both must be the same power-of-two
 // length. Written from the standard decomposition, no external DSP code.
-export function fft(re: Float64Array, im: Float64Array): void {
+function fft(re: Float64Array, im: Float64Array): void {
   const n = re.length;
 
   if (n !== im.length || n < 2 || (n & (n - 1)) !== 0) {

@@ -74,22 +74,22 @@ export const BLE_KEYS_NEEDED_COPY = "encrypted-link devices need keys (see docs/
 // no test vector contains a vendor key.
 
 /** Header bytes of the v2 handshake payload: E7 11 01 then the nonce. */
-export const BLE_V2_HANDSHAKE_CMD = 0x11;
+const BLE_V2_HANDSHAKE_CMD = 0x11;
 
-export const BLE_V2_HANDSHAKE_MARK = 0x01;
+const BLE_V2_HANDSHAKE_MARK = 0x01;
 
 /** GCM tag length the device accepts (WP04: 16 bytes, never 12). */
 export const BLE_V2_TAG_LEN = 16;
 
 /** GCM IV length in bytes. */
-export const BLE_V2_IV_LEN = 12;
+const BLE_V2_IV_LEN = 12;
 
 /**
  * Encodes a 20-byte E7 handshake frame: marker, cmd, seed or nonce payload
  * padded to byte 18, XOR of bytes 0 to 18. Local to this module so the
  * shared T-BLE-04 codec stays untouched.
  */
-export function encodeBleHandshake(cmd: number, payload: Uint8Array = new Uint8Array(0)): Uint8Array {
+function encodeBleHandshake(cmd: number, payload: Uint8Array = new Uint8Array(0)): Uint8Array {
   if (payload.length > BLE_PAYLOAD_LEN) {
     throw new RangeError(`BLE handshake payload needs at most ${BLE_PAYLOAD_LEN} bytes, got ${payload.length}`);
   }

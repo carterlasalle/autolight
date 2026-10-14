@@ -6,11 +6,11 @@
 // and govee-homeassistant custom_components/govee/api ble files). No value
 // here measures the owner's units.
 
-export const BLE_SERVICE_UUID = "00010203-0405-0607-0809-0a0b0c0d1910";
+const BLE_SERVICE_UUID = "00010203-0405-0607-0809-0a0b0c0d1910";
 
-export const BLE_WRITE_UUID = "00010203-0405-0607-0809-0a0b0c0d2b11";
+const BLE_WRITE_UUID = "00010203-0405-0607-0809-0a0b0c0d2b11";
 
-export const BLE_NOTIFY_UUID = "00010203-0405-0607-0809-0a0b0c0d2b10";
+const BLE_NOTIFY_UUID = "00010203-0405-0607-0809-0a0b0c0d2b10";
 
 export const BLE_VERSION_UUID = "00010203-0405-0607-0809-0a0b0c0d2b12";
 
@@ -31,7 +31,7 @@ export const BLE_PROTYPE = {
 } as const;
 
 /** Write command codes (WP04). */
-export const BLE_WRITE_CMD = {
+const BLE_WRITE_CMD = {
   POWER: 0x01,
   BRIGHTNESS: 0x04,
   COLOR: 0x05,
@@ -39,7 +39,7 @@ export const BLE_WRITE_CMD = {
 } as const;
 
 /** Colour payload modes under 0x33 0x05 (WP04). */
-export const BLE_COLOR_MODE = {
+const BLE_COLOR_MODE = {
   LEGACY: 0x02,
   SINGLE: 0x0d,
   MASKED: 0x15,
@@ -53,7 +53,7 @@ export const BLE_MASKED_KIND = {
 } as const;
 
 /** Read command codes (WP04). */
-export const BLE_READ_CMD = {
+const BLE_READ_CMD = {
   POWER: 0x01,
   BRIGHTNESS: 0x04,
   SUB_MODE: 0x05,
@@ -69,7 +69,7 @@ export const BLE_READ_CMD = {
 } as const;
 
 /** Host colour channel sub commands (WP04). */
-export const BLE_HOST_COLOR = {
+const BLE_HOST_COLOR = {
   PROBE: 0x90,
   ONE_COLOR: 0x83,
 } as const;

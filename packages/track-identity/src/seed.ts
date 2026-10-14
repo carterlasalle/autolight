@@ -7,7 +7,7 @@
 // plans: the fingerprint is the only identity input to the seed.
 import { createHash } from "node:crypto";
 
-export type SeedSource = "pcm-fingerprint" | "file-hash" | "native-id-weak";
+type SeedSource = "pcm-fingerprint" | "file-hash" | "native-id-weak";
 
 export interface SeedInput {
   pcmFingerprint?: string;

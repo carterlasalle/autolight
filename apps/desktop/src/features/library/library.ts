@@ -1,7 +1,7 @@
 import type { TrackModel } from "@autolight/contracts";
 
 // Library row (§95): track + readiness status. No page-specific copies (§142).
-export type Readiness = "READY" | "ANALYZING" | "NEEDS ANALYSIS" | "GRID WARNING" | "SOURCE MISSING";
+type Readiness = "READY" | "ANALYZING" | "NEEDS ANALYSIS" | "GRID WARNING" | "SOURCE MISSING";
 
 export interface LibraryRow { trackId: string; title: string; artist: string; bpm: number | null; duration: number; status: Readiness }
 

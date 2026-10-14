@@ -23,13 +23,13 @@ export type BeatIndex0 = number & { readonly __beatIndex: unique symbol };
 
 export type Seconds = number & { readonly __seconds: unique symbol };
 
-export type Milliseconds = number & { readonly __milliseconds: unique symbol };
+type Milliseconds = number & { readonly __milliseconds: unique symbol };
 
-export type Ns = bigint & { readonly __ns: unique symbol };
+type Ns = bigint & { readonly __ns: unique symbol };
 
-export const MS_PER_SECOND = 1000;
+const MS_PER_SECOND = 1000;
 
-export const NS_PER_MS = 1_000_000n;
+const NS_PER_MS = 1_000_000n;
 
 /** Grid anchor as stored in the native analysis (`index` is 0-based). */
 export interface BeatAnchor {

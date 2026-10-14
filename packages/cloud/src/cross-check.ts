@@ -29,7 +29,7 @@ export interface CrossCheckOutcome {
 }
 
 /** Which declaration the qualification keeps. The measured value stands. */
-export type QualificationRetention = "measured";
+type QualificationRetention = "measured";
 
 /** Pure comparison of one declared count against one measured count. */
 export function compareDeclaredSegments(

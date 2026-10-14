@@ -66,7 +66,7 @@ const EFFECT_FX2_STATUS = 0x95;
 
 const EFFECT_LEVEL_STATUS = 0xb4;
 
-export const PAD_STATUS: Record<Flx4Deck, readonly [number, number]> = {
+const PAD_STATUS: Record<Flx4Deck, readonly [number, number]> = {
   1: [0x97, 0x98],
   2: [0x99, 0x9a],
 };

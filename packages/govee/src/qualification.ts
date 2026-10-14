@@ -83,7 +83,7 @@ export const REQUIRED_AFTER_FIRMWARE_CHANGE: readonly QualificationStepId[] = [
 /** Candidate counts the user counts bands for (spec 42: discovered, never
  *  assumed). The sweep stops at the first count that does not appear, so the
  *  largest confirmed count is the changepoint. */
-export const SEGMENT_CANDIDATES: readonly number[] = [2, 4, 6, 8, 12, 16, 20, 30, 40, 60];
+const SEGMENT_CANDIDATES: readonly number[] = [2, 4, 6, 8, 12, 16, 20, 30, 40, 60];
 
 /** Descending rate sweep for step 13; the first rate that does not stutter is
  *  the unit's stable rate (spec 54 `maxStableFps`). */

@@ -608,6 +608,5 @@ export function compileShow(input: CompileInput): CompileResult {
   return { plan, diagnostics, rejected: [...rejected, ...problems.map((r) => ({ candidate: -1, reasons: [r] as readonly string[] })), ...outOfBounds.map((r) => ({ candidate: -1, reasons: [r] as readonly string[] }))] };
 }
 
-export { resolveConfig, DEFAULT_CONFIG } from "./config.js";
 
 export type { PlannerConfigSnapshot };

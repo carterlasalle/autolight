@@ -453,7 +453,6 @@ export function simGoldenFrame(proType: number, cmd: number, payload: readonly n
   return Buffer.from(out).toString("hex");
 }
 
-export { encodeBleFrame, parseBleAck };
 
 // ---------------------------------------------------------------------------
 // Full-sim helpers (T-BLE-09: contract surface over the peripheral above)

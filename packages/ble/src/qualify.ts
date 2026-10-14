@@ -16,7 +16,7 @@ import type { BleEncryptedMode } from "./encrypted.js";
 import { simContractChecks, SimPeripheral } from "./sim.js";
 import type { SimPeripheralOptions } from "./sim.js";
 
-export type BleWizardTransport = "ble";
+type BleWizardTransport = "ble";
 
 /** One unit's BLE qualification record, shaped for device_calibrations. */
 export interface BleQualificationRecord {
@@ -74,7 +74,7 @@ export function blankBleQualification(address: string): BleQualificationRecord {
   };
 }
 
-export interface BleWizardUser {
+interface BleWizardUser {
   /** True after the user saw the masked stripe change on the unit. */
   confirmMaskedWrite(pattern: "masked-stripe"): Promise<boolean>;
   /** Camera latency procedure in ms, or null when not run. */
@@ -101,7 +101,7 @@ export const BLE_WIZARD_STEPS = [
   "latency",
 ] as const;
 
-export type BleWizardStep = (typeof BLE_WIZARD_STEPS)[number];
+type BleWizardStep = (typeof BLE_WIZARD_STEPS)[number];
 
 export interface BleWizardStepResult {
   step: BleWizardStep;
@@ -219,7 +219,7 @@ export async function runBleQualification(probe: BleWizardProbe): Promise<{ reco
   }
 }
 
-export interface BleBudgetBenchmark {
+interface BleBudgetBenchmark {
   sustainedHz: number | null;
   ceilingHz: number | null;
   recoveryMs: number | null;

@@ -53,7 +53,7 @@ export const deckStateSchema = z.object({
 });
 
 /** JSON-safe form for IPC/worker boundaries: bigint is not JSON-serializable. */
-export const wireDeckStateSchema = deckStateSchema.extend({
+const wireDeckStateSchema = deckStateSchema.extend({
   receivedAtNs: z.string().regex(/^-?\d+$/, "receivedAtNs must be a decimal integer string"),
 });
 
@@ -151,7 +151,7 @@ const sectionKindSchema = z.enum([
 
 export type SectionKind = z.infer<typeof sectionKindSchema>;
 
-export const musicalEventTypeSchema = z.enum([
+const musicalEventTypeSchema = z.enum([
   "major-section-transition",
   "minor-phrase-transition",
   "build-start",
@@ -267,7 +267,7 @@ const phraseSchema = z.object({
   }).strict().optional(),
 }).strict();
 
-export type Phrase = z.infer<typeof phraseSchema>;
+type Phrase = z.infer<typeof phraseSchema>;
 
 const colorSchema = z.object({ r: z.number(), g: z.number(), b: z.number() }).strict();
 

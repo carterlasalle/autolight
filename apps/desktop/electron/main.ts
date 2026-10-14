@@ -108,7 +108,7 @@ function registerTestApi(): void {
   __testMarkStage("db");
 }
 
-export function nextStage(done: StartupStage[]): StartupStage | null {
+function nextStage(done: StartupStage[]): StartupStage | null {
   return STARTUP_ORDER.find((s) => !done.includes(s)) ?? null;
 }
 

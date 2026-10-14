@@ -11,13 +11,10 @@ import { normalizeOutline, perimeterLength, polygonArea, polygonCentroid, rectan
 import { REFERENCE_ROOMS, clubRectangle, curvedRoom, fieldCellsForReference, lRoom, referenceById, squareChunks, squareMirrored, squareRoom } from "./reference.js";
 
 export {
-  applyLogicalOrder, fitRunMapping, logicalToPhysical, orderLogical, rotateLogicalZero, topologyForRuns,
-  computeFields, fieldCellsFromMap, pointCells, projectToOutline, runPointAt,
-  derivedGroups, resolveSelector, splitWeights, zoneWeights,
-  classifyDirection, mirrorCheck, runWizardOnSim,
-  exportVenue, importVenue, outlineRuns, setLogicalZero,
-  normalizeOutline, perimeterLength, polygonArea, polygonCentroid, rectangleRoom, samplePath, validateRoom,
-  clubRectangle, curvedRoom, fieldCellsForReference, lRoom, referenceById, squareChunks, squareMirrored, squareRoom, REFERENCE_ROOMS,
+  computeFields,
+  classifyDirection, mirrorCheck,
+  normalizeOutline, perimeterLength, polygonArea, polygonCentroid, rectangleRoom, validateRoom,
+  fieldCellsForReference, referenceById, squareMirrored, REFERENCE_ROOMS,
 };
 
 export type { MappedCell, FieldCell, Venue };
