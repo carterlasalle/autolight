@@ -47,7 +47,10 @@ export class CloudService implements Service {
   }
   start(): ServiceStatus {
     if (this.opts.enabled !== true) {
-      this.tracker.set("degraded", "optional cloud metadata disabled (config or flag); frames never use the cloud");
+      // Disabled by choice is not a defect: the spec-132 vocabulary has idle
+      // for exactly this, and degraded is reserved for a service that cannot
+      // do its job (batch-22).
+      this.tracker.set("idle", "optional cloud metadata disabled (config or flag); frames never use the cloud");
 
       return this.status();
     }
@@ -123,11 +126,5 @@ export class CloudService implements Service {
   deviceMetadata(): GoveeCloudDevice[] {
     return this.lastDevices.map((d) => ({ ...d }));
   }
-}
-
-let instance: CloudService | null = null;
-
-function resetCloudService(): void {
-  instance = null;
 }
 

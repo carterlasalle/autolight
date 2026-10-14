@@ -487,7 +487,9 @@ describe("cloud-service", () => {
   it("is off by default and refuses metadata without a transport or key", async () => {
     const svc = new CloudService();
     const started = svc.start();
-    expect(started.state).toBe("degraded");
+    // Disabled by choice is idle with the reason, not degraded (batch-22).
+    expect(started.state).toBe("idle");
+    expect(started.detail).toContain("disabled");
     expect(await svc.devices()).toMatchObject({ ok: false, error: { code: "E_CLOUD_DISABLED" } });
 
     const keyless = new CloudService({ enabled: true, transport: { name: "fake-cloud", devices: async () => [] } });

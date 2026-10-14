@@ -1,4 +1,102 @@
 {
+  "batch-22": [
+    {
+      "path": "analysis/src/autolight_analysis/config_defaults.json",
+      "line": 188,
+      "verdict": "fixed-earlier",
+      "evidence": "live.provider.staleMs exists in the catalog, the generated registry (line 174) and the regenerated defaults. Verified 2026-10-14."
+    },
+    {
+      "path": "analysis/src/autolight_analysis/config_defaults.json",
+      "line": 119,
+      "verdict": "fixed-earlier",
+      "evidence": "analysis.build.minStrength/minConfidence are catalog rows with registry entries and defaults; structure.py's reads resolve. Verified 2026-10-14."
+    },
+    {
+      "path": "apps/desktop/electron/services/cloud-service.ts",
+      "line": 48,
+      "verdict": "fixed-by-commit",
+      "evidence": "A disabled optional service reports idle with the reason; degraded stays reserved for enabled-but-unable. Test pins the idle state (batch-22)."
+    },
+    {
+      "path": "apps/desktop/electron/services/midi-service.ts",
+      "line": 30,
+      "verdict": "fixed-earlier",
+      "evidence": "NOTE holds only deck-1 controls (PLAY_1/CUE_1/SYNC_1); no duplicate values exist and controlForNote's first-match is exact. Verified 2026-10-14."
+    },
+    {
+      "path": "apps/desktop/electron/services/midi-service.ts",
+      "line": 82,
+      "verdict": "fixed-earlier",
+      "evidence": "handleCc/handleNote both increment the messages counter. Verified 2026-10-14."
+    },
+    {
+      "path": "apps/desktop/journeys/live-session.journey.ts",
+      "line": 32,
+      "verdict": "fixed-by-commit",
+      "evidence": "The view-model inputs take the fixture's real track ids through trackIdOf, which fails loudly on a missing identity instead of substituting remembered ids (batch-22)."
+    },
+    {
+      "path": "apps/desktop/journeys/live-session.journey.ts",
+      "line": 12,
+      "verdict": "fixed-by-commit",
+      "evidence": "Both fixture dirs resolve upward with a named error; the capture keeps parseFixture validation (batch-22)."
+    },
+    {
+      "path": "apps/desktop/src/features/library/library-view.tsx",
+      "line": 18,
+      "verdict": "fixed-by-commit",
+      "evidence": "The header and empty-state copy state the truth: a session draft queue whose real job states live with the supervisor in main (batch-22)."
+    },
+    {
+      "path": "apps/desktop/src/features/library/library-view.tsx",
+      "line": 62,
+      "verdict": "fixed-by-commit",
+      "evidence": "The empty state splits: a filtering query shows its own message with a clear action; only the no-rows case mentions loading decks (batch-22)."
+    },
+    {
+      "path": "apps/desktop/src/features/library/library-view.tsx",
+      "line": 72,
+      "verdict": "fixed-by-commit",
+      "evidence": "The persists-across-restarts claim is removed (batch-22)."
+    },
+    {
+      "path": "apps/desktop/src/features/library/library-view.tsx",
+      "line": 45,
+      "verdict": "fixed-by-commit",
+      "evidence": "Row keys are the deck row ids directly; the unreachable libraryRowKey fallback and its import are gone (batch-22)."
+    },
+    {
+      "path": "apps/desktop/src/features/library/library-view.tsx",
+      "line": 79,
+      "verdict": "fixed-by-commit",
+      "evidence": "Cancel is disabled for Ready/Failed and Retry only enables on Failed, so a finished job cannot be rewound (batch-22)."
+    },
+    {
+      "path": "apps/desktop/src/routes/diagnostics/diagnostics-model.test.ts",
+      "line": 6,
+      "verdict": "fixed-by-commit",
+      "evidence": "The tab assertion pins the exact identifiers and order, not a length (batch-22)."
+    },
+    {
+      "path": "apps/desktop/src/routes/diagnostics/diagnostics-model.test.ts",
+      "line": 12,
+      "verdict": "fixed-by-commit",
+      "evidence": "djEventRow's full row shape is asserted (argument mapping) plus the explicit false flag (batch-22)."
+    },
+    {
+      "path": "apps/desktop/src/routes/diagnostics/diagnostics-model.test.ts",
+      "line": 7,
+      "verdict": "fixed-by-commit",
+      "evidence": "isFresh boundary cases at the default and an explicit threshold are pinned (batch-22)."
+    },
+    {
+      "path": "apps/desktop/src/routes/diagnostics/diagnostics-model.test.ts",
+      "line": 19,
+      "verdict": "fixed-by-commit",
+      "evidence": "The route matrix adds idle-app liveSafe, venue/device scopes and device+Live (batch-22)."
+    }
+  ],
   "batch-21": [
     {
       "path": "packages/rekordbox-live/src/osc.test.ts",
