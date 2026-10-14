@@ -26,7 +26,7 @@ class ProtocolError(Exception):
 
 
 _PROTOCOL_LOCK = threading.Lock()
-_PROTOCOL_FD: int | None = None
+_protocol_fd: int | None = None
 
 
 def protect_stdout() -> int:
@@ -34,19 +34,20 @@ def protect_stdout() -> int:
 
     Returns the preserved file descriptor the frame writer must use.
     """
-    global _PROTOCOL_FD
-    if _PROTOCOL_FD is not None:
-        return _PROTOCOL_FD
+    global _protocol_fd
+    # One check, inside the lock: this runs once per process, and an unlocked
+    # fast path made the inner return read as unreachable under static
+    # narrowing of the module global.
     with _PROTOCOL_LOCK:
-        if _PROTOCOL_FD is not None:
-            return _PROTOCOL_FD
+        if _protocol_fd is not None:
+            return _protocol_fd
         kept = os.dup(1)
         sys.stdout = sys.stderr
         try:
-            os.dup2(2, 1)
+            _ = os.dup2(2, 1)
         except OSError as e:
             log_event("protect-stdout-dup2-failed", error=str(e))
-        _PROTOCOL_FD = kept
+        _protocol_fd = kept
         return kept
 
 
@@ -104,6 +105,10 @@ class FrameWriter:
             while view:
                 written = os.write(self._fd, view)
                 view = view[written:]
+
+
+class Heartbeat:
+    """Emit heartbeat frames until stopped (T-ANA-01, T-ANA-02 supervision)."""
 
     def __init__(
         self, writer: FrameWriter, interval_ms: int = HEARTBEAT_DEFAULT_MS
