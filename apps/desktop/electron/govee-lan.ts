@@ -122,7 +122,11 @@ const GOVEE_DEFAULTS = {
   retryInitialMs: 2000,
   retryMaxMs: 60000,
   backgroundRescanMs: 30000,
-  offlineAfterMs: 15000,
+  // Must exceed backgroundRescanMs (30s): rounds are the only guaranteed
+  // liveness refresh, so a shorter window marks healthy streaming devices
+  // offline at the top of every round and re-arms them on the reply — a
+  // visible flash every round (reconnects climbing one per 30s).
+  offlineAfterMs: 75000,
   statusRetryMs: 350,
   statusDeadlineMs: 10000,
   armSettleMsDefault: 50,
@@ -2308,6 +2312,11 @@ export class GoveeLanManager implements StreamTransport {
     const scanRttMs = scanSent !== undefined && atMs - scanSent < 2000 ? atMs - scanSent : null;
 
     if (existing) {
+      // Age before this reply lands: it distinguishes a device that was
+      // really away (stream dead — recover) from one that merely missed a
+      // poll while streaming (re-arming would visibly flash the fixture).
+      const gapMs = atMs - existing.lastSeenMs;
+
       if (scanRttMs !== null) existing.rttMs = scanRttMs;
       if (claimedIp !== null && claimedIp !== senderIp) existing.disagreeCount += 1;
 
@@ -2325,7 +2334,9 @@ export class GoveeLanManager implements StreamTransport {
 
       if (wasOffline) {
         existing.health = "online";
-        this.onReappear(existing);
+
+        // Only a multi-poll absence re-arms; see gapMs above.
+        if (gapMs > this.o.offlineAfterMs * 2) this.onReappear(existing);
       } else if (existing.health !== "degraded") {
         existing.health = "online";
       }
