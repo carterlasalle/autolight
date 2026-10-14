@@ -19,9 +19,9 @@ import { createRequire } from "node:module";
 import { MessageChannel, type MessagePort } from "node:worker_threads";
 import { z } from "zod";
 import {
-  deckStateSchema,
   fixtureSchema,
   showPlanSchema,
+  wireDeckStateSchema,
   type DeckState,
   type Fixture,
   type ShowPlan,
@@ -144,10 +144,6 @@ export function probeMode(mode: HostMode, probe: AddonProbe = defaultAddonProbe)
 
 // ---------------------------------------------------------------------------
 // MessagePort host protocol (typed, validated both directions)
-
-const wireDeckStateSchema = deckStateSchema.extend({
-  receivedAtNs: z.string().regex(/^-?\d+$/, "receivedAtNs must be a decimal integer string"),
-});
 
 const hostInboundMessageSchema = z.discriminatedUnion("type", [
   z.object({

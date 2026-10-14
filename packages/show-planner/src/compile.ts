@@ -21,7 +21,7 @@ import {
 import { planIdentity } from "./identity.js";
 import { planRecurrence, summarizeSections } from "./recurrence.js";
 import { freshRestraint, notePaletteChange, observeSection, restrain } from "./restraint.js";
-import { hashValue, isPlanLayer, trackFingerprint, type CompiledShowPlan, type CompileInput, type CompileResult, type Oklch, type PlanCue, type PlannerConfigSnapshot, type PlannerStyle, type PlanLayer, type RejectedCandidate, type SectionPlan } from "./types.js";
+import { hashValue, isPlanLayer, trackFingerprint, type CompiledShowPlan, type CompileInput, type CompileResult, type Oklch, type PlanCue, type PlannerStyle, type PlanLayer, type RejectedCandidate, type SectionPlan } from "./types.js";
 import { diagnosticsOutOfBounds, evaluateCompiledPlan, validateCompiledPlan } from "./validate.js";
 import { pickCandidate, type SectionCandidate } from "./scoring.js";
 import { layerForCueName } from "./layers-fallback.js";

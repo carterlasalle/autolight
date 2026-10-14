@@ -28,30 +28,6 @@ function oklchToOklab(c: Oklch): Oklab {
   return { l: c.l, a: c.c * Math.cos(rad), b: c.c * Math.sin(rad) };
 }
 
-function oklabToOklch(lab: Oklab): Oklch {
-  const c = Math.sqrt(lab.a * lab.a + lab.b * lab.b);
-  let h = (Math.atan2(lab.b, lab.a) * 180) / Math.PI;
-
-  if (h < 0) h += 360;
-
-  return { l: lab.l, c, h };
-}
-
-export function linearRgbToOklab(r: number, g: number, b: number): Oklab {
-  const l = 0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b;
-  const m = 0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b;
-  const s = 0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b;
-  const l_ = Math.cbrt(l);
-  const m_ = Math.cbrt(m);
-  const s_ = Math.cbrt(s);
-
-  return {
-    l: 0.2104542553 * l_ + 0.793617785 * m_ - 0.0040720468 * s_,
-    a: 1.9779984951 * l_ - 2.428592205 * m_ + 0.4505937099 * s_,
-    b: 0.0259040371 * l_ + 0.7827717662 * m_ - 0.808675766 * s_,
-  };
-}
-
 function oklabDistance(x: Oklab, y: Oklab): number {
   const dl = x.l - y.l;
   const da = x.a - y.a;
@@ -64,23 +40,9 @@ export function oklchDistance(x: Oklch, y: Oklch): number {
   return oklabDistance(oklchToOklab(x), oklchToOklab(y));
 }
 
-// Blend in OKLab (the mixer blend space direction), never in sRGB.
-function blendOklch(a: Oklch, b: Oklch, t: number): Oklch {
-  const clamped = Math.min(1, Math.max(0, t));
-  const la = oklchToOklab(a);
-  const lb = oklchToOklab(b);
-
-  const mixed: Oklab = {
-    l: la.l + (lb.l - la.l) * clamped,
-    a: la.a + (lb.a - la.a) * clamped,
-    b: la.b + (lb.b - la.b) * clamped,
-  };
-
-  return oklabToOklch(mixed);
-}
-
 // Legacy linear-light sRGB mix, kept for the existing unit test and old
-// renderer path. New planner code uses blendOklch.
+// renderer path. Live colour mixing lives in @autolight/show-mixer
+// (blendColors, DS-09 spaces).
 export function blendRgb(
   a: [number, number, number],
   b: [number, number, number],
@@ -113,6 +75,8 @@ export function generateCorePalette(
   third: boolean,
 ): Oklch[] {
   const chroma = 0.05 + Math.min(1, Math.max(0, saturation)) * 0.2;
+  // light stays in [0.55, 0.70]; the ±0.05 offsets below never leave
+  // [0.5, 0.8], so no extra clamping is needed to protect the contrast.
   const light = 0.55 + Math.min(1, Math.max(0, energyMean)) * 0.15;
   const h1 = Math.floor(rand() * 360);
   const spread = 120 + Math.floor(rand() * 120);
@@ -120,40 +84,60 @@ export function generateCorePalette(
 
   const out: Oklch[] = [
     { l: light, c: chroma, h: h1 },
-    { l: Math.min(0.8, light + 0.05), c: chroma, h: h2 },
+    { l: light + 0.05, c: chroma, h: h2 },
   ];
 
   if (third) {
     const h3 = (h1 + 180 + Math.floor(rand() * 60)) % 360;
-    out.push({ l: Math.max(0.5, light - 0.05), c: chroma * 0.8, h: h3 });
+    out.push({ l: light - 0.05, c: chroma * 0.8, h: h3 });
   }
 
   return out;
 }
+// Shift later hues until every pair clears minDistance. The scan covers the
+// full hue wheel at 5-degree steps and keeps the best-effort hue when the
+// threshold is unreachable (e.g. near-grey palettes where 2*chroma caps the
+// distance), so callers always get the maximally-separated palette. The
+// return value reports whether every pair clears the threshold.
+export interface MinDistanceResult {
+  palette: Oklch[];
+  satisfied: boolean;
+}
 
-// Shift later hues until every pair clears minDistance. Bounded tries so a
-// tight threshold cannot loop.
-export function ensureMinDistance(palette: Oklch[], minDistance: number): Oklch[] {
+export function ensureMinDistance(palette: Oklch[], minDistance: number): MinDistanceResult {
   const out = palette.map((c) => ({ ...c }));
+  let satisfied = true;
 
   for (let i = 1; i < out.length; i++) {
-    let tries = 0;
+    let best = out[i]!;
+    let bestGap = -Infinity;
+    let placed = false;
 
-    while (tries < 12) {
-      let ok = true;
+    for (let step = 0; step < 72; step++) {
+      const candidate = { ...out[i]!, h: (out[i]!.h + step * 5) % 360 };
+      let gap = Infinity;
 
       for (let j = 0; j < i; j++) {
-        if (oklchDistance(out[i]!, out[j]!) < minDistance) {
-          ok = false;
-          break;
-        }
+        gap = Math.min(gap, oklchDistance(candidate, out[j]!));
       }
 
-      if (ok) break;
-      out[i] = { ...out[i]!, h: (out[i]!.h + 30) % 360 };
-      tries++;
+      if (gap > bestGap) {
+        bestGap = gap;
+        best = candidate;
+      }
+
+      if (gap >= minDistance) {
+        out[i] = candidate;
+        placed = true;
+        break;
+      }
+    }
+
+    if (!placed) {
+      out[i] = best;
+      satisfied = false;
     }
   }
 
-  return out;
+  return { palette: out, satisfied };
 }

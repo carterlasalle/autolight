@@ -10,7 +10,6 @@ export type JsonValue = string | number | boolean | null | JsonValue[] | { [key:
 
 const deckSourceSchema = z.enum(["rekordbox", "serato"]);
 
-type DeckSource = z.infer<typeof deckSourceSchema>;
 
 const loopStateSchema = z.object({
   active: z.boolean(),
@@ -19,7 +18,6 @@ const loopStateSchema = z.object({
   beatLength: z.number().nullable(),
 });
 
-type LoopState = z.infer<typeof loopStateSchema>;
 
 const trackIdentitySchema = z.object({
   id: z.string().min(1),
@@ -52,12 +50,12 @@ export const deckStateSchema = z.object({
   receivedAtNs: z.bigint(),
 });
 
-/** JSON-safe form for IPC/worker boundaries: bigint is not JSON-serializable. */
-const wireDeckStateSchema = deckStateSchema.extend({
+/** JSON-safe form for IPC/worker boundaries: bigint is not JSON-serializable.
+ * The show host's port protocol parses inbound deck states with this schema. */
+export const wireDeckStateSchema = deckStateSchema.extend({
   receivedAtNs: z.string().regex(/^-?\d+$/, "receivedAtNs must be a decimal integer string"),
 });
 
-type WireDeckState = z.infer<typeof wireDeckStateSchema>;
 
 
 
@@ -209,7 +207,6 @@ const inputEntrySchema = z.object({
   durationMs: z.number().optional(),
 }).strict();
 
-type InputEntry = z.infer<typeof inputEntrySchema>;
 
 const analysisInputsSchema = z.object({
   "source.audio": inputEntrySchema,
@@ -233,8 +230,6 @@ const analysisInputsSchema = z.object({
   "plan.generated": inputEntrySchema,
 }).strict();
 
-export type AnalysisInputs = z.infer<typeof analysisInputsSchema>;
-
 const phraseSchema = z.object({
   kind: sectionKindSchema,
   rawLabel: z.string().optional(),
@@ -253,7 +248,6 @@ const phraseSchema = z.object({
   }).strict().optional(),
 }).strict();
 
-type Phrase = z.infer<typeof phraseSchema>;
 
 const colorSchema = z.object({ r: z.number(), g: z.number(), b: z.number() }).strict();
 

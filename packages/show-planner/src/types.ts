@@ -21,7 +21,7 @@ export function envelopeToBeats(e: EnvelopeTime, bpm: number): number {
   return Math.max(0, (e.ms / 1000) * (bpm / 60));
 }
 
-export const CUE_LEVELS = ["track", "section", "phrase", "bar", "beat", "sub-beat"] as const;
+const CUE_LEVELS = ["track", "section", "phrase", "bar", "beat", "sub-beat"] as const;
 
 export type CueLevel = (typeof CUE_LEVELS)[number];
 

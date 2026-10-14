@@ -13,7 +13,7 @@ import type { PlannerStyle } from "./types.js";
 export { PLANNER_VERSION };
 
 
-export { BUILT_IN_STYLES } from "./styles.js";;;;
+export { BUILT_IN_STYLES } from "./styles.js";
 
 
 
@@ -24,12 +24,7 @@ export { BUILT_IN_STYLES } from "./styles.js";;;;
 
 
 
-export { blendRgb } from "./color.js";;;;;
-
-
-
-export type {
-} from "./types.js";
+export { blendRgb } from "./color.js";
 
 
 export * from "./primitives.js";
@@ -105,11 +100,6 @@ export function motifVariant(kind: string, occurrence: number): "forward" | "rev
   void kind;
 
   return occurrence % 2 === 0 ? "forward" : "reverse";
-}
-
-interface TrackIdentity2 {
-  coreHues: [number, number];
-  accentHue: number;
 }
 
 

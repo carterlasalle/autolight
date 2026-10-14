@@ -2200,5 +2200,37 @@
       "verdict": "fixed-earlier",
       "evidence": "buildStatusPacket's bpm (0x92) and beatInBar (0x94) now round-trip through decodeProlinkPacket."
     }
+  ],
+  "batch-31": [
+    {
+      "path": "packages/renderer/src/layers.ts",
+      "line": 80,
+      "verdict": "fixed",
+      "evidence": "A new parity test (apps/desktop/src/layer-map-parity.test.ts) pins all 51 cue types against both the renderer fallback (layerForCue) and the planner canonical (layerForCueName) with an expected layer each, plus the unknown-type fallback. Both maps currently agree on every type (0 diffs); drift now fails CI instead of silently mislayering."
+    },
+    {
+      "path": "packages/renderer/src/layers.ts",
+      "line": 108,
+      "verdict": "by-design-with-fix",
+      "evidence": "layerForCue checks `\"layer\" in cue` so planner-tagged objects keep their tag; when zod's parse strips the tag, the mirrored fallback yields the same layer, and the parity test above pins that equivalence for every cue type."
+    },
+    {
+      "path": "packages/show-mixer/src/blend.ts",
+      "line": 116,
+      "verdict": "fixed-earlier",
+      "evidence": "oklab-hue-linear-intensity is the DEFAULT space with its own mixOklabHueLinearIntensity implementation (:186), and the blend tests cover all four spaces including it."
+    },
+    {
+      "path": "packages/show-planner/src/index.test.ts",
+      "line": 114,
+      "verdict": "fixed",
+      "evidence": "The regenerate test now asserts the locked cue survives by identity, in-window count is exactly locked+fresh, and cues outside [64,96) keep the same count with and without locks."
+    },
+    {
+      "path": "packages/contracts/src/index.ts",
+      "line": 55,
+      "verdict": "fixed",
+      "evidence": "wireDeckStateSchema is now the single source of the JSON-safe deck state: exported from contracts and imported by the show host, replacing its inline duplicate (S10). Dead local aliases (DeckSource, LoopState, WireDeckState, InputEntry, Phrase, AnalysisInputs) removed; knip 0."
+    }
   ]
 }

@@ -3,8 +3,6 @@
 // compile path, none is decorative.
 import type { PlannerStyle } from "./types.js";
 
-const STYLE_IDS = ["club", "house", "festival", "lounge", "pop", "dark", "minimal"] as const;
-
 
 function style(
   id: string,
@@ -119,9 +117,6 @@ export const BUILT_IN_STYLES: Record<string, PlannerStyle> = {
     reactiveAmount: 0.05,
   }),
 };
-
-const DEFAULT_STYLE_ID = "club";
-
 
 export const STYLE_PROPERTIES = [
   "intensityRange",

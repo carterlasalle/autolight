@@ -120,9 +120,18 @@ describe("planner", () => {
     const fresh = [{ type: "section-look", startBeat: 64, durationBeats: 32, intensity: 0.5, target: "PRIMARY", priority: 10 }];
     const regen = regenerateSection(plan, 64, 96, fresh, [idx]);
     expect(regen.cues.filter((c) => c.startBeat === 64)).toHaveLength(2);
+    // The locked cue survives by identity, not as a copy.
     expect(regen.cues).toContain(locked);
     expect(regen.cues.some((c) => c.intensity === 0.5 && c.target === "PRIMARY")).toBe(true);
+    // Everything else inside the window is replaced; cues outside it are
+    // untouched (same count on both sides of every boundary).
+    const outside = (cues: readonly { startBeat: number; durationBeats: number }[]): number =>
+      cues.filter((c) => c.startBeat + c.durationBeats <= 64 || c.startBeat >= 96).length;
+
+    expect(outside(regen.cues)).toBe(outside(plan.cues));
+    expect(regen.cues.filter((c) => c.startBeat >= 64 && c.startBeat < 96)).toHaveLength(2);
     const regen2 = regenerateSection(plan, 64, 96, fresh, []);
     expect(regen2.cues.filter((c) => c.startBeat === 64)).toHaveLength(1);
+    expect(outside(regen2.cues)).toBe(outside(plan.cues));
   });
 });

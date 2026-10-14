@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isPrimitiveName, parsePrimitiveParams, requirePrimitive, checkTopology, checkFixtureRate, PRIMITIVE_REGISTRY, SPATIAL_PRIMITIVES, SPEC_PRIMITIVES, UnknownPrimitiveError } from "./primitives.js";
+import { isPrimitiveName, requirePrimitive, checkTopology, checkFixtureRate, PRIMITIVE_REGISTRY, SPATIAL_PRIMITIVES, SPEC_PRIMITIVES, UnknownPrimitiveError } from "./primitives.js";
 
 describe("T-PLAN-04 primitive library", () => {
   it("registers every spec primitive plus the spatial set", () => {
@@ -30,7 +30,7 @@ describe("T-PLAN-04 primitive library", () => {
   });
 
   it("rejects unknown primitive types with a typed error, not a silent skip", () => {
-    expect(() => requirePrimitive("Nope")).toThrowError(UnknownPrimitiveError);
+    expect(() => requirePrimitive("Nope")).toThrow(UnknownPrimitiveError);
     expect(isPrimitiveName("Nope")).toBe(false);
   });
 
