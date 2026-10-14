@@ -1,4 +1,24 @@
 {
+  "batch-19": [
+    {
+      "path": "packages/venue/src/wizard.ts",
+      "line": 115,
+      "verdict": "fixed-earlier",
+      "evidence": "verifyOffset rejects empty or mismatched-length arrays before any indexing, so NaN means cannot occur. Verified 2026-10-14."
+    },
+    {
+      "path": "apps/desktop/electron/services/simulator-show.test.ts",
+      "line": 52,
+      "verdict": "fixed-earlier",
+      "evidence": "show.frames() is decoded from the recorder bytes the sim received over the socket; the test compares the snapshot against that transported set exactly, per the in-test comment. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/config/src/base.ts",
+      "line": 81,
+      "verdict": "fixed-earlier",
+      "evidence": "json-typed keys are validated with isJsonSerializable, naming the key and unit. Verified 2026-10-14."
+    }
+  ],
   "batch-18": [
     {
       "path": "packages/reactive-audio/src/index.ts",
