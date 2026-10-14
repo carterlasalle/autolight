@@ -33,7 +33,10 @@ def test_shift_after_bar_64_warns_with_segments():
 
 def test_typed_warnings_round_trip_through_vote():
     native, ml = _grid(shift_from=64, shift=0.25)
-    vote = metrical_vote(native, {"beats": ml}, {"beats": list(native)})
+    vote = metrical_vote(
+        native,
+        {"beat-this": {"beats": ml}, "allinone-beats": {"beats": list(native)}},
+    )
     assert vote["warnings"], "shifted beat-this source must warn"
     w = vote["warnings"][0]
     assert w["evidence"] and w["beatRange"] == [1, len(native)]

@@ -358,16 +358,12 @@ def analyze_job(
             if ml_result and ml_result.get("beats")
             else None
         )
-        tolerance_ms = cfg.get("analysis.gridWarning.toleranceMs", 50)
-        min_anchors = cfg.get("analysis.gridWarning.minAnchors", 32)
-        vote = metrical_vote(
-            beat_times,
-            beat_this,
-            aio_metrical,
-            metrical_mode,
-            tolerance_ms,
-            min_anchors,
-        )
+        ml_sources: dict[str, dict] = {}
+        if metrical_mode in ("beat-this", "both") and beat_this:
+            ml_sources["beat-this"] = beat_this
+        if metrical_mode in ("allinone-beats", "both") and aio_metrical:
+            ml_sources["allinone-beats"] = aio_metrical
+        vote = metrical_vote(beat_times, ml_sources)
 
         beat_features = [
             {"beat": i + 1, **{k: agg["beat"][k][i] for k in agg["beat"]}}

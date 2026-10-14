@@ -1,4 +1,42 @@
 {
+  "batch-25": [
+    {
+      "path": "apps/desktop/src/features/live/live.test.ts",
+      "line": 28,
+      "verdict": "fixed-earlier",
+      "evidence": "The suite covers both branches: null track yields NEEDS ANALYSIS and the 'reports READY status' test at :76 passes a real model with libraryStatus READY. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/show-mixer/src/owner.test.ts",
+      "line": 24,
+      "verdict": "fixed-earlier",
+      "evidence": "'honors custom factors instead of the defaults' asserts the owner flips a->b when weight:0 is injected, so opts.factors is exercised beyond the literal. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/storage/src/keys.ts",
+      "line": 75,
+      "verdict": "fixed-earlier",
+      "evidence": "uniqueTrackLabels skips duplicate normalized trackIds via the seen set before grouping, so a repeated trackId can no longer overwrite a label. Verified 2026-10-14."
+    },
+    {
+      "path": "analysis/src/autolight_analysis/metrical.py",
+      "line": 89,
+      "verdict": "fixed",
+      "evidence": "Docstring claimed -o while the installed beat_this CLI accepts --output (verified via its --help); both docstring sites now state --output. While in the file, cleared its full ruff debt (named PLR2004 constants, GridTuning bundle for PLR0913/0917, TypedDict results) and pinned pyright/basedpyright to the repo's standard mode via analysis/pyrightconfig.json and [tool.basedpyright]. pyright src: 0 errors; ruff metrical: clean; tests pass."
+    },
+    {
+      "path": "apps/desktop/electron/services/identity-service.ts",
+      "line": 35,
+      "verdict": "fixed-earlier",
+      "evidence": "The cache is bounded: MAX_CACHE check with oldest-entry eviction at :100-103. Verified 2026-10-14."
+    },
+    {
+      "path": "apps/desktop/src/routes/library/library-rows.ts",
+      "line": 43,
+      "verdict": "fixed-earlier",
+      "evidence": "Status precedence is failed > SOURCE MISSING > ANALYZING > GRID WARNING > READY/NEEDS ANALYSIS; analyzing is checked unconditionally (line 48), so in-flight analysis is never masked. Verified 2026-10-14."
+    }
+  ],
   "batch-24": [
     {
       "path": "packages/venue/src/fields.test.ts",
