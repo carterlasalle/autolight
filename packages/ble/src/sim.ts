@@ -15,8 +15,6 @@ import {
 import {
   decodeBleFrame,
   decodeHostColor,
-  encodeBleFrame,
-  parseBleAck,
 } from "./commands.js";
 import { parseBleAdvertisement, type BleAdvertisement, type BleScanInput } from "./scan.js";
 import type { BleAdapter, BleBackendKind, BleConnection, BleNotifyHandler } from "./backends.js";

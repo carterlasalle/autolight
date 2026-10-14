@@ -15,9 +15,10 @@ const workspaceAlias = Object.fromEntries(
 
 // Browser-safe subpaths mirror vite.config.ts (T-TRU-04 spine fix): regex
 // first so barrels never swallow `/follow`, `/registry`, `/setup-assistant`.
+// The capture is greedy so deeper specifiers (@autolight/pkg/a/b) resolve too.
 const subpathAlias = [
   {
-    find: /^@autolight\/([^/]+)\/([^/]+)$/,
+    find: /^@autolight\/([^/]+)\/(.+)$/,
     replacement: join(workspaceSrc, "$1", "src", "$2.ts"),
   },
 ];

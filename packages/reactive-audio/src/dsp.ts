@@ -27,7 +27,9 @@ export const AGC_DEFAULTS = { rise: 0.3, decay: 0.05, target: 0.5 } as const;
 
 // AGC step: the envelope rises fast and decays slowly toward the input, and
 // the gain moves toward the level that would put the input at the target.
-// The gain is clamped to a sane range so silence cannot run it away.
+// The gain is clamped to a sane range, and silence holds the gain instead of
+// walking it up to the clamp (a silent frame carries no level information;
+// without the hold the next real input would arrive 4x boosted).
 export function agcStep(
   prev: AgcState,
   input: number,
@@ -36,7 +38,9 @@ export function agcStep(
   const rise = opts.rise ?? AGC_DEFAULTS.rise;
   const decay = opts.decay ?? AGC_DEFAULTS.decay;
   const target = opts.target ?? AGC_DEFAULTS.target;
-  const gain = prev.gain + (target - Math.min(1, input * prev.gain)) * 0.01;
+  const gain = input <= 0
+    ? prev.gain
+    : prev.gain + (target - Math.min(1, input * prev.gain)) * 0.01;
 
   const smoothed = input > prev.smoothed
     ? prev.smoothed + (input - prev.smoothed) * rise
@@ -229,7 +233,9 @@ export function bandEnergies(
 
   return LIVE_BAND_ORDER.map((band) => {
     const [lo, hi] = bands[band];
-    const first = Math.max(0, Math.floor(lo / binHz));
+    // Half-open membership by bin centre: both edges ceil, so a boundary bin
+    // belongs to exactly one band and adjacent bands never double-count it.
+    const first = Math.max(0, Math.ceil(lo / binHz));
     const last = Math.min(bins - 1, Math.ceil(hi / binHz) - 1);
 
     if (last < first) return 0;
@@ -401,6 +407,11 @@ export function tempoFromOnsets(
     bestScore = halfScore;
   }
 
+  // No lag correlates at all (a constant or all-silent envelope): there is
+  // no estimate to report, and a non-null result with zero confidence would
+  // be treated as a tempo by consumers.
+  if (!(bestScore > 0)) return null;
+
   return { bpm: 60 / (bestLag * hopSeconds), confidence: Math.min(1, Math.max(0, bestScore)), lagFrames: bestLag };
 }
 
@@ -450,6 +461,8 @@ export interface LiveFeatureExtractorOptions {
   onsetThreshold?: number;
   tempoMinBpm?: number;
   tempoMaxBpm?: number;
+  /** audio.agc.* knobs; omitted fields fall back to AGC_DEFAULTS. */
+  agc?: { rise?: number; decay?: number; target?: number };
 }
 
 // One live feature frame per hop: the extractor keeps a ring of the most
@@ -475,6 +488,12 @@ export class LiveFeatureExtractor {
     this.sampleRate = opts.sampleRate;
     this.fftSize = opts.fftSize ?? DEFAULT_FFT_SIZE;
     this.hopSize = opts.hopSize ?? DEFAULT_HOP_SIZE;
+
+    // A zero hop would divide to Infinity in the refractory math and zero
+    // seconds in the tempo hop; reject it and a zero FFT at the boundary
+    // instead of letting both fail silently downstream.
+    if (!(this.fftSize > 0)) throw new Error(`fftSize must be positive, got ${String(opts.fftSize)}`);
+    if (!(this.hopSize > 0)) throw new Error(`hopSize must be positive, got ${String(opts.hopSize)}`);
     this.fft = new Fft(this.fftSize);
     this.filters = melFilterbank({
       sampleRate: opts.sampleRate,
@@ -485,7 +504,7 @@ export class LiveFeatureExtractor {
       threshold: opts.onsetThreshold ?? DEFAULT_ONSET_THRESHOLD,
       refractoryFrames: Math.max(1, Math.ceil(this.fftSize / this.hopSize)),
     });
-    this.agc = new FrameAgc();
+    this.agc = new FrameAgc(opts.agc);
     this.tempoMinBpm = opts.tempoMinBpm ?? 60;
     this.tempoMaxBpm = opts.tempoMaxBpm ?? 200;
     this.ring = new Float64Array(this.fftSize);

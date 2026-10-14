@@ -187,12 +187,6 @@ export function bleV2Decrypt(key: BleV2Key, iv: Uint8Array, ciphertext: Uint8Arr
   return new Uint8Array(body);
 }
 
-/** Shape of the owner-provided local key file (JSON). The file holds the hex only. */
-interface BleKeysFile {
-  version: 1;
-  keyHex: string;
-}
-
 function hexToBytes(hex: string): Uint8Array {
   if (!/^[0-9a-fA-F]+$/.test(hex) || hex.length % 2 !== 0) {
     throw new Error("key file: keyHex needs even-length hex");

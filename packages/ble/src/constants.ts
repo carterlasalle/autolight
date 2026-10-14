@@ -5,12 +5,12 @@
 // govee-toolkit docs/protocol/ble.md, devices/H61A0.yaml, devices/H6008.yaml
 // and govee-homeassistant custom_components/govee/api ble files). No value
 // here measures the owner's units.
-
-const BLE_SERVICE_UUID = "00010203-0405-0607-0809-0a0b0c0d1910";
-
-const BLE_WRITE_UUID = "00010203-0405-0607-0809-0a0b0c0d2b11";
-
-const BLE_NOTIFY_UUID = "00010203-0405-0607-0809-0a0b0c0d2b10";
+//
+// GATT identity (for the real noble adapter when it lands; no consumer wires
+// these today, so no constants exist for them): service
+// 00010203-0405-0607-0809-0a0b0c0d1910, write characteristic
+// 00010203-0405-0607-0809-0a0b0c0d2b11, notify characteristic
+// 00010203-0405-0607-0809-0a0b0c0d2b10.
 
 export const BLE_VERSION_UUID = "00010203-0405-0607-0809-0a0b0c0d2b12";
 
@@ -30,20 +30,10 @@ export const BLE_PROTYPE = {
   HANDSHAKE: 0xe7,
 } as const;
 
-/** Write command codes (WP04). */
-const BLE_WRITE_CMD = {
-  POWER: 0x01,
-  BRIGHTNESS: 0x04,
-  COLOR: 0x05,
-  INTERPOLATION: 0xa3,
-} as const;
-
-/** Colour payload modes under 0x33 0x05 (WP04). */
-const BLE_COLOR_MODE = {
-  LEGACY: 0x02,
-  SINGLE: 0x0d,
-  MASKED: 0x15,
-} as const;
+// Write command codes (power 0x01, brightness 0x04, colour 0x05, interpolation
+// 0xa3) and colour payload modes (legacy 0x02, single 0x0d, masked 0x15) are
+// encoded at their call sites in commands.ts; tables here would be a second
+// copy nothing reads.
 
 /** Masked payload kinds under 0x33 0x05 0x15 (WP04). */
 export const BLE_MASKED_KIND = {
@@ -52,27 +42,9 @@ export const BLE_MASKED_KIND = {
   PER_ZONE_BRIGHTNESS: 0x03,
 } as const;
 
-/** Read command codes (WP04). */
-const BLE_READ_CMD = {
-  POWER: 0x01,
-  BRIGHTNESS: 0x04,
-  SUB_MODE: 0x05,
-  EXTRA_06: 0x06,
-  EXTRA_07: 0x07,
-  SEGMENT_COUNT: 0x0f,
-  WIFI_MAC: 0x14,
-  HARD_VERSION: 0x20,
-  SOFT_VERSION: 0x21,
-  IC_COUNT: 0x40,
-  GROUP_A5: 0xa5,
-  EXTRA_AB: 0xab,
-} as const;
-
-/** Host colour channel sub commands (WP04). */
-const BLE_HOST_COLOR = {
-  PROBE: 0x90,
-  ONE_COLOR: 0x83,
-} as const;
+// Read command codes and host-colour sub-commands are documented on bleRead
+// and bleHostColor* in commands.ts, which encode them at the call sites
+// (constants tables here would be a second copy nothing reads).
 
 /** Minimum short 0xA5 frame: marker, sub command, sum checksum. */
 export const BLE_A5_MIN_LEN = 3;

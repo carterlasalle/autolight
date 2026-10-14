@@ -262,20 +262,6 @@ export function bleRead(cmd: number, extra: Uint8Array = new Uint8Array(0)): Uin
   return encodeBleFrame(BLE_PROTYPE.READ, cmd, extra);
 }
 
-const BLE_READS = {
-  POWER: 0x01,
-  BRIGHTNESS: 0x04,
-  SUB_MODE: 0x05,
-  EXTRA_06: 0x06,
-  SEGMENT_COUNT: 0x0f,
-  WIFI_MAC: 0x14,
-  HARD_VERSION: 0x20,
-  SOFT_VERSION: 0x21,
-  IC_COUNT: 0x40,
-  GROUP_A5: 0xa5,
-  EXTRA_AB: 0xab,
-} as const;
-
 /** Host colour probe: a5 02 90. Render is temporary; lights a unit whose stored state is off. */
 export function bleHostColorProbe(): Uint8Array {
   return encodeHostColor(0x02, new Uint8Array([0x90]));

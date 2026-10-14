@@ -79,6 +79,8 @@ export class FakeLamp implements LanExchange {
   kelvin = 0;
   /** Did the most recent paint attempt land? Step 12's camera answer. */
   lastPaintLanded = false;
+  /** Opcode of the most recent landed paint; null until one lands. */
+  lastPaintOpcode: number | null = null;
   lastPaintReason = "none";
   /** Milliseconds between arming and the last landed paint. */
   landedDelayMs: number | null = null;
@@ -124,6 +126,12 @@ export class FakeLamp implements LanExchange {
     this.painted.forEach((_, index) => {
       this.painted[index] = [0, 0, 0];
     });
+    // A reboot drops everything in flight: a reply queued before the pull
+    // must not be readable after the reconnect, and the pre-reboot frame
+    // must not vouch for a later confirmation.
+    this.queue.length = 0;
+    this.lastPaintOpcode = null;
+    this.lastPaintLanded = false;
     this.offlineUntil = Date.now() + (this.options.reconnectDelayMs ?? 0);
   }
 
@@ -139,16 +147,19 @@ export class FakeLamp implements LanExchange {
     this.queue.push(text);
   }
 
-  reply(_deviceId: string, timeoutMs: number): Promise<string | null> {
+  reply(deviceId: string, timeoutMs: number): Promise<string | null> {
     if (this.options.behaviour === "lan-absent") return Promise.resolve(null);
 
     if (this.offline()) {
-      // Reachable again once the power cycle finishes: answer nothing until the
-      // deadline, like a unit still booting.
+      // A unit still booting answers nothing until its power cycle finishes;
+      // once offlineUntil passes, the remainder of the caller's timeout is
+      // served normally instead of being written off for the full window.
+      const waitMs = Math.max(0, this.offlineUntil - Date.now());
+
       return new Promise<string | null>((resolve) => {
         const timer = setTimeout(() => {
-          resolve(null);
-        }, Math.max(1, timeoutMs));
+          resolve(this.reply(deviceId, Math.max(0, timeoutMs - waitMs)));
+        }, waitMs);
 
         timer.unref?.();
       });
@@ -354,6 +365,7 @@ export class FakeLamp implements LanExchange {
     }
 
     this.lastPaintAt = Date.now();
+    this.lastPaintOpcode = opcode;
     let litZone: number | null = null;
     const nbSeg = payload[1] ?? 0;
 
@@ -428,8 +440,13 @@ export class ScriptedUser implements QualificationUser {
     return Promise.resolve(this.answers.identifyConfirmed ?? true);
   }
 
-  confirmPaint(_pattern: "B0-two-colour" | "B4-zoned"): Promise<boolean> {
-    return Promise.resolve(countDistinctBands(this.lamp.painted) >= 2);
+  confirmPaint(pattern: "B0-two-colour" | "B4-zoned"): Promise<boolean> {
+    // Answer from the paint under test: the lamp records the opcode that
+    // produced the current frame, so an earlier probe cannot vouch for a
+    // later broken one.
+    const expected = pattern === "B0-two-colour" ? OPCODE.RGB_STREAM : OPCODE.ZONED;
+
+    return Promise.resolve(this.lamp.lastPaintOpcode === expected && countDistinctBands(this.lamp.painted) >= 2);
   }
 
   seesDistinctBands(candidateZones: number): Promise<boolean> {

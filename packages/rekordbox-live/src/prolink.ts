@@ -6,7 +6,8 @@
 // interval at 0x28, pitch at 0x38 (0x100000 is 0 percent), BPM x 100 at 0x5a,
 // beat within bar at 0x5c, and the track device at 0x5e. Status packets
 // (port 50002) carry play state at 0x6f, master and sync flags at 0x75,
-// track ID at 0x2c, source slot at 0x28, pitch at 0x8c. Keepalives (port
+// track ID at 0x2c, source slot at 0x28, pitch at 0x8c, BPM x 100 at 0x92
+// (0xffff or 0 = none) and beat within bar at 0x94 (0 = none). Keepalives (port
 // 50000) are 0x36 bytes and only announce presence. Offsets are from the
 // published protocol documentation; no EPL code is copied.
 //

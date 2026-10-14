@@ -53,17 +53,26 @@ describe("ble link and pacing (T-BLE-03)", () => {
     const { adapter, peripheral } = simWith(clock, 10);
     const link = new BleLink("AA:BB:CC:DD:EE:01", adapter, { writeBudgetHz: 10, writeDrainMs: 0 }, clock);
     await link.open(() => undefined);
-    clock.advance(100);
+    const frame = (i: number): Uint8Array => new Uint8Array([0x33, 0x01, i & 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
 
+    // Burst: 30 frames arrive inside one budget window. Newest-wins keeps a
+    // single queued frame and the pacer releases it on the next due slot, so
+    // catch-up can never exceed the unit's budget.
+    for (let i = 0; i < 30; i++) link.send(frame(i));
+    expect(link.status().writesSuperseded).toBe(29);
+    clock.advance(100);
+    link.tick();
+
+    // Sustained cadence at the budget: every frame lands, none stalls.
     for (let i = 0; i < 30; i++) {
-      link.send(new Uint8Array([0x33, 0x01, i & 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]));
+      link.send(frame(i));
       clock.advance(100);
       link.tick();
     }
 
     clock.advance(500);
     expect(peripheral.metrics.stalled).toBe(0);
-    expect(link.status().writesSent).toBe(30);
+    expect(link.status().writesSent).toBe(31);
     await link.close();
   });
 
@@ -76,6 +85,12 @@ describe("ble link and pacing (T-BLE-03)", () => {
     await link.open(() => undefined);
     expect(link.status().budgetBadge).toBe("unmeasured");
     await link.close();
+    // The wizard records a budget by persisting it into the link config: the
+    // next link carries the measured value and loses the badge.
+    const measured = new BleLink("AA:BB:CC:DD:EE:01", adapter, { writeBudgetHz: 10 }, clock);
+
+    expect(measured.status().budgetHz).toBe(10);
+    expect(measured.status().budgetBadge).toBeNull();
   });
 
   it("newest-state-wins: an unsent write is replaced, never queued behind", async () => {
@@ -85,12 +100,16 @@ describe("ble link and pacing (T-BLE-03)", () => {
     await link.open(() => undefined);
     link.send(new Uint8Array([0x33, 0x01, 0x01, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]));
     link.send(new Uint8Array([0x33, 0x01, 0x00, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]));
-    expect(link.status().pendingWrites).toBeLessThanOrEqual(1);
+    expect(link.status().pendingWrites).toBe(1);
     expect(link.status().writesSuperseded).toBe(1);
     clock.advance(1500);
     link.tick();
     await Promise.resolve();
-    expect(peripheral.metrics.writes).toBeLessThanOrEqual(2);
+    expect(peripheral.metrics.writes).toBe(1);
+    expect(peripheral.written).toHaveLength(1);
+    // The frame that landed is the newest one (payload byte 2 === 0x00), not
+    // the superseded one.
+    expect(peripheral.written[0]?.[2]).toBe(0);
     await link.close();
   });
 
@@ -104,9 +123,20 @@ describe("ble link and pacing (T-BLE-03)", () => {
     clock.advance(10);
     link.tick();
     expect(link.busy).toBe(true);
-    clock.advance(300);
-    expect(link.busy).toBe(false);
-    await link.close();
+
+    // Close inside the drain window: close() must hold the link until the
+    // window elapses instead of cutting it short of the last write's ack.
+    let settled = false;
+    const closed = link.close().then(() => {
+      settled = true;
+    });
+
+    clock.advance(280);
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    expect(link.status().state).not.toBe("closed");
+    clock.advance(20);
+    await closed;
     expect(link.status().state).toBe("closed");
   });
 
@@ -132,7 +162,10 @@ describe("ble link and pacing (T-BLE-03)", () => {
       link.tick();
     }
 
-    expect(link.status().reconnects).toBeGreaterThanOrEqual(1);
+    // Exactly one reconnect started: the gap triggered a single attempt and
+    // its backoff succeeded (a broken backoff that never waited would still
+    // pass >= 1 here, an exact count pins the flow).
+    expect(link.status().reconnects).toBe(1);
     expect(link.status().state).toBe("connected");
     await link.close();
   });

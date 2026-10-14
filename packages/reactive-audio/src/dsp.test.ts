@@ -10,6 +10,7 @@ import {
   FrameAgc,
   LiveFeatureExtractor,
   OnsetDetector,
+  agcStep,
   bandEnergies,
   hzToMel,
   melEnergies,
@@ -196,22 +197,70 @@ describe("dsp (T-AUD-02)", () => {
     expect(state.gain).toBe(4);
   });
 
+  it("holds the AGC gain through silence instead of walking to the clamp", () => {
+    // Non-zero input keeps adapting (the clamp test above); silence must not.
+    const held = agcStep({ gain: 2, smoothed: 0.4 }, 0);
+
+    expect(held.gain).toBe(2);
+
+    for (let i = 0; i < 1000; i += 1) {
+      const next = agcStep({ gain: 2, smoothed: 0.4 }, 0);
+
+      expect(next.gain).toBe(2);
+    }
+  });
+
+  it("routes the agc target through FrameAgc options", () => {
+    const loud = new Float64Array(2048).fill(0.2);
+    const defaultTarget = new FrameAgc();
+    const highTarget = new FrameAgc({ target: 0.9 });
+    let a = { gain: 1, envelope: 0 };
+    let b = { gain: 1, envelope: 0 };
+
+    for (let i = 0; i < 50; i += 1) {
+      a = defaultTarget.process(loud);
+      b = highTarget.process(loud);
+    }
+
+    expect(b.gain).toBeGreaterThan(a.gain);
+  });
+
+  it("rejects a zero hop and zero fft instead of failing downstream", () => {
+    expect(() => new LiveFeatureExtractor({ sampleRate: SAMPLE_RATE, hopSize: 0 })).toThrow(/hopSize must be positive/);
+    expect(() => new LiveFeatureExtractor({ sampleRate: SAMPLE_RATE, fftSize: 0 })).toThrow(/fftSize must be positive/);
+  });
+
   it("estimates the tempo of a click train", () => {
     const hopSeconds = 512 / 48_000;
-    const fast = new Array<number>(512).fill(0);
+    const fast = Array.from<number>({ length: 512 }).fill(0);
 
     for (let i = 0; i < 512; i += 47) fast[i] = 1;
     const fastEstimate = tempoFromOnsets(fast, hopSeconds)!;
     expect(fastEstimate.bpm).toBeGreaterThan(117);
     expect(fastEstimate.bpm).toBeLessThan(123);
     expect(fastEstimate.confidence).toBeGreaterThan(0.5);
-    const slow = new Array<number>(512).fill(0);
+    const slow = Array.from<number>({ length: 512 }).fill(0);
 
     for (let i = 0; i < 512; i += 93) slow[i] = 1;
     const slowEstimate = tempoFromOnsets(slow, hopSeconds)!;
     expect(slowEstimate.bpm).toBeGreaterThan(57);
     expect(slowEstimate.bpm).toBeLessThan(63);
     expect(tempoFromOnsets([1, 0, 1], hopSeconds)).toBeNull();
+    // A constant envelope has no periodicity: every correlation is zero, so
+    // there is no estimate to report (confidence-0 temps are not a tempo).
+    expect(tempoFromOnsets(Array.from<number>({ length: 64 }).fill(0.5), hopSeconds)).toBeNull();
+  });
+
+  it("assigns a boundary bin to exactly one live band", () => {
+    // 4 Hz bins at this rate: bin 37 = 148 Hz sits inside bass, just below
+    // the 150 Hz lowMid edge. The old floor/ceil mix counted it in both.
+    const power = new Float64Array(FFT_SIZE / 2 + 1);
+
+    power[37] = 1;
+    const bands = bandEnergies(power, SAMPLE_RATE, FFT_SIZE);
+
+    expect(bands[0]).toBeGreaterThan(0);
+    expect(bands[1]).toBe(0);
   });
 
   it("estimates 120 BPM from a click train through the extractor", () => {

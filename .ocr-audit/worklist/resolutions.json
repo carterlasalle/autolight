@@ -2036,5 +2036,169 @@
       "verdict": "fixed-earlier",
       "evidence": "The journey uses two distinct fixtures (PRIMARY/SECONDARY) and asserts owner a/b, weight ordering, and per-fixture brightness handover, so crossfade ownership is directly observed. Verified 2026-10-14."
     }
+  ],
+  "batch-30": [
+    {
+      "path": "apps/desktop/src/routes/venue/mapping-wizard.tsx",
+      "line": 69,
+      "verdict": "by-design",
+      "evidence": "Next is gated by REQUIRED_STEPS confirmation (disabled until the step is confirmed) and Save is gated on every required step; steps 3 and 7 carry the data inputs that feed the topology. The component is the confirmation stepper over the T-ROOM-04 wizard logic; canvas-click device interactions are separate work, not inputs this stepper owns."
+    },
+    {
+      "path": "apps/desktop/vitest.config.ts",
+      "line": 28,
+      "verdict": "fixed",
+      "evidence": "include now collects src and electron tests (parity with the root config); verified by running electron/services/audit-log.test.ts through the desktop workspace config."
+    },
+    {
+      "path": "apps/desktop/vitest.config.ts",
+      "line": 17,
+      "verdict": "fixed",
+      "evidence": "Both desktop and root configs use a greedy subpath capture, so @autolight/pkg/a/b resolves to src/a/b.ts."
+    },
+    {
+      "path": "apps/desktop/vitest.config.ts",
+      "line": 12,
+      "verdict": "fixed",
+      "evidence": "readdirSync uses withFileTypes + isDirectory, matching the root config."
+    },
+    {
+      "path": "docs/finish/tools/check-coverage.mjs",
+      "line": 94,
+      "verdict": "fixed",
+      "evidence": "read() wraps readFileSync and reports one labeled problem line for a missing input; make-status.mjs got the same guard (console.error + exit 1). check-coverage still exits 0."
+    },
+    {
+      "path": "docs/finish/tools/check-coverage.mjs",
+      "line": 106,
+      "verdict": "fixed",
+      "evidence": "Finding references use word-boundary regexes in both the task-file text and the closing task body."
+    },
+    {
+      "path": "docs/finish/tools/check-coverage.mjs",
+      "line": 107,
+      "verdict": "fixed",
+      "evidence": "The always-true filter is deleted; expandTaskRefs already yields only T-XXX-NN ids."
+    },
+    {
+      "path": "docs/finish/tools/check-coverage.mjs",
+      "line": 134,
+      "verdict": "fixed",
+      "evidence": "The status token is the first word of a backtick-stripped cell, so annotations after the token no longer hide a valid status."
+    },
+    {
+      "path": "docs/finish/tools/check-coverage.mjs",
+      "line": 189,
+      "verdict": "fixed",
+      "evidence": "Probe references pass on exact probeDefs membership or the exact short form of a defined probe; P-56-typo can no longer ride on the P-56 prefix."
+    },
+    {
+      "path": "docs/finish/tools/check-coverage.mjs",
+      "line": 238,
+      "verdict": "documented",
+      "evidence": "The config-key scan is namespace-limited by construction: filenames (vitest.config.ts) and dotted identifiers (process.versions.node) share the syntax, so broadening would flag 53 non-key strings. The limit is now stated in the header (item 10) and the section comment: keys under catalog namespaces are checked (typo'd keys fail), unknown namespaces are out of scope."
+    },
+    {
+      "path": "packages/ble/src/link.test.ts",
+      "line": 52,
+      "verdict": "fixed",
+      "evidence": "The test now opens with a real burst (30 sends inside one window, 29 superseded) then a sustained cadence; asserts stalled 0 and writesSent 31 exactly."
+    },
+    {
+      "path": "packages/ble/src/link.test.ts",
+      "line": 80,
+      "verdict": "fixed",
+      "evidence": "pendingWrites is exactly 1 and writes exactly 1 after the flush, and the delivered frame is the newest (written[0][2] === 0)."
+    },
+    {
+      "path": "packages/ble/src/link.test.ts",
+      "line": 85,
+      "verdict": "fixed",
+      "evidence": "Lower bounds added with the newest-payload assertion above."
+    },
+    {
+      "path": "packages/ble/src/link.test.ts",
+      "line": 99,
+      "verdict": "fixed",
+      "evidence": "close() is now started inside the drain window and asserted to stay unsettled until the window elapses, then closed."
+    },
+    {
+      "path": "packages/ble/src/link.test.ts",
+      "line": 123,
+      "verdict": "fixed",
+      "evidence": "reconnects is asserted exactly 1 (a broken backoff cannot pass)."
+    },
+    {
+      "path": "packages/ble/src/link.test.ts",
+      "line": 67,
+      "verdict": "fixed",
+      "evidence": "The measured transition is asserted: a link built with the wizard-recorded budget reports budgetHz 10 and no badge."
+    },
+    {
+      "path": "packages/govee/src/lan-fake.test-support.ts",
+      "line": 115,
+      "verdict": "fixed",
+      "evidence": "powerCycle clears the reply queue and resets the paint state, so a pre-pull reply cannot be read after reconnect."
+    },
+    {
+      "path": "packages/govee/src/lan-fake.test-support.ts",
+      "line": 139,
+      "verdict": "fixed",
+      "evidence": "reply while offline waits out offlineUntil and then serves the caller's remaining timeout instead of always resolving null."
+    },
+    {
+      "path": "packages/govee/src/lan-fake.test-support.ts",
+      "line": 364,
+      "verdict": "fixed",
+      "evidence": "confirmPaint checks the opcode of the landed paint (B0 vs B4) plus >= 2 bands, so an earlier probe cannot vouch for a later broken one."
+    },
+    {
+      "path": "packages/reactive-audio/src/dsp.ts",
+      "line": 204,
+      "verdict": "fixed",
+      "evidence": "Band edges are half-open on both sides (ceil on first and last), so a boundary bin belongs to exactly one band; the boundary-bin test fails under the old floor/ceil mix."
+    },
+    {
+      "path": "packages/reactive-audio/src/dsp.ts",
+      "line": 428,
+      "verdict": "fixed",
+      "evidence": "LiveFeatureExtractorOptions carries an agc object that is passed to FrameAgc, so audio.agc.* values flow when a consumer supplies them; a target-routing test pins it."
+    },
+    {
+      "path": "packages/reactive-audio/src/dsp.ts",
+      "line": 36,
+      "verdict": "fixed",
+      "evidence": "agcStep holds the gain on silent input instead of walking it to the clamp; test added."
+    },
+    {
+      "path": "packages/reactive-audio/src/dsp.ts",
+      "line": 346,
+      "verdict": "fixed",
+      "evidence": "tempoFromOnsets returns null when no lag correlates at all (constant or silent envelope); test added."
+    },
+    {
+      "path": "packages/reactive-audio/src/dsp.ts",
+      "line": 417,
+      "verdict": "fixed",
+      "evidence": "The extractor rejects non-positive hopSize and fftSize at construction; test added."
+    },
+    {
+      "path": "packages/rekordbox-live/src/prolink.ts",
+      "line": 134,
+      "verdict": "fixed-earlier",
+      "evidence": "ProlinkStatusFrame declares bpm and beatInBar and the status branch decodes 0x92/0x94 with 0xffff/0 sentinels."
+    },
+    {
+      "path": "packages/rekordbox-live/src/prolink.ts",
+      "line": 9,
+      "verdict": "fixed",
+      "evidence": "The header offset list now includes BPM x100 at 0x92 and beat within bar at 0x94."
+    },
+    {
+      "path": "packages/rekordbox-live/src/prolink.ts",
+      "line": 210,
+      "verdict": "fixed-earlier",
+      "evidence": "buildStatusPacket's bpm (0x92) and beatInBar (0x94) now round-trip through decodeProlinkPacket."
+    }
   ]
 }

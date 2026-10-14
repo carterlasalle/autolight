@@ -23,7 +23,10 @@
 //  8. Decision switches DS-01..DS-NN are contiguous, each has a catalog row,
 //     and every DS referenced exists.
 //  9. Every hardware runbook HW-* referenced exists in the WP15 runbook table.
-// 10. Every config key referenced in backticks exists in the 03 catalog.
+// 10. Every backticked config key under a catalog namespace exists in the 03
+//     catalog. Keys under unknown namespaces are not scanned: filenames
+//     (vitest.config.ts) and dotted identifiers (process.versions.node) share
+//     the syntax, so only namespaces the catalog itself defines are checked.
 //
 // Exit code 0 when all checks pass, 1 otherwise. Output lists every problem.
 
@@ -55,7 +58,17 @@ function listMarkdown(dir) {
   return out;
 }
 
-const read = (p) => readFileSync(p, "utf8");
+const read = (p) => {
+  try {
+    return readFileSync(p, "utf8");
+  } catch {
+    // A missing or unreadable plan input must surface as one clean problem
+    // line, not an uncaught exception that hides every later check.
+    fail(`required input ${rel(p)} is missing or unreadable`);
+
+    return "";
+  }
+};
 
 const rel = (p) => relative(repoRoot, p);
 
@@ -128,8 +141,10 @@ const taskFileText = taskFiles.map(read).join("\n");
 for (const [id, closedBy] of findings) {
   if (id.startsWith("F-X-")) continue;
 
-  if (!taskFileText.includes(id)) fail(`${id} is not referenced by any task file`);
-  const closedByTasks = [...expandTaskRefs(closedBy)].filter((t) => tasks.has(t) || /^T-[A-Z]+-\d{2}$/.test(t));
+  // Word boundaries: `taskFileText.includes(id)` would treat F-BLE-011 as a
+  // reference to F-BLE-01 and hide a genuinely unreferenced finding.
+  if (!new RegExp(`\\b${id}\\b`).test(taskFileText)) fail(`${id} is not referenced by any task file`);
+  const closedByTasks = [...expandTaskRefs(closedBy)];
 
   if (closedByTasks.length === 0) fail(`${id} names no task in "Closed by"`);
 
@@ -139,7 +154,7 @@ for (const [id, closedBy] of findings) {
       continue;
     }
 
-    if (!tasks.get(t).body.includes(id)) fail(`${t} does not mention ${id} but is named as closing it`);
+    if (!new RegExp(`\\b${id}\\b`).test(tasks.get(t).body)) fail(`${t} does not mention ${id} but is named as closing it`);
   }
 }
 
@@ -164,7 +179,9 @@ if (!existsSync(statusPath)) {
 
   for (const [id, cells] of statusRows) {
     if (!tasks.has(id)) fail(`STATUS.md lists ${id}, which has no task heading`);
-    const st = cells.find((c) => VALID.has(c.replace(/`/g, "")));
+    // The status cell may carry an annotation after the token (for example
+    // `DONE-VERIFIED` (owner ran it)); the first word is the status.
+    const st = cells.map((c) => c.replace(/`/g, "").trim()).find((c) => VALID.has(c.split(/\s+/)[0] ?? ""));
 
     if (!st) { fail(`${id} on STATUS.md has no valid status (${[...VALID].join(", ")})`); continue; }
 
@@ -228,7 +245,15 @@ const wp05 = read(join(planDir, "wp05-room-and-venue.md"));
 for (const m of wp05.matchAll(/^\s*\| `(P-ROOM-\d{2}-[a-z0-9-]+)` \|/gm)) probeDefs.add(m[1]);
 
 // A reference may use the short form (P-56) of a defined probe (P-56-ui-freeze).
-const shortForms = new Set([...probeDefs].map((p) => p.match(/^P-(ROOM-\d{2}|[0-9]+(?:\.[0-9]+)?)/)?.[0]).filter(Boolean));
+// Only the exact short form passes: any longer suffixed reference (P-56-typo)
+// is matched against probeDefs alone, so it cannot ride on the prefix.
+const shortForms = new Set();
+
+for (const p of probeDefs) {
+  const m = /^(P-(?:ROOM-\d{2}|[0-9]+(?:\.[0-9]+)?))-/.exec(p);
+
+  if (m) shortForms.add(m[1]);
+}
 
 for (const file of allDocs) {
   const text = read(file);
@@ -236,10 +261,7 @@ for (const file of allDocs) {
   for (const m of text.matchAll(/`(P-[0-9A-Za-z.]+(?:-[a-z0-9.]+)*)`/g)) {
     const p = m[1];
 
-    if (probeDefs.has(p)) continue;
-    const short = p.match(/^P-(ROOM-\d{2}|[0-9]+(?:\.[0-9]+)?)/)?.[0];
-
-    if (short && shortForms.has(short)) continue;
+    if (probeDefs.has(p) || shortForms.has(p)) continue;
     fail(`${rel(file)} references probe ${p}, which is not defined in the matrix or WP05`);
   }
 }
@@ -279,8 +301,11 @@ for (const file of allDocs) {
 }
 
 // ---------------------------------------------------------------- config keys
-// Every backticked config key referenced in the plan exists in the catalog
-// (03 section 3). Namespaces come from the catalog itself.
+// Every backticked key whose namespace appears in the catalog exists in the
+// catalog (03 section 3). Namespaces come from the catalog itself; a key
+// under a namespace the catalog never defines cannot be distinguished from a
+// filename or a dotted identifier, so it is out of this check's scope by
+// design (a deliberate typo'd key IS caught, a typo'd namespace is not).
 const keyDefs = new Set([...cfg.matchAll(/^\| `([a-z0-9]+\.[A-Za-z0-9.<>*]+)` \|/gm)].map((m) => m[1]));
 
 const namespaces = [...new Set([...keyDefs].map((k) => k.split(".")[0]))];

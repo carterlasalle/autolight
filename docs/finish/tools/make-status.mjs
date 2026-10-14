@@ -16,7 +16,15 @@ const planDir = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 const statusPath = join(planDir, "STATUS.md");
 
-const read = (n) => readFileSync(join(planDir, n), "utf8");
+const read = (n) => {
+  try {
+    return readFileSync(join(planDir, n), "utf8");
+  } catch {
+    // One labeled line instead of a raw stack: the fix is always the input.
+    console.error(`make-status: required input ${n} is missing or unreadable`);
+    process.exit(1);
+  }
+};
 
 const files = readdirSync(planDir)
   .filter((n) => n.endsWith(".md") && (n.startsWith("wp") || n.startsWith("03-") || n.startsWith("04-")))

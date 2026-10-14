@@ -1,7 +1,7 @@
 # OCR audit — batch checklist
 
 Source: `.ocr-audit/worklist/batches` (85 batches, 2324 comments).
-Refreshed against HEAD f48cfa6 (2026-10-14) with `node .ocr-audit/worklist/triage.mjs` (sidecar: resolutions.json).
+Refreshed against HEAD 3959156 (2026-10-14) with `node .ocr-audit/worklist/triage.mjs` (sidecar: resolutions.json).
 Legend: [x] all comments resolved+verified, [~] in progress, [ ] not started.
 
 [x] batch-01: open 0, unknown 0, applied 44 of 44
@@ -33,7 +33,7 @@ Legend: [x] all comments resolved+verified, [~] in progress, [ ] not started.
 [x] batch-27: open 0, unknown 0, applied 28 of 28
 [x] batch-28: open 0, unknown 0, applied 33 of 33
 [x] batch-29: open 0, unknown 0, applied 33 of 33
-[~] batch-30: open 27, unknown 0, applied 2 of 29
+[x] batch-30: open 0, unknown 0, applied 29 of 29
 [~] batch-31: open 4, unknown 0, applied 22 of 26
 [~] batch-32: open 9, unknown 0, applied 20 of 29
 [~] batch-33: open 25, unknown 0, applied 1 of 26
@@ -56,7 +56,7 @@ Legend: [x] all comments resolved+verified, [~] in progress, [ ] not started.
 [~] batch-50: open 17, unknown 0, applied 10 of 27
 [~] batch-51: open 27, unknown 0, applied 2 of 29
 [~] batch-52: open 18, unknown 0, applied 13 of 31
-[~] batch-53: open 25, unknown 0, applied 2 of 27
+[~] batch-53: open 24, unknown 0, applied 3 of 27
 [~] batch-54: open 11, unknown 0, applied 17 of 28
 [~] batch-55: open 26, unknown 0, applied 2 of 28
 [~] batch-56: open 26, unknown 0, applied 2 of 28
