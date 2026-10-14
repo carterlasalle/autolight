@@ -135,6 +135,10 @@ interface ShellState {
   liveBeat: number;
   altOn: boolean;
   altSpeed: number;
+  // Party-card tempo for the beat effects: tap tempo here, or the mic
+  // estimate written by the operator-started Audio sync card. Separate from
+  // `bpm`, which mirrors the DJ deck.
+  altBpm: number;
   bpm: number | null;
   reactiveLevel: number;
   overridesIntensity: number | null;
@@ -178,6 +182,7 @@ export const useShell = create<ShellState>((set) => ({
   liveBeat: 0,
   altOn: false,
   altSpeed: 500,
+  altBpm: 128,
   bpm: null,
   reactiveLevel: 0,
   overridesIntensity: null,

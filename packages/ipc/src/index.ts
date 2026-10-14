@@ -22,8 +22,11 @@ export type PartyPaletteName = (typeof partyPaletteNames)[number];
 
 // Party effects (LED_PARTY's mode catalog, re-created client-side). Names
 // live here so the channel schema, the renderer's effect picker and the
-// main-process frame generator consume one list.
-export const partyEffectNames = ["pulse", "strobe", "jump", "wash", "spot"] as const;
+// main-process frame generator consume one list. The beat effects run on a
+// tapped tempo — no microphone, no audio permission, ever.
+export const partyBeatEffects = ["beat-flash", "beat-cycle", "beat-alternate", "beat-rainbow"] as const;
+
+export const partyEffectNames = ["pulse", "strobe", "jump", "wash", "spot", ...partyBeatEffects] as const;
 
 export type PartyEffectName = (typeof partyEffectNames)[number];
 
@@ -139,8 +142,19 @@ export const channels = {
       // strobe and jump; the main process resolves it to colours.
       effect: z.enum(partyEffectNames).optional(),
       palette: z.enum(partyPaletteNames).optional(),
+      // Tempo for the beat effects, from the card's tap tempo or BPM entry.
+      // Plain arithmetic — the beat never comes from a microphone.
+      bpm: z.number().min(40).max(300).optional(),
     }),
     response: z.union([ok(z.object({ enabled: z.boolean(), mode: z.string() })), errorSchema]),
+  },
+  "venue/alternate-bpm": {
+    // Tempo updates for a running beat effect: the main-page mic's estimate
+    // or the card's tap tempo writes it without restarting the runner. Never
+    // requested by this channel — the mic only exists once the operator
+    // starts the Audio sync card.
+    request: z.object({ version: v1, bpm: z.number().min(40).max(300) }),
+    response: z.union([ok(z.object({ bpm: z.number().min(40).max(300), applied: z.boolean() })), errorSchema]),
   },
   "venue/paint-stripes": {
     request: z.object({ version: v1, id: z.string(), zones: z.number().int().min(1).max(255) }),

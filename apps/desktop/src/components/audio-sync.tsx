@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { useShell } from "../app/store.js";
+import { createTempoTracker } from "@autolight/reactive-audio";
+import { typedInvoke, useShell } from "../app/store.js";
 import { Button } from "./ui/button.js";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card.js";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select.js";
@@ -89,6 +90,10 @@ export function AudioSyncCard(): JSX.Element {
       analyser.fftSize = 256;
       src.connect(analyser);
       const data = new Uint8Array(analyser.frequencyBinCount);
+      const freq = new Uint8Array(analyser.frequencyBinCount);
+      const prevFreq = new Uint8Array(analyser.frequencyBinCount);
+      const tracker = createTempoTracker();
+      let lastTempoMs = 0;
 
       const tick = (): void => {
         analyser.getByteTimeDomainData(data);
@@ -101,6 +106,33 @@ export function AudioSyncCard(): JSX.Element {
         const sensitivity = useShell.getState().sensitivity;
 
         s.set({ audioLevel: peak, reactiveLevel: Math.min(1, peak * sensitivity) });
+
+        // Onset tempo from spectral flux. This only runs because the operator
+        // started this capture — no other code path ever opens the microphone.
+        analyser.getByteFrequencyData(freq);
+        let flux = 0;
+
+        for (let i = 0; i < freq.length; i++) {
+          const d = (freq[i] ?? 0) - (prevFreq[i] ?? 0);
+
+          if (d > 0) flux += d;
+        }
+
+        prevFreq.set(freq);
+        const now = performance.now();
+        const bpm = tracker.push(flux, now);
+
+        if (bpm !== null) {
+          // Shared tempo state keeps the Party card's BPM box truthful while
+          // the mic drives; the channel only nudges a runner that exists.
+          if (useShell.getState().altBpm !== bpm) useShell.getState().set({ altBpm: bpm });
+
+          if (useShell.getState().altOn && now - lastTempoMs > 1500) {
+            lastTempoMs = now;
+            void typedInvoke("venue/alternate-bpm", { version: 1, bpm });
+          }
+        }
+
         rafRef.current = requestAnimationFrame(tick);
       };
 
@@ -160,7 +192,7 @@ export function AudioSyncCard(): JSX.Element {
           <Button size="sm" variant="outline" onClick={() => { void start(); }}>Start</Button>
           <Button size="sm" variant="outline" onClick={stop}>Stop</Button>
         </div>
-        <p className="text-sm text-muted-foreground">Overlay nudges brightness/sparkle from the DJ grid (§69) — never mic guessing.</p>
+        <p className="text-sm text-muted-foreground">Overlay nudges brightness/sparkle from the DJ grid (§69); the tempo detected here feeds the Party card's beat effects while this capture runs.</p>
       </CardContent>
     </Card>
   );

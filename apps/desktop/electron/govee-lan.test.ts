@@ -227,4 +227,37 @@ describe("govee registry (venue hydration)", () => {
     expect(defaultDeviceName("H6076", "AA:BB:CC:DD:EE:02")).toBe("Lamp");
     expect(defaultDeviceName("H9999", "AA:BB:CC:DD:EE:03")).toBe("AA:BB:CC:DD:EE:03");
   });
+
+  it("beat effects demand a tempo and take live bpm updates", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "autolight-registry-"));
+    const path = join(dir, "govee-registry.json");
+
+    writeFileSync(path, JSON.stringify({
+      version: 1,
+      devices: [
+        { mac: "AA:BB:CC:DD:EE:0B", sku: "H6076", name: "Left", enabled: true, zones: 2, ipHistory: ["127.0.0.1"], rung: "cached-unicast", lastSeenMs: 10 },
+        { mac: "AA:BB:CC:DD:EE:0C", sku: "H6076", name: "Right", enabled: true, zones: 2, ipHistory: ["127.0.0.1"], rung: "cached-unicast", lastSeenMs: 11 },
+      ],
+    }));
+
+    const mgr = new GoveeLanManager({ ...quietOpts(path), replyPort: 0, loopbackScan: true });
+
+    try {
+      mgr.registrySnapshot();
+      expect(() => mgr.startAlternate({ mode: "lamps", speedMs: 60, colours: { a: [1, 2, 3], b: [0, 0, 0] }, effect: "beat-flash" }))
+        .toThrow(/needs a tempo/);
+      expect(mgr.alternateStatus()).toBeNull();
+
+      const receipt = mgr.startAlternate({ mode: "lamps", speedMs: 60, colours: { a: [1, 2, 3], b: [0, 0, 0] }, effect: "beat-flash", bpm: 128 });
+
+      expect(receipt).toMatchObject({ effect: "beat-flash", bpm: 128 });
+      expect(mgr.setAlternateBpm(300)).toBe(true);
+      expect(mgr.alternateStatus()).toMatchObject({ bpm: 300 });
+      expect(await mgr.stopAlternate()).toBe(true);
+      // Not running: a tempo update has nothing to apply to.
+      expect(mgr.setAlternateBpm(120)).toBe(false);
+    } finally {
+      mgr.stop();
+    }
+  });
 });

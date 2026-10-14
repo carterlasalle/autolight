@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { partyEffectNames, type PartyEffectName } from "@autolight/ipc";
+import { partyBeatEffects, partyEffectNames, type PartyEffectName } from "@autolight/ipc";
 import { PARTY_PALETTES, useShell, typedInvoke, type PartyPalette } from "../../app/store.js";
 import { Button } from "../../components/ui/button.js";
 import { Input } from "../../components/ui/input.js";
@@ -37,6 +37,7 @@ const SEGMENT_CANDIDATES: readonly number[] = [8, 12, 14, 16, 20];
 
 const EFFECT_LABELS: Record<PartyEffectName | "alternate", string> = {
   alternate: "Swap A/B", pulse: "Pulse", strobe: "Strobe", jump: "Jump", wash: "Wash", spot: "Spot",
+  "beat-flash": "Beat: Flash", "beat-cycle": "Beat: Cycle", "beat-alternate": "Beat: A/B", "beat-rainbow": "Beat: Rainbow",
 };
 
 function toHex(rgb: [number, number, number]): string {
@@ -282,22 +283,62 @@ export function AlternateCard(): JSX.Element {
   const halvesReady = tiles.filter((t) => t.enabled).every((t) => t.segments >= 2);
   const bIsInverse = colourB.every((v, i) => v === 255 - (colourA[i] ?? 0));
   const bIsOff = colourB.every((v) => v === 0);
-  const usesPalette = effect === "pulse" || effect === "strobe" || effect === "jump";
+  const bpm = useShell((st) => st.altBpm);
+  const tapsRef = useRef<number[]>([]);
+  const beatSelected = effect !== "alternate" && (partyBeatEffects as readonly string[]).includes(effect);
+  // Palette-driven effects: pulse/strobe/jump read it, and so do the beat
+  // cycle and downbeat rainbow; beat flash is white and alternate is A/B.
+  const usesPalette = effect === "pulse" || effect === "strobe" || effect === "jump" || effect === "beat-cycle" || effect === "beat-rainbow";
 
   // Overrides let a running effect switch the moment the picker changes,
   // without waiting a render: the same reason the speed slider re-sends.
-  const send = (enabled: boolean, over: { effect?: PartyEffectName | "alternate"; palette?: PartyPalette } = {}): void => {
+  // Tempo and speed default to the live store values, never a stale render.
+  const send = (enabled: boolean, over: { effect?: PartyEffectName | "alternate"; palette?: PartyPalette; bpm?: number; speedMs?: number } = {}): void => {
     const fx = over.effect ?? effect;
     const pal = over.palette ?? palette;
+    const tempo = over.bpm ?? useShell.getState().altBpm;
+    const speed = over.speedMs ?? useShell.getState().altSpeed;
+    const beat = fx !== "alternate" && (partyBeatEffects as readonly string[]).includes(fx);
 
     useShell.getState().set({ altOn: enabled });
     void typedInvoke("venue/alternate", {
-      version: 1, enabled, mode, speedMs: altSpeed, rgbA: colourA, rgbB: colourB,
+      version: 1, enabled, mode, speedMs: speed, rgbA: colourA, rgbB: colourB,
       ...(fx !== "alternate" ? { effect: fx } : {}),
-      ...(fx === "pulse" || fx === "strobe" || fx === "jump" ? { palette: pal } : {}),
+      ...(fx === "pulse" || fx === "strobe" || fx === "jump" || fx === "beat-cycle" || fx === "beat-rainbow" ? { palette: pal } : {}),
+      ...(beat ? { bpm: tempo } : {}),
     }).then((res) => {
       if (res === null && enabled) useShell.getState().set({ altOn: false });
     });
+  };
+
+  // Tap tempo: median of the recent tap intervals, arithmetic only — the
+  // beat feature never asks for the microphone.
+  const tap = (): void => {
+    const now = performance.now();
+    const taps = [...tapsRef.current, now].filter((t) => now - t < 3000).slice(-6);
+
+    tapsRef.current = taps;
+
+    if (taps.length < 2) return;
+    const intervals: number[] = [];
+
+    for (let i = 1; i < taps.length; i++) {
+      const prev = taps[i - 1];
+      const cur = taps[i];
+
+      if (prev !== undefined && cur !== undefined) intervals.push(cur - prev);
+    }
+
+    if (intervals.length === 0) return;
+    intervals.sort((x, y) => x - y);
+    const median = intervals[Math.floor(intervals.length / 2)];
+
+    if (median === undefined || median <= 0) return;
+    const next = Math.round(60_000 / median);
+
+    if (next < 40 || next > 300) return;
+    useShell.getState().set({ altBpm: next });
+    if (altOn) send(true, { bpm: next });
   };
 
   return (
@@ -315,7 +356,16 @@ export function AlternateCard(): JSX.Element {
           {(["alternate", ...partyEffectNames] as const).map((e) => (
             <Button
               key={e} size="sm" variant={effect === e ? "default" : "outline"}
-              onClick={() => { setEffect(e); if (altOn) send(true, { effect: e }); }}
+              onClick={() => {
+                setEffect(e);
+                // Beat hits need a fine tick: nudge a slow slider down once,
+                // the same way the strobe preset sets 80ms.
+                const beat = e !== "alternate" && (partyBeatEffects as readonly string[]).includes(e);
+                const speed = beat && useShell.getState().altSpeed > 120 ? 50 : undefined;
+
+                if (speed !== undefined) useShell.getState().set({ altSpeed: speed });
+                if (altOn) send(true, { effect: e, ...(speed !== undefined ? { speedMs: speed } : {}) });
+              }}
               aria-pressed={effect === e}
             >
               {EFFECT_LABELS[e]}
@@ -333,6 +383,26 @@ export function AlternateCard(): JSX.Element {
                 {p}
               </Button>
             ))}
+          </div>
+        ) : null}
+        {beatSelected ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground">BPM
+              <Input
+                aria-label="Beat tempo"
+                type="number" min={40} max={300}
+                value={String(bpm)}
+                onChange={(e) => {
+                  const n = Number.parseInt(e.target.value, 10);
+
+                  if (Number.isInteger(n) && n >= 40 && n <= 300) useShell.getState().set({ altBpm: n });
+                }}
+                onBlur={() => { if (altOn) send(true); }}
+                className="h-8 w-20"
+              />
+            </label>
+            <Button size="sm" variant="outline" onClick={tap}>Tap</Button>
+            <span className="text-xs text-muted-foreground">Tap the tempo, or start the Audio sync card's mic to drive it — this card never requests the microphone.</span>
           </div>
         ) : null}
         <div className="flex flex-wrap items-center gap-3">

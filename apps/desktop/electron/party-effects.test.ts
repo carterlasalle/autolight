@@ -8,7 +8,9 @@ import { PARTY_PALETTES, partyFrame, type Rgb } from "./party-effects.js";
 const a: Rgb = [255, 0, 0];
 const b: Rgb = [0, 0, 255];
 const palette: Rgb[] = [[1, 2, 3], [4, 5, 6]];
-const opts = { groups: 2, a, b, palette };
+const opts = { groups: 2, a, b, palette, stepMs: 100 };
+// 1000 ms beat at a 100 ms tick: ten ticks per beat.
+const beat = { ...opts, beatMs: 1000 };
 
 // First group's colour, with the contract asserted: a frame must produce one
 // colour per requested group.
@@ -67,8 +69,41 @@ describe("party effects (LED_PARTY port)", () => {
     expect(mid[0]).toBeLessThan(peak[0]);
   });
 
-  it("falls back to A/B when the palette is empty and covers every name", () => {
-    expect(first("jump", 0, { ...opts, palette: [] })).toEqual(a);
+  it("beat flash hits white at the beat top and dies within one tick", () => {
+    expect(first("beat-flash", 0, beat)).toEqual([255, 255, 255]);
+    expect(first("beat-flash", 1, beat)).toEqual([0, 0, 0]);
+    expect(first("beat-flash", 9, beat)).toEqual([0, 0, 0]);
+    // Tick 10 = the top of beat 1.
+    expect(first("beat-flash", 10, beat)).toEqual([255, 255, 255]);
+  });
+
+  it("beat cycle holds one palette colour per beat", () => {
+    expect(first("beat-cycle", 0, beat)).toEqual([1, 2, 3]);
+    expect(first("beat-cycle", 5, beat)).toEqual([1, 2, 3]);
+    expect(first("beat-cycle", 10, beat)).toEqual([4, 5, 6]);
+    expect(first("beat-cycle", 20, beat)).toEqual([1, 2, 3]);
+  });
+
+  it("beat alternate swaps A and B each beat", () => {
+    expect(first("beat-alternate", 0, beat)).toEqual(a);
+    expect(first("beat-alternate", 10, beat)).toEqual(b);
+    expect(first("beat-alternate", 20, beat)).toEqual(a);
+  });
+
+  it("beat rainbow blasts the downbeat and dims the rest of the bar", () => {
+    expect(first("beat-rainbow", 0, beat)).toEqual([1, 2, 3]);
+
+    const offbeat = first("beat-rainbow", 10, beat);
+
+    expect(offbeat).not.toEqual([1, 2, 3]);
+    expect(offbeat).not.toEqual([0, 0, 0]);
+    // Next bar's downbeat: beat 4, palette colour 2.
+    expect(first("beat-rainbow", 40, beat)).toEqual([4, 5, 6]);
+  });
+
+  it("beat effects hold colour A with no tempo, and the palette covers every name", () => {
+    expect(first("beat-flash", 0, opts)).toEqual(a);
+    expect(first("beat-cycle", 0, opts)).toEqual(a);
     expect(Object.keys(PARTY_PALETTES).sort()).toEqual([...partyPaletteNames].sort());
   });
 });

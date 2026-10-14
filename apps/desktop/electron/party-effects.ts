@@ -32,6 +32,22 @@ const BLACK: Rgb = [0, 0, 0];
 // pulses and washes in a musical band (8 x 250 ms = 2 s).
 const CYCLE = 8;
 
+// How long the beat-flash hit lasts inside each beat, at tick granularity.
+const FLASH_MS = 90;
+
+/** Frame inputs. `stepMs` is the runner's tick length; `beatMs` (60000/bpm)
+ *  is required by the beat effects, which read elapsed time as
+ *  `tick * stepMs`. The tempo is arithmetic — tap or the operator-started
+ *  mic estimate — never an audio permission. */
+interface PartyFrameOptions {
+  groups: number;
+  a: Rgb;
+  b: Rgb;
+  palette: Rgb[];
+  stepMs: number;
+  beatMs?: number;
+}
+
 const blend = (from: Rgb, to: Rgb, k: number): Rgb => [
   Math.round(from[0] + (to[0] - from[0]) * k),
   Math.round(from[1] + (to[1] - from[1]) * k),
@@ -41,15 +57,18 @@ const blend = (from: Rgb, to: Rgb, k: number): Rgb => [
 /**
  * Colours for `groups` outputs at `tick`. `groups` is one per fixture
  * (lamps mode) or two (strip halves). `a`/`b` are the operator's flash
- * colours; the palette drives pulse and jump.
+ * colours; the palette drives pulse, jump and the beat cycle.
  */
 export function partyFrame(
   effect: PartyEffect,
   tick: number,
-  opts: { groups: number; a: Rgb; b: Rgb; palette: Rgb[] },
+  opts: PartyFrameOptions,
 ): Rgb[] {
   const palette = opts.palette.length > 0 ? opts.palette : [opts.a, opts.b];
   const fill = (colour: Rgb): Rgb[] => Array.from({ length: opts.groups }, () => colour);
+  const beatMs = opts.beatMs !== undefined && opts.beatMs > 0 ? opts.beatMs : null;
+  const elapsedMs = tick * opts.stepMs;
+  const beatIndex = beatMs === null ? 0 : Math.floor(elapsedMs / beatMs);
 
   switch (effect) {
     case "pulse": {
@@ -83,6 +102,32 @@ export function partyFrame(
       const lit = tick % Math.max(1, opts.groups);
 
       return Array.from({ length: opts.groups }, (_, i) => (i === lit ? opts.a : BLACK));
+    }
+    case "beat-flash": {
+      // LED_PARTY "Beat: White Flash": a white hit at the top of each beat.
+      if (beatMs === null) return fill(opts.a);
+
+      return fill(elapsedMs % beatMs < FLASH_MS ? [255, 255, 255] : BLACK);
+    }
+    case "beat-cycle": {
+      // "Beat: Palette Cycle": one palette colour per beat.
+      if (beatMs === null) return fill(opts.a);
+
+      return fill(palette[beatIndex % palette.length] ?? opts.a);
+    }
+    case "beat-alternate": {
+      // "Beat: Alternate Base/Alt": A on even beats, B on odd.
+      if (beatMs === null) return fill(opts.a);
+
+      return fill(beatIndex % 2 === 0 ? opts.a : opts.b);
+    }
+    case "beat-rainbow": {
+      // "Beat: Downbeat Rainbow": the colour steps each bar; the downbeat
+      // hits full, the rest of the bar sits dim.
+      if (beatMs === null) return fill(opts.a);
+      const colour = palette[Math.floor(beatIndex / 4) % palette.length] ?? opts.a;
+
+      return fill(beatIndex % 4 === 0 ? colour : blend(colour, BLACK, 0.8));
     }
   }
 }

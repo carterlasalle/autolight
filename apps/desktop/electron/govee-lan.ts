@@ -49,6 +49,7 @@ import type {
 } from "@autolight/govee";
 import { partyFrame } from "./party-effects.js";
 import type { PartyEffect, Rgb } from "./party-effects.js";
+import { partyBeatEffects } from "@autolight/ipc";
 
 const GLOBAL_BROADCAST = "255.255.255.255";
 
@@ -67,6 +68,12 @@ const DEFAULT_NAMES: Record<string, string> = { H1A45: "Strip lights", H6076: "L
 
 export function defaultDeviceName(sku: string, mac: string): string {
   return DEFAULT_NAMES[sku] ?? mac;
+}
+
+// Beat effects need a tempo (tap or the operator-started mic estimate); the
+// other party effects ignore bpm entirely.
+function isBeatEffect(effect: PartyEffect): boolean {
+  return (partyBeatEffects as readonly string[]).includes(effect);
 }
 
 const RUNG_MARKS = 32;
@@ -265,6 +272,9 @@ export interface AlternateOptions {
   effect?: PartyEffect;
   /** Palette driving pulse/jump/strobe, e.g. PARTY_PALETTES.Neon. */
   palette?: Rgb[];
+  /** Tempo for the beat effects; tap tempo or the operator-started mic
+   *  estimate. Live-updatable through setAlternateBpm. */
+  bpm?: number;
 }
 
 export interface AlternateReceipt {
@@ -273,6 +283,7 @@ export interface AlternateReceipt {
   fixtures: number;
   colours: AlternateColours;
   effect?: PartyEffect;
+  bpm?: number;
 }
 
 interface AlternateStateInternal extends AlternateOptions {
@@ -1159,6 +1170,12 @@ export class GoveeLanManager implements StreamTransport {
 
     const speedMs = Math.min(5000, Math.max(40, Math.round(opts.speedMs)));
 
+    if (opts.effect !== undefined && isBeatEffect(opts.effect) && opts.bpm === undefined) {
+      throw new Error(`effect ${opts.effect} needs a tempo (fix: tap the tempo in the Party card, or start the mic overlay)`);
+    }
+
+    const bpm = opts.bpm !== undefined ? Math.min(300, Math.max(40, Math.round(opts.bpm))) : undefined;
+
     void this.stopAlternate();
     const timer = setInterval(() => { void this.alternateStep(); }, speedMs);
 
@@ -1166,13 +1183,13 @@ export class GoveeLanManager implements StreamTransport {
       timer.unref?.();
     } catch { /* loop lifetime owns the timer */ }
 
-    const state: AlternateStateInternal = { ...opts, speedMs, timer, phase: false, tick: 0 };
+    const state: AlternateStateInternal = { ...opts, ...(bpm !== undefined ? { bpm } : {}), speedMs, timer, phase: false, tick: 0 };
     this.alternate = state;
     // Engage immediately: waiting one interval before the first swap makes
     // the button feel dead.
     void this.alternateStep();
 
-    return { mode: opts.mode, speedMs, fixtures: enabled.length, colours: opts.colours, ...(opts.effect !== undefined ? { effect: opts.effect } : {}) };
+    return { mode: opts.mode, speedMs, fixtures: enabled.length, colours: opts.colours, ...(opts.effect !== undefined ? { effect: opts.effect } : {}), ...(bpm !== undefined ? { bpm } : {}) };
   }
 
   /** Stop the alternation and settle every enabled fixture back on the
@@ -1205,7 +1222,20 @@ export class GoveeLanManager implements StreamTransport {
       mode: cur.mode, speedMs: cur.speedMs, colours: cur.colours,
       fixtures: [...this.devices.values()].filter((e) => e.enabled).length,
       ...(cur.effect !== undefined ? { effect: cur.effect } : {}),
+      ...(cur.bpm !== undefined ? { bpm: cur.bpm } : {}),
     };
+  }
+
+  /** Live tempo update for a running party runner (the card's tap tempo, or
+   *  the mic estimate from the operator-started Audio sync card). The effect
+   *  is not restarted: it keeps its phase and simply re-times. */
+  setAlternateBpm(bpm: number): boolean {
+    const cur = this.alternate;
+
+    if (cur === null) return false;
+    cur.bpm = Math.min(300, Math.max(40, Math.round(bpm)));
+
+    return true;
   }
 
   private alternateStep(): void {
@@ -1233,7 +1263,10 @@ export class GoveeLanManager implements StreamTransport {
       // the two flash colours (LED_PARTY's mode catalog, client-side).
       if (cur.effect !== undefined) {
         const groups = cur.mode === "halves" ? 2 : enabled.length;
-        const frame = partyFrame(cur.effect, cur.tick, { groups, a, b, palette: cur.palette ?? [] });
+        const frame = partyFrame(cur.effect, cur.tick, {
+          groups, a, b, palette: cur.palette ?? [], stepMs: cur.speedMs,
+          ...(cur.bpm !== undefined ? { beatMs: 60_000 / cur.bpm } : {}),
+        });
         const colourAt = (i: number): Rgb => frame[i] ?? a;
 
         if (cur.mode === "lamps") {

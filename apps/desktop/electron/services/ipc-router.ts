@@ -7,7 +7,7 @@ import {
   setShowStyle, setEnergyTier, triggerBuild, triggerDrop,
   setMasterBlackout, setMasterFull, setMasterFreeze, setMasterIntensity, resumeMaster,
   readShowState, readVenueList, setVenueColor, deviceAction, pollAxCommand,
-  renameVenueDevice, setVenueDeviceEnabled, setVenueSegments, setVenueAlternate, paintStripesCommand, paintRangeCommand,
+  renameVenueDevice, setVenueDeviceEnabled, setVenueSegments, setVenueAlternate, setVenueAlternateBpm, paintStripesCommand, paintRangeCommand,
 } from "./../show-service.js";
 import { ServiceTracker, type Service, type ServiceStatus } from "./base.js";
 import { getConfigService } from "./config-service.js";
@@ -80,6 +80,7 @@ const handlers: ChannelHandlerTable = {
   "venue/set-color": (req) => setVenueColor(req.rgb, req.targets),
   "venue/segments-set": (req) => setVenueSegments(req.id, req.zones),
   "venue/alternate": (req) => setVenueAlternate(req),
+  "venue/alternate-bpm": (req) => setVenueAlternateBpm(req),
   "venue/paint-stripes": (req) => paintStripesCommand(req.id, req.zones),
   "venue/paint-range": (req) => paintRangeCommand(req.id, req.from, req.to, req.rgb),
   "venue/device-action": (req) => deviceAction(req.id, req.action),

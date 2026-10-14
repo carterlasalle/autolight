@@ -3,8 +3,6 @@ import { DEFAULT_OVERLAY_CAP, applyOverlayScalar } from "./overlay.js";
 // Live audio may only nudge brightness/sparkle (§69); never strobe/palette/drop.
 // Legacy scalar entry: delegates to overlay.ts so the configured
 // audio.overlay.cap is honored and black stays black (F-AUD-02/04, T-AUD-03).
-export const MAX_OVERLAY_GAIN = DEFAULT_OVERLAY_CAP;
-
 export function applyOverlay(planned: number, energy: number, reactiveAmount: number, cap: number = DEFAULT_OVERLAY_CAP): number {
   return applyOverlayScalar(planned, energy, reactiveAmount, cap);
 }
@@ -61,5 +59,7 @@ export * from "./capture.js";
 export * from "./dsp.js";
 
 export * from "./overlay.js";
+
+export * from "./tempo.js";
 
 export * from "./timing.js";

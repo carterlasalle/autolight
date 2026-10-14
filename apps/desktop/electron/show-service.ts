@@ -706,6 +706,7 @@ export function setVenueAlternate(req: ChannelRequest<"venue/alternate">): { ok:
       ...(req.effect !== undefined ? { effect: req.effect } : {}),
       // The channel carries the palette by name; the colour table lives here.
       ...(req.palette !== undefined ? { palette: PARTY_PALETTES[req.palette] } : {}),
+      ...(req.bpm !== undefined ? { bpm: req.bpm } : {}),
     });
 
     svc.recorder.record("venue/alternate", { enabled: true, ...receipt });
@@ -722,6 +723,16 @@ export function setVenueAlternate(req: ChannelRequest<"venue/alternate">): { ok:
   });
 
   return { ok: true, enabled: false, mode: "off" };
+}
+
+/** Live tempo for a running beat effect (tap tempo or the operator-started
+ *  mic estimate). Records only when a runner actually took it. */
+export function setVenueAlternateBpm(req: ChannelRequest<"venue/alternate-bpm">): { ok: true; bpm: number; applied: boolean } {
+  const applied = govee().setAlternateBpm(req.bpm);
+
+  if (applied) getShowService().recorder.record("venue/alternate-bpm", { bpm: req.bpm });
+
+  return { ok: true, bpm: req.bpm, applied };
 }
 
 export function setVenueSegments(id: string, zones: number): { ok: true; id: string; zones: number } {
