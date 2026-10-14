@@ -12,7 +12,6 @@
   },
   "dependencies": {
     "@autolight/track-identity": "^0.1.0",
-    "rekordbox-connect": "^1.2.17",
     "zod": "^3.23.8"
   },
   "optionalDependencies": {

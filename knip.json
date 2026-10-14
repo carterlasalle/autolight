@@ -17,17 +17,27 @@
       ],
       "project": [
         "electron/**/*.ts!",
-        "src/**/*.{ts,tsx}!",
+        "src/**/*.{ts,tsx,css}!",
         "scripts/*.mjs",
         "journeys/**/*.ts"
       ]
     },
     "packages/*": {
-      "entry": ["src/index.ts!"],
       "project": ["src/**/*.ts!"]
     }
   },
-  "ignore": ["packages/*/dist/**", "apps/desktop/dist/**"],
+  "ignoreBinaries": ["osascript", "uv", "tail"],
+  "ignoreDependencies": [
+    "@knip/language-server",
+    "@oxlint/plugins",
+    "@tailwindcss/language-server",
+    "gitnexus",
+    "madge",
+    "sql-language-server",
+    "typescript-language-server",
+    "vscode-langservers-extracted",
+    "yaml-language-server"
+  ],
   "rules": {
     "files": "error",
     "exports": "error",
