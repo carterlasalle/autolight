@@ -2010,5 +2010,31 @@
       "verdict": "fixed",
       "evidence": "The duplicated 262144 is unified: DEFAULT_SNAPSHOT_MAX_BYTES is the single literal next to the host's config resolution in index.ts, and snapshot.ts binds SNAPSHOT_MAX_BYTES from it. knip clean, show-host tests and typecheck pass."
     }
+  ],
+  "batch-29": [
+    {
+      "path": "packages/venue/src/groups.test.ts",
+      "line": 43,
+      "verdict": "fixed-earlier",
+      "evidence": "The fieldRange test asserts every returned cell's s within [0.2, 0.4] via fields.s lookups, so a too-wide range fails. Verified 2026-10-14."
+    },
+    {
+      "path": "protocol-fixtures/rekordbox/ax/windows-tree.json",
+      "line": 3,
+      "verdict": "fixed",
+      "evidence": "All three ax fixtures now carry capture: synthetic + verified: false (macos-tree and no-decks-tree gained them), the ax.test names say synthetic with HW-RB-AX-01 pending, and a tripwire test pins the flags so a real capture must flip them deliberately. Registry qualification stays null."
+    },
+    {
+      "path": "protocol-fixtures/rekordbox/ax/windows-tree.json",
+      "line": 14,
+      "verdict": "fixed-earlier",
+      "evidence": "The inverted label convention is documented in the fixture's transportSemantics field with the runbook reference, and ax.test pins the mapping (Pause -> playing:false, Play -> playing:true) on the Windows tree. Verified 2026-10-14."
+    },
+    {
+      "path": "apps/desktop/journeys/night.journey.ts",
+      "line": 30,
+      "verdict": "fixed-earlier",
+      "evidence": "The journey uses two distinct fixtures (PRIMARY/SECONDARY) and asserts owner a/b, weight ordering, and per-fixture brightness handover, so crossfade ownership is directly observed. Verified 2026-10-14."
+    }
   ]
 }

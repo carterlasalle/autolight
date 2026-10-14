@@ -1,5 +1,7 @@
 {
   "platform": "macos",
+  "capture": "synthetic",
+  "verified": false,
   "note": "Hand-shaped from Rekordbox's macOS accessibility structure (deck containers with role AXGroup and a deck label, time fields labelled elapsed and remaining, a play/pause button per deck). Not a hardware capture: runbook HW-RB-AX-01 records the real tree and replaces or extends this file.",
   "root": [
     {

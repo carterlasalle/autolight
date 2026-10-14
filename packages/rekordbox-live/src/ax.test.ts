@@ -7,6 +7,8 @@ import { AxProvider } from "./ax-provider.js";
 
 interface TreeFixture {
   platform: string;
+  capture?: string;
+  verified?: boolean;
   note: string;
   root: AxNode[];
 }
@@ -45,7 +47,7 @@ function tree(deckOneElapsed: string, deckOneRemaining: string, deckTwoElapsed: 
 }
 
 describe("AX tree reading (T-LIVE-06)", () => {
-  it("separates decks and their fields on the recorded macOS tree", () => {
+  it("separates decks and their fields on the synthetic macOS tree (HW-RB-AX-01 pending)", () => {
     const readings = readAxDecks(macos.root);
     expect(readings.map((r) => r.deckId)).toEqual([1, 2]);
     const [one, two] = readings;
@@ -58,13 +60,21 @@ describe("AX tree reading (T-LIVE-06)", () => {
     expect(two?.playing).toBe(true);
   });
 
-  it("separates decks on the recorded Windows tree and reads the label hints", () => {
+  it("separates decks on the synthetic Windows tree and reads the label hints", () => {
     const readings = readAxDecks(windows.root);
     expect(readings.map((r) => r.deckId)).toEqual([1, 2]);
     expect(readings[0]?.elapsedSeconds).toBe(12);
     expect(readings[0]?.remainingSeconds).toBe(168);
     expect(readings[0]?.playing).toBe(false);
     expect(readings[1]?.playing).toBe(true);
+  });
+
+  it("keeps the AX fixture honesty flags until a real capture lands", () => {
+    // The fixtures are synthetic and their tests say so. A real HW-RB-AX-01
+    // capture must flip these flags and rename the tests above; this tripwire
+    // stops a stale "as if recorded" claim from surviving either change alone.
+    expect([macos.capture, windows.capture, noDecks.capture]).toEqual(["synthetic", "synthetic", "synthetic"]);
+    expect([macos.verified, windows.verified, noDecks.verified]).toEqual([false, false, false]);
   });
 
   it("refuses to guess when elapsed and remaining look the same", () => {
