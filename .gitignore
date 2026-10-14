@@ -13,6 +13,10 @@ __pycache__/
 
 test-results/
 playwright-report/
+# Task scratch: repo-local temp files (never commit).
+.tmp/
 # T-OPS-05: packaged outputs plus fetched vendor sidecars never commit.
 apps/desktop/release/
 apps/desktop/vendor/
+!.scc/plugins.toml
+!.scc/plugins.lock

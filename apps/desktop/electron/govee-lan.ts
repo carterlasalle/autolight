@@ -58,6 +58,15 @@ const SAVE_THROTTLE_MS = 5000;
 
 const IP_HISTORY = 8;
 
+// Friendly default labels for known models: a newly discovered device shows a
+// product name instead of its MAC until someone renames it. Unknown SKUs keep
+// the MAC so nothing is invented.
+const DEFAULT_NAMES: Record<string, string> = { H1A45: "Strip lights", H6076: "Lamp" };
+
+export function defaultDeviceName(sku: string, mac: string): string {
+  return DEFAULT_NAMES[sku] ?? mac;
+}
+
 const RUNG_MARKS = 32;
 
 export type DiscoveryRung =
@@ -848,14 +857,13 @@ export class GoveeLanManager implements StreamTransport {
 
   // -- read-back (T-GOV-07) ----------------------------------------------------
 
-  async requestDevStatus(mac: string, opts?: { retryMs?: number; deadlineMs?: number }): Promise<DevStatusResult> {
+  async requestDevStatus(mac: string, opts?: { retryMs?: number; deadlineMs?: number; quiet?: boolean }): Promise<DevStatusResult> {
     await this.start();
     const entry = this.require(mac);
 
-    if (entry.armed) {
-      return { mac, answered: false, attempts: 0, rttMs: null, status: null, skippedWhileArmed: true };
-    }
-
+    // Read-only, so it also runs while armed: skipping armed devices made rtt
+    // unmeasurable exactly when the rig is live. Quiet probes do not count a
+    // sleeping device as a failure.
     const retryMs = Math.max(1, opts?.retryMs ?? this.o.statusRetryMs);
     const deadlineMs = Math.max(1, opts?.deadlineMs ?? this.o.statusDeadlineMs);
     const started = this.clock();
@@ -901,7 +909,7 @@ export class GoveeLanManager implements StreamTransport {
       }
 
       if (this.clock() - started + retryMs > deadlineMs) {
-        this.noteFailure(entry, `devStatus unanswered after ${attempts} attempts`);
+        if (opts?.quiet !== true) this.noteFailure(entry, `devStatus unanswered after ${attempts} attempts`);
 
         return { mac, answered: false, attempts, rttMs: null, status: null, skippedWhileArmed: false };
       }
@@ -2065,6 +2073,7 @@ export class GoveeLanManager implements StreamTransport {
 
       this.checkInterfaces();
       this.markOffline();
+      this.probeRtt();
     } finally {
       this.roundInFlight = false;
     }
@@ -2111,6 +2120,16 @@ export class GoveeLanManager implements StreamTransport {
       if (entry.health !== "offline" && now - entry.lastSeenMs > this.o.offlineAfterMs) {
         entry.health = "offline";
       }
+    }
+  }
+
+  // devStatus is the only read-back that measures rtt, and rounds are the only
+  // recurring hook. Quiet probes keep a sleeping device's health untouched.
+  private probeRtt(): void {
+    for (const entry of this.devices.values()) {
+      if (entry.ip === "" || entry.health !== "online") continue;
+
+      void this.requestDevStatus(entry.mac, { retryMs: 150, deadlineMs: 250, quiet: true }).catch(() => undefined);
     }
   }
 
@@ -2251,6 +2270,14 @@ export class GoveeLanManager implements StreamTransport {
         existing.health = "online";
       }
 
+      // A name still equal to its MAC was never chosen by anyone: adopt the
+      // model default when one exists, so rescans fill in "Strip lights".
+      const adopted = defaultDeviceName(data["sku"] as string, mac);
+
+      if (adopted !== mac && existing.name === existing.mac) {
+        existing.name = adopted;
+      }
+
       this.saveRegistrySoon();
 
       return;
@@ -2259,7 +2286,7 @@ export class GoveeLanManager implements StreamTransport {
     const entry: DeviceEntry = {
       mac,
       sku: data["sku"] as string,
-      name: mac,
+      name: defaultDeviceName(data["sku"] as string, mac),
       enabled: true,
       ip,
       ipHistory: [ip],

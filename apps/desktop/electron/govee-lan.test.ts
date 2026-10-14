@@ -2,7 +2,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { GoveeLanManager } from "./govee-lan.js";
+import { GoveeLanManager, defaultDeviceName } from "./govee-lan.js";
 
 // Manager-level rows for the venue registry contract (spec 99, §49): saved
 // lights hydrate before any scan, and rename / enabled survive a reload.
@@ -218,5 +218,11 @@ describe("govee registry (venue hydration)", () => {
     } finally {
       mgr.stop();
     }
+  });
+
+  it("names known models by default and leaves unknown ones on their MAC", () => {
+    expect(defaultDeviceName("H1A45", "AA:BB:CC:DD:EE:01")).toBe("Strip lights");
+    expect(defaultDeviceName("H6076", "AA:BB:CC:DD:EE:02")).toBe("Lamp");
+    expect(defaultDeviceName("H9999", "AA:BB:CC:DD:EE:03")).toBe("AA:BB:CC:DD:EE:03");
   });
 });
