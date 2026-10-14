@@ -132,6 +132,13 @@ export class SimPeripheral {
   handleDisconnect(): void {
     this.connected = false;
     this.notify = null;
+    // A reconnect starts a new session: handshake, provisioning and the
+    // host-colour hold from the previous session must not leak into it.
+    this.handshakeDone = false;
+    this.handshakeSeedSeen = false;
+    this.provisionStarted = false;
+    this.provisionStopped = false;
+    this.hostColorAt = 0;
   }
 
   subscribe(handler: BleNotifyHandler): void {
@@ -140,14 +147,18 @@ export class SimPeripheral {
 
   /** Applies one write, answers the ack on notify. Stalls past the budget. */
   handleWrite(frame: Uint8Array, now: number): void {
+    // writes counts attempts (a stalled write still arrived at the GATT
+    // layer); the frame is only recorded as written once the unit accepts
+    // it, so `written` never contains frames the stall guard dropped.
     this.metrics.writes += 1;
-    this.written.push(frame.slice());
 
     if (this.stalled(now)) {
       this.metrics.stalled += 1;
 
       return;
     }
+
+    this.written.push(frame.slice());
 
     if (this.budgetHz !== null) {
       const spacing = 1000 / Math.max(1, this.budgetHz);
@@ -538,8 +549,10 @@ export function simContractChecks(peripherals: SimPeripheral[], now: number): Si
     },
     {
       name: "one-connection-rule",
-      ok: peripherals.every((p) => !p.connected || p.metrics.connects >= 1),
-      detail: "connected peripherals counted exactly one connect",
+      // On the fresh sweep nothing is connected and nothing has counted a
+      // connect; the busy rule itself is exercised by the connect tests.
+      ok: peripherals.every((p) => !p.connected && p.metrics.connects === 0),
+      detail: "fresh peripherals start disconnected with zero connects",
     },
     {
       name: "version-characteristic",
@@ -548,8 +561,11 @@ export function simContractChecks(peripherals: SimPeripheral[], now: number): Si
     },
     {
       name: "host-color-hold",
-      ok: peripherals.every((p) => typeof p.hostColorHeld(now) === "boolean"),
-      detail: "render hold queryable on every peripheral",
+      // No host-colour write has landed on the fresh sweep: every hold must
+      // read expired (an unarmed hold claiming a live hold is the bug this
+      // catches; the armed/expiry behaviour has its own test).
+      ok: peripherals.every((p) => !p.hostColorHeld(now)),
+      detail: "unarmed render holds all read expired",
     },
   ];
 

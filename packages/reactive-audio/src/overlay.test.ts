@@ -42,6 +42,9 @@ describe("overlay rules (P-69)", () => {
     // independent of the module constant (batch-15).
     const darkRed = applyOverlayLinear([0.4, 0, 0], 1, 1);
     expect(darkRed).toEqual([0.48, 0, 0]);
+    // A full-bright channel pins the joint factor: independent per-channel
+    // clamping would return (1, 0.55, 0.275) here, a hue shift.
+    expect(applyOverlayLinear([1, 0.5, 0.25], 1, 0.5)).toEqual([1, 0.5, 0.25]);
   });
 
   it("is silent without energy or style amount", () => {
@@ -56,6 +59,9 @@ describe("overlay rules (P-69)", () => {
     expect(applyOverlayScalar(0.5, 2, 0.5)).toBeCloseTo(applyOverlayScalar(0.5, 1, 0.5), 12);
     expect(applyOverlayScalar(0.5, 1, 5)).toBeCloseTo(applyOverlayScalar(0.5, 1, 1), 12);
     expect(applyOverlayScalar(-1, 1, 1)).toBe(0);
+    // +Infinity clamps to full light, never to black.
+    expect(applyOverlayScalar(Number.POSITIVE_INFINITY, 1, 1)).toBe(1);
+    expect(applyOverlayLinear([Number.POSITIVE_INFINITY, 0, 0], 1, 1)).toEqual([1, 0, 0]);
     expect(overlayAmount(99, 99)).toBe(1);
   });
 });

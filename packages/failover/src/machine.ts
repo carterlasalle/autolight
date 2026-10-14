@@ -20,6 +20,10 @@ import {
 
 export type HealthSignal = "ok" | "lan-silent" | "stream-fault";
 
+// The LAN frame paths a loss takes down together: one spelling for the
+// detection branches and the reclaim set.
+const LAN_TRANSPORTS: readonly TransportId[] = ["lan-razer", "lan-json"];
+
 export interface FailoverThresholds {
   lanLossMs: number;
   probeIntervalMs: number;
@@ -126,8 +130,7 @@ export class FailoverMachine {
       const down = new Set<TransportId>();
 
       if (lanDown) {
-        down.add("lan-razer");
-        down.add("lan-json");
+        for (const t of LAN_TRANSPORTS) down.add(t);
       }
 
       if (streamDown && this.current !== null) down.add(this.current);
@@ -175,11 +178,16 @@ export class FailoverMachine {
       }
     }
 
+    // The preferred path dropped again while probing: back to a plain
+    // failed-over state, so no stale probe authorizes a later switch.
+    if (!preferredUp && this.state === "probing-preferred") {
+      this.state = "failed-over";
+    }
+
     const down = new Set<TransportId>();
 
     if (lanDown) {
-      down.add("lan-razer");
-      down.add("lan-json");
+      for (const t of LAN_TRANSPORTS) down.add(t);
     }
 
     if (streamDown && this.current !== null) down.add(this.current);
@@ -188,11 +196,17 @@ export class FailoverMachine {
     const held = selectFrameTransport(withUnreachable(cfg, down));
 
     if (held.transport === null) {
-      const open = selectFrameTransport(withUnreachable(cfg, lanDown ? new Set<TransportId>(["lan-razer", "lan-json"]) : new Set<TransportId>()));
+      const open = selectFrameTransport(withUnreachable(cfg, lanDown ? new Set<TransportId>(LAN_TRANSPORTS) : new Set<TransportId>()));
 
-      if (open.transport !== null && open.transport !== this.current) {
+      // No path the policy trusts, but one exists: hold the reclaimed path
+      // and report it consistently (falling through would null the
+      // selection and dark the fixture on the very next tick).
+      if (open.transport !== null) {
         this.lastSelection = open;
-        this.moveTo(open.transport, "No fallback left; reclaimed the reachable path", atMs, false);
+
+        if (open.transport !== this.current) {
+          this.moveTo(open.transport, "No fallback left; reclaimed the reachable path", atMs, false);
+        }
 
         if (this.state === "probing-preferred") this.state = "failed-over";
 

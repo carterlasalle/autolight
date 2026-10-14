@@ -204,14 +204,19 @@ export function feedEventFromDecoded(event: Flx4Event): Flx4FeedEvent | null {
   return null;
 }
 
+// Unmapped events are kept for diagnosis in a bounded ring; the drop
+// counter (unknownDroppedCount) keeps the truncation visible (S26).
+const FLX4_FEED_UNKNOWN_CAP = 256;
+
 // Bounded latest-wins queue (S26): keeps the newest event per deck+control,
-// drops the oldest deck+control bucket when over capacity, counts drops.
+// drops the stalest deck+control bucket when over capacity, counts drops.
 export class Flx4Feed {
   private readonly capacity: number;
   private readonly buckets = new Map<string, Flx4FeedEvent>();
   private order: string[] = [];
   private dropped = 0;
   private readonly unknown: Flx4Event[] = [];
+  private unknownDropped = 0;
 
   constructor(opts: Flx4FeedOptions = {}) {
     this.capacity = Math.max(1, opts.capacity ?? FLX4_FEED_DEFAULT_CAPACITY);
@@ -230,6 +235,13 @@ export class Flx4Feed {
     if (mapped === null) {
       this.unknown.push(event);
 
+      // Bounded diagnostic ring: the counter keeps the loss visible instead
+      // of growing without limit over a long session.
+      if (this.unknown.length > FLX4_FEED_UNKNOWN_CAP) {
+        this.unknown.shift();
+        this.unknownDropped += 1;
+      }
+
       return null;
     }
 
@@ -241,7 +253,12 @@ export class Flx4Feed {
   push(event: Flx4FeedEvent): void {
     const key = this.keyOf(event);
 
-    if (!this.buckets.has(key)) this.order.push(key);
+    // Recency, not first-sight: a re-seen key moves to the back so eviction
+    // drops the stalest bucket, matching the latest-wins contract.
+    const existing = this.order.indexOf(key);
+
+    if (existing !== -1) this.order.splice(existing, 1);
+    this.order.push(key);
     this.buckets.set(key, event);
 
     while (this.order.length > this.capacity) {
@@ -273,6 +290,11 @@ export class Flx4Feed {
 
   unknownEvents(): readonly Flx4Event[] {
     return this.unknown;
+  }
+
+  /** Unknown events dropped from the bounded diagnostic ring. */
+  unknownDroppedCount(): number {
+    return this.unknownDropped;
   }
 }
 
@@ -309,7 +331,13 @@ export interface Flx4CompositeWiring {
   readonly stop: () => void;
   readonly consumed: () => number;
   readonly signals: () => readonly Flx4Signal[];
+  /** Signals dropped from the bounded trace ring (kept visible, S26). */
+  readonly signalsDropped: () => number;
 }
+
+// Bounded trace ring: production sessions run for hours; the wiring keeps
+// the newest trace signals and counts what fell off (S26).
+const FLX4_SIGNAL_TRACE_CAP = 512;
 
 // Production wiring: service events flow into the state model, signals
 // derive per event, transport edges and faders reach the composite provider
@@ -325,12 +353,20 @@ export function subscribeServiceToComposite(
   feed: Flx4Feed = new Flx4Feed(),
 ): Flx4CompositeWiring {
   const seen: Flx4Signal[] = [];
+  let signalsDropped = 0;
   let consumed = 0;
 
   const stop = service.onEvent((event) => {
     model.apply(event);
 
-    for (const signal of derive(event)) seen.push(signal);
+    for (const signal of derive(event)) {
+      seen.push(signal);
+
+      if (seen.length > FLX4_SIGNAL_TRACE_CAP) {
+        seen.shift();
+        signalsDropped += 1;
+      }
+    }
 
     if (feed.ingestDecoded(event) !== null) {
       consumed += driveCompositeFromFeed(feed, composite);
@@ -341,6 +377,7 @@ export function subscribeServiceToComposite(
     stop,
     consumed: () => consumed,
     signals: () => seen,
+    signalsDropped: () => signalsDropped,
   };
 }
 
@@ -392,7 +429,11 @@ export function deriveExpressiveHints(
 ): ExpressiveHint[] {
   const enabled = new Set<ExpressiveHintKind>(opts.enabled ?? [...HINT_DEFAULTS.enabled]);
   const filterWindowMs = opts.filterWindowMs ?? HINT_DEFAULTS.filterWindowMs;
+  const restraintWindowMs = opts.restraintWindowMs ?? HINT_DEFAULTS.restraintWindowMs;
   const out: ExpressiveHint[] = [];
+  // Detectors read history as an oldest-first window: normalize once so a
+  // caller passing newest-first cannot flip directions or "previous" values.
+  const ordered = [...history].sort((a, b) => (a.atNs < b.atNs ? -1 : a.atNs > b.atNs ? 1 : 0));
 
   for (const event of events) {
     const ms = Number(event.atNs) / 1e6;
@@ -401,7 +442,7 @@ export function deriveExpressiveHints(
       const deck = event.deck;
       const windowStart = ms - filterWindowMs;
 
-      const trail = history
+      const trail = ordered
         .filter((h) => h.control === "filter" && h.deck === event.deck && Number(h.atNs) / 1e6 >= windowStart)
         .map((h) => h.value);
 
@@ -446,7 +487,7 @@ export function deriveExpressiveHints(
     if (event.control === "channel-fader" && event.deck !== 0 && enabled.has("fader-rise")) {
       const deck = event.deck;
 
-      const previous = [...history]
+      const previous = [...ordered]
         .reverse()
         .find((h) => h.control === "channel-fader" && h.deck === event.deck);
 
@@ -525,9 +566,12 @@ export function deriveExpressiveHints(
           used: false,
         });
       } else if (event.value >= 0.4) {
-        const killed = [...history]
+        // Re-entry only counts a kill inside the restraint window: a kill
+        // from minutes ago is not a re-entry.
+        const killCutoffMs = ms - restraintWindowMs;
+        const killed = [...ordered]
           .reverse()
-          .find((h) => h.control === "eq-low" && h.deck === event.deck && h.value <= 0.05);
+          .find((h) => h.control === "eq-low" && h.deck === event.deck && h.value <= 0.05 && Number(h.atNs) / 1e6 >= killCutoffMs);
 
         if (killed) {
           out.push({

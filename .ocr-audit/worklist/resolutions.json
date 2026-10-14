@@ -2670,5 +2670,175 @@
       "verdict": "fixed",
       "evidence": "Wall labels sit at wall midpoints."
     }
+  ],
+  "batch-35": [
+    {
+      "path": "packages/ble/src/sim.ts",
+      "line": 479,
+      "verdict": "fixed",
+      "evidence": "Contract checks are meaningful on the fresh sweep: one-connection-rule asserts disconnected + zero connects; host-color-hold asserts unarmed holds read expired."
+    },
+    {
+      "path": "packages/ble/src/sim.ts",
+      "line": 489,
+      "verdict": "fixed",
+      "evidence": "Same host-color-hold check; the typeof-boolean tautology is gone."
+    },
+    {
+      "path": "packages/ble/src/sim.ts",
+      "line": 128,
+      "verdict": "fixed",
+      "evidence": "handleDisconnect clears handshakeSeedSeen/handshakeDone/provision flags and the host-colour hold: a reconnect is a new session."
+    },
+    {
+      "path": "packages/ble/src/sim.ts",
+      "line": 141,
+      "verdict": "fixed",
+      "evidence": "written only records accepted frames; metrics.writes counts attempts (comment states it) so stalled frames never appear as written."
+    },
+    {
+      "path": "packages/controller-flx4/src/integration.ts",
+      "line": 198,
+      "verdict": "fixed",
+      "evidence": "The unknown ring is bounded (256) with unknownDroppedCount(); the loss stays visible."
+    },
+    {
+      "path": "packages/controller-flx4/src/integration.ts",
+      "line": 288,
+      "verdict": "fixed",
+      "evidence": "The signal trace is a 512 ring with signalsDropped() exposed on the wiring interface."
+    },
+    {
+      "path": "packages/controller-flx4/src/integration.ts",
+      "line": 207,
+      "verdict": "fixed",
+      "evidence": "Bucket order is true LRU: re-seen keys move to the back so eviction drops the stalest bucket."
+    },
+    {
+      "path": "packages/controller-flx4/src/integration.ts",
+      "line": 360,
+      "verdict": "fixed",
+      "evidence": "History is normalized oldest-first once at detector entry; filter direction no longer depends on caller order."
+    },
+    {
+      "path": "packages/controller-flx4/src/integration.ts",
+      "line": 394,
+      "verdict": "fixed",
+      "evidence": "fader-rise reads 'previous' from the normalized order (newest match)."
+    },
+    {
+      "path": "packages/controller-flx4/src/integration.ts",
+      "line": 467,
+      "verdict": "fixed",
+      "evidence": "eq re-entry only counts kills within restraintWindowMs (8s default)."
+    },
+    {
+      "path": "packages/failover/src/machine.ts",
+      "line": 174,
+      "verdict": "fixed",
+      "evidence": "The reclaim holds the reclaimed transport consistently: lastSelection=open, move only when different, return open (never falls through to a null move that darkened the fixture next tick)."
+    },
+    {
+      "path": "packages/failover/src/machine.ts",
+      "line": 144,
+      "verdict": "fixed",
+      "evidence": "preferredUp false while probing resets the state to failed-over; no stale probe authorizes a later switch."
+    },
+    {
+      "path": "packages/failover/src/machine.ts",
+      "line": 122,
+      "verdict": "fixed",
+      "evidence": "LAN_TRANSPORTS is the one spelling for the two LAN ids across detection branches and the reclaim set."
+    },
+    {
+      "path": "packages/govee/src/qualification.ts",
+      "line": 261,
+      "verdict": "fixed",
+      "evidence": "Stored records validate the step table itself (ids in order), not just the count."
+    },
+    {
+      "path": "packages/govee/src/qualification.ts",
+      "line": 761,
+      "verdict": "fixed",
+      "evidence": "The PacingStream is closed in finally; a rejected markStutter or failed wait cannot leave it pacing."
+    },
+    {
+      "path": "packages/govee/src/qualification.ts",
+      "line": 824,
+      "verdict": "fixed",
+      "evidence": "readbackOpts passes the session clock, so readDevStatus windows follow the injected clock (the fake-clock tests govern them)."
+    },
+    {
+      "path": "packages/govee/src/qualification.ts",
+      "line": 367,
+      "verdict": "fixed",
+      "evidence": "runStep archives the previous evidence to priorEvidence before overwriting on a re-run."
+    },
+    {
+      "path": "packages/govee/src/qualification.ts",
+      "line": 458,
+      "verdict": "fixed",
+      "evidence": "DEFAULT_ZONE_COUNT names the candidate count at module scope; the header's no-literal-count claim now holds."
+    },
+    {
+      "path": "packages/govee/src/qualification.ts",
+      "line": 310,
+      "verdict": "fixed",
+      "evidence": "enterAt calls resetStep; the duplicated reset body is gone."
+    },
+    {
+      "path": "packages/reactive-audio/src/overlay.ts",
+      "line": 70,
+      "verdict": "fixed",
+      "evidence": "applyOverlayLinear uses one joint factor min(gain, 1/max): hue is exact even when clipping; a bright-channel test pins it."
+    },
+    {
+      "path": "packages/reactive-audio/src/overlay.ts",
+      "line": 25,
+      "verdict": "fixed",
+      "evidence": "clamp01 clamps +Infinity to 1 instead of folding it to 0; tests added."
+    },
+    {
+      "path": "packages/reactive-audio/src/overlay.ts",
+      "line": 52,
+      "verdict": "fixed",
+      "evidence": "Both paths share overlayFactor: one clamp rule, no duplicated chain."
+    },
+    {
+      "path": "packages/reactive-audio/src/index.test.ts",
+      "line": 6,
+      "verdict": "fixed",
+      "evidence": "Overlay assertions pin exact values (1 and 0.6)."
+    },
+    {
+      "path": "packages/reactive-audio/src/index.test.ts",
+      "line": 14,
+      "verdict": "fixed",
+      "evidence": "The asymmetry is proven over a full envelope (attack steps << release steps), not a one-step tautology."
+    },
+    {
+      "path": "packages/reactive-audio/src/index.test.ts",
+      "line": 19,
+      "verdict": "fixed",
+      "evidence": "recentLooks, cooldowns and palette are asserted exactly."
+    },
+    {
+      "path": "packages/renderer/src/index.ts",
+      "line": 170,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: a sibling session has renderer/goldens.ts, color.ts and regions.test.ts under active edit (uncommitted) plus a new spatial-batch11 test; the three renderer findings (topHue index inversion, frameHash section boundary, latency isolation) were implemented and verified locally but reverted to avoid clobbering their in-flight goldens. They must land after that work commits (they require a golden:update run with --reason)."
+    },
+    {
+      "path": "packages/renderer/src/index.ts",
+      "line": 116,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: same sibling renderer work; see above."
+    },
+    {
+      "path": "packages/renderer/src/index.ts",
+      "line": 153,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: same sibling renderer work; see above."
+    }
   ]
 }

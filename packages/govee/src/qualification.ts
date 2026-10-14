@@ -45,6 +45,11 @@ import {
 } from "./probe.js";
 import { chaseFrames, identify, type ActionFixture } from "./actions.js";
 
+// Spec 42: the count is measured per unit (step 9); this is only the
+// candidate default before any measurement, named so no bare literal count
+// appears in this package.
+const DEFAULT_ZONE_COUNT = 8;
+
 /** Spec 52, in order. `spec` is the step number inside spec 52, never a zone
  *  or segment count: segment counts are measured per unit and no literal count
  *  appears in this package (spec 42). */
@@ -262,10 +267,15 @@ export class QualificationSession {
     if (saved?.calibrationJson) {
       try {
         // The blob this class wrote. Validate the two things a corrupted or
-        // older record would get wrong before trusting the rest.
+        // older record would get wrong before trusting the rest: the
+        // hardwareId, and the step table itself (a same-length record whose
+        // ids or order drifted from QUALIFICATION_STEPS is not this record).
         const parsed = JSON.parse(saved.calibrationJson) as QualificationState;
+        const tableMatches = Array.isArray(parsed.steps) &&
+          parsed.steps.length === QUALIFICATION_STEP_COUNT &&
+          parsed.steps.every((step, i) => step.id === QUALIFICATION_STEPS[i]?.id);
 
-        if (parsed.hardwareId !== hardwareId || !Array.isArray(parsed.steps) || parsed.steps.length !== QUALIFICATION_STEP_COUNT) {
+        if (parsed.hardwareId !== hardwareId || !tableMatches) {
           return new QualificationSession(
             options,
             freshState(hardwareId, options.discovery.sku, firmwareFromScan(options.discovery)),
@@ -321,13 +331,9 @@ export class QualificationSession {
     for (const attempt of this.stateValue.steps) {
       if (attempt.step < target) continue;
 
-      if (Object.keys(attempt.evidence).length > 0) {
-        attempt.priorEvidence = [...attempt.priorEvidence, JSON.stringify(attempt.evidence)].slice(-4);
-      }
-
-      attempt.status = "pending";
-      attempt.evidence = {};
-      attempt.atMs = null;
+      // One reset rule (history-keeping included), shared with the
+      // firmware-change path.
+      this.resetStep(attempt.id);
     }
 
     this.stateValue.status = "in-progress";
@@ -386,6 +392,13 @@ export class QualificationSession {
 
     if (attempt === undefined) throw new Error(`qualification step ${def.id} is not in the record`);
     attempt.attempts += 1;
+
+    // A re-run keeps the previous measurement visible: overwriting evidence
+    // without archiving it would erase what was measured before.
+    if (Object.keys(attempt.evidence).length > 0) {
+      attempt.priorEvidence = [...attempt.priorEvidence, JSON.stringify(attempt.evidence)].slice(-4);
+    }
+
     attempt.status = outcome.status;
     attempt.evidence = outcome.evidence;
     attempt.atMs = this.now();
@@ -478,11 +491,14 @@ export class QualificationSession {
     return typeof value === "string" ? value : null;
   }
 
-  private readbackOpts(): { retryMs: number; deadlineMs: number; wait: Waiter } {
+  private readbackOpts(): { retryMs: number; deadlineMs: number; wait: Waiter; clock: () => number } {
     return {
       retryMs: this.options.statusRetryMs ?? PROBE_DEFAULTS.statusRetryMs,
       deadlineMs: this.options.statusDeadlineMs ?? PROBE_DEFAULTS.statusDeadlineMs,
       wait: this.wait,
+      // The session clock governs the readback windows too: without it the
+      // probe measures with real time and a fake-clock test hangs on it.
+      clock: () => this.now(),
     };
   }
 
@@ -494,7 +510,7 @@ export class QualificationSession {
   private zones(): number {
     const counted = this.numberFrom("segment-count", "logicalSegmentCount");
 
-    return Math.max(1, Math.floor(counted ?? this.options.zones ?? 8));
+    return Math.max(1, Math.floor(counted ?? this.options.zones ?? DEFAULT_ZONE_COUNT));
   }
 
   private execute(id: QualificationStepId, user: QualificationUser): Promise<StepOutcome> {
@@ -833,25 +849,31 @@ export class QualificationSession {
 
       const frames = chaseFrames(zones, "forward");
       const interval = 1000 / Math.max(1, rate);
+      let stuttered = false;
 
-      for (let tick = 0; tick < ticks; tick++) {
-        const frame = frames[tick % frames.length];
+      try {
+        for (let tick = 0; tick < ticks; tick++) {
+          const frame = frames[tick % frames.length];
 
-        if (frame !== undefined) stream.setAll(frame);
-        await this.wait(interval);
+          if (frame !== undefined) stream.setAll(frame);
+          await this.wait(interval);
+        }
+
+        stuttered = await user.markStutter(rate);
+        sweep.push({
+          rateHz: rate,
+          framesSent: stream.framesSent,
+          framesSuperseded: stream.framesSuperseded,
+          missedTicks: stream.missedTicks,
+          stutter: stuttered,
+        });
+      } finally {
+        // The stream owns the scheduler: a rejected markStutter (or a failed
+        // wait) must not leave it pacing after the step returns.
+        stream.close();
       }
 
-      const stutter = await user.markStutter(rate);
-      sweep.push({
-        rateHz: rate,
-        framesSent: stream.framesSent,
-        framesSuperseded: stream.framesSuperseded,
-        missedTicks: stream.missedTicks,
-        stutter,
-      });
-      stream.close();
-
-      if (!stutter) {
+      if (!stuttered) {
         stable = rate;
         break;
       }

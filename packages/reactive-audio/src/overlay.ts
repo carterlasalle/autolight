@@ -22,7 +22,9 @@
 export const DEFAULT_OVERLAY_CAP = 0.2;
 
 function clamp01(v: number): number {
-  if (!Number.isFinite(v)) return 0;
+  // NaN is no light; +Infinity is maximum light (folding it to 0 would
+  // render a runaway input black); negatives clamp to 0.
+  if (Number.isNaN(v)) return 0;
 
   return Math.min(1, Math.max(0, v));
 }
@@ -37,6 +39,17 @@ export function overlayGain(energy: number, reactiveAmount: number, cap: number 
   return 1 + clamp01(energy) * overlayAmount(cap, reactiveAmount);
 }
 
+// One joint factor for every clamped channel: hue survives even when the
+// bump would push a channel past 1 (independent per-channel clamping would
+// shift the colour). A channel at 1 pins the factor so ratios are exact.
+function overlayFactor(channels: readonly number[], gain: number): number {
+  let max = 0;
+
+  for (const v of channels) max = Math.max(max, clamp01(v));
+
+  return max === 0 ? 0 : Math.min(gain, 1 / max);
+}
+
 // Scalar planned light in linear 0..1: black stays black, bump is bounded by
 // planned * amount, result never exceeds 1.
 export function applyOverlayScalar(
@@ -47,9 +60,7 @@ export function applyOverlayScalar(
 ): number {
   const p = clamp01(planned);
 
-  if (p === 0) return 0;
-
-  return Math.min(1, p * overlayGain(energy, reactiveAmount, cap));
+  return p * overlayFactor([p], overlayGain(energy, reactiveAmount, cap));
 }
 
 // RGB in linear light: every channel scales by the SAME factor, so hue is
@@ -60,15 +71,10 @@ export function applyOverlayLinear(
   reactiveAmount: number,
   cap: number = DEFAULT_OVERLAY_CAP,
 ): [number, number, number] {
-  const gain = overlayGain(energy, reactiveAmount, cap);
+  const c0 = clamp01(planned[0]!);
+  const c1 = clamp01(planned[1]!);
+  const c2 = clamp01(planned[2]!);
+  const f = overlayFactor([c0, c1, c2], overlayGain(energy, reactiveAmount, cap));
 
-  const scale = (v: number): number => {
-    const c = clamp01(v);
-
-    if (c === 0) return 0;
-
-    return Math.min(1, c * gain);
-  };
-
-  return [scale(planned[0]!), scale(planned[1]!), scale(planned[2]!)];
+  return [c0 * f, c1 * f, c2 * f];
 }
