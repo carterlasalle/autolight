@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   ConsentStore,
+  consentHashOf,
   consentTextFor,
 } from "./consent.js";
 import {
@@ -36,9 +37,14 @@ describe("session recorder and exact replay (T-DATA-06, F-DATA-06, spec 103)", (
     expect(rec.count).toBeGreaterThan(0);
     expect(rec.count).toBeLessThan(400);
     expect(rec.droppedCount).toBeGreaterThan(0);
+    // Oldest-first eviction: the retained seqs are the newest contiguous run.
+    const seqs = rec.entries().map((e) => e.seq);
+    expect(seqs).toHaveLength(rec.count);
+    expect(seqs[0]).toBe(400 - rec.count);
+    for (let i = 1; i < seqs.length; i += 1) expect(seqs[i]).toBe(seqs[i - 1]! + 1);
     const lines = rec.exportNdjson().split("\n");
     expect(lines.length).toBe(rec.count);
-    expect(parseSessionNdjson(rec.exportNdjson()).length).toBe(rec.count);
+    expect(parseSessionNdjson(rec.exportNdjson())).toHaveLength(rec.count);
   });
 
   it("replays with 100 percent frame hash equality on the same snapshot", () => {
@@ -284,14 +290,21 @@ describe("consent and audit for privileged helpers (T-SEC-05, F-SEC-03)", () => 
     const text = consentTextFor("memory-reader");
     expect(text.needs.join(" ")).toContain("elevated");
     expect(text.undo.length).toBeGreaterThan(0);
-    const record = store.grant("memory-reader", "hash-1", "2026-10-01T00:00:00.000Z");
+    const record = store.grant("memory-reader", consentHashOf("memory-reader"), "2026-10-01T00:00:00.000Z");
     expect(record.consentedAt).toBe("2026-10-01T00:00:00.000Z");
     expect(store.startHelper("memory-reader")).toEqual({ ok: true });
+    // A duplicate start while running is refused and not audited twice.
+    expect(store.startHelper("memory-reader").ok).toBe(false);
+    store.stopHelper("memory-reader");
+    // A phantom stop (nothing running) adds no entry.
     store.stopHelper("memory-reader");
     const actions = store.entries().map((e) => e.action);
     expect(actions).toEqual(["consent-granted", "start", "stop"]);
     store.revoke("memory-reader");
     expect(store.has("memory-reader")).toBe(false);
+    expect(store.startHelper("memory-reader").ok).toBe(false);
+    // A stale hash (text changed since the grant) refuses the start.
+    store.grant("memory-reader", "stale-hash", "2026-10-01T00:00:00.000Z");
     expect(store.startHelper("memory-reader").ok).toBe(false);
   });
 });
