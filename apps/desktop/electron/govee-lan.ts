@@ -233,24 +233,26 @@ export interface ManualReceipt {
 }
 
 export type AlternateMode = "lamps" | "halves";
-export type AlternatePattern = "swap" | "complement";
+
+export interface AlternateColours {
+  a: [number, number, number];
+  b: [number, number, number];
+}
 
 /** Alternate-runner request: the rig's fixtures swap, or each strip splits
- *  in half and the halves swap. */
+ *  in half and the halves swap. Colours are explicit — the caller decides
+ *  what the off phase shows (black, the inverse, or a second pick). */
 export interface AlternateOptions {
   mode: AlternateMode;
-  pattern: AlternatePattern;
   speedMs: number;
-  /** Standing colour group A keeps; group B gets off (swap) or the inverse
-   *  (complement). */
-  base: [number, number, number];
+  colours: AlternateColours;
 }
 
 export interface AlternateReceipt {
   mode: AlternateMode;
-  pattern: AlternatePattern;
   speedMs: number;
   fixtures: number;
+  colours: AlternateColours;
 }
 
 interface AlternateStateInternal extends AlternateOptions {
@@ -1146,7 +1148,7 @@ export class GoveeLanManager implements StreamTransport {
     // the button feel dead.
     void this.alternateStep();
 
-    return { mode: opts.mode, pattern: opts.pattern, speedMs, fixtures: enabled.length };
+    return { mode: opts.mode, speedMs, fixtures: enabled.length, colours: opts.colours };
   }
 
   /** Stop the alternation and settle every enabled fixture back on the
@@ -1161,7 +1163,7 @@ export class GoveeLanManager implements StreamTransport {
     try {
       for (const entry of this.devices.values()) {
         if (!entry.enabled) continue;
-        await this.setColor(entry.mac, cur.base[0], cur.base[1], cur.base[2]);
+        await this.setColor(entry.mac, cur.colours.a[0], cur.colours.a[1], cur.colours.a[2]);
       }
     } catch (err) {
       this.warn(`alternate restore failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -1176,7 +1178,7 @@ export class GoveeLanManager implements StreamTransport {
     if (cur === null) return null;
 
     return {
-      mode: cur.mode, pattern: cur.pattern, speedMs: cur.speedMs,
+      mode: cur.mode, speedMs: cur.speedMs, colours: cur.colours,
       fixtures: [...this.devices.values()].filter((e) => e.enabled).length,
     };
   }
@@ -1197,11 +1199,8 @@ export class GoveeLanManager implements StreamTransport {
   private async alternateApply(cur: AlternateStateInternal): Promise<void> {
 
     try {
-      const base = cur.base;
-      const other: [number, number, number] = cur.pattern === "complement"
-        ? [255 - base[0], 255 - base[1], 255 - base[2]]
-        : [0, 0, 0];
-      const colourFor = (groupA: boolean): [number, number, number] => (groupA !== cur.phase ? base : other);
+      const { a, b } = cur.colours;
+      const colourFor = (groupA: boolean): [number, number, number] => (groupA !== cur.phase ? a : b);
       const enabled = [...this.devices.values()].filter((e) => e.enabled);
 
       if (cur.mode === "lamps") {

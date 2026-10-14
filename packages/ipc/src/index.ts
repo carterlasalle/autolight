@@ -114,9 +114,11 @@ export const channels = {
       version: v1,
       enabled: z.boolean(),
       mode: z.enum(["lamps", "halves"]),
-      pattern: z.enum(["swap", "complement"]),
       speedMs: z.number().int().min(40).max(5000),
-      rgb: z.tuple([z.number().int().min(0).max(255), z.number().int().min(0).max(255), z.number().int().min(0).max(255)]),
+      // The two flash colours are explicit picks (the off phase is black or
+      // any second colour the operator chooses).
+      rgbA: z.tuple([z.number().int().min(0).max(255), z.number().int().min(0).max(255), z.number().int().min(0).max(255)]),
+      rgbB: z.tuple([z.number().int().min(0).max(255), z.number().int().min(0).max(255), z.number().int().min(0).max(255)]),
     }),
     response: z.union([ok(z.object({ enabled: z.boolean(), mode: z.string() })), errorSchema]),
   },

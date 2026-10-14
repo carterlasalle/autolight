@@ -180,9 +180,9 @@ describe("govee registry (venue hydration)", () => {
 
     try {
       mgr.registrySnapshot();
-      expect(() => mgr.startAlternate({ mode: "lamps", pattern: "swap", speedMs: 200, base: [255, 255, 255] }))
+      expect(() => mgr.startAlternate({ mode: "lamps", speedMs: 200, colours: { a: [255, 255, 255], b: [0, 0, 0] } }))
         .toThrow(/two fixtures/);
-      expect(() => mgr.startAlternate({ mode: "halves", pattern: "swap", speedMs: 200, base: [255, 255, 255] }))
+      expect(() => mgr.startAlternate({ mode: "halves", speedMs: 200, colours: { a: [255, 255, 255], b: [0, 0, 0] } }))
         .toThrow(/saved segment count/);
       expect(mgr.alternateStatus()).toBeNull();
     } finally {
@@ -207,11 +207,11 @@ describe("govee registry (venue hydration)", () => {
 
     try {
       mgr.registrySnapshot();
-      const receipt = mgr.startAlternate({ mode: "lamps", pattern: "complement", speedMs: 200, base: [10, 20, 30] });
-      expect(receipt).toMatchObject({ mode: "lamps", pattern: "complement", fixtures: 2 });
+      const receipt = mgr.startAlternate({ mode: "lamps", speedMs: 200, colours: { a: [10, 20, 30], b: [30, 20, 10] } });
+      expect(receipt).toMatchObject({ mode: "lamps", fixtures: 2, colours: { a: [10, 20, 30], b: [30, 20, 10] } });
       expect(mgr.alternateStatus()).not.toBeNull();
       // A second start replaces the runner instead of stacking timers.
-      mgr.startAlternate({ mode: "lamps", pattern: "swap", speedMs: 100, base: [10, 20, 30] });
+      mgr.startAlternate({ mode: "lamps", speedMs: 100, colours: { a: [10, 20, 30], b: [0, 0, 0] } });
       expect(await mgr.stopAlternate()).toBe(true);
       expect(mgr.alternateStatus()).toBeNull();
       expect(await mgr.stopAlternate()).toBe(false);

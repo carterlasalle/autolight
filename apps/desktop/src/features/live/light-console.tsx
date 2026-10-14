@@ -246,20 +246,24 @@ export function LightConsoleCard(): JSX.Element {
 }
 
 /** Alternate runner (manual lane): flashes between the two lamps, or between
- *  each strip's halves. `swap` leaves group B dark; `complement` gives it the
- *  inverse colour. LED_PARTY's AB swap / single spot, on the real rig. */
+ *  each strip's halves, with two explicit colours. Presets fill the second
+ *  colour (off / inverse), and a manual pick makes it a custom pair.
+ *  LED_PARTY's AB swap / single spot, on the real rig. */
 export function AlternateCard(): JSX.Element {
   const altOn = useShell((st) => st.altOn);
   const altSpeed = useShell((st) => st.altSpeed);
-  const colour = useShell((st) => st.wheelColor);
+  const wheelColour = useShell((st) => st.wheelColor);
   const [mode, setMode] = useState<"lamps" | "halves">("lamps");
-  const [pattern, setPattern] = useState<"swap" | "complement">("swap");
+  const [colourA, setColourA] = useState<[number, number, number]>(wheelColour);
+  const [colourB, setColourB] = useState<[number, number, number]>([0, 0, 0]);
   const tiles = useShell((st) => st.tiles);
   const halvesReady = tiles.filter((t) => t.enabled).every((t) => t.segments >= 2);
+  const bIsInverse = colourB.every((v, i) => v === 255 - (colourA[i] ?? 0));
+  const bIsOff = colourB.every((v) => v === 0);
 
   const send = (enabled: boolean): void => {
     useShell.getState().set({ altOn: enabled });
-    void typedInvoke("venue/alternate", { version: 1, enabled, mode, pattern, speedMs: altSpeed, rgb: colour }).then((res) => {
+    void typedInvoke("venue/alternate", { version: 1, enabled, mode, speedMs: altSpeed, rgbA: colourA, rgbB: colourB }).then((res) => {
       if (res === null && enabled) useShell.getState().set({ altOn: false });
     });
   };
@@ -275,12 +279,51 @@ export function AlternateCard(): JSX.Element {
             </Button>
           ))}
         </div>
-        <div className="flex flex-wrap items-center gap-1" role="radiogroup" aria-label="Alternate pattern">
-          {(["swap", "complement"] as const).map((p) => (
-            <Button key={p} size="sm" variant={pattern === p ? "default" : "outline"} onClick={() => setPattern(p)} aria-pressed={pattern === p}>
-              {p === "swap" ? "Swap (one dark)" : "Complement"}
-            </Button>
-          ))}
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            Colour A
+            <input
+              type="color"
+              aria-label="Alternate colour A"
+              value={toHex(colourA)}
+              onChange={(e) => {
+                const rgb = fromHex(e.target.value);
+
+                if (!rgb) return;
+                setColourA(rgb);
+                // Presets follow the new A; a custom pair is left alone.
+                if (bIsOff) setColourB([0, 0, 0]);
+                else if (bIsInverse) setColourB([255 - rgb[0], 255 - rgb[1], 255 - rgb[2]]);
+              }}
+              className="h-7 w-9 cursor-pointer rounded border border-border bg-transparent p-0.5"
+            />
+          </label>
+          <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            Colour B
+            <input
+              type="color"
+              aria-label="Alternate colour B"
+              value={toHex(colourB)}
+              onChange={(e) => {
+                const rgb = fromHex(e.target.value);
+
+                if (rgb) setColourB(rgb);
+              }}
+              className="h-7 w-9 cursor-pointer rounded border border-border bg-transparent p-0.5"
+            />
+          </label>
+        </div>
+        <div className="flex flex-wrap items-center gap-1" role="radiogroup" aria-label="Alternate B preset">
+          <Button size="sm" variant={bIsOff ? "default" : "outline"} onClick={() => setColourB([0, 0, 0])} aria-pressed={bIsOff}>
+            B = off
+          </Button>
+          <Button
+            size="sm" variant={bIsInverse ? "default" : "outline"}
+            onClick={() => setColourB([255 - colourA[0], 255 - colourA[1], 255 - colourA[2]])}
+            aria-pressed={bIsInverse}
+          >
+            B = inverse of A
+          </Button>
         </div>
         <label className="flex min-w-0 flex-col gap-1 text-sm">Speed: {altSpeed}ms
           <Slider min={100} max={2000} step={50} value={[altSpeed]} onValueChange={([v]) => {
@@ -296,7 +339,7 @@ export function AlternateCard(): JSX.Element {
             : <Button size="sm" onClick={() => send(true)}>Start alternate</Button>}
         </div>
         <p className="text-xs text-muted-foreground">
-          Flashes {mode === "lamps" ? "the two lamps" : "each strip's two halves"} at {altSpeed}ms{pattern === "swap" ? ", one side going dark" : " with the inverse colour"}. Uses the picked colour as the bright side.
+          Flashes {mode === "lamps" ? "the two lamps" : "each strip's two halves"} at {altSpeed}ms between colour A and colour B. The razer path makes both snap; a lamp without a saved segment count cross-fades instead.
         </p>
         {mode === "halves" && !halvesReady ? (
           <p className="text-xs text-muted-foreground">Strip halves need a saved segment count on every lamp (Segments card).</p>

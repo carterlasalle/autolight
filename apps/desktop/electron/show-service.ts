@@ -692,14 +692,14 @@ export function setVenueColor(rgb: [number, number, number], targets?: string[])
   return { ok: true, rgb };
 }
 
-export function setVenueAlternate(req: { enabled: boolean; mode: "lamps" | "halves"; pattern: "swap" | "complement"; speedMs: number; rgb: [number, number, number] }): { ok: true; enabled: boolean; mode: string } {
+export function setVenueAlternate(req: { enabled: boolean; mode: "lamps" | "halves"; speedMs: number; rgbA: [number, number, number]; rgbB: [number, number, number] }): { ok: true; enabled: boolean; mode: string } {
   const svc = getShowService();
 
   if (req.enabled) {
     // Starting a looping effect is an explicit takeover: it cannot fight a
     // blackout, so it clears the master overrides first (recorded).
     takeManualWheel("venue/alternate");
-    const receipt = govee().startAlternate({ mode: req.mode, pattern: req.pattern, speedMs: req.speedMs, base: req.rgb });
+    const receipt = govee().startAlternate({ mode: req.mode, speedMs: req.speedMs, colours: { a: req.rgbA, b: req.rgbB } });
 
     svc.recorder.record("venue/alternate", { enabled: true, ...receipt });
 
