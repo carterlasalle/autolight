@@ -260,6 +260,7 @@
   "govee.failover.probeIntervalMs": 10000,
   "live.provider": "fusion",
   "live.provider.staleMs": 500,
+  "live.follow.mode": "preview",
   "live.rkbx.oscBind": "127.0.0.1:4460",
   "live.rkbx.configPath": "",
   "live.prolink.mode": "passive",

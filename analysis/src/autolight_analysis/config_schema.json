@@ -961,6 +961,11 @@
       "default": 500,
       "description": "ms  [spec 105]"
     },
+    "live.follow.mode": {
+      "type": "string",
+      "default": "preview",
+      "description": "enum preview, ax-beat, prolink, soundswitch  [owner (Setup follow-mode)]"
+    },
     "live.rkbx.oscBind": {
       "type": "string",
       "default": "127.0.0.1:4460",

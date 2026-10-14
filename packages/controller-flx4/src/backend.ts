@@ -351,6 +351,9 @@ export class Flx4ControllerService {
     const candidates = this.mode === "auto" ? [...AUTO_BACKEND_ORDER] : [this.mode];
     const attempts: Flx4BackendAttempt[] = [];
     let lastUnavailable: { reason: string; remedy: string } | null = null;
+    // A held-single-client failure is the actionable truth: remember it even
+    // when later backends fail for their own reasons (batch-02).
+    let heldUnavailable: { reason: string; remedy: string } | null = null;
     let sawPort = false;
     let probeFailed = false;
 
@@ -426,6 +429,8 @@ export class Flx4ControllerService {
         const message = error instanceof Error ? error.message : String(error);
         attempts.push({ backend: name, ok: false, reason: message });
         const heldSingleClient = driver.sharing === "single-client" && this.platform === "win32";
+
+        if (heldSingleClient) heldUnavailable = { reason: message, remedy: WINDOWS_HELD_REMEDY };
         lastUnavailable = { reason: message, remedy: heldSingleClient ? WINDOWS_HELD_REMEDY : remedyFor(name) };
       }
     }
@@ -433,10 +438,15 @@ export class Flx4ControllerService {
     if (startGeneration !== this.generation) return;
     this.attempts = attempts;
 
-    if (lastUnavailable !== null) {
+    // A held-by-another-client condition wins the final report even when a
+    // later backend failed for an unrelated reason; otherwise the last
+    // failure stands (batch-02).
+    const unavailable = heldUnavailable ?? lastUnavailable;
+
+    if (unavailable !== null) {
       this.connection = "unavailable-on-this-device";
-      this.reason = lastUnavailable.reason;
-      this.remedy = lastUnavailable.remedy;
+      this.reason = unavailable.reason;
+      this.remedy = unavailable.remedy;
     } else if (sawPort || probeFailed) {
       // A matched-but-unopenable port is failed; backends that never probed
       // are failed too (nothing installed), never "held by another client".
@@ -467,7 +477,17 @@ export class Flx4ControllerService {
 
     if (this.events.length > this.eventCapacity) this.events.shift();
 
-    for (const listener of this.eventListeners) listener(event);
+    // One throwing listener must not abort delivery to the rest, nor
+    // propagate into the MIDI read loop that feeds acceptBytes; isolate per
+    // listener like the config store emits (batch-02).
+    for (const listener of this.eventListeners) {
+      try {
+        listener(event);
+      } catch {
+        // A subscriber's failure is its own; the ring and decoder already
+        // recorded the event above.
+      }
+    }
   }
 
   private closeInput(): void {
@@ -484,7 +504,15 @@ export class Flx4ControllerService {
   private notifyStatus(): void {
     const status = this.status();
 
-    for (const listener of this.statusListeners) listener(status);
+    // Same isolation as event delivery: one bad subscriber must not starve
+    // the others of status transitions (batch-02).
+    for (const listener of this.statusListeners) {
+      try {
+        listener(status);
+      } catch {
+        // A subscriber's failure is its own.
+      }
+    }
   }
 }
 
@@ -567,7 +595,18 @@ export function createNativeDriver(load: RtMidiLoader = defaultRtMidiLoader, pla
     },
     async open(port, onMessage) {
       const input = new (asRtMidiModule(await load()).Input)();
-      input.openPort(Number(port.id));
+
+      try {
+        input.openPort(Number(port.id));
+      } catch (error) {
+        // WinMM keeps a half-open handle when openPort fails (another app
+        // holds the single client); release it so our own leak cannot block
+        // the retry once the other app quits (batch-02).
+        input.closePort();
+
+        throw error;
+      }
+
       input.on("message", (_deltaTime, message) => {
         onMessage(message);
       });

@@ -1,4 +1,60 @@
 {
+  "batch-02": [
+    {
+      "path": "packages/config/src/store.ts",
+      "line": 221,
+      "verdict": "fixed-earlier",
+      "evidence": "save() re-reads the file and merges keys this store never touched before writing (read-merge-write with sibling-store comment); removed-intent tombstones preserved. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/config/src/store.ts",
+      "line": 200,
+      "verdict": "fixed-earlier",
+      "evidence": "load() emits config:changed for every reset and set (with before/after/liveSafe), so subscribers see loaded values. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/controller-flx4/src/backend.ts",
+      "line": 201,
+      "verdict": "fixed-earlier",
+      "evidence": "poll() has an in-flight guard (this.polling), generation checks after each await, and stop() bumps generation + clears polling; a stopped service cannot be resurrected by an in-flight pass. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/controller-flx4/src/backend.ts",
+      "line": 333,
+      "verdict": "fixed-by-commit",
+      "evidence": "heldUnavailable is captured separately and wins the final unavailable-on-this-device classification over a later unrelated failure (batch-02 fix)."
+    },
+    {
+      "path": "apps/desktop/src/routes/live/manual-intents.ts",
+      "line": 41,
+      "verdict": "fixed-by-commit",
+      "evidence": "freezeHoldIntent(held) now freezes while held and resumes at the next bar on release; a momentary press no longer latches the master frozen (batch-02 fix, test updated)."
+    },
+    {
+      "path": "packages/config/src/registry.ts",
+      "line": 245,
+      "verdict": "fixed-earlier",
+      "evidence": "templateFor resolves dynamic families (device transportMode/transportOrder, ui.shortcuts.*, qa.faults.*) through their template rows; defineKey accepts concrete keys under each pattern. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/config/src/secrets.ts",
+      "line": 35,
+      "verdict": "fixed-earlier",
+      "evidence": "redactSecretText deduplicates and replaces longest-first, so a substring secret cannot shield part of a longer one. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/config/src/secrets.ts",
+      "line": 55,
+      "verdict": "fixed-earlier",
+      "evidence": "toBase64/fromBase64 prefer Buffer behind a typeof guard and fall back to the browser globals, so the module loads in either runtime. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/rekordbox-live/src/osc.ts",
+      "line": 163,
+      "verdict": "fixed-earlier",
+      "evidence": "The bundle loop throws on element overrun and on any trailing 1-3 residual bytes (reported malformed, never thrown at the caller). Verified 2026-10-14."
+    }
+  ],
   "batch-01": [
     {
       "path": "packages/govee/src/engines/toolkit.ts",

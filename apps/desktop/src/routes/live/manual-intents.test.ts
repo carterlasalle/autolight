@@ -24,8 +24,8 @@ describe("manual lane intents (T-UI-04)", () => {
     expect(blinderIntent()).toEqual({ channel: "show/trigger-build", payload: { version: 1 } });
     expect(palettePickIntent([1, 2, 3])).toEqual({ channel: "venue/set-color", payload: { version: 1, rgb: [1, 2, 3] } });
     expect(palettePickIntent([300, -20, 128.6])).toEqual({ channel: "venue/set-color", payload: { version: 1, rgb: [255, 0, 129] } });
-    expect(freezeHoldIntent(true)).toEqual({ channel: "master/resume", payload: { version: 1, at: "bar" } });
-    expect(freezeHoldIntent(false)).toEqual({ channel: "master/freeze", payload: { version: 1, frozen: true } });
+    expect(freezeHoldIntent(true)).toEqual({ channel: "master/freeze", payload: { version: 1, frozen: true } });
+    expect(freezeHoldIntent(false)).toEqual({ channel: "master/resume", payload: { version: 1, at: "bar" } });
   });
   it("clamps sensitivity into the schema range and guards non-finite input", () => {
     expect(sensitivityIntent(9).payload).toMatchObject({ value: 1 });

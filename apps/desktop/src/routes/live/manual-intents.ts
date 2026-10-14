@@ -42,9 +42,12 @@ export function palettePickIntent(rgb: [number, number, number]): ManualIntent {
 }
 
 export function freezeHoldIntent(held: boolean): ManualIntent {
+  // Hold semantics: the F key freezes while held and resumes at the next
+  // bar on release. The previous mapping was inverted, so a momentary
+  // press-then-release left the master latched frozen (batch-02).
   return held
-    ? { channel: "master/resume", payload: { version: 1, at: "bar" } }
-    : { channel: "master/freeze", payload: { version: 1, frozen: true } };
+    ? { channel: "master/freeze", payload: { version: 1, frozen: true } }
+    : { channel: "master/resume", payload: { version: 1, at: "bar" } };
 }
 
 export function sensitivityIntent(value: number): ManualIntent {

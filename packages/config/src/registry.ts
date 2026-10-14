@@ -3,7 +3,7 @@ import { z } from "zod";
 // @autolight/config registry (T-CFG-01). Generated from
 // docs/finish/03-config-and-decisions.md section 3 by
 // `yarn workspace @autolight/config run export`. Do not hand-edit: edit the
-// catalog, rerun export, commit both. 244 keys.
+// catalog, rerun export, commit both. 245 keys.
 
 export interface KeyDef {
   key: string;
@@ -172,6 +172,7 @@ export const KEYS: readonly KeyDef[] = [
   { key: "govee.device.<fixtureId>.transportOrder", type: "json", defaultRaw: "[\"lan-razer\",\"ble-segmented\",\"lan-json\",\"ble-single\",\"matter\"]", unit: "ordered list", range: "", receipt: "spec 148", liveSafe: true, scope: "device" },
   { key: "live.provider", type: "string", defaultRaw: "fusion", unit: "enum DS-01", range: "", receipt: "owner", liveSafe: false, scope: "app" },
   { key: "live.provider.staleMs", type: "number", defaultRaw: "500", unit: "ms", range: "", receipt: "spec 105", liveSafe: true, scope: "app" },
+  { key: "live.follow.mode", type: "string", defaultRaw: "preview", unit: "enum preview, ax-beat, prolink, soundswitch", range: "", receipt: "owner (Setup follow-mode)", liveSafe: true, scope: "app" },
   { key: "live.rkbx.oscBind", type: "string", defaultRaw: "127.0.0.1:4460", unit: "host:port", range: "", receipt: "rkbx_link README default destination", liveSafe: false, scope: "app" },
   { key: "live.rkbx.configPath", type: "string", defaultRaw: "\"\"", unit: "path to user's rkbx_link folder", range: "", receipt: "user", liveSafe: false, scope: "app" },
   { key: "live.prolink.mode", type: "string", defaultRaw: "passive", unit: "enum DS-29", range: "", receipt: "owner", liveSafe: false, scope: "app" },
@@ -265,7 +266,14 @@ export const KEYS: readonly KeyDef[] = [
 
 type ConfigKey = (typeof KEYS)[number]["key"];
 
-const byKey = new Map(KEYS.map((k) => [k.key, k]));
+const byKey = new Map<string, KeyDef>();
+
+// A duplicate key would silently shadow its earlier row and default; the
+// lookup refuses to build instead of hiding the collision.
+for (const k of KEYS) {
+  if (byKey.has(k.key)) throw new Error(`duplicate-config-key: ${k.key}`);
+  byKey.set(k.key, k);
+}
 
 // Dynamic key families (per-device / per-shortcut / per-scenario maps)
 // resolve through their listed template rows in KEYS.
@@ -290,14 +298,14 @@ export function defaultFor(key: string): unknown {
   const def = defineKey(key);
   if (def.type === "boolean") return def.defaultRaw === "true";
   if (def.type === "number") return Number(def.defaultRaw);
-  if (def.type === "json") { try { return JSON.parse(def.defaultRaw); } catch { return def.defaultRaw; } }
+  if (def.type === "json") {
+    try {
+      return JSON.parse(def.defaultRaw);
+    } catch {
+      throw new Error(`malformed-json-default: ${key} raw ${def.defaultRaw}`);
+    }
+  }
   return def.defaultRaw;
-}
-
-function defaultsObject(): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const k of KEYS) out[k.key] = defaultFor(k.key);
-  return out;
 }
 
 const defaultsSchema = z.record(z.string(), z.unknown());

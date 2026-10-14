@@ -2,7 +2,7 @@
 
 Generated from `docs/finish/03-config-and-decisions.md` section 3 by `yarn workspace @autolight/config run export`. Do not hand-edit.
 
-244 keys. Receipt kinds: spec (SPEC mandates), upstream (measured upstream), measured (measured by us), unmeasured (starting guess with owning task).
+245 keys. Receipt kinds: spec (SPEC mandates), upstream (measured upstream), measured (measured by us), unmeasured (starting guess with owning task).
 
 | Key | Default | Unit | Range | Receipt | Live-safe |
 | --- | --- | --- | --- | --- | --- |
@@ -161,6 +161,7 @@ Generated from `docs/finish/03-config-and-decisions.md` section 3 by `yarn works
 | `govee.device.<fixtureId>.transportOrder` | `["lan-razer","ble-segmented","lan-json","ble-single","matter"]` | ordered list |  | spec 148 | Y |
 | `live.provider` | `fusion` | enum DS-01 |  | owner | N |
 | `live.provider.staleMs` | `500` | ms |  | spec 105 | Y |
+| `live.follow.mode` | `preview` | enum preview, ax-beat, prolink, soundswitch |  | owner (Setup follow-mode) | Y |
 | `live.rkbx.oscBind` | `127.0.0.1:4460` | host:port |  | rkbx_link README default destination | N |
 | `live.rkbx.configPath` | `""` | path to user's rkbx_link folder |  | user | N |
 | `live.prolink.mode` | `passive` | enum DS-29 |  | owner | N |
