@@ -23,7 +23,7 @@ import threading
 from pathlib import Path
 
 _session_lock = threading.Lock()
-_session_info: dict | None = None
+_session_info: dict[str, object] | None = None
 _load_count = 0
 
 
@@ -63,14 +63,19 @@ def load_count() -> int:
     return _load_count
 
 
-def ensure_session(device: str = "cpu") -> dict:
-    """Pre-warm the session without analyzing (T-ANA-05 pre-warm step)."""
+def _ensure_session_locked(device: str) -> dict[str, object]:
+    """ensure_session's body for callers already holding _session_lock."""
     global _session_info
-    with _session_lock:
-        if _session_info is not None:
-            return _session_info
-        _session_info = {"device": device, "ready": allinone_available()}
+    if _session_info is not None:
         return _session_info
+    _session_info = {"device": device, "ready": allinone_available()}
+    return _session_info
+
+
+def ensure_session(device: str = "cpu") -> dict[str, object]:
+    """Pre-warm the session without analyzing (T-ANA-05 pre-warm step)."""
+    with _session_lock:
+        return _ensure_session_locked(device)
 
 
 # Harmonix functional labels → §21 normalized section vocabulary.
@@ -184,7 +189,10 @@ def analyze_full(
     global _load_count
     with _session_lock:
         first = _load_count == 0
-        ensure_session(device)
+        # Lock-held helper, not ensure_session: that one re-acquires the same
+        # non-reentrant lock and deadlocked the first caller. Only the side
+        # effect (session registered) matters here.
+        _ = _ensure_session_locked(device)
         if first:
             _load_count += 1
     result = allin1_infer.analyze(
