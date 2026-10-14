@@ -1,4 +1,90 @@
 {
+  "batch-06": [
+    {
+      "path": "apps/desktop/electron/services/library-service.ts",
+      "line": 97,
+      "verdict": "fixed-earlier",
+      "evidence": "start()'s tail sets running only when every readable root has a watcher; failed opens and missing watchers land on degraded. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/rekordbox-live/src/link.ts",
+      "line": 104,
+      "verdict": "fixed-earlier",
+      "evidence": "start() joins concurrent starts through this.connecting, assigns this.socket only after connect, and stop() clears both and awaits the close. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/rekordbox-live/src/link.ts",
+      "line": 67,
+      "verdict": "by-design",
+      "evidence": "atNs is the engine-domain receive time by contract (fusion compares it against the same clock); the sidecar's optional atMs is deliberately not trusted (clock-domain mixing would reintroduce the skew class fusion guards)."
+    },
+    {
+      "path": "apps/desktop/electron/services/fault-injection.ts",
+      "line": 145,
+      "verdict": "by-design",
+      "evidence": "The runner resolves every tick synchronously (newest-wins), so staleFrames=0 and maxPending=0 are honest constants with comments; recoveryFrames encodes spec 106/108 timings. Verified 2026-10-14."
+    },
+    {
+      "path": "apps/desktop/electron/services/fault-injection.ts",
+      "line": 94,
+      "verdict": "fixed-earlier",
+      "evidence": "The interface comment now matches the implementation: discoveryDegradedFrames counts logical ticks while a discovery-plane fault is active. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/rekordbox-live/src/lighting-ipc.ts",
+      "line": 279,
+      "verdict": "fixed-earlier",
+      "evidence": "The replay rate is validated (RangeError for non-finite or <= 0) before any division. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/rekordbox-live/src/lighting-ipc.ts",
+      "line": 151,
+      "verdict": "fixed-earlier",
+      "evidence": "Capture base64 is validated (charset + length) before Buffer.from, so malformed input reports instead of decoding to empty bytes. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/rekordbox-live/src/memory-reader.ts",
+      "line": 160,
+      "verdict": "by-design",
+      "evidence": "pointerPathSchema enforces offsets.length(1): single-level pointer paths are the committed format produced by our own scan process. Verified 2026-10-14."
+    },
+    {
+      "path": "THIRD_PARTY_NOTICES",
+      "line": 51,
+      "verdict": "fixed-by-commit",
+      "evidence": "Regenerated with tools/license-check.mjs: autolight-analysis carries LicenseRef-FirstParty-Proprietary with a note (first-party workspace package)."
+    },
+    {
+      "path": "THIRD_PARTY_NOTICES",
+      "line": 311,
+      "verdict": "by-design",
+      "evidence": "pyrekordbox is a declared analysis dependency with a provenance header; the rkbx_link policy names a different project (never a dependency)."
+    },
+    {
+      "path": "THIRD_PARTY_NOTICES",
+      "line": 391,
+      "verdict": "lock-authoritative",
+      "evidence": "uv.lock resolves torch 2.14.0 with torchaudio 2.11.0; the notices mirror the lock. The pair's metadata allows it (uv resolved it)."
+    },
+    {
+      "path": "THIRD_PARTY_NOTICES",
+      "line": 151,
+      "verdict": "lock-authoritative",
+      "evidence": "httpcore2/httpx2 are the real resolved distributions in uv.lock (PyPI URLs, 2026-09-23); the lockfile is authoritative over name expectations."
+    },
+    {
+      "path": "THIRD_PARTY_NOTICES",
+      "line": 3,
+      "verdict": "fixed-by-commit",
+      "evidence": "Regenerated: the Yarn scan now reports 1695 rows (the zero-row capture predated this environment); the tool already fails a zero-row scan."
+    },
+    {
+      "path": "THIRD_PARTY_NOTICES",
+      "line": 371,
+      "verdict": "fixed-by-commit",
+      "evidence": "The policy block now documents weak_copyleft_lgpl (allowed unmodified with notices shipped; no derivative distributed) and OR-choice semantics; THIRD_PARTY_NOTICES.md intro matches."
+    }
+  ],
   "batch-05": [
     {
       "path": "apps/desktop/src/components/kit.tsx",

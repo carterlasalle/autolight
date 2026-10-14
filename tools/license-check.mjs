@@ -16,21 +16,56 @@ import { fileURLToPath } from "node:url";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 // Denylist: GPL, AGPL, unlicensed. LGPL is NOT denied (OD-08 may bundle the
-// LGPL fpcalc binary; FFmpeg ships as LGPL). "unknown" counts as unlicensed.
-const DENY_RE = [/agpl/i, /\bgpl(?!l)/i, /^unlicensed\b/i, /^unknown\b/i];
+// LGPL fpcalc binary; FFmpeg ships as LGPL). "unknown" counts as unlicensed,
+// as does NOASSERTION (normalization found nothing to assert).
+const DENY_RE = [/agpl/i, /\bgpl(?!l)/i, /^unlicensed\b/i, /^unknown\b/i, /^noassertion$/i];
 
-function normLicense(raw) {
+// SPDX normalization: scanner/hand-list free text becomes an SPDX expression
+// (or LicenseRef- for first-party/proprietary items) so allow/deny tooling
+// can compare exactly instead of relying on ad-hoc tokenization. Provenance
+// remarks stay in a separate `note` field, never inside the license string.
+const SPDX_ALIASES = new Map([
+  ["mit license", "MIT"],
+  ["isc license (iscl)", "ISC"],
+  ["python software foundation license", "PSF-2.0"],
+  ["bsd license", "BSD-3-Clause"],
+  ["bsd", "BSD-3-Clause"],
+  ["apache software license", "Apache-2.0"],
+  ["apache 2.0", "Apache-2.0"],
+  ["apache license 2.0", "Apache-2.0"],
+  ["zlib/libpng", "Zlib"],
+  ["mozilla public license 2.0 (mpl 2.0)", "MPL-2.0"],
+]);
+
+function spdxLicense(raw) {
   const s = String(raw ?? "").trim();
 
-  if (!s || /^see license/i.test(s)) return "UNLICENSED";
+  if (!s || /^see license/i.test(s)) return { license: "NOASSERTION", note: `unresolved scanner text: ${s || "(empty)"}` };
+  const m = /^(.+?)\s*\(([^()]*)\)\s*$/.exec(s);
+  const alias = SPDX_ALIASES.get(s.toLowerCase());
 
-  return s;
+  if (alias) return { license: alias };
+
+  if (m && SPDX_ALIASES.get(m[1].trim().toLowerCase())) {
+    return { license: SPDX_ALIASES.get(m[1].trim().toLowerCase()), note: m[2].trim() };
+  }
+
+  return { license: s };
+}
+
+function normLicense(raw) {
+  return spdxLicense(raw).license;
 }
 
 function denied(licenseField) {
   const norm = normLicense(licenseField);
 
   if (norm === "UNLICENSED" || /^unknown$/i.test(norm)) return true;
+  // An OR-choice is denied only when every arm is denied: the distributor
+  // picks the permissive arm (node-forge ships BSD-3-Clause OR GPL-2.0).
+  const arms = String(norm).split(/\s+OR\s+/i);
+
+  if (arms.length > 1) return arms.every((arm) => denied(arm));
   const parts = String(norm).split(/[;,|/()]+/).map((s) => s.trim()).filter(Boolean);
   const toks = parts.length ? parts : [String(norm)];
 
@@ -58,21 +93,39 @@ function parseConverterRows(rows) {
 }
 
 function yarnLicenses() {
-  try {
-    const out = execFileSync("yarn", ["dlx", "license-checker-rseidelsohn", "--json", "--start", "."], {
+  // Prefer the workspace-installed bin (offline, pinned): `yarn dlx` hits
+  // the network and fails under Yarn 4's linker here, which used to fail
+  // open into an empty inventory.
+  const attempts = [
+    () => execFileSync("node", ["node_modules/.bin/license-checker-rseidelsohn", "--json", "--start", "."], {
       cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024,
-    });
+    }),
+    () => execFileSync("yarn", ["dlx", "license-checker-rseidelsohn", "--json", "--start", "."], {
+      cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024,
+    }),
+  ];
 
-    const parsed = JSON.parse(out);
-    const map = {};
+  const errors = [];
 
-    for (const [key, v] of Object.entries(parsed)) {
-      const at = key.lastIndexOf("@");
-      map[key] = { name: key.slice(0, at), version: key.slice(at + 1), licenses: v.licenses };
+  for (const run of attempts) {
+    try {
+      const out = run();
+      const parsed = JSON.parse(out);
+      const map = {};
+
+      for (const [key, v] of Object.entries(parsed)) {
+        const at = key.lastIndexOf("@");
+        map[key] = { name: key.slice(0, at), version: key.slice(at + 1), licenses: v.licenses };
+      }
+
+      if (Object.keys(map).length > 0) return map;
+      errors.push("scan returned no packages");
+    } catch (e) {
+      errors.push(String(e).split("\n")[0]);
     }
+  }
 
-    return map;
-  } catch (e1) {
+  try {
     const out = execFileSync("yarn", ["dlx", "license-checker-rseidelsohn", "--json", "--summary", "--start", "."], {
       cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024,
     });
@@ -91,8 +144,14 @@ function yarnLicenses() {
       } catch { /* ignore non-JSON progress lines */ }
     }
 
-    return parseConverterRows(rows);
+    const map = parseConverterRows(rows);
+
+    if (Object.keys(map).length > 0) return map;
+  } catch (e) {
+    errors.push(String(e).split("\n")[0]);
   }
+
+  throw new Error(`all yarn license scans failed: ${errors.join(" | ")}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -115,12 +174,12 @@ function pipLicenses() {
 
 function handList() {
   return [
-    { name: "FFmpeg", kind: "bundled binary", license: "LGPL-2.1-or-later (unmodified static build; T-OPS-05 vendors it)", version: "pinned in apps/desktop/scripts/fetch-vendor.mjs (BtbN win64-lgpl, myndr macOS-arm64)" },
+    { name: "FFmpeg", kind: "bundled binary", license: "LGPL-2.1-or-later", note: "unmodified binary; T-OPS-05 vendors it", version: "system (brew/choco today)" },
     { name: "uv", kind: "bundled binary", license: "MIT OR Apache-2.0", version: "0.9.4 (pinned in apps/desktop/scripts/fetch-vendor.mjs; astral-sh/setup-uv in CI)" },
     { name: "Python 3.12", kind: "runtime", license: "PSF-2.0", version: "3.12 (setup-python)" },
     { name: "Node.js 22 (Electron bundles its own)", kind: "runtime", license: "MIT", version: "engines >=22.12" },
-    { name: "all-in-one-infer weights", kind: "model weights", license: "UNLICENSED until owner decides (OD-09); not bundled today", version: "not bundled", acknowledged: "vendor publishes no license; nothing is bundled or fetched (OD-09 pending)" },
-    { name: "beat-this weights", kind: "model weights", license: "UNLICENSED until owner decides (OD-09); not bundled today", version: "not bundled", acknowledged: "vendor publishes no license; nothing is bundled or fetched (OD-09 pending)" },
+    { name: "all-in-one-infer weights", kind: "model weights", license: "UNLICENSED until owner decides (OD-09); not bundled today", note: "vendor publishes no license; nothing is bundled or fetched", version: "not bundled", acknowledged: "vendor publishes no license; nothing is bundled or fetched (OD-09 pending)" },
+    { name: "beat-this weights", kind: "model weights", license: "UNLICENSED until owner decides (OD-09); not bundled today", note: "vendor publishes no license; nothing is bundled or fetched", version: "not bundled", acknowledged: "vendor publishes no license; nothing is bundled or fetched (OD-09 pending)" },
   ];
 }
 
@@ -218,6 +277,8 @@ function selfTest() {
   assert(denied("GPL-2.0-only"), "GPL-2.0-only must be denied");
   assert(denied("AGPL-3.0"), "AGPL-3.0 must be denied");
   assert(!denied("LGPL-2.1-or-later"), "LGPL must pass (FFmpeg, fpcalc)");
+  assert(!denied("(BSD-3-Clause OR GPL-2.0)"), "OR-choice with a permissive arm must pass (node-forge)");
+  assert(denied("(GPL-2.0 OR GPL-3.0)"), "OR-choice with every arm denied must fail");
   assert(denied("UNLICENSED"), "UNLICENSED must be denied");
   assert(denied("Unlicensed"), "Unlicensed mixed case must be denied (token path)");
   assert(denied("UNLICENSED (weights, not bundled)"), "tokenized UNLICENSED phrase must be denied (case-insensitive tokens)");
@@ -225,6 +286,12 @@ function selfTest() {
   assert(denied("UNKNOWN"), "UNKNOWN must be denied");
   assert(denied(""), "empty license must be denied");
   assert(!denied("MIT OR Apache-2.0"), "MIT OR Apache-2.0 must pass (uv)");
+  assert(spdxLicense("Python Software Foundation License").license === "PSF-2.0", "PSF free text normalizes to SPDX");
+  assert(spdxLicense("MIT License").license === "MIT", "MIT free text normalizes to SPDX");
+  assert(spdxLicense("BSD License").license === "BSD-3-Clause", "BSD free text normalizes to SPDX");
+  assert(spdxLicense("").license === "NOASSERTION", "empty license normalizes to NOASSERTION");
+  assert(denied(spdxLicense("").license), "NOASSERTION must be denied");
+  assert(spdxLicense("LGPL-2.1-or-later").license === "LGPL-2.1-or-later", "SPDX input passes through unchanged");
 
   const tmp = mkdtempSync(join(tmpdir(), "al-license-selftest-"));
 
@@ -260,6 +327,17 @@ let failures = 0;
 // the report and the summary instead of failing silently or hard).
 const acknowledged = [];
 
+// First-party workspace packages: their license comes from the repo, not
+// registry metadata (license-checker/pip-licenses report UNKNOWN for
+// packages without published license metadata).
+const FIRST_PARTY_PIP = new Set(["autolight-analysis"]);
+
+const FIRST_PARTY_YARN_PREFIX = "@autolight/";
+
+const FIRST_PARTY_LICENSE = "LicenseRef-FirstParty-Proprietary";
+
+const FIRST_PARTY_NOTE = "first-party workspace package (analysis/pyproject.toml); license is the repository's own, not PyPI metadata";
+
 const fail = (m) => { console.error(`license-check FAIL: ${m}`); failures++; };
 
 let yarnMap = {};
@@ -270,7 +348,15 @@ try {
   fail(`yarn license scan failed (run yarn install first): ${String(e).split("\n")[0]}`);
 }
 
+// An empty yarn inventory is a failed scan, not a clean pass: without it the
+// gate would approve every JS/Electron dependency vacuously.
+if (Object.keys(yarnMap).length === 0) {
+  fail("yarn license scan returned no packages (expected the workspace dependency inventory)");
+}
+
 for (const [key, v] of Object.entries(yarnMap)) {
+  if (String(v.name).startsWith(FIRST_PARTY_YARN_PREFIX)) continue;
+
   if (denied(normLicense(v.licenses))) fail(`yarn ${key} license=${JSON.stringify(v.licenses)}`);
 }
 
@@ -282,8 +368,6 @@ try {
   fail(`pip-licenses failed (run uv sync --project analysis --frozen --all-groups first): ${String(e).split("\n")[0]}`);
 }
 
-// First-party workspace package: its license comes from the repo, not PyPI metadata.
-const FIRST_PARTY_PIP = new Set(["autolight-analysis"]);
 
 // Metadata-gap allowlist: packages whose upstream license is known but whose
 // PyPI metadata pip-licenses reports as UNKNOWN. Each entry names the real
@@ -306,6 +390,7 @@ for (const p of pipRows) {
 
 for (const h of handList()) {
   if (!denied(normLicense(h.license))) continue;
+
   if (h.acknowledged) {
     acknowledged.push(`${h.name}: ${h.acknowledged}`);
     continue;
@@ -321,16 +406,48 @@ for (const n of installedRkbxScan(yarnMap, pipRows)) fail(`rkbx_link installed: 
 for (const h of tripwireScan()) fail(`unlicensed Skip-BART/SeqLight artifact: ${h}`);
 
 const report = {
+  schema_version: 1,
   generated: new Date().toISOString().slice(0, 10),
-  yarn: Object.values(yarnMap).map((v) => ({ name: v.name, version: v.version, license: normLicense(v.licenses) })),
+  yarn: Object.values(yarnMap).map((v) => {
+    if (String(v.name).startsWith(FIRST_PARTY_YARN_PREFIX)) {
+      return { name: v.name, version: v.version, license: FIRST_PARTY_LICENSE, note: "first-party workspace package (packages/*); license is the repository's own, not registry metadata" };
+    }
+
+    const { license, note } = spdxLicense(v.licenses);
+    const entry = { name: v.name, version: v.version, license };
+
+    if (note !== undefined) entry.note = note;
+
+    return entry;
+  }),
   pip: pipRows.map((p) => {
     const nm = String(p.Name ?? p.name ?? "");
+
+    if (FIRST_PARTY_PIP.has(nm.toLowerCase())) {
+      return { name: p.Name ?? p.name, version: p.Version ?? p.version, license: FIRST_PARTY_LICENSE, note: FIRST_PARTY_NOTE };
+    }
+
     const known = KNOWN_LICENSE.get(nm.toLowerCase());
 
-    return { name: p.Name ?? p.name, version: p.Version ?? p.version, license: known ?? normLicense(p.License ?? p.license) };
+    if (known !== undefined) return { name: p.Name ?? p.name, version: p.Version ?? p.version, license: known };
+    const { license, note } = spdxLicense(p.License ?? p.license);
+    const entry = { name: p.Name ?? p.name, version: p.Version ?? p.version, license };
+
+    if (note !== undefined) entry.note = note;
+
+    return entry;
   }),
   hand: handList(),
-  policy: { denylist: ["GPL", "AGPL", "unlicensed", "unknown"], acknowledged, rkbx_link: "never a dependency", skipBartSeqLight: "no files, weights, or datasets (research inspiration only)" },
+  policy: {
+    denylist: ["GPL", "AGPL", "unlicensed", "unknown", "NOASSERTION"],
+    acknowledged_denylist_exceptions: acknowledged,
+    forbidden_dependency_rekordbox_link: "never a dependency",
+    unlicensed_model_guard_skip_bart_seq_light: "no files, weights, or datasets (research inspiration only)",
+    // LGPL is not denied, but it is not unconditioned either: the library
+    // stays unmodified and its notices ship (FFmpeg static build, soxr,
+    // fpcalc per OD-08); no derivative of the library itself is distributed.
+    weak_copyleft_lgpl: "allowed unmodified with notices shipped; no derivative of the library is distributed (FFmpeg, soxr, fpcalc)",
+  },
 };
 
 process.stdout.write(JSON.stringify(report, null, 2) + "\n");
