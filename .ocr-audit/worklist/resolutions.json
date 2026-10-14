@@ -2232,5 +2232,61 @@
       "verdict": "fixed",
       "evidence": "wireDeckStateSchema is now the single source of the JSON-safe deck state: exported from contracts and imported by the show host, replacing its inline duplicate (S10). Dead local aliases (DeckSource, LoopState, WireDeckState, InputEntry, Phrase, AnalysisInputs) removed; knip 0."
     }
+  ],
+  "batch-32": [
+    {
+      "path": "analysis/src/autolight_analysis/features.py",
+      "line": 233,
+      "verdict": "fixed-earlier",
+      "evidence": "Empty frames (or empty series) degrade to zero-filled beat/subbeat/bar arrays via the early return; a live probe with an empty series and three beats returns lengths 3/6/1 without raising. Verified 2026-10-14."
+    },
+    {
+      "path": "analysis/src/autolight_analysis/features.py",
+      "line": 248,
+      "verdict": "fixed-earlier",
+      "evidence": "The module docstring now states phrase-level structure comes from PSSI/ML in structure.py, not this aggregation."
+    },
+    {
+      "path": "analysis/src/autolight_analysis/features.py",
+      "line": 238,
+      "verdict": "fixed-earlier",
+      "evidence": "edges and sub_masks are computed once per beat, outside the per-feature loop; they depend on the beat's start/end so hoisting is impossible. The claim of per-feature recomputation does not match the code. Verified 2026-10-14."
+    },
+    {
+      "path": "analysis/tests/test_schema.py",
+      "line": 42,
+      "verdict": "fixed-earlier",
+      "evidence": "Beyond the count floor the test asserts the specific invalid values (schemaVersion=99, identity.id missing, beatInBar=5, bpm=0) via any(). Verified 2026-10-14."
+    },
+    {
+      "path": "apps/desktop/electron-builder.cjs",
+      "line": 64,
+      "verdict": "fixed-earlier",
+      "evidence": "extendInfo carries NSAppleEventsUsageDescription alongside the automation.apple-events entitlement."
+    },
+    {
+      "path": "apps/desktop/electron-builder.cjs",
+      "line": 45,
+      "verdict": "by-design",
+      "evidence": "The @julusian/midi glob is deliberately kept for the optional addon installed alongside the app (DS-13); backend.ts probes it at startup via createRequire and falls back to Web MIDI when absent, which the comment on the glob documents."
+    },
+    {
+      "path": "apps/desktop/src/components/issue-7.test.ts",
+      "line": 59,
+      "verdict": "fixed-earlier",
+      "evidence": "A second test (keep the fallback on deck A, never deck B) exercises fallbackBpm=128 directly and asserts deck B never inherits it. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/controller-flx4/src/integration.test.ts",
+      "line": 146,
+      "verdict": "by-design",
+      "evidence": "confirmAudible's doc states the fail-over explicitly: a missing MIDI fader defers to the DJ weight, a present one must read above the physical-up floor; the test comment names the null branch as the documented deferral, not a second source agreeing."
+    },
+    {
+      "path": "packages/controller-flx4/src/integration.test.ts",
+      "line": 79,
+      "verdict": "fixed-earlier",
+      "evidence": "The drain test asserts the exact drained sequence (deck, control, value for both entries) plus exact droppedCount and depth. Verified 2026-10-14."
+    }
   ]
 }
