@@ -1,4 +1,42 @@
 {
+  "batch-04": [
+    {
+      "path": "apps/desktop/electron/services/show-host-supervisor.ts",
+      "line": 124,
+      "verdict": "fixed-earlier",
+      "evidence": "ensureWorker tracks a `tapping` flag: a failed message tap keeps the tracker degraded instead of being overwritten by the running state. Verified 2026-10-14."
+    },
+    {
+      "path": "apps/desktop/electron/services/show-host-supervisor.ts",
+      "line": 101,
+      "verdict": "fixed-earlier",
+      "evidence": "start() registers setShowHostMetricsReader(() => this.metrics()); stop() clears it. Verified 2026-10-14."
+    },
+    {
+      "path": "apps/desktop/src/components/audio-sync.tsx",
+      "line": 46,
+      "verdict": "fixed-earlier",
+      "evidence": "releaseCapture() closes the ctxRef AudioContext (void ctx?.close()), stops stream tracks, cancels the RAF loop; it runs on unmount. Verified 2026-10-14."
+    },
+    {
+      "path": "apps/desktop/src/components/audio-sync.tsx",
+      "line": 44,
+      "verdict": "fixed-earlier",
+      "evidence": "start() is guarded by startingRef + live streamRef: a second Start is a no-op, so no stream/RAF/context is orphaned. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/ble/src/link.ts",
+      "line": 198,
+      "verdict": "fixed-earlier",
+      "evidence": "close() counts unsent queued writes into this.dropped (surfaced as writesDroppedBudget) before clearing, and resolves the drain wait via its own timer. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/rekordbox-library/src/sidecar.ts",
+      "line": 188,
+      "verdict": "fixed-earlier",
+      "evidence": "child.stdin.on('error') is attached before end(stdin) with a comment: the child can exit before reading stdin, the outcome is reported through error/close. Verified 2026-10-14."
+    }
+  ],
   "batch-03": [
     {
       "path": "analysis/src/autolight_analysis/config_schema.json",
