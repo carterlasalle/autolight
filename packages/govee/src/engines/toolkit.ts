@@ -103,7 +103,11 @@ export type ToolkitLoader = () => Promise<BindingModule>;
 export const defaultToolkitLoader: ToolkitLoader = async () => {
   const entry = process.env["AUTOLIGHT_GOVEE_TOOLKIT_ENTRY"];
   const specifier = entry !== undefined && entry.length > 0 ? entry : "govee-toolkit";
-  const dynamicImport = new Function("s", "return import(s)") as (s: string) => Promise<unknown>;
+  // A wrapper keeps the specifier a runtime value so bundlers leave the
+  // import to the host; Node's own require(esm) covers the CJS bundle case.
+  // The previous Function("s", "return import(s)") indirection was eval in
+  // disguise and violated the Function-constructor ban (batch-01).
+  const dynamicImport = (s: string): Promise<unknown> => import(s);
   const mod = await dynamicImport(specifier);
   const shaped = asBindingModule(mod);
 
@@ -146,7 +150,9 @@ function resolveStart(candidate: unknown): BindingModule | null {
     // Checked as a function; the generated loader's call signature is known.
     const call = startFn as () => Promise<BindingSdk>;
 
-    return withStatics({ start: () => call() }, version, core, target);
+    // Receiver preserved: a generated wrapper that touches `this` must see
+    // the same object the Govee-class branch below hands over.
+    return withStatics({ start: () => call.call(candidate) }, version, core, target);
   }
 
   const govee = "Govee" in candidate ? candidate.Govee : undefined;
@@ -185,6 +191,7 @@ class ToolkitStream implements SegmentStreamLike {
   framesRequested = 0;
   private readonly stream: BindingStream;
   private readonly startedAt = Date.now();
+  private closePromise: Promise<void> | null = null;
   private closed = false;
 
   constructor(stream: BindingStream, fallbackZones: number, fallbackRateHz: number) {
@@ -195,9 +202,11 @@ class ToolkitStream implements SegmentStreamLike {
 
   setAll(frame: Uint8Array): void {
     if (this.closed) return;
-    this.framesRequested += 1;
     // Newest wins inside the binding: the next writer replaces the previous.
     this.stream.setAll(frame);
+    // Counted only after the binding accepted it: a throwing emitter must
+    // not inflate framesRequested.
+    this.framesRequested += 1;
   }
 
   get bindingStream(): BindingStream {
@@ -216,7 +225,14 @@ class ToolkitStream implements SegmentStreamLike {
     if (this.closed) return;
     this.closed = true;
     // Disarm and wait for the last frame to leave (toolkit SegmentStream).
-    void Promise.resolve(this.stream.close()).catch(() => undefined);
+    this.closePromise = Promise.resolve(this.stream.close()).then(() => undefined).catch(() => undefined);
+  }
+
+  /** Resolves when the native close settled. `close()` stays void for the
+   *  SegmentStreamLike surface; the engine awaits this at shutdown so the
+   *  SDK is not torn down while streams still own handles (batch-01). */
+  settled(): Promise<void> {
+    return this.closePromise ?? Promise.resolve();
   }
 }
 
@@ -348,6 +364,14 @@ export class ToolkitEngine implements LanStreamEngine {
     const started = Date.now();
     const bindingStream = await handle.openStream(resolutionFor(opts), opts.rateHz, opts.gradient !== 0);
     this.openMs = Date.now() - started;
+    const prior = this.streams.get(deviceId);
+
+    if (prior) {
+      // Replace, never leak: without this the previous native emitter keeps
+      // running and holding its handle after the map overwrite (batch-01).
+      prior.close();
+    }
+
     const stream = new ToolkitStream(bindingStream, opts.resolution ?? this.zones, opts.rateHz);
     this.streams.set(deviceId, stream);
 
@@ -367,6 +391,14 @@ export class ToolkitEngine implements LanStreamEngine {
   }
 
   async health(deviceId: string): Promise<EngineHealth | null> {
+    const bindingError = this.streams.get(deviceId)?.bindingStream.error ?? null;
+
+    if (bindingError !== null) {
+      // A stopped/errored emitter is a live failure of this stream; the
+      // handle's own health cannot see it (batch-01).
+      return { state: "degraded", failures: 1, available: true };
+    }
+
     const handle = await this.handleFor(deviceId);
     const health = handle.health("lan");
 
@@ -395,8 +427,17 @@ export class ToolkitEngine implements LanStreamEngine {
   }
 
   async close(): Promise<void> {
-    for (const stream of this.streams.values()) stream.close();
+    const closing = [...this.streams.values()].map((stream) => {
+      stream.close();
+
+      return stream.settled();
+    });
+
     this.streams.clear();
+    // Native streams finish before the SDK goes down, so the last frames
+    // can still leave; the old fire-and-forget path tore down underneath
+    // them (batch-01 shutdown ordering).
+    await Promise.all(closing);
 
     if (this.sdkPromise !== null) {
       try {

@@ -165,7 +165,26 @@ export function fitRunMapping(
       return lo.u + (hi.u - lo.u) * t;
     }
 
-    return ((cell + 0.5) / Math.max(1, cellCount)) * usableLen;
+    // Outside the anchored span: continue the nearest anchor interval's
+    // slope (clamped to the usable length) so cell order never inverts
+    // against the anchors (batch-01). A single anchor has no slope to
+    // borrow, so the uniform position is clamped to it instead.
+    if (anchorU.length >= 2) {
+      const a = lo === null ? anchorU[0]! : anchorU[anchorU.length - 2]!;
+      const b = lo === null ? anchorU[1]! : anchorU[anchorU.length - 1]!;
+      const slope = (b.u - a.u) / (b.cell - a.cell);
+      const base = lo ?? anchorU[0]!;
+
+      return Math.min(usableLen, Math.max(0, base.u + (cell - base.cell) * slope));
+    }
+
+    const uniform = ((cell + 0.5) / Math.max(1, cellCount)) * usableLen;
+
+    if (lo) return Math.max(lo.u, uniform);
+
+    if (hi) return Math.min(hi.u, uniform);
+
+    return uniform;
   };
 
   const cells: MappedCell[] = [];
@@ -183,8 +202,6 @@ export function fitRunMapping(
 
 
 export function orderLogical(midS: number[], zeroS: number, direction: "clockwise" | "counterclockwise"): number[] {
-  const n = midS.length;
-
   const rel = midS.map((s) => {
     const d = direction === "clockwise" ? s - zeroS : zeroS - s;
 
@@ -192,7 +209,9 @@ export function orderLogical(midS: number[], zeroS: number, direction: "clockwis
   });
 
   const order = rel.map((_, i) => i).sort((a, b) => rel[a]! - rel[b]!);
-  const logical = new Array<number>(n);
+  // `order` is a permutation of 0..n-1, so every slot is written exactly
+  // once; a pre-sized `new Array` is both flagged by unicorn and redundant.
+  const logical: number[] = [];
   order.forEach((physical, logicalIndex) => {
     logical[physical] = logicalIndex;
   });

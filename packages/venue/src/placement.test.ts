@@ -37,6 +37,23 @@ describe("T-ROOM-02 placements and Fixture v2", () => {
     ).toThrow(/non-monotonic/);
   });
 
+  it("keeps cells outside the anchored span ordered (slope extrapolation)", () => {
+    const run = square();
+    const anchors = [
+      { cell: 5, run: "loop", atMeters: 0 },
+      { cell: 15, run: "loop", atMeters: 20 },
+    ];
+    const cells = fitRunMapping(run, 20, anchors);
+    const startOf = (i: number): number => cells[i]!.positions[0]!.startM;
+    // A uniform fallback put cell 4 ahead of the anchored cell 5; the
+    // anchored slope keeps order non-decreasing across the whole run.
+    expect(startOf(4)).toBeLessThanOrEqual(startOf(5));
+    for (let i = 1; i < 20; i++) expect(startOf(i)).toBeGreaterThanOrEqual(startOf(i - 1));
+    // A single anchor has no slope; the fallback clamps to it instead.
+    const single = fitRunMapping(run, 20, [{ cell: 5, run: "loop", atMeters: 0 }]);
+    expect(single[4]!.positions[0]!.startM).toBeLessThanOrEqual(single[5]!.positions[0]!.startM);
+  });
+
   it("keeps physical to logical a bijection and rotates it on logical-zero move", () => {
     const run = square();
     const cells = fitRunMapping(run, 8, []);
