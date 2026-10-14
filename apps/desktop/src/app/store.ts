@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { callChannel, type Channel, type ChannelRequest, type ChannelResponse } from "@autolight/ipc";
 import type { ShowCue } from "@autolight/contracts";
 import type { DeviceTile } from "../features/venue/venue.js";
 
@@ -28,37 +29,69 @@ declare global {
 
 // T-ARC-02: IPC errors surface in diagnostics status, never swallowed into
 // undefined. Callers that tolerate absence check for null explicitly.
+function recordIpcFailure(key: string, message: string): void {
+  const { diagnostics, set } = useShell.getState();
+
+  set({ diagnostics: { ...diagnostics, [key]: message } });
+}
+
+function clearIpcFailure(key: string): void {
+  const { diagnostics, set } = useShell.getState();
+
+  if (!(key in diagnostics)) return;
+  const next = { ...diagnostics };
+
+  delete next[key];
+  set({ diagnostics: next });
+}
+
 export async function invoke(channel: string, payload: unknown): Promise<unknown> {
   const key = `ipc:${channel}`;
 
-  const recordDiagnostic = (message: string): void => {
-    const { diagnostics, set } = useShell.getState();
-    set({ diagnostics: { ...diagnostics, [key]: message } });
-  };
-
-  const clearDiagnostic = (): void => {
-    const { diagnostics, set } = useShell.getState();
-
-    if (!(key in diagnostics)) return;
-    const next = { ...diagnostics };
-    delete next[key];
-    set({ diagnostics: next });
-  };
-
   try {
     if (!window.autolight) {
-      recordDiagnostic("unavailable: preload missing");
+      recordIpcFailure(key, "unavailable: preload missing");
 
       return null;
     }
 
     const result = await window.autolight.invoke(channel, payload);
-    clearDiagnostic();
+
+    clearIpcFailure(key);
 
     return result;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    recordDiagnostic(message);
+    recordIpcFailure(key, message);
+
+    return null;
+  }
+}
+
+// Typed client (T-ARC-02 ratchet): new renderer call sites go through
+// callChannel, so request and response validate against the channel table
+// and the channel name is checked at compile time. Failures record exactly
+// like invoke(); null means "did not land", never undefined.
+export async function typedInvoke<C extends Channel>(channel: C, request: ChannelRequest<C>): Promise<Extract<ChannelResponse<C>, { ok: true }> | null> {
+  const key = `ipc:${channel}`;
+
+  try {
+    const api = window.autolight;
+
+    if (!api) {
+      recordIpcFailure(key, "unavailable: preload missing");
+
+      return null;
+    }
+
+    const result = await callChannel(api.invoke, channel, request);
+
+    clearIpcFailure(key);
+
+    return result;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    recordIpcFailure(key, message);
 
     return null;
   }
@@ -106,7 +139,6 @@ interface ShellState {
   flashMode: "static" | "cycle";
   wheelOn: boolean;
   wheelColor: [number, number, number];
-  customColor: boolean;
   pendingStyle: string | null;
   liveBeat: number;
   altOn: boolean;
@@ -151,7 +183,6 @@ export const useShell = create<ShellState>((set) => ({
   flashMode: "static",
   wheelOn: false,
   wheelColor: [255, 255, 255],
-  customColor: false,
   pendingStyle: null,
   liveBeat: 0,
   altOn: false,

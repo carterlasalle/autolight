@@ -99,4 +99,68 @@ describe("govee registry (venue hydration)", () => {
       mgr.stop();
     }
   });
+
+  it("setColorFor addresses exactly the picked fixtures", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "autolight-registry-"));
+    const path = join(dir, "govee-registry.json");
+
+    writeFileSync(path, JSON.stringify({
+      version: 1,
+      devices: [
+        {
+          mac: "AA:BB:CC:DD:EE:05", sku: "H6076", name: "Left", enabled: true,
+          ipHistory: ["127.0.0.1"], rung: "cached-unicast", lastSeenMs: 4,
+        },
+        {
+          mac: "AA:BB:CC:DD:EE:06", sku: "H1A45", name: "Right", enabled: false,
+          ipHistory: ["127.0.0.1"], rung: "cached-unicast", lastSeenMs: 5,
+        },
+      ],
+    }));
+
+    // A real port is needed for the senders; 0 keeps the reply socket
+    // ephemeral so parallel workers never collide on 4002. Loopback senders
+    // let the command path run without touching any physical LAN.
+    const mgr = new GoveeLanManager({ ...quietOpts(path), replyPort: 0, loopbackScan: true });
+
+    try {
+      // Explicit picks ignore the enabled filter; unknown ids fail alone.
+      const receipt = await mgr.setColorFor(["AA:BB:CC:DD:EE:06", "AA:BB:CC:DD:EE:99"], 10, 20, 30);
+      expect(receipt.ok).toEqual(["AA:BB:CC:DD:EE:06"]);
+      expect(receipt.failed.map((f) => f.mac)).toEqual(["AA:BB:CC:DD:EE:99"]);
+    } finally {
+      mgr.stop();
+    }
+  });
+
+  it("a saved segment count survives a reload", () => {
+    const dir = mkdtempSync(join(tmpdir(), "autolight-registry-"));
+    const path = join(dir, "govee-registry.json");
+
+    writeFileSync(path, JSON.stringify({
+      version: 1,
+      devices: [{
+        mac: "AA:BB:CC:DD:EE:07", sku: "H6076", name: "Lamp", enabled: true, zones: null,
+        ipHistory: ["10.0.0.12"], rung: "cached-unicast", lastSeenMs: 6,
+      }],
+    }));
+
+    const first = new GoveeLanManager(quietOpts(path));
+
+    try {
+      first.registrySnapshot();
+      first.setZones("AA:BB:CC:DD:EE:07", 14);
+      first.saveRegistryNow();
+    } finally {
+      first.stop();
+    }
+
+    const second = new GoveeLanManager(quietOpts(path));
+
+    try {
+      expect(second.registrySnapshot()[0]).toMatchObject({ zones: 14 });
+    } finally {
+      second.stop();
+    }
+  });
 });

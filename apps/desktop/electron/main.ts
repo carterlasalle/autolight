@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { writeFileSync } from "node:fs";
 import { app, BrowserWindow, session, type BrowserWindowConstructorOptions, type WebContents } from "electron";
-import { createIpc } from "./services/ipc-router.js";
+import { createIpc, TRUSTED_DEV_ORIGIN } from "./services/ipc-router.js";
 import {
   createShowService,
   getShowService,
@@ -140,7 +140,26 @@ export interface SecuritySettings {
   };
 }
 
-export function securitySettings(preloadPath: string): SecuritySettings {
+// Exact-origin rule shared with the ipc-router sender check (single
+// source): the URL is parsed and compared, never prefix-matched, so
+// `http://localhost:5173.evil.com` can never pass a local check.
+export function isTrustedLocalUrl(raw: string, opts: { allowDevtools?: boolean } = {}): boolean {
+  try {
+    const url = new URL(raw);
+
+    if (url.protocol === "file:") return true;
+    if (opts.allowDevtools === true && url.protocol === "devtools:") return true;
+
+    return url.origin === TRUSTED_DEV_ORIGIN;
+  } catch {
+    return false;
+  }
+}
+
+// file:// renderer plus the Vite dev server in dev. Nothing else.
+const LOCAL_ORIGINS = ["file://", TRUSTED_DEV_ORIGIN];
+
+export function securitySettings(preloadPath: string, devServer = false): SecuritySettings {
   return {
     webPreferences: {
       preload: preloadPath,
@@ -150,10 +169,14 @@ export function securitySettings(preloadPath: string): SecuritySettings {
       webSecurity: true,
     },
     // Strict CSP: local files and fonts only. No remote scripts, no eval
-    // (no 'unsafe-eval' anywhere; no 'unsafe-inline' on script-src).
+    // (no 'unsafe-eval' anywhere; no 'unsafe-inline' on script-src in the
+    // shipped app). The Vite dev server injects the React-refresh preamble
+    // as an inline <script> into index.html, so the dev-server page needs
+    // 'unsafe-inline'; that relaxation is gated on the dev origin and never
+    // applies to the file:// renderer the packaged app loads.
     csp: [
       "default-src 'none'",
-      "script-src 'self'",
+      devServer ? "script-src 'self' 'unsafe-inline'" : "script-src 'self'",
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: file:",
       "font-src 'self' data: file:",
@@ -165,20 +188,22 @@ export function securitySettings(preloadPath: string): SecuritySettings {
       "frame-ancestors 'none'",
     ].join("; "),
     // file:// renderer plus the Vite dev server in dev. Nothing else.
-    allowedNavigation: ["file://", "http://localhost:5173"],
+    allowedNavigation: [...LOCAL_ORIGINS],
     allowNewWindow: false,
     // Mic/audio-capture granted to the app windows only; MIDI where used
     // (FLX4 WebMIDI fallback runs in the renderer); everything else denied.
     permissions: {
-      audioCaptureOrigins: ["file://", "http://localhost:5173"],
-      midiOrigins: ["file://", "http://localhost:5173"],
+      audioCaptureOrigins: [...LOCAL_ORIGINS],
+      midiOrigins: [...LOCAL_ORIGINS],
     },
   };
 }
 
 function applySessionHardening(): void {
   const ses = session.defaultSession;
-  const settings = securitySettings("");
+  // The dev-server CSP allows the Vite-injected inline preamble; the
+  // packaged app (file://) always gets the strict script-src 'self' policy.
+  const settings = securitySettings("", Boolean(process.env["AUTOLIGHT_RENDERER_URL"]));
   // CSP injected on response headers so a missing <meta> in the renderer
   // build can never silently leave the window unprotected. Inject only on
   // frame documents; cancel remote scripts and workers at the network
@@ -200,10 +225,7 @@ function applySessionHardening(): void {
   // the CSP header lands.
   ses.webRequest.onBeforeRequest((details, callback) => {
     if (details.resourceType === "mainFrame" || details.resourceType === "subFrame") {
-      const allowed =
-        details.url.startsWith("file://") ||
-        details.url.startsWith("http://localhost:5173") ||
-        details.url.startsWith("devtools://");
+      const allowed = isTrustedLocalUrl(details.url, { allowDevtools: true });
 
       callback(allowed ? {} : { cancel: true });
 
@@ -211,9 +233,7 @@ function applySessionHardening(): void {
     }
 
     if (details.resourceType === "script") {
-      const local =
-        details.url.startsWith("file://") ||
-        details.url.startsWith("http://localhost:5173");
+      const local = isTrustedLocalUrl(details.url);
 
       callback(local ? {} : { cancel: true });
 
@@ -234,10 +254,7 @@ function applySessionHardening(): void {
   ): boolean => {
     const url = webContents?.getURL() ?? "";
 
-    const local =
-      url.startsWith("file://") || url.startsWith("http://localhost:5173");
-
-    if (!local) return false;
+    if (!isTrustedLocalUrl(url)) return false;
 
     if (permission === "media") {
       return isAudioWindow(url);
@@ -247,9 +264,7 @@ function applySessionHardening(): void {
       // Full hardware access: the app's own main window (FLX4 WebMIDI
       // fallback) or the registered hidden DSP window — never any page that
       // merely happens to load from a local URL.
-      const originAllowed = settings.permissions.midiOrigins.some((prefix) => url.startsWith(prefix));
-
-      return originAllowed && (webContents === mainWindowContents || isAudioWindow(url));
+      return webContents === mainWindowContents || isAudioWindow(url);
     }
 
     return false;
@@ -332,10 +347,7 @@ export async function boot(): Promise<void> {
   win.webContents.on("will-navigate", (nav) => {
     const url = nav.url;
 
-    if (
-      !settings.allowedNavigation.some((prefix) => url.startsWith(prefix)) &&
-      !url.startsWith("devtools://")
-    ) {
+    if (!isTrustedLocalUrl(url, { allowDevtools: true })) {
       nav.preventDefault();
     }
   });

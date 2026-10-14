@@ -5,12 +5,12 @@ import { z } from "zod";
 // in renderer code: preload exposes named functions built from this table.
 // Errors return { ok: false, error: { code, message } } and surface in UI status.
 
-export const errorSchema = z.object({
+const errorSchema = z.object({
   ok: z.literal(false),
   error: z.object({ code: z.string(), message: z.string() }),
 });
 
-export type IpcError = z.infer<typeof errorSchema>;
+type IpcError = z.infer<typeof errorSchema>;
 
 function ok<T extends z.ZodRawShape>(payload: z.ZodObject<T>) {
   return z.object({ ok: z.literal(true), ...payload.shape }).passthrough();
@@ -54,15 +54,24 @@ export const channels = {
     ]),
   },
   "show/style": {
-    request: z.object({ version: v1, style: z.string(), palette: z.string() }),
+    request: z.object({ version: v1, style: z.string(), palette: z.string(), custom: z.boolean().optional() }),
     response: z.union([ok(z.object({ style: z.string() })), errorSchema]),
   },
   "show/energy": {
-    request: z.object({ version: v1, tier: z.string() }),
+    request: z.object({
+      version: v1,
+      tier: z.string(),
+      // Manual-lane energy options the director consumes: alternate A/B,
+      // its pattern, and its speed. Optional so a bare tier change stays
+      // valid.
+      alternate: z.boolean().optional(),
+      pattern: z.string().optional(),
+      speedMs: z.number().optional(),
+    }),
     response: z.union([ok(z.object({ tier: z.string() })), errorSchema]),
   },
   "show/trigger-build": {
-    request: z.object({ version: v1 }),
+    request: z.object({ version: v1, at: z.number().optional() }),
     response: z.union([ok(z.object({ triggered: z.literal(true) })), errorSchema]),
   },
   "show/trigger-drop": {
@@ -78,8 +87,32 @@ export const channels = {
     response: z.union([ok(z.object({ fixtures: z.array(z.unknown()) })), errorSchema]),
   },
   "venue/set-color": {
-    request: z.object({ version: v1, rgb: z.tuple([z.number().int().min(0).max(255), z.number().int().min(0).max(255), z.number().int().min(0).max(255)]) }),
+    request: z.object({
+      version: v1,
+      rgb: z.tuple([z.number().int().min(0).max(255), z.number().int().min(0).max(255), z.number().int().min(0).max(255)]),
+      // Explicit fixture ids (macs) from the console's per-light picker;
+      // absent means every enabled fixture.
+      targets: z.array(z.string().min(1)).max(16).optional(),
+    }),
     response: z.union([ok(z.object({ rgb: z.tuple([z.number().int().min(0).max(255), z.number().int().min(0).max(255), z.number().int().min(0).max(255)]) })), errorSchema]),
+  },
+  "venue/segments-set": {
+    request: z.object({ version: v1, id: z.string(), zones: z.number().int().min(1).max(255) }),
+    response: z.union([ok(z.object({ id: z.string(), zones: z.number() })), errorSchema]),
+  },
+  "venue/paint-stripes": {
+    request: z.object({ version: v1, id: z.string(), zones: z.number().int().min(1).max(255) }),
+    response: z.union([ok(z.object({ id: z.string(), zones: z.number() })), errorSchema]),
+  },
+  "venue/paint-range": {
+    request: z.object({
+      version: v1,
+      id: z.string(),
+      from: z.number().int().min(0).max(255),
+      to: z.number().int().min(0).max(255),
+      rgb: z.tuple([z.number().int().min(0).max(255), z.number().int().min(0).max(255), z.number().int().min(0).max(255)]),
+    }),
+    response: z.union([ok(z.object({ id: z.string(), from: z.number(), to: z.number() })), errorSchema]),
   },
   "venue/device-action": {
     request: z.object({ version: v1, id: z.string(), action: z.string() }),
@@ -195,10 +228,6 @@ export type Channel = keyof typeof channels;
 export type ChannelRequest<C extends Channel> = z.infer<(typeof channels)[C]["request"]>;
 
 export type ChannelResponse<C extends Channel> = z.infer<(typeof channels)[C]["response"]>;
-
-export type Handler<C extends Channel> = (
-  request: ChannelRequest<C>,
-) => Promise<ChannelResponse<C>> | ChannelResponse<C>;
 
 // Contract test helper (T-TRU-03): enumerate every channel with a valid
 // request so integration tests can assert channel-specific side effects.

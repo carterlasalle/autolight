@@ -663,15 +663,44 @@ export function readVenueList(): { ok: true; fixtures: unknown[] } {
   return { ok: true, fixtures: found.map(deviceRecord) };
 }
 
-export function setVenueColor(rgb: [number, number, number]): { ok: true; rgb: [number, number, number] } {
+export function setVenueColor(rgb: [number, number, number], targets?: string[]): { ok: true; rgb: [number, number, number] } {
   const svc = getShowService();
   svc.venueColor = rgb;
-  svc.recorder.record("venue/set-color", { rgb });
+  svc.recorder.record("venue/set-color", { rgb, targets: targets ?? "all-enabled" });
   // The swatch is the standing look: it paints the rig now (manual lane)
-  // and is what master/resume restores after blackout.
-  manualCommand("venue/set-color", () => govee().setColorAll(rgb[0], rgb[1], rgb[2]));
+  // and is what master/resume restores after blackout. An explicit target
+  // list is the console's per-light picker; without one, every enabled
+  // fixture takes the colour.
+  if (targets !== undefined && targets.length > 0) {
+    manualCommand("venue/set-color", () => govee().setColorFor(targets, rgb[0], rgb[1], rgb[2]));
+  } else {
+    manualCommand("venue/set-color", () => govee().setColorAll(rgb[0], rgb[1], rgb[2]));
+  }
 
   return { ok: true, rgb };
+}
+
+export function setVenueSegments(id: string, zones: number): { ok: true; id: string; zones: number } {
+  govee().setZones(id, zones);
+  getShowService().recorder.record("venue/segments", { id, zones });
+
+  return { ok: true, id, zones };
+}
+
+export function paintStripesCommand(id: string, zones: number): Promise<{ ok: true; id: string; zones: number }> {
+  return govee().paintStripes(id, zones).then((receipt) => {
+    getShowService().recorder.record("venue/paint-stripes", { id: receipt.mac, zones: receipt.zones });
+
+    return { ok: true as const, id: receipt.mac, zones: receipt.zones };
+  });
+}
+
+export function paintRangeCommand(id: string, from: number, to: number, rgb: [number, number, number]): Promise<{ ok: true; id: string; from: number; to: number }> {
+  return govee().paintRange(id, from, to, rgb[0], rgb[1], rgb[2]).then((receipt) => {
+    getShowService().recorder.record("venue/paint-range", { id: receipt.mac, from: receipt.from, to: receipt.to, rgb });
+
+    return { ok: true as const, id: receipt.mac, from: receipt.from, to: receipt.to };
+  });
 }
 
 export function renameVenueDevice(id: string, name: string): { ok: true; id: string; name: string } {

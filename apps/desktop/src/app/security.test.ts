@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 // Collected by vitest (src/**/*.test.ts). Imports the built main module
 // source directly; asserts the same exports the bundle probe checks.
-import { securitySettings, registerAudioWindow, isAudioWindow } from "../../electron/main.js";
+import { securitySettings, registerAudioWindow, isAudioWindow, isTrustedLocalUrl } from "../../electron/main.js";
 
 // T-SEC-03 Electron security checklist: asserts every hardening setting from
 // the built main module exports. If main.ts stops consuming any field, add
@@ -39,6 +39,16 @@ describe("T-SEC-03 security checklist", () => {
     expect(csp).toContain("object-src 'none'");
     expect(csp).toContain("frame-ancestors 'none'");
   });
+  it("relaxes script-src only for the Vite dev server (the React preamble is inline)", () => {
+    const scriptOf = (csp: string) => csp.split(";").map((d) => d.trim()).find((d) => d.startsWith("script-src"));
+    expect(scriptOf(securitySettings("preload.cjs").csp)).toBe("script-src 'self'");
+    expect(scriptOf(securitySettings("preload.cjs", true).csp)).toBe("script-src 'self' 'unsafe-inline'");
+    // The relaxation must not leak any other directive.
+    const dev = securitySettings("preload.cjs", true).csp;
+    expect(dev).toContain("default-src 'none'");
+    expect(dev).toContain("object-src 'none'");
+    expect(dev).not.toContain("unsafe-eval");
+  });
 
   it("navigates only to app origins and never opens new windows", () => {
     const s = securitySettings("preload.cjs");
@@ -55,5 +65,22 @@ describe("T-SEC-03 security checklist", () => {
     registerAudioWindow("file:///audio.html");
     expect(isAudioWindow("file:///audio.html")).toBe(true);
     expect(isAudioWindow("https://evil.example/")).toBe(false);
+  });
+
+  it("matches local URLs by exact origin, never by prefix", () => {
+    // The origin rule the ipc-router sender check and every window-level
+    // guard share: the dev origin and file:// pass, prefix lookalikes and
+    // the rest of the web do not.
+    expect(isTrustedLocalUrl("http://localhost:5173/")).toBe(true);
+    expect(isTrustedLocalUrl("http://localhost:5173/index.html?x=1#y")).toBe(true);
+    expect(isTrustedLocalUrl("http://localhost:5173.evil.com/")).toBe(false);
+    expect(isTrustedLocalUrl("http://localhost:5173@evil.com/")).toBe(false);
+    expect(isTrustedLocalUrl("http://localhost:5174/")).toBe(false);
+    expect(isTrustedLocalUrl("file:///index.html")).toBe(true);
+    expect(isTrustedLocalUrl("https://evil.example/")).toBe(false);
+    expect(isTrustedLocalUrl("")).toBe(false);
+    // Devtools pages are a navigation allowance only, never a script one.
+    expect(isTrustedLocalUrl("devtools://devtools/bundled/inspector.html")).toBe(false);
+    expect(isTrustedLocalUrl("devtools://devtools/bundled/inspector.html", { allowDevtools: true })).toBe(true);
   });
 });

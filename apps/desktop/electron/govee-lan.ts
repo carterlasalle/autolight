@@ -41,7 +41,8 @@ import { dirname, join } from "node:path";
 import {
   MULTICAST, SCAN_REQUEST, parseDevStatus, envelope,
   devStatusCommand, turnCommand, brightnessCommand, colorCommand,
-  arm, paint, blackoutPayload, whiteHitPayload, solidPayload, PacingStream, WALL_SCHEDULER,
+  arm, paint, blackoutPayload, whiteHitPayload, solidPayload, paintRangePayload, stripeFrame,
+  PacingStream, WALL_SCHEDULER,
 } from "@autolight/govee";
 import type {
   LanDeviceStatus, LanInbound, StreamTransport, StreamOptions,
@@ -969,6 +970,83 @@ export class GoveeLanManager implements StreamTransport {
     }
 
     entry.zones = zones;
+    // Operator-confirmed counts are durable knowledge: keep them across
+    // restarts so the console and the segmented chase come back armed.
+    this.saveRegistrySoon();
+  }
+
+  /** Address an explicit fixture set (the console's per-light picker).
+   *  Targets are deliberate user picks, so the enabled filter does not
+   *  apply; unknown ids fail per-fixture instead of throwing as a batch. */
+  async setColorFor(macs: readonly string[], r: number, g: number, b: number): Promise<ManualReceipt> {
+    // Same restart path as commandEnabled: an explicit target can arrive
+    // before any scan in this process, so seed from the registry first.
+    if (this.devices.size === 0) this.loadRegistry();
+    const ok: string[] = [];
+    const failed: { mac: string; message: string }[] = [];
+
+    for (const id of macs) {
+      try {
+        const entry = this.require(id);
+
+        await this.setColor(entry.mac, r, g, b);
+        ok.push(entry.mac);
+      } catch (err) {
+        failed.push({ mac: id, message: err instanceof Error ? err.message : String(err) });
+      }
+    }
+
+    return { ok, failed };
+  }
+
+  /** Segment probe (wizard step 9): arm at the candidate count and paint
+   *  alternating stripes, so the operator can count the bands on the unit.
+   *  The count is only durable once the operator confirms it via setZones. */
+  async paintStripes(mac: string, zones: number): Promise<{ mac: string; zones: number }> {
+    await this.start();
+    const entry = this.require(mac);
+
+    if (!Number.isInteger(zones) || zones <= 0 || zones > 255) {
+      throw new RangeError(`paintStripes needs 1..255 zones, got ${zones}`);
+    }
+
+    await this.ensureStreamAt(entry.mac, zones);
+    const live = this.require(entry.mac);
+    const frame = stripeFrame(zones);
+
+    live.lastFrame = frame.slice();
+    live.stream?.setAll(frame);
+
+    return { mac: live.mac, zones };
+  }
+
+  /** One contiguous zone range in one colour (console segment paint).
+   *  Needs a known count: counting segments is the operator's step. */
+  async paintRange(mac: string, from: number, to: number, r: number, g: number, b: number): Promise<{ mac: string; zones: number; from: number; to: number }> {
+    await this.start();
+    const entry = this.require(mac);
+    const zones = entry.zones ?? (entry.lastFrame ? Math.floor(entry.lastFrame.length / 3) : 0);
+
+    if (zones <= 0) {
+      throw new Error(`paintRange needs a known segment count for ${mac} (fix: count segments first)`);
+    }
+
+    await this.ensureStreamAt(entry.mac, zones);
+    const live = this.require(entry.mac);
+    const frame = paintRangePayload(zones, from, to, r, g, b);
+
+    live.lastFrame = frame.slice();
+    live.stream?.setAll(frame);
+
+    return { mac: live.mac, zones, from, to };
+  }
+
+  private async ensureStreamAt(mac: string, zones: number): Promise<void> {
+    const entry = this.require(mac);
+    const stream = entry.stream;
+
+    if (stream && !entry.streamClosed && entry.zones === zones) return;
+    await this.openStream(mac, { zones });
   }
 
   closeStream(mac: string): void {
@@ -1423,6 +1501,7 @@ export class GoveeLanManager implements StreamTransport {
         sku: e.sku,
         name: e.name,
         enabled: e.enabled,
+        zones: e.zones,
         ipHistory: e.ipHistory,
         bleHard: e.bleHard,
         bleSoft: e.bleSoft,
@@ -2080,7 +2159,7 @@ export class GoveeLanManager implements StreamTransport {
     try {
       const raw = JSON.parse(readFileSync(path, "utf8")) as {
         devices?: {
-          mac?: unknown; sku?: unknown; name?: unknown; enabled?: unknown; ipHistory?: unknown;
+          mac?: unknown; sku?: unknown; name?: unknown; enabled?: unknown; zones?: unknown; ipHistory?: unknown;
           bleHard?: unknown; bleSoft?: unknown; wifiHard?: unknown; wifiSoft?: unknown;
           lastSeenMs?: unknown;
         }[];
@@ -2114,7 +2193,7 @@ export class GoveeLanManager implements StreamTransport {
           health: "offline",
           fps: this.o.fallbackHz,
           armed: false,
-          zones: null,
+          zones: typeof row.zones === "number" && row.zones > 0 ? row.zones : null,
           sentFrames: 0,
           supersededFrames: 0,
           rttMs: null,
@@ -2169,6 +2248,7 @@ export interface LanRegistryFile {
     sku: string;
     name: string;
     enabled: boolean;
+    zones: number | null;
     ipHistory: string[];
     rung: DiscoveryRung;
     lastSeenMs: number;

@@ -7,7 +7,7 @@ import {
   setShowStyle, setEnergyTier, triggerBuild, triggerDrop,
   setMasterBlackout, setMasterFull, setMasterFreeze, setMasterIntensity, resumeMaster,
   readShowState, readVenueList, setVenueColor, deviceAction, pollAxCommand,
-  renameVenueDevice, setVenueDeviceEnabled,
+  renameVenueDevice, setVenueDeviceEnabled, setVenueSegments, paintStripesCommand, paintRangeCommand,
 } from "./../show-service.js";
 import { ServiceTracker, type Service, type ServiceStatus } from "./base.js";
 import { getConfigService } from "./config-service.js";
@@ -55,7 +55,7 @@ export interface IpcMainPort {
 // are exactly the Channel union.
 const channelNames = Object.keys(channels) as Channel[];
 
-export type ChannelHandler<C extends Channel> = (
+type ChannelHandler<C extends Channel> = (
   request: ChannelRequest<C>,
 ) => Promise<ChannelResponse<C>> | ChannelResponse<C>;
 
@@ -77,7 +77,10 @@ const handlers: ChannelHandlerTable = {
   "show/trigger-drop": () => triggerDrop(),
   "show/state": (req) => readShowState(req.deck),
   "venue/list": () => readVenueList(),
-  "venue/set-color": (req) => setVenueColor(req.rgb),
+  "venue/set-color": (req) => setVenueColor(req.rgb, req.targets),
+  "venue/segments-set": (req) => setVenueSegments(req.id, req.zones),
+  "venue/paint-stripes": (req) => paintStripesCommand(req.id, req.zones),
+  "venue/paint-range": (req) => paintRangeCommand(req.id, req.from, req.to, req.rgb),
   "venue/device-action": (req) => deviceAction(req.id, req.action),
   "venue/device-rename": (req) => renameVenueDevice(req.id, req.name),
   "venue/device-enabled": (req) => setVenueDeviceEnabled(req.id, req.enabled),
@@ -245,7 +248,7 @@ export function createIpc(): ServiceStatus {
 
 let instance: IpcRouter | null = null;
 
-export function getIpcRouter(): IpcRouter {
+function getIpcRouter(): IpcRouter {
   instance ??= new IpcRouter({
     handle: (channel, listener) => {
       // SAFETY: Electron invokes the handler with (IpcMainInvokeEvent, ...args);

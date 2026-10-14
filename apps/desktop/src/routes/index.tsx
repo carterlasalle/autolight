@@ -1,8 +1,10 @@
+import { useEffect } from "react";
 import type { LiveState, Route } from "../app/store.js";
 import { LiveView, ControlGrid } from "../features/live/live-view.js";
 import { LibraryView } from "../features/library/library-view.js";
 import { InspectorView } from "../features/inspector/inspector-view.js";
 import { VenueView } from "../features/venue/venue-view.js";
+import { hydrateRig } from "../features/venue/rig.js";
 import { SetupView } from "../features/setup/setup-view.js";
 import { DiagnosticsView } from "../features/diagnostics/diagnostics-view.js";
 import { SettingsView } from "../features/settings/settings-view.js";
@@ -26,5 +28,9 @@ const SCREENS: Record<Route, (live: LiveState | null) => JSX.Element> = {
 };
 
 export function Routes({ route, live }: { route: Route; live: LiveState | null }): JSX.Element {
+  // The rig hydrates once at the shell: every screen — the Live console
+  // included — sees saved lights without visiting Venue first.
+  useEffect(() => { hydrateRig(); }, []);
+
   return SCREENS[route](live);
 }

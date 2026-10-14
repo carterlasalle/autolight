@@ -4,7 +4,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  blackoutPayload, whiteHitPayload, solidPayload, latencyBeats, encodeRaw, decodeRaw, envelope,
+  blackoutPayload, whiteHitPayload, solidPayload, paintRangePayload, latencyBeats, encodeRaw, decodeRaw, envelope,
   arm, paint, paintZoned, parseStatus,
   qualificationKey, needsRequalification, LatestStream, DeviceManager,
   parseScanReply, turnCommand, brightnessCommand, colorCommand,
@@ -72,6 +72,12 @@ describe("govee", () => {
     expect([...solidPayload(2, 10, 20, 30)]).toEqual([10, 20, 30, 10, 20, 30]);
     expect([...solidPayload(1, -5, 300, 12.6)]).toEqual([0, 255, 13]);
     expect([...solidPayload(0, 1, 2, 3)]).toEqual([]);
+  });
+  it("range paint fills only the clamped slice", () => {
+    expect([...paintRangePayload(4, 1, 2, 10, 20, 30)]).toEqual([0, 0, 0, 10, 20, 30, 10, 20, 30, 0, 0, 0]);
+    // Reversed and out-of-bounds indices clamp inside the frame.
+    expect([...paintRangePayload(2, 5, -3, 1, 2, 3)]).toEqual([1, 2, 3, 1, 2, 3]);
+    expect([...paintRangePayload(0, 0, 3, 9, 9, 9)]).toEqual([]);
   });
   it("computes latency offset in beats", () => {
     expect(latencyBeats(500, 120)).toBeCloseTo(1);

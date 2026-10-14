@@ -1,5 +1,5 @@
 import { useShallow } from "zustand/shallow";
-import { useShell, invoke } from "../../app/store.js";
+import { useShell, typedInvoke } from "../../app/store.js";
 import type { LiveState } from "../../app/store.js";
 import { Button } from "../../components/ui/button.js";
 import { Slider } from "../../components/ui/slider.js";
@@ -9,6 +9,7 @@ import { BUILT_IN_STYLES } from "@autolight/show-planner";
 import { ALT_PATTERNS } from "../../app/store.js";
 import type { AltPattern } from "../../app/store.js";
 import { nextPhraseBeat } from "../../routes/live/live-fields.js";
+import { LightConsoleCard, SegmentsCard } from "./light-console.js";
 import { CueList, DeckPanel, FixturePreview, MasterControls } from "../../components/kit.js";
 import { AudioSyncCard } from "../../components/audio-sync.js";
 
@@ -24,16 +25,16 @@ function masterIntent(intent: "blackout" | "full" | "freeze" | "resume"): void {
 
   if (intent === "blackout") {
     sync({ blackout: true, frozen: false });
-    void invoke("master/blackout", { version: 1 });
+    void typedInvoke("master/blackout", { version: 1 });
   } else if (intent === "full") {
     sync({ blackout: false });
-    void invoke("master/full", { version: 1 });
+    void typedInvoke("master/full", { version: 1 });
   } else if (intent === "freeze") {
     sync({ frozen: true });
-    void invoke("master/freeze", { version: 1, frozen: true });
+    void typedInvoke("master/freeze", { version: 1, frozen: true });
   } else {
     sync({ blackout: false, frozen: false });
-    void invoke("master/resume", { version: 1, at: "bar" });
+    void typedInvoke("master/resume", { version: 1, at: "bar" });
   }
 }
 
@@ -134,47 +135,25 @@ export function LiveView({ live }: { live: LiveState | null }): JSX.Element {
   );
 }
 
-// Below-fold manual lane: every prior intent, grouped by purpose with one
-// heading each. Same controls and intents, no new behavior.
-const CUSTOM_SWATCHES: [number, number, number][] = [[255, 0, 0], [0, 255, 0], [0, 0, 255], [255, 255, 255]];
-
+// Below-fold manual lane: the working light console plus the show-scoped
+// controls, grouped by purpose with one heading each. Controls whose effect
+// needs the show runtime (style, energy, build/drop, flash, alternate) are
+// disabled with that stated — a button that records an intent nobody
+// consumes is a dead button.
 function isAltPattern(v: string): v is AltPattern {
   return ALT_PATTERNS.some((p) => p === v);
 }
 
+const RUNTIME_NOTE = "Needs the show runtime (not built yet): acts when a show is loaded.";
+
 export function ControlGrid(): JSX.Element {
   const s = useShell(useShallow((st) => ({
     style: st.style, palette: st.palette, pendingStyle: st.pendingStyle, blinder: st.blinder,
-    running: st.running, customColor: st.customColor, flashOn: st.flashOn, flashMode: st.flashMode,
+    running: st.running, flashOn: st.flashOn, flashMode: st.flashMode,
     manual: st.manual, tier: st.tier, liveBeat: st.liveBeat, target: st.target,
     sensitivity: st.sensitivity, altOn: st.altOn, altPattern: st.altPattern, altSpeed: st.altSpeed,
     set: st.set,
   })));
-  const livePalette = useShell((st) => st.live?.palette ?? null);
-
-  // Swatches: the resolved track's palette when a show is loaded, the four
-  // basic colours otherwise, custom colours appended behind the switch.
-  const swatches: [number, number, number][] = [];
-  const seenSwatches = new Set<string>();
-  const paletteIsTrack = livePalette !== null && livePalette.length > 0;
-
-  for (const rgb of paletteIsTrack ? livePalette : CUSTOM_SWATCHES) {
-    const key = rgb.join(",");
-
-    if (seenSwatches.has(key)) continue;
-    seenSwatches.add(key);
-    swatches.push(rgb);
-  }
-
-  if (s.customColor) {
-    for (const rgb of CUSTOM_SWATCHES) {
-      const key = rgb.join(",");
-
-      if (seenSwatches.has(key)) continue;
-      seenSwatches.add(key);
-      swatches.push(rgb);
-    }
-  }
 
   return (
     <section aria-label="Manual control" className="mt-4">
@@ -184,9 +163,9 @@ export function ControlGrid(): JSX.Element {
         <h3 className="text-base font-medium">Style</h3>
         <div className="mt-2 flex min-w-0 flex-col gap-2">
           <label className="flex min-w-0 items-center gap-2 text-sm">Style:
-            <Select value={s.style} onValueChange={(v) => {
+            <Select disabled value={s.style} onValueChange={(v) => {
               s.set({ style: v, pendingStyle: v });
-              void invoke("show/style", { version: 1, style: v, palette: s.palette, custom: false });
+              void typedInvoke("show/style", { version: 1, style: v, palette: s.palette, custom: false });
             }}>
               <SelectTrigger className="h-8 min-w-0 flex-1"><SelectValue /></SelectTrigger>
               <SelectContent>{Object.keys(BUILT_IN_STYLES).map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
@@ -196,116 +175,88 @@ export function ControlGrid(): JSX.Element {
             <p className="text-xs text-muted-foreground">Pending {s.pendingStyle}: applies at the next phrase boundary.</p>
           ) : null}
           <label className="flex items-center gap-2 text-sm">
-            <Switch checked={s.blinder} onCheckedChange={(v) => { s.set({ blinder: v }); }} /> Blinder on next phrase
+            <Switch disabled checked={s.blinder} onCheckedChange={(v) => { s.set({ blinder: v }); }} /> Blinder on next phrase
           </label>
-          {!s.running
-            ? <Button size="sm" onClick={() => { s.set({ running: true }); void invoke("master/resume", { version: 1, at: "bar" }); }}>Start live autoloops</Button>
-            : <Button size="sm" variant="outline" onClick={() => { s.set({ running: false }); void invoke("master/freeze", { version: 1, frozen: true }); }}>Stop live autoloops</Button>}
+          <Button size="sm" disabled variant="outline">Live autoloops</Button>
+          <p className="text-xs text-muted-foreground">{RUNTIME_NOTE}</p>
         </div>
       </div>
       <AudioSyncCard />
-      <div className="min-w-0 rounded-xl border border-border bg-card px-4 py-3">
-        <h3 className="text-base font-medium">Colour</h3>
-        <div className="mt-2 flex min-w-0 flex-col gap-2">
-          <div role="group" aria-label="Colour palette" className="flex flex-wrap gap-2">
-            {swatches.map((rgb, i) => (
-              <button
-                key={`sw-${i}`} type="button" aria-label={`colour ${i + 1}`}
-                className="size-7 shrink-0 rounded-full border-2 border-white/20"
-                style={{ backgroundColor: `rgb(${rgb[0]},${rgb[1]},${rgb[2]})` }}
-                onClick={() => {
-                  s.set({ wheelColor: rgb });
-                  void invoke("venue/set-color", { version: 1, rgb });
-                }}
-              />
-            ))}
-          </div>
-          <label className="flex items-center gap-2 text-sm">
-            <Switch checked={s.customColor} onCheckedChange={(v) => { s.set({ customColor: v }); }} /> Custom colours
-          </label>
-          <div className="flex flex-wrap gap-2">
-            <Button size="sm" variant="outline" onClick={() => { void invoke("master/blackout", { version: 1 }); }}>Blackout</Button>
-            <Button
-              size="sm" variant="outline"
-              onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); void invoke("master/full", { version: 1 }); }}
-              onPointerUp={() => { void invoke("master/resume", { version: 1, at: "bar" }); }}
-              onPointerCancel={() => { void invoke("master/resume", { version: 1, at: "bar" }); }}
-            >
-              White (hold)
-            </Button>
-          </div>
-        </div>
-      </div>
+      <LightConsoleCard />
+      <SegmentsCard />
       <div className="min-w-0 rounded-xl border border-border bg-card px-4 py-3">
         <h3 className="text-base font-medium">Flash</h3>
         <div className="mt-2 flex min-w-0 flex-col gap-2">
           <label className="flex items-center gap-2 text-sm">
-            <Switch checked={s.flashOn} onCheckedChange={(v) => { s.set({ flashOn: v }); }} /> Flash on beat
+            <Switch disabled checked={s.flashOn} onCheckedChange={(v) => { s.set({ flashOn: v }); }} /> Flash on beat
           </label>
           <div className="flex gap-3 text-sm">
             {(["static", "cycle"] as const).map((m) => (
               <label key={m} className="flex items-center gap-1.5">
-                <input type="radio" name="flash-mode" checked={s.flashMode === m} onChange={() => { s.set({ flashMode: m }); }} />
+                <input type="radio" name="flash-mode" disabled checked={s.flashMode === m} onChange={() => { s.set({ flashMode: m }); }} />
                 {m === "static" ? "Static" : "Cycle"}
               </label>
             ))}
           </div>
+          <p className="text-xs text-muted-foreground">{RUNTIME_NOTE}</p>
         </div>
       </div>
       <div className="min-w-0 rounded-xl border border-border bg-card px-4 py-3">
         <h3 className="text-base font-medium">Takeover</h3>
         <div className="mt-2 flex min-w-0 flex-col gap-2">
           <label className="flex items-center gap-2 text-sm">
-            <Switch checked={s.manual} onCheckedChange={(v) => { s.set({ manual: v }); }} /> Manual override
+            <Switch disabled checked={s.manual} onCheckedChange={(v) => { s.set({ manual: v }); }} /> Manual override
           </label>
           <div className="flex flex-wrap gap-2" role="group" aria-label="Manual Energy Tier">
             {(["LOW", "MED", "HIGH"] as const).map((t) => (
-              <Button key={t} size="sm" variant={s.tier === t ? "default" : "outline"} disabled={!s.manual} onClick={() => {
+              <Button key={t} size="sm" variant={s.tier === t ? "default" : "outline"} disabled onClick={() => {
                 s.set({ tier: t });
-                void invoke("show/energy", { version: 1, tier: t });
+                void typedInvoke("show/energy", { version: 1, tier: t });
               }}>{t}</Button>
             ))}
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" variant="outline" onClick={() => { void invoke("show/trigger-build", { version: 1, at: nextPhraseBeat(s.liveBeat) }); }}>Build</Button>
-            <Button size="sm" variant="outline" onClick={() => { void invoke("show/trigger-drop", { version: 1 }); }}>Drop</Button>
+            <Button size="sm" variant="outline" disabled onClick={() => { void typedInvoke("show/trigger-build", { version: 1, at: nextPhraseBeat(s.liveBeat) }); }}>Build</Button>
+            <Button size="sm" variant="outline" disabled onClick={() => { void typedInvoke("show/trigger-drop", { version: 1 }); }}>Drop</Button>
           </div>
           <div className="flex flex-wrap gap-3" role="radiogroup" aria-label="Spatial target">
             {(["A", "B", "Both"] as const).map((t) => (
               <label key={t} className="flex items-center gap-1.5 text-sm">
-                <input type="radio" name="spatial-target" checked={s.target === t} onChange={() => { s.set({ target: t }); }} />
+                <input type="radio" name="spatial-target" disabled checked={s.target === t} onChange={() => { s.set({ target: t }); }} />
                 {t}
               </label>
             ))}
           </div>
-          <label className="flex min-w-0 flex-col gap-1 text-sm">Sensitivity: {s.sensitivity.toFixed(1)}x
-            <Slider min={0.5} max={2} step={0.1} value={[s.sensitivity]} onValueChange={([v]) => {
+          <label className="flex min-w-0 flex-col gap-1 text-sm">Master intensity: {s.sensitivity.toFixed(1)}x
+            <Slider min={0.5} max={1} step={0.05} value={[s.sensitivity]} onValueChange={([v]) => {
               const next = v ?? 1;
               s.set({ sensitivity: next });
-              void invoke("master/intensity", { version: 1, value: next });
+              void typedInvoke("master/intensity", { version: 1, value: next });
             }} />
           </label>
+          <p className="text-xs text-muted-foreground">{RUNTIME_NOTE}</p>
         </div>
       </div>
       <div className="min-w-0 rounded-xl border border-border bg-card px-4 py-3">
         <h3 className="text-base font-medium">Alternate</h3>
         <div className="mt-2 flex min-w-0 flex-col gap-2">
           <label className="flex items-center gap-2 text-sm">
-            <Switch checked={s.altOn} onCheckedChange={(v) => { s.set({ altOn: v }); void invoke("show/energy", { version: 1, tier: s.tier ?? "MED", alternate: v }); }} /> Alternating mode
+            <Switch disabled checked={s.altOn} onCheckedChange={(v) => { s.set({ altOn: v }); void typedInvoke("show/energy", { version: 1, tier: s.tier ?? "MED", alternate: v }); }} /> Alternating mode
           </label>
           <label className="flex min-w-0 items-center gap-2 text-sm">Pattern:
-            <Select value={s.altPattern} onValueChange={(v) => { if (!isAltPattern(v)) return; s.set({ altPattern: v }); void invoke("show/energy", { version: 1, tier: s.tier ?? "MED", alternate: s.altOn, pattern: v }); }}>
+            <Select disabled value={s.altPattern} onValueChange={(v) => { if (!isAltPattern(v)) return; s.set({ altPattern: v }); void typedInvoke("show/energy", { version: 1, tier: s.tier ?? "MED", alternate: s.altOn, pattern: v }); }}>
               <SelectTrigger className="h-8 min-w-0 flex-1"><SelectValue /></SelectTrigger>
               <SelectContent>{ALT_PATTERNS.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
             </Select>
           </label>
           <label className="flex min-w-0 flex-col gap-1 text-sm">Speed: {s.altSpeed}ms
-            <Slider min={100} max={2000} step={50} value={[s.altSpeed]} onValueChange={([v]) => {
+            <Slider disabled min={100} max={2000} step={50} value={[s.altSpeed]} onValueChange={([v]) => {
               const next = v ?? 500;
               s.set({ altSpeed: next });
-              void invoke("show/energy", { version: 1, tier: s.tier ?? "MED", alternate: s.altOn, speedMs: next });
+              void typedInvoke("show/energy", { version: 1, tier: s.tier ?? "MED", alternate: s.altOn, speedMs: next });
             }} />
           </label>
+          <p className="text-xs text-muted-foreground">{RUNTIME_NOTE}</p>
         </div>
       </div>
       </div>

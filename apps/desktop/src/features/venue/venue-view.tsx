@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useShell, invoke } from "../../app/store.js";
+import { useShell, typedInvoke } from "../../app/store.js";
 import { Button } from "../../components/ui/button.js";
 import { Input } from "../../components/ui/input.js";
 import { Switch } from "../../components/ui/switch.js";
@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { deviceScreenRow, withTransportMode, type TransportMode } from "../../routes/venue/device-screens.js";
 import { RoomVenueRoute } from "../../routes/venue/index.js";
 import type { DeviceTile } from "./venue.js";
+import { applyRigDevices, hydrateRig, type VenueDevice } from "./rig.js";
 import type { Room } from "@autolight/venue";
 import { rectangleRoom } from "@autolight/venue";
 
@@ -25,28 +26,8 @@ const KNOWN_SCAN_TARGETS: readonly string[] = [
   "carterlights.resnet.nd.edu",
 ];
 
-// venue/scan and venue/list reply with these (show-service deviceRecord):
-// measured fields stay null when unknown, never a placeholder string.
-interface VenueDevice {
-  id: string; address: string; name: string; sku: string; firmware: string;
-  health: DeviceTile["health"]; enabled: boolean;
-  zones: number | null; rttMs: number | null; rung: string; lastSeenMs: number;
-}
-
-function tileForDevice(d: VenueDevice): DeviceTile {
-  return {
-    id: d.id,
-    sku: d.sku,
-    name: d.name,
-    enabled: d.enabled,
-    ip: d.address !== "" ? d.address : null,
-    firmware: d.firmware,
-    segments: d.zones ?? 0,
-    fps: 0, sentFrames: 0, supersededFrames: 0,
-    latencyMs: d.rttMs ?? 0,
-    health: d.health,
-  };
-}
+// venue/scan and venue/list reply records live in ./rig.js (shared with the
+// Live console hydration).
 
 export function VenueView(): JSX.Element {
   const s = useShell();
@@ -68,59 +49,40 @@ export function VenueView(): JSX.Element {
 
   useEffect(() => {
     let cancelled = false;
-    void invoke("config/get", { version: 1, key: "govee.lan.discovery.scanList" }).then((raw: unknown) => {
+    void typedInvoke("config/get", { version: 1, key: "govee.lan.discovery.scanList" }).then((res) => {
       if (cancelled) return;
-      const envelope = raw as { ok?: boolean; value?: unknown } | null;
-
-      const saved = envelope && envelope.ok !== false && Array.isArray(envelope.value)
-        ? (envelope.value as unknown[]).map((v) => String(v))
-        : [];
+      const saved = res !== null && Array.isArray(res.value) ? res.value.map((v) => String(v)) : [];
 
       const seeded = saved.length > 0 ? saved : [...KNOWN_SCAN_TARGETS];
       setScanTargets(seeded.join(", "));
 
       if (saved.length === 0 && seeded.length > 0) {
-        void invoke("config/set", { version: 1, scope: "app", key: "govee.lan.discovery.scanList", value: seeded });
+        void typedInvoke("config/set", { version: 1, scope: "app", key: "govee.lan.discovery.scanList", value: seeded });
       }
     });
 
     // Saved lights hydrate from the registry: name, enabled and last-known
     // health survive a restart; re-scanning refreshes them.
-    void invoke("venue/list", { version: 1 }).then((raw: unknown) => {
-      if (cancelled) return;
-      const envelope = raw as { ok?: boolean; fixtures?: unknown } | null;
-      const list = envelope && envelope.ok !== false && Array.isArray(envelope.fixtures)
-        ? (envelope.fixtures as VenueDevice[])
-        : [];
-
-      if (list.length === 0) return;
-      useShell.getState().set({
-        devices: list.map((d) => ({ address: d.address, name: d.name })),
-        tiles: list.map(tileForDevice),
-      });
-    });
+    hydrateRig();
 
     return () => { cancelled = true; };
   }, []);
 
   const saveScanTargets = (): void => {
     const list = scanTargets.split(",").map((t) => t.trim()).filter((t) => t.length > 0);
-    void invoke("config/set", { version: 1, scope: "app", key: "govee.lan.discovery.scanList", value: list }).then(() => setScanSaved(true));
-  };
-
-  const applyDevices = (list: VenueDevice[]): void => {
-    s.set({ devices: list.map((d) => ({ address: d.address, name: d.name })) });
-    s.set({ tiles: list.map(tileForDevice) });
+    void typedInvoke("config/set", { version: 1, scope: "app", key: "govee.lan.discovery.scanList", value: list }).then((res) => {
+      if (res !== null) setScanSaved(true);
+    });
   };
 
   const scan = (): void => {
     setScanning(true);
-    void invoke("venue/scan", { version: 1 }).then((result: unknown) => {
-      const envelope = result as { ok?: boolean; devices?: unknown } | null;
-      const list = envelope && envelope.ok !== false && Array.isArray(envelope.devices)
-        ? (envelope.devices as VenueDevice[])
-        : [];
-      applyDevices(list);
+    void typedInvoke("venue/scan", { version: 1 }).then((res) => {
+      // SAFETY: venue/scan's reply contract carries a devices array; each row
+      // is the DeviceRecord shape this screen renders (defensive cast only).
+      const list = res !== null && Array.isArray(res.devices) ? (res.devices as VenueDevice[]) : [];
+
+      applyRigDevices(list);
       setScanning(false);
     });
   };
@@ -129,11 +91,12 @@ export function VenueView(): JSX.Element {
     const draft = (nameDrafts[tile.id] ?? tile.name).trim();
 
     if (draft.length === 0 || draft === tile.name) return;
-    void invoke("venue/device-rename", { version: 1, id: tile.id, name: draft }).then(() => {
+    void typedInvoke("venue/device-rename", { version: 1, id: tile.id, name: draft }).then((res) => {
+      if (res === null) return;
       useShell.getState().set({
-        tiles: useShell.getState().tiles.map((t) => (t.id === tile.id ? { ...t, name: draft } : t)),
+        tiles: useShell.getState().tiles.map((t) => (t.id === tile.id ? { ...t, name: res.name } : t)),
       });
-      setNameDrafts((prev) => ({ ...prev, [tile.id]: draft }));
+      setNameDrafts((prev) => ({ ...prev, [tile.id]: res.name }));
     });
   };
 
@@ -142,17 +105,12 @@ export function VenueView(): JSX.Element {
     useShell.getState().set({
       tiles: useShell.getState().tiles.map((t) => (t.id === tile.id ? { ...t, enabled } : t)),
     });
-    void invoke("venue/device-enabled", { version: 1, id: tile.id, enabled })
-      .then((raw: unknown) => {
-        const ok = (raw as { ok?: boolean } | null)?.ok !== false;
-
-        if (!ok) throw new Error("refused");
-      })
-      .catch(() => {
-        useShell.getState().set({
-          tiles: useShell.getState().tiles.map((t) => (t.id === tile.id ? { ...t, enabled: !enabled } : t)),
-        });
+    void typedInvoke("venue/device-enabled", { version: 1, id: tile.id, enabled }).then((res) => {
+      if (res !== null) return;
+      useShell.getState().set({
+        tiles: useShell.getState().tiles.map((t) => (t.id === tile.id ? { ...t, enabled: !enabled } : t)),
       });
+    });
   };
 
   const identified = useShell((st) => st.identifiedIds);
@@ -230,10 +188,8 @@ export function VenueView(): JSX.Element {
                     size="sm"
                     variant={isIdentified ? "secondary" : "default"}
                     onClick={() => {
-                      void invoke("venue/identify", { version: 1, id: t.id }).then((result: unknown) => {
-                        const ok = (result as { ok?: boolean } | null)?.ok !== false;
-
-                        if (ok && !useShell.getState().identifiedIds.includes(t.id)) {
+                      void typedInvoke("venue/identify", { version: 1, id: t.id }).then((res) => {
+                        if (res !== null && !useShell.getState().identifiedIds.includes(t.id)) {
                           useShell.getState().set({ identifiedIds: [...useShell.getState().identifiedIds, t.id] });
                         }
                       });
@@ -245,10 +201,8 @@ export function VenueView(): JSX.Element {
                     size="sm"
                     variant={isChased ? "secondary" : "outline"}
                     onClick={() => {
-                      void invoke("venue/test-chase", { version: 1, id: t.id }).then((result: unknown) => {
-                        const ok = (result as { ok?: boolean } | null)?.ok !== false;
-
-                        if (ok && !useShell.getState().chasePassedIds.includes(t.id)) {
+                      void typedInvoke("venue/test-chase", { version: 1, id: t.id }).then((res) => {
+                        if (res !== null && !useShell.getState().chasePassedIds.includes(t.id)) {
                           useShell.getState().set({ chasePassedIds: [...useShell.getState().chasePassedIds, t.id] });
                         }
                       });
@@ -256,7 +210,7 @@ export function VenueView(): JSX.Element {
                   >
                     {isChased ? "✓ Chase passed" : "Test chase"}
                   </Button>
-                  <Button size="sm" variant="ghost" onClick={() => { void invoke("venue/device-action", { version: 1, id: t.id, action: "RECALIBRATE" }); }}>
+                  <Button size="sm" variant="ghost" onClick={() => { void typedInvoke("venue/device-action", { version: 1, id: t.id, action: "RECALIBRATE" }); }}>
                     Recalibrate
                   </Button>
                   <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -269,7 +223,7 @@ export function VenueView(): JSX.Element {
                     <Select value={row.transportMode} onValueChange={(v) => {
                       const mode = v as TransportMode;
                       setModes((prev) => ({ ...prev, [t.id]: mode }));
-                      void invoke("config/set", { version: 1, scope: "device", key: "govee.device.<fixtureId>.transportMode", value: mode });
+                      void typedInvoke("config/set", { version: 1, scope: "device", key: "govee.device.<fixtureId>.transportMode", value: mode });
                     }}>
                       <SelectTrigger className="h-8 w-24 font-mono text-xs"><SelectValue /></SelectTrigger>
                       <SelectContent>{(["hybrid", "lan", "ble"] as const).map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>

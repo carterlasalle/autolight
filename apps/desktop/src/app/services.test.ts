@@ -830,7 +830,7 @@ describe("ipc handlers have real effects (T-TRU-03)", () => {
     }
   });
 
-  it("venue channels discover and drive a loopback sim (T-GOV-05 ladder)", async () => {
+  it("venue channels discover and drive a loopback sim (T-GOV-05 ladder)", { timeout: 20_000 }, async () => {
     const { call, svc, cleanup } = await setupTru03();
 
     // Scan-list-only discovery against a loopback sim: no LAN touched, the
@@ -917,6 +917,25 @@ describe("ipc handlers have real effects (T-TRU-03)", () => {
           await call("venue/device-enabled", { version: 1, id: "AA:BB:CC:DD:EE:01", enabled: true });
           expect((await appMgr.setColorAll(4, 5, 6)).ok).toEqual(["AA:BB:CC:DD:EE:01"]);
           await vi.waitFor(() => { expect(displayed()).toEqual([4, 5, 6]); });
+
+          // Segment console over the wire: stripes arm the stream at the
+          // candidate count, the saved count lands in the registry, and the
+          // range paint addresses exactly the picked slice.
+          await call("venue/paint-stripes", { version: 1, id: "AA:BB:CC:DD:EE:01", zones: 8 });
+          await vi.waitFor(() => { expect(sim.armedState).toBe(true); });
+          await vi.waitFor(() => {
+            expect(sim.rendered.slice(0, 8).map((c) => c.join(","))).toEqual([
+              "255,0,0", "0,0,255", "255,0,0", "0,0,255", "255,0,0", "0,0,255", "255,0,0", "0,0,255",
+            ]);
+          });
+          await call("venue/segments-set", { version: 1, id: "AA:BB:CC:DD:EE:01", zones: 8 });
+          expect(appMgr.registrySnapshot().find((d) => d.mac === "AA:BB:CC:DD:EE:01")?.zones).toBe(8);
+          await call("venue/paint-range", { version: 1, id: "AA:BB:CC:DD:EE:01", from: 0, to: 3, rgb: [0, 255, 0] });
+          await vi.waitFor(() => {
+            expect(sim.rendered.slice(0, 8).map((c) => c.join(","))).toEqual([
+              "0,255,0", "0,255,0", "0,255,0", "0,255,0", "0,0,0", "0,0,0", "0,0,0", "0,0,0",
+            ]);
+          });
 
           await call("venue/identify", { version: 1, id: "AA:BB:CC:DD:EE:01" });
           await call("venue/test-chase", { version: 1, id: "AA:BB:CC:DD:EE:01" });

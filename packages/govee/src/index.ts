@@ -45,6 +45,8 @@ export type { SceneCatalog, SceneMoment, SceneRequest } from "./scenes.js";
 
 export { DeviceMetrics } from "./metrics.js";
 
+export { stripeFrame } from "./qualification.js";
+
 export type { DeviceHealthState, DeviceMetricsRow, MetricsSample } from "./metrics.js";
 
 // Legacy alias kept until T-GOV-02 deletes encodeFrame (M1): maps to encodeRaw.
@@ -99,6 +101,25 @@ export function solidPayload(segmentCount: number, r: number, g: number, b: numb
   const clamp = (v: number): number => Math.min(255, Math.max(0, Math.round(v)));
 
   for (let i = 0; i < count; i++) {
+    out[i * 3] = clamp(r); out[i * 3 + 1] = clamp(g); out[i * 3 + 2] = clamp(b);
+  }
+
+  return out;
+}
+
+// One contiguous zone range in one colour for the console's segment paint;
+// zones outside the range stay off. Indices clamp inside the frame so a
+// stale range can never write out of bounds (§47 blackout safety).
+export function paintRangePayload(segmentCount: number, from: number, to: number, r: number, g: number, b: number): Uint8Array {
+  const count = Math.max(0, Math.floor(segmentCount));
+  const out = new Uint8Array(count * 3);
+
+  if (count === 0) return out;
+  const lo = Math.max(0, Math.min(count - 1, Math.floor(Math.min(from, to))));
+  const hi = Math.max(0, Math.min(count - 1, Math.floor(Math.max(from, to))));
+  const clamp = (v: number): number => Math.min(255, Math.max(0, Math.round(v)));
+
+  for (let i = lo; i <= hi; i++) {
     out[i * 3] = clamp(r); out[i * 3 + 1] = clamp(g); out[i * 3 + 2] = clamp(b);
   }
 
