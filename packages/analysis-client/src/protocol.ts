@@ -3,6 +3,8 @@
 // framed protocol, typed statuses, and the persistent-queue record shape.
 // Playback never blocks: analyze() queues; crashes requeue (spec 109);
 // large artifacts travel by path.
+import { randomUUID } from "node:crypto";
+
 export interface AnalyzeRequest {
   trackId: string;
   audioPath: string;
@@ -75,6 +77,7 @@ export function parseFrame(line: string): ProtocolFrame {
   if (typeof msg !== "object" || msg === null || Array.isArray(msg)) {
     throw new Error(`non-object-frame: ${line.slice(0, 120)}`);
   }
+
   const frame = msg as Record<string, unknown>;
 
   if (frame["v"] !== PROTOCOL_VERSION) {
@@ -92,6 +95,7 @@ export function frameId(msg: ProtocolFrame): string | undefined {
   const id = msg.id ?? msg.trackId;
 
   if (typeof id === "string") return id === "" ? undefined : id;
+
   if (typeof id === "number") return Number.isFinite(id) ? String(id) : undefined;
 
   return undefined;
@@ -103,6 +107,9 @@ export function toJob(req: AnalyzeRequest): AnalysisJob {
     trackId: req.trackId,
     audioPath: req.audioPath,
     stages: [...(req.stages ?? ["decode", "ml", "dsp", "events", "fusion"])],
+    // An absent configHash is unknown configuration, not a default one:
+    // the worker keys its artifact cache on it (T-ANA-02), so callers that
+    // know their snapshot must pass it.
     configHash: req.configHash ?? "",
     priority: req.priority ?? "preanalysis",
     state: "Queued",
@@ -115,12 +122,16 @@ export function toJob(req: AnalyzeRequest): AnalysisJob {
 }
 
 /** Classify a worker typed failure into an AnalyzeErrorCode (T-ANA-02). */
+function hasCodePrefix(text: string, code: string): boolean {
+  return text === code || text.startsWith(`${code}:`) || text.startsWith(`${code} `);
+}
+
 export function classifyError(text: string): AnalyzeErrorCode {
-  if (text.startsWith("audio-missing")) return "audio-missing";
+  if (hasCodePrefix(text, "audio-missing")) return "audio-missing";
 
-  if (text.startsWith("native-unreadable")) return "native-unreadable";
+  if (hasCodePrefix(text, "native-unreadable")) return "native-unreadable";
 
-  if (text.startsWith("dsp-fallback")) return "dsp-fallback";
+  if (hasCodePrefix(text, "dsp-fallback")) return "dsp-fallback";
 
   return "worker-exited";
 }

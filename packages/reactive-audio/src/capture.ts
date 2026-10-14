@@ -97,6 +97,7 @@ export class AudioCaptureHost {
   private deviceIdValue: string;
   private permissionState: CapturePermission = "not-requested";
   private session: CaptureSessionHandle | null = null;
+  private starting: Promise<{ ok: boolean; reason: string | null }> | null = null;
   private pending: LiveFeatures | null = null;
   private received = 0;
   private superseded = 0;
@@ -131,6 +132,22 @@ export class AudioCaptureHost {
   /** Idempotent: a second start reuses the running context, one context only. */
   async start(): Promise<{ ok: boolean; reason: string | null }> {
     if (this.session !== null) return { ok: true, reason: null };
+    // A concurrent start (or a setDevice race) must join the in-flight
+    // attempt: both past the guard would open two platform sessions and
+    // leak one (batch-17).
+    if (this.starting !== null) return this.starting;
+
+    const run = this.startOnce();
+    this.starting = run;
+
+    try {
+      return await run;
+    } finally {
+      this.starting = null;
+    }
+  }
+
+  private async startOnce(): Promise<{ ok: boolean; reason: string | null }> {
     const permission = this.permissionState === "granted" ? "granted" : await this.platform.requestPermission();
     this.permissionState = permission;
 
@@ -158,6 +175,9 @@ export class AudioCaptureHost {
 
     if (session === null) return;
     this.session = null;
+    // A frame buffered before teardown must not be readable afterwards: it
+    // describes a session that no longer exists (batch-17).
+    this.pending = null;
     session.stop();
   }
 
@@ -167,10 +187,20 @@ export class AudioCaptureHost {
     this.deviceIdValue = deviceId;
 
     if (this.session === null) return { ok: true, reason: null };
-    this.stop();
+    const before = this.session;
+    // Bring the replacement up before releasing the working session: a
+    // failed switch must leave capture running on the old device (batch-17).
+    this.session = null;
     const result = await this.start();
 
-    if (!result.ok) this.deviceIdValue = previous;
+    if (!result.ok) {
+      this.session = before;
+      this.deviceIdValue = previous;
+
+      return result;
+    }
+
+    before.stop();
 
     return result;
   }

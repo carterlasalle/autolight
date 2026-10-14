@@ -30,5 +30,9 @@ describe("update strategy (T-OPS-04, spec 145)", () => {
     expect(state.notice).not.toContain("dialog");
     const idle = noteUpdateAvailable("2.1.0", false);
     expect(idle.deferred).toBe(false);
+    // A loaded show defers exactly like Live does (batch-17).
+    const showLoaded = noteUpdateAvailable("2.1.0", false, true);
+    expect(showLoaded).toMatchObject({ available: "2.1.0", deferred: true });
+    expect(showLoaded.notice).toContain("after the show");
   });
 });

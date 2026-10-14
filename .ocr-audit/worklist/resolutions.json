@@ -1,4 +1,84 @@
 {
+  "batch-17": [
+    {
+      "path": "packages/show-planner/src/contrast.ts",
+      "line": 149,
+      "verdict": "fixed-earlier",
+      "evidence": "fakeDropHold stops at actualBeat - preDarkBeats and shares priority 96 with the real pre-drop blackout (comment explains one restraint family). Verified 2026-10-14."
+    },
+    {
+      "path": "apps/desktop/electron/updater/index.ts",
+      "line": 18,
+      "verdict": "fixed-by-commit",
+      "evidence": "decideUpdateCheck reports skip-disabled before any live/show deferral (batch-17)."
+    },
+    {
+      "path": "apps/desktop/electron/updater/index.ts",
+      "line": 38,
+      "verdict": "fixed-by-commit",
+      "evidence": "noteUpdateAvailable takes showLoaded and defers on either gate state; test pinned (batch-17)."
+    },
+    {
+      "path": "apps/desktop/electron/updater/index.ts",
+      "line": 51,
+      "verdict": "fixed-by-commit",
+      "evidence": "One module-private updateGateOpen feeds decideUpdateCheck, noteUpdateAvailable and canInstallUpdate (batch-17)."
+    },
+    {
+      "path": "apps/desktop/src/app/services.test.ts",
+      "line": 260,
+      "verdict": "fixed-by-commit",
+      "evidence": "Fake timers install before construction/start so the poll interval is visible to the fake clock (batch-17)."
+    },
+    {
+      "path": "apps/desktop/src/app/services.test.ts",
+      "line": 224,
+      "verdict": "fixed-earlier",
+      "evidence": "The test's two global touches are both cleaned: resetHostIntentForwarderForTest, and resumeMaster zeroes every override flag. Verified 2026-10-14."
+    },
+    {
+      "path": "apps/desktop/src/features/diagnostics/diagnostics-view.tsx",
+      "line": 81,
+      "verdict": "fixed-earlier",
+      "evidence": "seenAt stamps only on a resolved shape; the failure path returns before it and leaves the stale badge on the last good fetch. Verified 2026-10-14."
+    },
+    {
+      "path": "apps/desktop/src/features/diagnostics/diagnostics-view.tsx",
+      "line": 120,
+      "verdict": "fixed-by-commit",
+      "evidence": "The unreachable stored-string fallback and its prop are deleted; TabMetrics renders the rows its tab owns (batch-17)."
+    },
+    {
+      "path": "apps/desktop/src/features/diagnostics/diagnostics-view.tsx",
+      "line": 68,
+      "verdict": "fixed-earlier",
+      "evidence": "The store write spreads the prior diagnostics map instead of replacing it. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/analysis-client/src/protocol.ts",
+      "line": 91,
+      "verdict": "fixed-by-commit",
+      "evidence": "The configHash default carries a contract comment (unknown != default; the worker keys artifacts on it). Staged surgically so the sibling's uncommitted protocol work stays unstaged."
+    },
+    {
+      "path": "packages/reactive-audio/src/capture.ts",
+      "line": 158,
+      "verdict": "fixed-by-commit",
+      "evidence": "setDevice brings the replacement up first, stops the old only on success, and restores the old session and device on failure (batch-17)."
+    },
+    {
+      "path": "packages/reactive-audio/src/capture.ts",
+      "line": 128,
+      "verdict": "fixed-by-commit",
+      "evidence": "start() joins an in-flight attempt (this.starting), so concurrent starts cannot open two platform sessions (batch-17)."
+    },
+    {
+      "path": "packages/reactive-audio/src/capture.ts",
+      "line": 149,
+      "verdict": "fixed-by-commit",
+      "evidence": "stop() clears the buffered pending frame; latest() cannot return features from a torn-down session (batch-17)."
+    }
+  ],
   "batch-16": [
     {
       "path": "packages/storage/src/metrics.ts",

@@ -303,6 +303,10 @@ describe("show-host-supervisor", () => {
 
 describe("provider-manager", () => {
   it("runs the AX poll loop and the ProLink observer, then stops both", async () => {
+    // Fake timers first: start() schedules the poll interval synchronously,
+    // and an interval created under real timers is invisible to the fake
+    // clock (batch-17).
+    vi.useFakeTimers();
     const captured: { beat: ((beat: number, bpm: number | null) => void) | null } = { beat: null };
 
     const svc = new ProviderManager({
@@ -319,7 +323,6 @@ describe("provider-manager", () => {
     });
 
     expect(svc.start().state).toBe("running");
-    vi.useFakeTimers();
 
     try {
       // Deterministic clock: the poll loop is driven by setInterval.

@@ -9,8 +9,9 @@ function renderBpm(bpm: number | null): string {
   return bpm === null ? deckBpm(bpm) : `${deckBpm(bpm)} BPM`;
 }
 
-// Per-tab metric rows: each tab names the rows it owns; anything else falls
-// back to the stored string. Labels stay stable so a glance finds them.
+// Per-tab metric rows: each tab names the rows it owns. The rows array is
+// complete by construction, so every tab renders its own rows; the old
+// stored-string fallback branch was unreachable (batch-17).
 type MetricTab = Exclude<(typeof DIAGNOSTIC_TABS)[number], "DJ Events" | "Logs">;
 const TAB_ROWS: Record<MetricTab, readonly string[]> = {
   Transport: ["DJ link"],
@@ -23,8 +24,8 @@ const TAB_ROWS: Record<MetricTab, readonly string[]> = {
   "Track Resolver": ["Track"],
 };
 
-function TabMetrics({ tab, rows, fallback, sessionEvents }: {
-  tab: MetricTab | "Logs"; rows: { label: string; value: string }[]; fallback: string | undefined; sessionEvents: number;
+function TabMetrics({ tab, rows, sessionEvents }: {
+  tab: MetricTab | "Logs"; rows: { label: string; value: string }[]; sessionEvents: number;
 }): JSX.Element {
   if (tab === "Logs") {
     return <p className="font-timing text-sm tabular-nums">Session events: {sessionEvents}</p>;
@@ -32,9 +33,6 @@ function TabMetrics({ tab, rows, fallback, sessionEvents }: {
 
   const wanted = TAB_ROWS[tab];
   const found = rows.filter((r) => wanted.includes(r.label));
-  if (found.length === 0) {
-    return <p className="text-sm text-muted-foreground">{fallback ?? `${tab}: loading…`}</p>;
-  }
 
   return (
     <dl className="grid grid-cols-[140px_1fr] gap-x-3 gap-y-1.5 text-sm">
@@ -157,7 +155,7 @@ export function DiagnosticsView(): JSX.Element {
                 <p className="text-xs text-muted-foreground">Per-event rows land here when the recorder exposes them; the count above is live.</p>
               </div>
             ) : (
-              <TabMetrics tab={t} rows={rows} fallback={diagnostics[t]} sessionEvents={sessionEvents} />
+              <TabMetrics tab={t} rows={rows} sessionEvents={sessionEvents} />
             )}
           </TabsContent>
         ))}
