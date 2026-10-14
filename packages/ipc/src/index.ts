@@ -156,6 +156,14 @@ export const channels = {
     request: z.object({ version: v1, bpm: z.number().min(40).max(300) }),
     response: z.union([ok(z.object({ bpm: z.number().min(40).max(300), applied: z.boolean() })), errorSchema]),
   },
+  "venue/power": {
+    // The explicit inverse of a physical switch-off: sends power on/off over
+    // LAN and drops stale arming, so the next paint re-arms and repaints
+    // instead of writing frames into a dark fixture. Absent id = every
+    // enabled fixture.
+    request: z.object({ version: v1, on: z.boolean(), id: z.string().min(1).optional() }),
+    response: z.union([ok(z.object({ on: z.boolean(), applied: z.array(z.string()) })), errorSchema]),
+  },
   "venue/paint-stripes": {
     request: z.object({ version: v1, id: z.string(), zones: z.number().int().min(1).max(255) }),
     response: z.union([ok(z.object({ id: z.string(), zones: z.number() })), errorSchema]),

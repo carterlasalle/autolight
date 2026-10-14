@@ -54,12 +54,12 @@ function fromHex(hex: string): [number, number, number] | null {
 }
 
 /** Display label for a light: the registry name, else its SKU. */
-export function lightLabel(t: DeviceTile): string {
+function lightLabel(t: DeviceTile): string {
   return t.name === t.id ? t.sku : t.name;
 }
 
 /** HSV → RGB (h in degrees, s/v in 0..1). The wheel's single conversion. */
-export function hsvToRgb(h: number, s: number, v: number): [number, number, number] {
+function hsvToRgb(h: number, s: number, v: number): [number, number, number] {
   const c = v * s;
   const hh = (((h % 360) + 360) % 360) / 60;
   const x = c * (1 - Math.abs((hh % 2) - 1));
@@ -73,7 +73,7 @@ export function hsvToRgb(h: number, s: number, v: number): [number, number, numb
 }
 
 /** Hue of an RGB colour in degrees (0 = red). */
-export function hueOf(rgb: [number, number, number]): number {
+function hueOf(rgb: [number, number, number]): number {
   const r = rgb[0] / 255;
   const g = rgb[1] / 255;
   const b = rgb[2] / 255;
@@ -251,6 +251,13 @@ export function LightConsoleCard(): JSX.Element {
         <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="outline" onClick={blinder}>Blinder</Button>
           <Button size="sm" variant="outline" onClick={() => { useShell.getState().set({ altOn: false }); void typedInvoke("master/blackout", { version: 1 }); }}>Blackout</Button>
+          <Button
+            size="sm" variant="outline"
+            title="Power every enabled light back on after a switch-off, then re-arm the stream"
+            onClick={() => { void typedInvoke("venue/power", { version: 1, on: true }); }}
+          >
+            Lights on
+          </Button>
           <Button
             size="sm" variant="outline"
             onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); useShell.getState().set({ altOn: false }); void typedInvoke("master/full", { version: 1 }); }}

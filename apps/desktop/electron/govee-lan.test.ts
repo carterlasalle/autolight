@@ -260,4 +260,26 @@ describe("govee registry (venue hydration)", () => {
       mgr.stop();
     }
   });
+
+  it("power reaches a known fixture and rejects unknown ids", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "autolight-registry-"));
+    const path = join(dir, "govee-registry.json");
+
+    writeFileSync(path, JSON.stringify({
+      version: 1,
+      devices: [
+        { mac: "AA:BB:CC:DD:EE:0D", sku: "H6076", name: "Lamp", enabled: true, ipHistory: ["127.0.0.1"], rung: "cached-unicast", lastSeenMs: 12 },
+      ],
+    }));
+
+    const mgr = new GoveeLanManager({ ...quietOpts(path), replyPort: 0, loopbackScan: true });
+
+    try {
+      mgr.registrySnapshot();
+      await expect(mgr.setPower("AA:BB:CC:DD:EE:0D", true)).resolves.toEqual({ mac: "AA:BB:CC:DD:EE:0D", on: true });
+      await expect(mgr.setPower("AA:BB:CC:DD:EE:FF", true)).rejects.toThrow(/unknown device/);
+    } finally {
+      mgr.stop();
+    }
+  });
 });

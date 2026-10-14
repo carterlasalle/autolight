@@ -735,6 +735,47 @@ export function setVenueAlternateBpm(req: ChannelRequest<"venue/alternate-bpm">)
   return { ok: true, bpm: req.bpm, applied };
 }
 
+/** Power a fixture (or every enabled fixture) on/off over LAN — the explicit
+ *  inverse of a physical switch-off. Power-off stops the party runner first:
+ *  its repaints re-arm the fixture, which would undo the off immediately. */
+export function setVenuePower(on: boolean, id?: string): { ok: true; on: boolean; applied: string[] } {
+  const manager = govee();
+  const rows = manager.registrySnapshot();
+  const targets = id !== undefined
+    ? rows.filter((d) => d.mac === id || d.ip === id)
+    : rows.filter((d) => d.enabled);
+
+  if (id !== undefined && targets.length === 0) {
+    throw new Error(`unknown device ${id} (fix: scan the LAN first)`);
+  }
+
+  const applied = targets.map((t) => t.mac);
+  const svc = getShowService();
+
+  const run = (): void => {
+    for (const t of targets) {
+      void manager.setPower(t.mac, on)
+        .then((receipt) => { svc.recorder.record("venue/power", { ...receipt, name: t.name }); })
+        .catch((err: unknown) => {
+          svc.recorder.record("manual/failed", { op: "venue/power", mac: t.mac, message: err instanceof Error ? err.message : String(err) });
+        });
+    }
+  };
+
+  if (!on) {
+    void manager.stopAlternate()
+      .then((stopped) => {
+        if (stopped) svc.recorder.record("manual/alternate-stopped", { op: "venue/power" });
+        run();
+      })
+      .catch(() => run());
+  } else {
+    run();
+  }
+
+  return { ok: true, on, applied };
+}
+
 export function setVenueSegments(id: string, zones: number): { ok: true; id: string; zones: number } {
   govee().setZones(id, zones);
   getShowService().recorder.record("venue/segments", { id, zones });

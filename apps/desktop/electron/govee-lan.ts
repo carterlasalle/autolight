@@ -1333,6 +1333,32 @@ export class GoveeLanManager implements StreamTransport {
     entry.streamDesired = false;
   }
 
+  // -- power -------------------------------------------------------------------
+
+  /** Turn a fixture's power on/off over LAN and drop stale arming. After a
+   *  physical switch-off the fixture no longer honors razer frames, but the
+   *  manager may still believe it is armed; clearing that (with the stream)
+   *  makes the next paint re-arm and repaint the fixture instead of writing
+   *  frames into the dark. */
+  async setPower(mac: string, on: boolean): Promise<{ mac: string; on: boolean }> {
+    await this.start();
+    const entry = this.require(mac);
+
+    await this.enqueue(entry.mac, async () => {
+      await this.spaced(entry);
+      this.sendJson(entry.mac, turnCommand(on));
+      entry.armed = false;
+      this.closeStream(entry.mac);
+    });
+
+    this.saveRegistrySoon();
+    // Refresh the observed on/off state (and rtt) if the fixture answers; the
+    // receipt does not wait on it.
+    void this.requestDevStatus(entry.mac, { retryMs: 200, deadlineMs: 600, quiet: true }).catch(() => undefined);
+
+    return { mac: entry.mac, on };
+  }
+
   // -- blackout, white, brightness (T-GOV-09) -------------------------------------
 
   async blackout(mac: string): Promise<void> {
