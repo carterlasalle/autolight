@@ -1,0 +1,354 @@
+{
+ "packages/reactive-audio/src/index.ts": [
+  {
+   "path": "packages/reactive-audio/src/index.ts",
+   "content": "The comment claims the cap is now `audio.overlay.cap` times `style.reactiveAmount`, but `applyOverlay` has no `cap` parameter and hardcodes `MAX_OVERLAY_GAIN`. The configured `audio.overlay.cap` (registry key, `liveSafe: true`, default 0.2) is therefore silently ignored by this entry point, which is exactly the open F-AUD-04 defect. The new `overlay.ts` (`overlayAmount`/`applyOverlayScalar`/`applyOverlayLinear`) already takes the configured cap; either delegate to it or add a `cap` parameter here so callers can honor config.",
+   "existing_code": "export const MAX_OVERLAY_GAIN = 0.2; // Fixed cap; now audio.overlay.cap times style.reactiveAmount (T-AUD-03).",
+   "start_line": 2,
+   "end_line": 2,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/reactive-audio/src/index.ts",
+   "content": "This is additive gain, so black is relit: `applyOverlay(0, 1, 1)` returns `0.2` instead of `0`, breaking the documented \"black stays black / no relighting darkness\" invariant (F-AUD-02) that `overlay.ts` enforces (`if (p === 0) return 0`). The overlay must scale the planned value multiplicatively and return 0 when `planned` is 0.",
+   "existing_code": "  return Math.min(1, planned + clamped * MAX_OVERLAY_GAIN);",
+   "start_line": 5,
+   "end_line": 5,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/reactive-audio/src/index.ts",
+   "content": "`Math.min`/`Math.max` do not sanitize `NaN`, so a non-finite `energy` or `reactiveAmount` (e.g. from config or an uninitialized analyser) yields `NaN` and corrupts the planned brightness downstream (`Math.min(1, NaN)` is `NaN`). `overlay.ts` guards this via `clamp01` (`if (!Number.isFinite(v)) return 0`); apply the same finite-number guard here.",
+   "existing_code": "  const clamped = Math.min(1, Math.max(0, energy)) * Math.min(1, Math.max(0, reactiveAmount));",
+   "start_line": 4,
+   "end_line": 4,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/reactive-audio/src/index.ts",
+   "content": "When every option in `options` is on cooldown, `avail.length === 0`, so `seed % 0` is `NaN`, `avail[NaN]` is `undefined`, and the `?? \"hold\"` fallback silently selects a look that may itself be on cooldown \u2014 bypassing the cooldown policy with no error. `state.cooldowns` is caller-supplied, so this empty case is reachable. Guard `avail.length === 0` explicitly (e.g. fall back to the least-recently-used look or `hold` deliberately with a documented comment).",
+   "existing_code": "  const look = avail[seed % avail.length] ?? \"hold\";",
+   "start_line": 20,
+   "end_line": 20,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/reactive-audio/src/index.ts",
+   "content": "`seed` is used without normalization. Any negative value (or `-0`/float artifacts) makes `seed % avail.length` negative, so `avail[negative]` is `undefined` and the function always degrades to `\"hold\"`, defeating the adaptive selection for producers that emit negative seeds. Normalize with `((seed % n) + n) % n` before indexing.",
+   "existing_code": "export function nextLook(state: DirectorState, energyHigh: boolean, seed: number): { look: AdaptiveLook; state: DirectorState } {",
+   "start_line": 16,
+   "end_line": 16,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/reactive-audio/src/index.ts",
+   "content": "The non-null assertion `cooled[o]!` is false: options may include keys absent from `state.cooldowns`, so `cooled[o]` can be `undefined`. The code only works by relying on `undefined > 0 === false`. Use an explicit default (`(cooled[o] ?? 0) > 0`) so the absent-key semantics are intentional rather than hidden by the assertion.",
+   "existing_code": "  const avail = options.filter((o) => !(cooled[o]! > 0));",
+   "start_line": 19,
+   "end_line": 19,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/reactive-audio/src/timing.ts": [
+  {
+   "path": "packages/reactive-audio/src/timing.ts",
+   "content": "`BigInt(Math.round(latencyMs * 1e6))` throws a `RangeError` when `latencyMs` is non-finite (`NaN`/`Infinity`), and the result of the subtraction is never guarded. Two failure modes here:\n1. A bad `LatencyMeasurement` (e.g., deserialized qualification record, or `detectedAtMs - emittedAtMs` that somehow becomes non-finite) stored via `record()` will make `align()`/`alignFeature()` throw at runtime instead of failing safe.\n2. When the offset exceeds `captureTimeNs` (capture near stream start, or an over-measured offset) `showTimeNs` underflows to a negative `bigint`, which the correlation (T-LIVE-07) and adaptive clock (DS-23) consumers may treat as an invalid timestamp.\nValidate the input and clamp/handle the result.",
+   "suggestion_code": "  if (!Number.isFinite(latencyMs) || latencyMs < 0) {\n    throw new RangeError(`alignedShowTimeNs: invalid latencyMs ${latencyMs}`);\n  }\n  const offsetNs = BigInt(Math.round(latencyMs * 1e6));\n  return captureTimeNs > offsetNs ? captureTimeNs - offsetNs : 0n;",
+   "existing_code": "  return captureTimeNs - BigInt(Math.round(latencyMs * 1e6));",
+   "start_line": 37,
+   "end_line": 37,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/reactive-audio/src/timing.ts",
+   "content": "`record()` stores any `LatencyMeasurement` without validating `latencyMs` or `confidence`. A negative/non-finite `latencyMs` violates the `alignedShowTimeNs` contract (\"subtracted, never added\") \u2014 a negative value shifts show time forward and can crash `align()` via `BigInt`; a `confidence` outside [0, 1] silently propagates incorrect calibration quality downstream. Validate before accepting.",
+   "suggestion_code": "  record(measurement: LatencyMeasurement): void {\n    if (!Number.isFinite(measurement.latencyMs) || measurement.latencyMs < 0) {\n      throw new RangeError(`record: invalid latencyMs ${measurement.latencyMs}`);\n    }\n    if (!Number.isFinite(measurement.confidence) || measurement.confidence < 0 || measurement.confidence > 1) {\n      throw new RangeError(`record: invalid confidence ${measurement.confidence}`);\n    }\n    this.measurement = measurement;\n  }",
+   "existing_code": "  record(measurement: LatencyMeasurement): void {\n    this.measurement = measurement;\n  }",
+   "start_line": 63,
+   "end_line": 65,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/reactive-audio/src/timing.ts",
+   "content": "When `detectedAtMs < emittedAtMs` the difference is silently clamped to 0 with no signal to the caller, so an inverted emission/detection ordering or a clock-domain skew is presented as a valid zero-latency measurement. `confidence` is then computed against the clamped 0 (denominator `Math.max(1, 0)`), over-reporting calibration quality for a physically impossible result. Consider surfacing the inversion (e.g., return a sentinel or throw) rather than masking it.",
+   "existing_code": "  const latencyMs = Math.max(0, opts.detectedAtMs - opts.emittedAtMs);",
+   "start_line": 25,
+   "end_line": 25,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/rekordbox-live/src/link.test.ts": [
+  {
+   "path": "packages/rekordbox-live/src/link.test.ts",
+   "content": "The publish-wait loop recurses via `setImmediate` with no iteration cap or deadline. If `publish()` never produces a `setTempo` frame (e.g. the socket is closed, the write is dropped, or a future gating flag suppresses publishing), `published.promise` never settles and the whole suite hangs instead of failing with a clear message. Bound the loop with a deadline/attempt count and throw on timeout. Returning the matched line (see next comment) also lets the assertion validate the payload.",
+   "suggestion_code": "      const waitForPublish = async (): Promise<string> => {\n        for (let attempt = 0; attempt < 100; attempt += 1) {\n          const line = sidecar.received.find((entry) => entry.includes(\"setTempo\"));\n          if (line) return line;\n          await new Promise((resolve) => setImmediate(resolve));\n        }\n        throw new Error(\"sidecar never received a setTempo frame\");\n      };\n      const publishedLine = await waitForPublish();\n      expect(JSON.parse(publishedLine)).toEqual({ setTempo: 126 });",
+   "existing_code": "      const check = (): void => {\n        if (sidecar.received.join(\"\\n\").includes(\"setTempo\")) published.resolve();\n        else setImmediate(check);\n      };",
+   "start_line": 55,
+   "end_line": 58,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-live/src/link.test.ts",
+   "content": "The only check is that the received text contains the substring `setTempo`; the actual value (126) is never asserted. A publish path that writes a wrong or malformed tempo (e.g. `setTempo: 0`, `NaN`, or a string) would still pass. Parse the frame and assert the full payload.",
+   "suggestion_code": "      transport.publish({ tempo: 126 });\n      // publish() was called above; assert the exact frame below instead of a substring match.",
+   "existing_code": "      transport.publish({ tempo: 126 });",
+   "start_line": 53,
+   "end_line": 53,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/link.test.ts",
+   "content": "The transport is only stopped inside the `try` block; the `finally` closes only the fake server. If any assertion before `transport.stop()` throws, the client socket stays open and leaks into later tests. Worse, `stopFakeSidecar` calls `server.close()`, whose callback only fires once all existing connections have ended, so with the transport socket still open the `finally` itself can hang. Move `transport.stop()` into the `finally` (guarding against a double-stop) so teardown always runs.",
+   "suggestion_code": "    } finally {\n      await transport.stop();\n      await stopFakeSidecar(sidecar);\n    }",
+   "existing_code": "    } finally {\n      await stopFakeSidecar(sidecar);\n    }",
+   "start_line": 64,
+   "end_line": 66,
+   "category": "bug",
+   "severity": "high"
+  }
+ ],
+ "packages/serato/src/emulator.ts": [
+  {
+   "path": "packages/serato/src/emulator.ts",
+   "content": "`close()` can hang forever: it attaches a `'close'` listener and then calls `socket.end()`. If the socket has already been destroyed/closed (e.g. a connection error before or after `connect()` resolved, or the peer closed first), the `'close'` event has already been emitted and will never fire again, so `await promise` never settles and the test process hangs. Guard against the already-closed state (or race with a timeout).",
+   "suggestion_code": "    if (socket.destroyed || socket.closed) return;\n    const { promise, resolve } = Promise.withResolvers<void>();\n    socket.once(\"close\", () => resolve());\n    socket.end();\n    await promise;",
+   "existing_code": "    const { promise, resolve } = Promise.withResolvers<void>();\n    socket.once(\"close\", () => resolve());\n    socket.end();\n    await promise;",
+   "start_line": 320,
+   "end_line": 323,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/serato/src/emulator.ts",
+   "content": "`this.socket?.write(...)` silently no-ops when `socket` is null (never connected, or already nulled by `close()`). A script can therefore \"play\" successfully while emitting zero frames, and tests can pass without ever exercising the protocol. Consider throwing when there is no live socket so the failure is surfaced instead of hidden.",
+   "suggestion_code": "    this.recorded.push({ atMs: Date.now(), bytes, direction: \"sent\" });\n    if (!this.socket) throw new Error(\"send() called before connect() or after close()\");\n    this.socket.write(bytes);",
+   "existing_code": "    this.recorded.push({ atMs: Date.now(), bytes, direction: \"sent\" });\n    this.socket?.write(bytes);",
+   "start_line": 272,
+   "end_line": 273,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/serato/src/emulator.ts",
+   "content": "The `'error'` handler only rejects the `connect()` promise. Once the promise has settled, calling `reject` is a no-op, so all later socket errors (during handshake/playback) are swallowed with no cleanup and no propagation. Pending `awaiters` are left to time out after 4s instead of failing fast, and the caller never learns the connection broke. Store the error / reject pending waiters (see also `awaitPredicate`/`close`).",
+   "existing_code": "    socket.on(\"error\", reject);",
+   "start_line": 233,
+   "end_line": 233,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/serato/src/emulator.ts",
+   "content": "`setTimeout` here is never cleared, and waiters are only removed on match or timeout. A successful match leaves the timer alive (keeping the event loop busy for up to 4s), and on socket close/error the pending promise is neither resolved nor rejected, so callers see a generic 4s 'no ... from server' timeout instead of the real disconnect cause. Capture the timer handle and clear it on settle, and add a way to fail/reject outstanding waiters when the socket errors or closes. Also consider hoisting the hardcoded 4000 ms into a named constant.",
+   "existing_code": "    const { promise, resolve, reject } = Promise.withResolvers<OscMessage>();\n    const waiter = { match, resolve, reject, onTimeout };\n    this.waiters.push(waiter);\n    setTimeout(() => {",
+   "start_line": 338,
+   "end_line": 341,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/serato/src/emulator.ts",
+   "content": "The handshake couples success to the server sending `/Register/Status/Video/Mixer/Crossfader` and to that frame being the *last* one of the subscription burst. If the server subscribes to a different topic set, or emits the crossfader topic earlier/mid-burst, the topic list read back after this await is incomplete and the caller instead gets a generic 4s timeout rather than a clear protocol-mismatch error. Also, `register` is redundant: the first `/Register/Status/` address returned by `awaitMessagePrefix` is already contained in the filtered `receivedMessages` list, so `[...new Set([register, ...])]` would be identical without it.",
+   "existing_code": "    const register = await this.awaitMessagePrefix(\"/Register/Status/\");\n    // The subscription burst ends with the mixer topic; waiting for it proves\n    // every /Register/Status/... frame has arrived before we read them back.\n    await this.awaitMessage(\"/Register/Status/Video/Mixer/Crossfader\");",
+   "start_line": 261,
+   "end_line": 264,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/serato/src/emulator.ts",
+   "content": "This line is duplicated verbatim in ~9 places across the switch, and each occurrence relies on `as OscMessage` to hide the fact that indexing a 4-element array yields `OscMessage | undefined`. Extract a small helper (e.g. `filepathMessage(deckId, filePath)`) to remove the duplication and the unsafe cast.",
+   "existing_code": "      add(0, trackMessages(1, \"/music/fixture-a.mp3\", \"Fixture A\", \"Emulator\")[2] as OscMessage);",
+   "start_line": 105,
+   "end_line": 105,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/show-director/src/index.ts": [
+  {
+   "path": "packages/show-director/src/index.ts",
+   "content": "The final rotation `ranked[(state.phrase * 7) % Math.max(1, ranked.length)]` indexes into the ENTIRE ranked array, not just the top-preference tie group. The preceding sort only orders the array; since the modulo picks an arbitrary index across all candidates, the documented preference for an unused motif/palette is defeated (e.g. phrase 1 picks index 7 even when motifs[0]/palette are available). The sort is effectively dead logic. Rotate only within the highest-preference group so the tie-break cannot override the preference.",
+   "suggestion_code": "  const score = (l: PhraseLook): number =>\n    (state.motifs.includes(l.motif) ? 1 : 0) * 2 + (l.palette === state.palette ? 1 : 0);\n  const best = score(ranked[0]!);\n  const top = ranked.filter((l) => score(l) === best);\n  return top[(state.phrase * 7) % top.length] ?? ranked[0]!;",
+   "existing_code": "  return ranked[(state.phrase * 7) % Math.max(1, ranked.length)] ?? ranked[0]!;",
+   "start_line": 213,
+   "end_line": 213,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/show-director/src/index.ts",
+   "content": "When `candidates` is empty (all non-current looks cooled down, or only the current look exists), `usable`/`fallback` degrade to `pool.filter((l) => l.id !== last)` and then to the raw `pool`. The intermediate step can therefore re-emit a look whose cooldown is still active (violating the documented cooldown restraint), and the final `pool` fallback can even return the just-used look (violating the 'never pick the same look twice in a row' rule asserted in index.test.ts). Add an intermediate step that still excludes cooled-down looks before falling all the way back.",
+   "suggestion_code": "  const notLast = pool.filter((l) => l.id !== last);\n  const usable =\n    candidates.length > 0\n      ? candidates\n      : notLast.filter((l) => (state.cooldowns[l.id] ?? 0) <= 0);\n  const fallback = usable.length > 0 ? usable : notLast.length > 0 ? notLast : pool;",
+   "existing_code": "  const usable = candidates.length > 0 ? candidates : pool.filter((l) => l.id !== last);\n  const fallback = usable.length > 0 ? usable : pool;",
+   "start_line": 199,
+   "end_line": 200,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-director/src/index.ts",
+   "content": "`Math.max(1, phraseBeats)` does not guard against a non-finite phraseBeats: Math.max(1, NaN) is NaN, so phraseOf returns Math.floor(beat / NaN) === NaN. That NaN then flows into directorTick, where `phrase <= state.phrase` is always false, so a new look is picked on every tick and `state.phrase` is permanently corrupted to NaN. Validate phraseBeats (fall back to the default when not finite/positive).",
+   "suggestion_code": "  const span = Number.isFinite(phraseBeats) && phraseBeats >= 1 ? phraseBeats : DEFAULT_PHRASE_BEATS;\n  return Math.floor(beat / span);",
+   "existing_code": "  return Math.floor(beat / Math.max(1, phraseBeats));",
+   "start_line": 113,
+   "end_line": 113,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-director/src/index.ts",
+   "content": "If the supplied `library` does not contain the stored current look id (e.g. library swap/failover, or `minLooks` changed between ticks), `currentLook` is undefined while `phrase === state.phrase`, so the guard fails and directorTick picks a new look and returns `changed: true` even though no phrase boundary was crossed. This breaks the documented contract that `changed` is true only on a phrase advance, and callers keying effects off `changed` will fire spuriously mid-phrase. Handle the missing-current-look case explicitly (resolve or report consistency) instead of treating it as a phrase advance.",
+   "existing_code": "  if (phrase <= state.phrase && currentLook !== undefined) {",
+   "start_line": 231,
+   "end_line": 231,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-director/src/index.ts",
+   "content": "`DirectorInput.onset` is documented as driving accents for `audio-informed` ('lets live energy/onsets ... pick the energy level and accents') and is passed by callers (see index.test.ts line 77/83), but it is never read anywhere in this file (neither advisedEnergy nor directorTick). The accent behavior is therefore unimplemented / the field is dead. Either wire onset into the accent/energy decision or remove the field and update the docs.",
+   "existing_code": "  onset?: boolean;",
+   "start_line": 85,
+   "end_line": 85,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-director/src/index.ts",
+   "content": "`DirectorHint` declares three advisory kinds (`fader-rise`, `filter-sweep`, `transport`), and the header comment states FLX4 hints are 'consumed structurally as the same kind of advisory nudge'. However only `fader-rise` is handled; `filter-sweep` and `transport` are silently ignored, so live FLX4 expressive input (emitted by controller-flx4/integration.ts) has no effect. Confirm this is intended and document it, or handle the remaining hint kinds.",
+   "existing_code": "    if (hint.kind === \"fader-rise\" && hint.value > 0.7 && idx < order.length - 1) {",
+   "start_line": 176,
+   "end_line": 176,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/storage/src/logging.ts": [
+  {
+   "path": "packages/storage/src/logging.ts",
+   "content": "The spread order `...this.sessionFields(), ...extra` lets caller-supplied `extra` override the logger's own core fields (`timestamp`, `monoMs`, `module`, `severity`, `message`). Since `extra` is typed `Partial<LogFields>`, a caller (or forwarded worker payload) can silently replace these, producing records that no longer reflect this logger or the spec-130 schema. Build core fields last, or strip reserved keys from `extra` before spreading.",
+   "existing_code": "      severity,\n      message,\n      ...this.sessionFields(),\n      ...extra,\n    };",
+   "start_line": 69,
+   "end_line": 73,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/storage/src/logging.ts",
+   "content": "`state.suppressed` is incremented but never read anywhere, and `onSuppressed` is always invoked with the constant `1`. Consumers cannot distinguish a burst of N suppressed lines from N separate single suppressions, and any intent to report an accumulated count per window is never realized (the field is effectively dead). Also, the accumulated count is never flushed when the key changes or the window rolls over. Either surface `state.suppressed` (and reset it) when reporting, or drop the unused field.",
+   "existing_code": "      if (state.count > maxRepeated) {\n        state.suppressed += 1;\n        this.options.onSuppressed?.(1);\n        return;\n      }",
+   "start_line": 55,
+   "end_line": 59,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/storage/src/logging.ts",
+   "content": "The dedup key is only `${severity}:${message}`, ignoring contextual fields (`session`, `deck`, `track`, `fixture`, `event`). Two genuinely distinct events that share severity+message (e.g. the same error text for different decks/tracks) are treated as repeats and silently dropped within the window, causing real data loss. Include the contextual identifiers in the key (or require callers to make messages unique).",
+   "existing_code": "    const key = `${severity}:${message}`;",
+   "start_line": 51,
+   "end_line": 51,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/storage/src/logging.ts",
+   "content": "`timestamp` is derived from `monoMs` via `new Date(monoMs)`. The field name (and injectable `now`) implies a monotonic clock; if a caller injects `performance.now()` or another monotonic source, `monoMs` is not wall-clock epoch ms, so `timestamp` becomes a wrong (1970-based) time while still passing validation. Additionally, if `now()` returns an out-of-range value, `toISOString()` throws `RangeError`. Capture wall-clock time for `timestamp` independently (or document/enforce that `now` must be `Date.now`).",
+   "existing_code": "      timestamp: new Date(monoMs).toISOString(),",
+   "start_line": 66,
+   "end_line": 66,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/storage/src/logging.ts",
+   "content": "Required fields are validated individually above and then re-checked by this loop, so a single missing field yields two problems (e.g. `timestamp: missing or not an ISO date` plus `timestamp: missing`). This pollutes diagnostics and makes problem counts misleading. The core-field presence checks are redundant with the individual checks \u2014 drop this loop (or drop the presence clause from the individual checks).",
+   "existing_code": "  for (const key of LOG_SCHEMA_KEYS) {\n    if (!(key in row)) problems.push(`${key}: missing`);\n  }",
+   "start_line": 144,
+   "end_line": 146,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "packages/storage/src/logging.ts",
+   "content": "This only checks for the *presence* of `rawProtocol`; it never validates its type. In diagnostic mode a `rawProtocol` of any type (number, object, etc.) passes validation, contradicting the `LogFields.rawProtocol?: string` contract and potentially breaking downstream consumers that assume a string. Validate the type when the key is present.",
+   "existing_code": "  if (!diagnosticMode && \"rawProtocol\" in row) {\n    problems.push(\"rawProtocol: only allowed in diagnostic mode\");\n  }",
+   "start_line": 141,
+   "end_line": 143,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/storage/src/perf.test.ts": [
+  {
+   "path": "packages/storage/src/perf.test.ts",
+   "content": "`writeFileSync` is imported but never used in this file (persistence goes through `writeMeasurement`). Dead import \u2014 remove it.",
+   "suggestion_code": "import { mkdirSync, readFileSync } from \"node:fs\";",
+   "existing_code": "import { mkdirSync, readFileSync, writeFileSync } from \"node:fs\";",
+   "start_line": 2,
+   "end_line": 2,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/storage/src/perf.test.ts",
+   "content": "This test does not validate the committed evidence snapshot as its comment claims; it reads `measurementPath`, which defaults to a tmpdir file. So it actually validates the artefact written by the first test in the same run, and it will throw ENOENT (test fails) whenever the first test is filtered out or this test is run in isolation (e.g. `vitest run -t \"parseable\"`). Under AUTOLIGHT_PERF_REFRESH=1 it reads the file that test 1 just rewrote, so it is never the promised read-only check of the committed snapshot. Read the committed file explicitly so the guard is deterministic and actually covers the committed artefact.",
+   "suggestion_code": "    const committedPath = join(evidenceDir, \"measurement.json\");\n    const file = JSON.parse(readFileSync(committedPath, \"utf8\")) as { measurements: Measurement[]; generatedAt: string };",
+   "existing_code": "    const file = JSON.parse(readFileSync(measurementPath, \"utf8\")) as { measurements: Measurement[]; generatedAt: string };",
+   "start_line": 219,
+   "end_line": 219,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/storage/src/perf.test.ts",
+   "content": "The config snapshot hash records `qa.perf.ciSlack` as a hardcoded 3, but the actual run may use `ciSlack = 1` when `AUTOLIGHT_PERF_STRICT=1`. The stored `configHash` then does not describe the run that produced the measurements (the file separately records the real `ciSlack`), so strict and relaxed runs collapse to the same hash and any hash-keyed comparison/cache lookup loses its meaning. Feed the real value.",
+   "suggestion_code": "        \"qa.perf.ciSlack\": ciSlack,",
+   "existing_code": "        \"qa.perf.ciSlack\": 3,",
+   "start_line": 135,
+   "end_line": 135,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/storage/src/perf.test.ts",
+   "content": "`apps/desktop/package.json` is read and parsed twice for two adjacent fields; parse it once into a local constant. Also, the later assertions `expect(written.app.version).toBe(\"0.1.0\")` and `expect(written.measurements.length).toBe(8)` hardcode external facts: a legitimate version bump, or adding/removing a measurement, breaks the suite without any behavioural regression. Assert the derived values (e.g. compare against the parsed package fields, or that the expected measurement names are present) instead of literals.",
+   "existing_code": "      appName: JSON.parse(readFileSync(join(repoRoot, \"apps\", \"desktop\", \"package.json\"), \"utf8\")).name as string,\n      appVersion: JSON.parse(readFileSync(join(repoRoot, \"apps\", \"desktop\", \"package.json\"), \"utf8\")).version as string,",
+   "start_line": 128,
+   "end_line": 129,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/storage/src/perf.test.ts",
+   "content": "The deliberately injected stall is a single-tick event, so its pass/fail is evaluated with `statistic: \"p99\"`. Whether the stall lands in p99 depends on how many catch-up ticks the drift-corrected loop emits above the threshold after the busy-wait (here it just barely does, ~5 samples of ~201 exceed 15 ms, needing at least 3). A slightly different sample count or scheduler behaviour pushes the outlier outside p99, the measurement passes, and `failedMeasurements(...)` no longer equals `[\"showHost.tickJitterWith20msStall\"]`. Use `statistic: \"max\"` (as the `jitter?.max` assertion already relies on) or make the stall span enough ticks to deterministically enter p99.",
+   "suggestion_code": "      summarise(\"showHost.tickJitterWith20msStall\", \"ms\", stalledJitter, {\n        threshold: thresholds.tickJitterP99Ms,\n        statistic: \"max\",\n      }),",
+   "existing_code": "      summarise(\"showHost.tickJitterWith20msStall\", \"ms\", stalledJitter, {\n        threshold: thresholds.tickJitterP99Ms,\n        statistic: \"p99\",\n      }),",
+   "start_line": 110,
+   "end_line": 113,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/storage/src/perf.test.ts",
+   "content": "This assertion requires the injected stall to be the only failing measurement, but the non-stall measurements use host-dependent wall-clock timings. On a loaded host render/IPC/DJ can exceed even the relaxed 3x thresholds (the file's own comment notes a dev host measuring ~6.7 ms against a 3x10 ms-ish budget), so `failedMeasurements` may contain extra names and the test fails spuriously; conversely a genuine regression on a fast host can slip under the slack. The assertion is therefore both flaky and weak as a regression gate \u2014 consider asserting that the stall entry is among the failures (or pin deterministic/mocked timing) rather than exact equality.",
+   "existing_code": "    expect(failedMeasurements(file).map((m) => m.name)).toEqual([\"showHost.tickJitterWith20msStall\"]);",
+   "start_line": 171,
+   "end_line": 171,
+   "category": "test",
+   "severity": "medium"
+  }
+ ]
+}

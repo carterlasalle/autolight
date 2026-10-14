@@ -1,0 +1,307 @@
+{
+ "apps/desktop/src/routes/venue/room.test.ts": [
+  {
+   "path": "apps/desktop/src/routes/venue/room.test.ts",
+   "content": "Test name claims it \"walks the ten wizard steps and explains mirrored splits\", but this only renders step 1 statically. The Next/Back navigation and the mirrored-split explanation (in mapping-wizard.tsx only rendered when `step === 3 && direction === \"both\"`) are never reached, so the test passes even if navigation and the split note are completely broken. The third assertion is also just a substring of the step-1 label, so it verifies nothing about splits. Make the initial step injectable or drive the wizard (advance steps / select \"both\") to actually test the claimed behavior.",
+   "existing_code": "    const html = renderToStaticMarkup(createElement(MappingWizard, { onDone: () => undefined }));",
+   "start_line": 27,
+   "end_line": 27,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/src/routes/venue/room.test.ts",
+   "content": "\"previews the real room with live cells and a beat control\" is not verifiable via renderToStaticMarkup: the `useMemo` cell recomputation and the beat input's `onChange` are never invoked, and the assertions only check two aria-label strings. A regression that renders zero cells (the SVG circles in room-preview.tsx) or breaks the beat handler would still pass. Assert the rendered cell count and exercise the beat control (e.g. with @testing-library/react) rather than relying on label presence.",
+   "existing_code": "    const html = renderToStaticMarkup(createElement(RoomPreview, { roomId: \"square-loop\" }));",
+   "start_line": 34,
+   "end_line": 34,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/src/routes/venue/room.test.ts",
+   "content": "These assertions only check that label strings appear in the static HTML. A broken drag-driven resize (onChange no-op, wrong input type, or a numeric field that never updates the room) would still satisfy every `toContain` check, so the test cannot fail for the behavior named (\"numeric alternatives for every drag\"). Drive the inputs and assert the room/state actually changes.",
+   "existing_code": "    const html = renderToStaticMarkup(createElement(RoomVenueRoute));",
+   "start_line": 10,
+   "end_line": 10,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/routes/venue/room.test.ts",
+   "content": "Only the 5x5 -> 10x5 happy path is covered. Degenerate/invalid inputs the drag path could produce (a zero-width outline, 0/negative/NaN widthM/depthM) and the DJ-position fallback branch in rescaleOutline (when the scaled DJ anchor falls outside the new bounds) are never exercised, so a regression in the clamp/fallback logic would go undetected. Add cases for invalid dims and for a DJ anchor that lands outside the rescaled bounds.",
+   "existing_code": "    const room = { ...rectangleRoom(5, 5), ceilingHeight: 3.2 };",
+   "start_line": 17,
+   "end_line": 17,
+   "category": "test",
+   "severity": "medium"
+  }
+ ],
+ "packages/govee/src/firmware.ts": [
+  {
+   "path": "packages/govee/src/firmware.ts",
+   "content": "Config sanitization does not guard NaN/Infinity. `Math.floor(NaN)` is `NaN`, so `Math.max(0, NaN)` stays `NaN`; then `this.rearmAt.length >= this.maxRearm` is always false and `mayRearm()` never throttles (unbounded retries). Likewise `Math.max(1, NaN)` is `NaN`, so the prune predicate `now - rearmAt[0] >= this.windowMs` is always false and entries never expire, permanently suppressing rearm after `maxRearm` pushes. `Infinity` for either option reproduces the same failure. Validate with `Number.isFinite` before applying the bounds.",
+   "suggestion_code": "    const maxRearmAttempts = options.maxRearmAttempts ?? DEFAULT_MAX_REARM;\n    this.maxRearm = Number.isFinite(maxRearmAttempts)\n      ? Math.max(0, Math.floor(maxRearmAttempts))\n      : DEFAULT_MAX_REARM;\n    const rearmWindowMs = options.rearmWindowMs ?? DEFAULT_REARM_WINDOW_MS;\n    this.windowMs = Number.isFinite(rearmWindowMs) && rearmWindowMs > 0\n      ? rearmWindowMs\n      : DEFAULT_REARM_WINDOW_MS;",
+   "existing_code": "    this.maxRearm = Math.max(0, Math.floor(options.maxRearmAttempts ?? DEFAULT_MAX_REARM));\n    this.windowMs = Math.max(1, options.rearmWindowMs ?? DEFAULT_REARM_WINDOW_MS);",
+   "start_line": 34,
+   "end_line": 35,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/govee/src/firmware.ts",
+   "content": "`\"unmeasured\"` is used as a sentinel in the next branch, but it is not excluded here. When both `savedFirmware` and `currentFirmware` equal `\"unmeasured\"`, `known` becomes true, so the first branch can return `gate: \"segmented\"` with reason \"firmware matches the qualified record\" and a null warning \u2014 bypassing the unmeasured warning and the rule that fallback is only to a verified capability. Exclude the sentinel from the equality match.",
+   "suggestion_code": "    const known =\n      currentFirmware !== \"\" &&\n      currentFirmware !== \"unmeasured\" &&\n      currentFirmware === savedFirmware;",
+   "existing_code": "    const known = currentFirmware !== \"\" && currentFirmware === savedFirmware;",
+   "start_line": 40,
+   "end_line": 40,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/govee/src/firmware.ts",
+   "content": "The sliding-window eviction assumes the injected `clock` is monotonic. A backward step (NTP/manual adjustment) makes `now - rearmAt[0]` negative so no entry ever satisfies `>= windowMs`, entries are never evicted, and rearm is permanently disabled; a large forward jump flushes all history and allows an immediate burst exceeding the intended budget. Guard against non-monotonic timestamps (e.g. detect `now < lastSeen` and reset, or clamp `now` to at least the last observed time).",
+   "existing_code": "    const now = this.clock();\n    while (this.rearmAt.length > 0 && now - this.rearmAt[0]! >= this.windowMs) this.rearmAt.shift();\n    if (this.rearmAt.length >= this.maxRearm) return false;",
+   "start_line": 67,
+   "end_line": 69,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/govee/src/firmware.ts",
+   "content": "The same sliding-window eviction block is duplicated in `mayRearm` and `rearmCount`. A fix to the pruning/budget logic in one path can silently diverge from the other, causing `rearmCount()` to report a count inconsistent with `mayRearm()`'s budget accounting. Extract a private helper (e.g. `pruneRearm(now)`) and reuse it in both methods.",
+   "existing_code": "  rearmCount(): number {\n    const now = this.clock();\n    while (this.rearmAt.length > 0 && now - this.rearmAt[0]! >= this.windowMs) this.rearmAt.shift();\n    return this.rearmAt.length;\n  }",
+   "start_line": 74,
+   "end_line": 78,
+   "category": "maintainability",
+   "severity": "medium"
+  }
+ ],
+ "packages/reactive-audio/src/overlay.test.ts": [
+  {
+   "path": "packages/reactive-audio/src/overlay.test.ts",
+   "content": "Tautological assertion: the expected value is computed from the same `DEFAULT_OVERLAY_CAP` imported from the module under test, so if the default cap regresses (e.g. changed to 0.5), `Math.min(1, 0.4 * (1 + DEFAULT_OVERLAY_CAP))` silently changes along with it and the test still passes. It proves nothing about the constant or the default-cap code path. Pin the expected value to a literal so the contract is actually asserted.",
+   "suggestion_code": "    // With default cap 0.2 and full energy: 0.4 * 1.2 = 0.48.\n    expect(darkRed).toEqual([0.48, 0, 0]);",
+   "existing_code": "    expect(darkRed).toEqual([Math.min(1, 0.4 * (1 + DEFAULT_OVERLAY_CAP)), 0, 0]);",
+   "start_line": 36,
+   "end_line": 36,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "packages/reactive-audio/src/overlay.test.ts",
+   "content": "The hue test derives `gain` from the output itself and only checks that the three per-channel ratios are equal. If the overlay were a no-op (gain === 1, every channel unchanged), all three ratios would still be equal and the test would pass. Add a ground-truth assertion that the overlay actually bumped the light (expected gain 1.1 here) and exercise the case where hue could realistically break: a channel that saturates at 1 while others do not (e.g. planned near [1, 0.2, 0.1]), which is exactly where clamped scaling would shift hue.",
+   "suggestion_code": "    const gain = out[0]! / planned[0]!;\n    // Ground truth: cap 0.2 * amount 0.5 at full energy => gain 1.1.\n    expect(gain).toBeCloseTo(1.1, 12);\n    expect(out[1]! / planned[1]!).toBeCloseTo(gain, 12);\n    expect(out[2]! / planned[2]!).toBeCloseTo(gain, 12);",
+   "existing_code": "    const gain = out[0]! / planned[0]!;\n    expect(out[1]! / planned[1]!).toBeCloseTo(gain, 12);\n    expect(out[2]! / planned[2]!).toBeCloseTo(gain, 12);",
+   "start_line": 31,
+   "end_line": 33,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "packages/reactive-audio/src/overlay.test.ts",
+   "content": "Upper-bound-only clamp assertion: `toBeLessThanOrEqual(1)` is satisfied by any value <= 1, including 0.9 (no bump applied) or a wrong value from an off-by-one clamp. At cap=0.2, amount=1, energy=1 the expected result is exactly 1 (0.9 * 1.2 = 1.08 clamped to 1), so assert the exact clamped value and also cover a case that must NOT clamp to distinguish the two paths.",
+   "suggestion_code": "    expect(applyOverlayScalar(0.9, 1, 1, cap)).toBe(1);\n    expect(applyOverlayScalar(0.8, 1, 1, cap)).toBeCloseTo(0.8 * (1 + cap), 12);",
+   "existing_code": "    expect(applyOverlayScalar(0.9, 1, 1, cap)).toBeLessThanOrEqual(1);",
+   "start_line": 24,
+   "end_line": 24,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/reactive-audio/src/overlay.test.ts",
+   "content": "`applyOverlayScalar(2, 5, 5)` exercises out-of-range planned, energy and reactiveAmount together with the default cap at once, so a failing result cannot be attributed to the intended clamp. Use isolated cases (e.g. energy>1 with valid amount, negative/zero amount, planned>1) and add the non-finite edge cases that `clamp01` explicitly handles (NaN/Infinity) \u2014 currently untested, so a regression in the `Number.isFinite` branch would go unnoticed.",
+   "suggestion_code": "    expect(applyOverlayScalar(2, 1, 0, 0.2)).toBe(1); // clamps planned only\n    expect(applyOverlayScalar(0.5, 5, 0, 0.2)).toBeCloseTo(0.5, 12); // clamps energy only\n    expect(applyOverlayScalar(-1, 1, 1)).toBe(0);\n    expect(overlayAmount(99, 99)).toBe(1);\n    expect(applyOverlayScalar(0.5, NaN, 1)).toBeCloseTo(0.5, 12); // non-finite energy\n    expect(overlayAmount(Infinity, 1)).toBe(1);",
+   "existing_code": "    expect(applyOverlayScalar(2, 5, 5)).toBe(1);\n    expect(applyOverlayScalar(-1, 1, 1)).toBe(0);\n    expect(overlayAmount(99, 99)).toBe(1);",
+   "start_line": 46,
+   "end_line": 48,
+   "category": "test",
+   "severity": "medium"
+  }
+ ],
+ "packages/show-planner/src/recurrence.ts": [
+  {
+   "path": "packages/show-planner/src/recurrence.ts",
+   "content": "`_core` is declared but never read: the core colour input is silently discarded and `coreHue` is derived only from `s.kind.length`. Because two sections of the same kind always produce the same length, their `coreHue` values are always identical, so `hueDiff` is always 0 and `hueSim` is always 1 in `sectionSimilarity`. The 0.3 hue term therefore becomes a constant added to every same-kind comparison and actual colour data can never influence motif grouping (contradicting the module's stated colour-aware design). Either use the passed `core` (e.g. `_core[i]?.h ?? ...`) to drive `coreHue`, or drop the parameter/term so the score honestly reflects only energy and length.",
+   "existing_code": "    coreHue: (s.kind.length * 137) % 360,",
+   "start_line": 35,
+   "end_line": 35,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/show-planner/src/recurrence.ts",
+   "content": "`sectionSimilarity` returns exactly 0 for sections of differing kinds, but this guard uses `>= threshold`. When `config.similarityThreshold` is 0 (or negative \u2014 it is a plain config number with no enforced lower bound) `0 >= 0` is true, so a section of a completely different kind will be merged into the first group, directly violating the documented invariant that dissimilar sections never share a motif. Guard the comparison, e.g. reject a zero/negative similarity or require `sectionSimilarity(...) > 0 && ... >= threshold` (or clamp threshold to a positive minimum).",
+   "existing_code": "      if (sectionSimilarity(s, first) >= threshold) {",
+   "start_line": 73,
+   "end_line": 73,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/show-planner/src/recurrence.ts",
+   "content": "Each section is compared only against the first member of each existing group and accepted on a single match, so group membership is neither transitive nor order-independent: a section can join a group while being below `similarityThreshold` relative to the group's other members, and simply reordering the input can produce different motif assignments. Compare against a representative/centroid of the group (or the minimum similarity across all members) so grouping is stable regardless of iteration order.",
+   "existing_code": "    for (const g of groups) {\n      const first = summaries[g.members[0]!]!;",
+   "start_line": 71,
+   "end_line": 72,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/recurrence.ts",
+   "content": "Behaviour-tuning values are hardcoded in planner modules instead of coming from `PlannerConfigSnapshot`: recurrence.ts bakes in the `static-look` baseLook, identity.ts embeds impact-budget/darkness-horizon and probability weights, and validate.ts carries the `2`/`32` density/palette window divisors. Per the project contract, every planner number should live in config so these can be tuned and kept in sync; extract them into named config fields/constants.",
+   "existing_code": "        baseLook: \"static-look\",",
+   "start_line": 109,
+   "end_line": 109,
+   "category": "maintainability",
+   "severity": "medium"
+  }
+ ],
+ "packages/show-planner/src/restraint.ts": [
+  {
+   "path": "packages/show-planner/src/restraint.ts",
+   "content": "Restraint state is tracked but never enforced: `strobeWindowBeats` is never advanced, so `duty` is always 0 and cumulative strobe-duty limiting never happens; likewise `lastStrobeBeat`/`lastPaletteChange`/`sectionStartBeat`/`strobeBeats` are written but never read, so the intended strobe-gap, palette-spacing and section-start limits are not actually enforced. Either implement the checks (advance a rolling window, read the fields) or remove the dead state so the limits are not falsely advertised.",
+   "existing_code": "    const duty = state.strobeWindowBeats > 0 ? state.strobeBeats / state.strobeWindowBeats : 0;\n    if (duty + durationBeats / 64 > config.strobeMaxDuty * scale + 0.02) {",
+   "start_line": 135,
+   "end_line": 136,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/show-planner/src/restraint.ts",
+   "content": "State is mutated before the final verdict is known. After the white-hit-specific checks pass, `lastWhiteHitBeat`/`blinderBeats` are committed immediately, but the later direction/family/impact checks (and `notePattern`) can still return `substitute`/`reject`. The rejected/replaced event has therefore already advanced the white-hit gap and consumed counters, wrongly suppressing or distorting subsequent legal white hits and impacts. Compute the complete verdict against a copy (or defer all writes) and commit state only once the final decision is `accept` (or the intended substituted effect).",
+   "existing_code": "    state.lastWhiteHitBeat = beat;\n    state.blinderBeats += durationBeats;",
+   "start_line": 118,
+   "end_line": 119,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/show-planner/src/restraint.ts",
+   "content": "The same impact budget is enforced two inconsistent ways. `restrain` gates white-hit on `wholeTrackImpactCount >= trackImpactMax * scale` (scaled by `0.5 + impactAggression`) and never accounts for the rejected event's counters itself, whereas `requestBlinder` compares against the unscaled `trackImpactMax` and never checks `sectionImpactCount` at all. Additionally the impact counters are only incremented in the `opts.impact` block, so a white-hit routed through `restrain` without `impact: true` consumes no budget while still being gated by those counters. This yields divergent limits for the same budget and lets the white-hit path bypass accounting. Use one shared budget check (same scaling and both section + track counters) for every impact-producing path.",
+   "existing_code": "  if (state.wholeTrackImpactCount >= config.trackImpactMax) {\n    return { decision: \"reject\", reason: \"blinder request over the track impact budget\" };",
+   "start_line": 209,
+   "end_line": 210,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/restraint.ts",
+   "content": "On a repeated spatial direction the verdict substitutes with `substitute: type`, i.e. the identical effect type, so the substitution is a no-op that does not actually vary the show. A caller that honours `verdict.substitute` verbatim will emit the same repeated cue. Return a genuinely different effect (e.g. `\"pulse\"`, as `notePattern` does) or drop the misleading substitute.",
+   "existing_code": "          substitute: type,",
+   "start_line": 160,
+   "end_line": 160,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/show-runtime/src/index.ts": [
+  {
+   "path": "packages/show-runtime/src/index.ts",
+   "content": "`observeRate` only ever appends to `scratch.reversals` and never prunes it (both `seekWorld` and `initialScratchState` reset it, but a long session between seeks keeps growing it). `recentReversals` filters the whole array on every tick, so the array is both an unbounded memory growth and an O(n)-per-tick scan. Prune the array to the reversal window when appending.",
+   "suggestion_code": "  const windowNs = BigInt(Math.round(REVERSAL_WINDOW_SECONDS * 1e9));\n  const kept = scratch.reversals.filter((ns) => state.receivedAtNs - ns <= windowNs);\n  const reversals = reversed ? [...kept, state.receivedAtNs] : kept;\n  return { ...scratch, reversals, lastRate: state.playRate };",
+   "existing_code": "  const reversals = reversed ? [...scratch.reversals, state.receivedAtNs] : scratch.reversals;\n  return { ...scratch, reversals, lastRate: state.playRate };",
+   "start_line": 183,
+   "end_line": 184,
+   "category": "performance",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-runtime/src/index.ts",
+   "content": "The blend branch never checks that `inputs.djBpm > 0`. `djBpm` is derived from `lastKnown.beatsPerSecond * 60`, and `beatsPerSecond` is `tempoBps * playRate`, i.e. negative during reverse playback (and 0 when paused). With a negative `djBpm` the computed `bpm` can be <= 0; `atTempo` correctly rejects it (returns null), but the fallback then returns `{ beat: audio, bpm, source: \"blend\" }` with the non-positive `bpm`. Consumers advancing the adaptive clock at that tempo will freeze or run the clock backwards. Guard `djBpm` and the returned `bpm`.",
+   "suggestion_code": "    const bpm = (Math.max(0, inputs.djBpm) + inputs.audioBpm * audioWeight) / (1 + audioWeight);\n    const blended = atTempo(inputs.djBeat, bpm, inputs.djAnchorNs);\n    if (blended !== null) return { beat: blended, bpm, source: \"blend\" };\n    if (audio !== null && bpm > 0) return { beat: audio, bpm, source: \"blend\" };",
+   "existing_code": "    const bpm = (inputs.djBpm + inputs.audioBpm * audioWeight) / (1 + audioWeight);\n    const blended = atTempo(inputs.djBeat, bpm, inputs.djAnchorNs);\n    if (blended !== null) return { beat: blended, bpm, source: \"blend\" };\n    if (audio !== null) return { beat: audio, bpm, source: \"blend\" };",
+   "start_line": 408,
+   "end_line": 411,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/show-runtime/src/index.ts",
+   "content": "`resumeBeat`/`pendingResume` are the only product of `quantizeResume`, but `kind` is forced to `\"none\"` immediately. `overrideEffect` keys off `state.kind`, so the override is already released in the same call and the pending-window is inert: the quantized release boundary never actually holds the override until `resumeBeat`. On top of that, `tickWorld` discards the `resumed` flag from `advanceOverride`, so no consumer can observe the quantized resumption either. The documented \"Resuming automation quantizes to the requested boundary\" behaviour is therefore not implemented. Either keep the previous override kind until the boundary and clear it in `advanceOverride`, or propagate `resumed` through the tick.",
+   "existing_code": "  const resumeBeat = quantizeResume(opts.beat, at, opts.grid ?? null);\n  return { ...prev, kind: \"none\", resumeAt: at, whiteIntensity, resumeBeat, pendingResume: resumeBeat > opts.beat };",
+   "start_line": 305,
+   "end_line": 306,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-runtime/src/index.ts",
+   "content": "`installPlan`/`installModel` blindly overwrite `world.generation` with whatever generation is passed, and they share the same `generation` field. An out-of-order/stale install (plan gen N, then model gen N-1, or a late plan for an old generation) silently clobbers the newer artefacts while `tickWorld` keeps emitting `generation: world.generation`. Add a monotonic guard so a generation lower than the current one is rejected (or at least so plan and model cannot regress each other).",
+   "existing_code": "export function installPlan(world: DeckWorld, generation: number, plan: ShowPlan | null): void {\n  world.plan = plan;\n  world.generation = generation;\n}",
+   "start_line": 571,
+   "end_line": 574,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-runtime/src/index.ts",
+   "content": "`trackDeck` rebuilds the scratch state on every call via `initialScratchState(prevBeat)`, so `observeRate` only ever sees the default `lastRate` and can record at most one reversal per call. Consequently `recentReversals(...) >= opts.minReversalsPerSec` (default 2) can never be true, making the reversal-based half of `scratchDetected` dead in this compat path. It should carry the previous scratch state across calls (or accept one as an argument) instead of recreating it.",
+   "existing_code": "  const scratch = observeRate(initialScratchState(prevBeat), obs);",
+   "start_line": 851,
+   "end_line": 851,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-runtime/src/index.ts",
+   "content": "The fallback branches contradict the documented contract above (\"bar/phrase boundaries ... never from multiples of 4 and 16\"). When `grid` is null, or provided but its `barBeats`/`phraseBeats` array is empty (e.g. `resumeGridFromModel` on a model with no downbeats/sections), `nextBoundary` returns null and this silently produces off-grid resume points from synthetic 4/16 multiples. Either drop the synthetic fallback or clearly document that it is a degraded approximation.",
+   "existing_code": "  if (at === \"beat\") return Math.ceil(beat);\n  if (at === \"bar\") return Math.ceil(beat / 4) * 4;\n  return Math.ceil(beat / 16) * 16;",
+   "start_line": 231,
+   "end_line": 233,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-runtime/src/index.ts",
+   "content": "The estimation path is chosen by `fresh` (gated on `estimatorOptions.seekThresholdMs`, default 150ms) while `clockHealth`/`motionFactor` use the independent `HEALTH_EXTRAPOLATE_MS` (500) / `HEALTH_HOLD_MS` (2000) thresholds, and `clockSource` is derived from `health`, not from the branch actually taken. With the defaults this happens to align, but a `DeckWorldOptions.estimator` override with `seekThresholdMs > 500` makes the `fresh` branch run `estimator.observe` while `health === \"holding\"`, so the tick reports `clockSource: \"hold\"` and a faded `motion` even though a fresh observation was used. Derive `clockSource` from the branch that produced `estimated` (or reuse the same threshold set) to keep the reported source/motion consistent with reality.",
+   "existing_code": "  const fresh = ageMs <= world.estimatorOptions.seekThresholdMs;",
+   "start_line": 653,
+   "end_line": 653,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/storage/src/index.ts": [
+  {
+   "path": "packages/storage/src/index.ts",
+   "content": "The DELETE key is a strict subset of the table's PRIMARY KEY `(track_id, schema_version, analyzer_version, config_hash, fingerprint)` here it omits `schema_version` and `config_hash`. As a result, saving one artifact variant deletes every other valid variant for the same track/analyzer/fingerprint (e.g. an artifact cached under a different config hash), which directly contradicts cache.ts's documented policy that \"a different snapshot is a different cache entry, never a silently reused one\". Additionally the DELETE and INSERT are not wrapped in a transaction, so if the INSERT throws (or a concurrent writer interleaves) the previously valid row is already gone and the cache is left empty. Delete using the full primary key and make the replace atomic.",
+   "suggestion_code": "    this.driver.run(\"BEGIN\");\n    try {\n      this.driver.run(\n        `DELETE FROM analysis_artifacts\n         WHERE track_id = ? AND schema_version = ? AND analyzer_version = ? AND config_hash = ? AND fingerprint = ?`,\n        [trackId, schemaVersionValue, analyzerVersion, configHash, fingerprint],\n      );\n      this.driver.run(\n        `INSERT INTO analysis_artifacts\n           (track_id, schema_version, analyzer_version, config_hash, fingerprint, artifact_path, created_at)\n         VALUES (?, ?, ?, ?, ?, ?, datetime('now'))`,\n        [trackId, schemaVersionValue, analyzerVersion, configHash, fingerprint, artifactPath],\n      );\n      this.driver.run(\"COMMIT\");\n    } catch (error) {\n      this.driver.run(\"ROLLBACK\");\n      throw error;\n    }",
+   "existing_code": "      \"DELETE FROM analysis_artifacts WHERE track_id = ? AND analyzer_version = ? AND fingerprint = ?\",\n      [trackId, analyzerVersion, fingerprint],",
+   "start_line": 159,
+   "end_line": 160,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/storage/src/index.ts",
+   "content": "Same defect as saveArtifact: the DELETE uses only `(track_id, style_id, planner_version)` but the table's PRIMARY KEY is `(track_id, style_id, planner_version, style_hash, venue_class, config_hash)`. Saving a plan for one style/venue/config variant wipes every other valid plan variant for the same track, style and planner, so a lookup via the full-key `planRow` (which filters all six columns) will then miss rows that should still be cacheable. The delete+insert is also non-transactional, so an INSERT failure leaves the plan cache empty. Delete by the full primary key inside a transaction.",
+   "suggestion_code": "    this.driver.run(\"BEGIN\");\n    try {\n      this.driver.run(\n        `DELETE FROM show_plans\n         WHERE track_id = ? AND style_id = ? AND planner_version = ? AND style_hash = ? AND venue_class = ? AND config_hash = ?`,\n        [\n          trackId,\n          styleId,\n          plannerVersion,\n          extra.styleHash ?? \"\",\n          extra.venueClass ?? \"\",\n          extra.configHash ?? \"\",\n        ],\n      );\n      this.driver.run(\n        `INSERT INTO show_plans\n           (track_id, style_id, planner_version, schema_version, source_fingerprint, style_hash, venue_class, config_hash, seed, plan_json, created_at)\n         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,\n        [\n          trackId,\n          styleId,\n          plannerVersion,\n          extra.schemaVersion ?? CACHE_SCHEMA_VERSION,\n          extra.sourceFingerprint ?? \"\",\n          extra.styleHash ?? \"\",\n          extra.venueClass ?? \"\",\n          extra.configHash ?? \"\",\n          seed,\n          planJson,\n        ],\n      );\n      this.driver.run(\"COMMIT\");\n    } catch (error) {\n      this.driver.run(\"ROLLBACK\");\n      throw error;\n    }",
+   "existing_code": "    this.driver.run(\"DELETE FROM show_plans WHERE track_id = ? AND style_id = ? AND planner_version = ?\", [\n      trackId,\n      styleId,\n      plannerVersion,\n    ]);",
+   "start_line": 205,
+   "end_line": 209,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/storage/src/index.ts",
+   "content": "`migrate()` can throw (e.g. it refuses downgrades, and adoptLegacyBaseline/migration SQL may fail). If it throws here, the driver opened just above is never closed, leaking the underlying SQLite connection and its file handle/lock. Wrap the migration call so the driver is closed on failure (and rethrow).",
+   "suggestion_code": "    if (options.skipMigrations !== true) {\n      try {\n        migrate(this.driver);\n      } catch (error) {\n        this.driver.close();\n        throw error;\n      }\n    }",
+   "existing_code": "    if (options.skipMigrations !== true) migrate(this.driver);",
+   "start_line": 110,
+   "end_line": 110,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/storage/src/index.ts",
+   "content": "`PlanKeyParts` carries `sourceFingerprint` and cache.ts treats the source fingerprint as part of the plan cache key (`planKey`/`planFresh`), but this query ignores it. Combined with the fact that `source_fingerprint` is not part of the table's primary key, a plan generated for a previous version of the track file can be returned for the new fingerprint until `saveShowPlan` happens to overwrite it (fastpath's only freshness check is trackId/styleId, not fingerprint). Add the source fingerprint to the WHERE clause (or explicitly document why it is intentionally excluded).",
+   "suggestion_code": "      `SELECT * FROM show_plans\n       WHERE track_id = ? AND style_id = ? AND planner_version = ? AND source_fingerprint = ? AND style_hash = ? AND venue_class = ? AND config_hash = ?\n       ORDER BY rowid DESC LIMIT 1`,",
+   "existing_code": "      `SELECT * FROM show_plans\n       WHERE track_id = ? AND style_id = ? AND planner_version = ? AND style_hash = ? AND venue_class = ? AND config_hash = ?\n       ORDER BY rowid DESC LIMIT 1`,",
+   "start_line": 241,
+   "end_line": 243,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ]
+}

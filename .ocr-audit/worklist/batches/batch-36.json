@@ -1,0 +1,249 @@
+{
+ "packages/show-mixer/src/pipeline.test.ts": [
+  {
+   "path": "packages/show-mixer/src/pipeline.test.ts",
+   "content": "`planA.cues` is built with `planB.cues.map((c) => ({ ...c, startBeat: c.startBeat }))`, which is a pure no-op: the mapped cues are value-identical to `planB.cues`. As a result A and B carry the exact same cue content (only `trackId` differs), so the crossfade assertions (`owner`, `cues.length`, `intensity`) cannot detect cue-source confusion or wrong-deck cue attribution \u2014 a bug that mixes A's cues into B's output would still pass. Make A's cues genuinely distinct (e.g. set a different cue type/intensity or mark them) so the test proves cues come from the correct deck.",
+   "existing_code": "    const planA = { ...planB, trackId: \"old\", cues: planB.cues.map((c) => ({ ...c, startBeat: c.startBeat })) };",
+   "start_line": 59,
+   "end_line": 59,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-mixer/src/pipeline.test.ts",
+   "content": "`right.cues.every((c) => c.intensity <= 1)` is a tautology given `mixDown` clamps with `Math.min(1, Math.max(0, cue.intensity * weight))`, so intensity is always in [0,1]. Combined with the weak `length > 0` check, this passes even if crossfade attenuation is broken (all-zero/near-zero intensities included). Assert a lower bound or compare against the unscaled value (e.g. `every((c) => c.intensity > 0 && c.intensity < original)`) so the scaling behavior is actually verified.",
+   "existing_code": "    expect(right.cues.every((c) => c.intensity <= 1)).toBe(true);",
+   "start_line": 70,
+   "end_line": 70,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-mixer/src/pipeline.test.ts",
+   "content": "`store.saveTrack(...)` persists `raw.slice(0, 200)` \u2014 a truncated, invalid-JSON fragment \u2014 yet nothing in this test ever reads the stored identity (the assertions check the artifact path and the plan JSON only), so this setup is dead and gives false confidence that the fast path exercises track identity. Either drop the call or, if the intent is to validate stored track data, store a valid value and assert it is round-tripped; otherwise a broken `saveTrack` would go undetected.",
+   "existing_code": "    store.saveTrack(\"real-track-1\", raw.slice(0, 200), 247.2);",
+   "start_line": 34,
+   "end_line": 34,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-mixer/src/pipeline.test.ts",
+   "content": "The `impactOwner` assertion and the `renderFrame` call are disconnected: `renderFrame(plan, 120, ...)` renders a freshly planned show and never receives the owner/impact result, so `expect([...frames.get(\"left\")!].some((v) => v > 0))` only proves some fixture lit up. It does not validate that drop impact is applied to the incoming deck (the stated intent of this test). Either feed the ownership decision into the render path or remove the misleading frame assertion and keep the focused `impactOwner` check.",
+   "existing_code": "    const frames = renderFrame(plan, 120, [groupedFixture(\"left\", 0, [\"PRIMARY\"]), groupedFixture(\"right\", 1, [\"SECONDARY\"])]);",
+   "start_line": 52,
+   "end_line": 52,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-mixer/src/pipeline.test.ts",
+   "content": "Duplicate import from the same module: `makeFixture` is imported on line 9 and `makeDeck` is imported here again from `@autolight/simulator`. Consolidate into a single import statement for clarity and to avoid drift.",
+   "existing_code": "import { makeDeck } from \"@autolight/simulator\";",
+   "start_line": 11,
+   "end_line": 11,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-mixer/src/pipeline.test.ts",
+   "content": "Every test reads a hardcoded fixture via `readFileSync` with no failure handling, and the crossfade test silently depends on `real-track-1` having cues that overlap beat 120 (`filter((c) => beat >= c.startBeat && beat < c.startBeat + c.durationBeats)`). A missing/renamed fixture throws an opaque ENOENT, and a fixture with no cue touching that beat makes the crossfade assertions vacuous (`right.cues.length` would be 0). Guard the fixture read with a descriptive error and assert the beat-120 cue window is non-empty before relying on it.",
+   "existing_code": "const dir = join(dirname(fileURLToPath(import.meta.url)), \"..\", \"..\", \"..\", \"test-fixtures\", \"analysis\");",
+   "start_line": 13,
+   "end_line": 13,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/show-planner/src/primitives.ts": [
+  {
+   "path": "packages/show-planner/src/primitives.ts",
+   "content": "Plain-object lookups (`value in PRIMITIVE_REGISTRY`, `ALIAS_TO_CANONICAL[value]`, `key in defaults`, `NEW_STYLES[style.id]`, `SECTION_ENERGY[kind]`, `BUILT_IN_STYLES[id]`) consult the prototype chain. Inherited names (`toString`, `constructor`, `hasOwnProperty`, `__proto__`, etc.) therefore resolve as valid entries and return inherited values/functions cast to the expected types, silently breaking name resolution, param rejection, style/energy lookup, and the resolveStyle fallback. Use own-property checks (or null-prototype maps / Sets) for every lookup and guard the fallbacks.",
+   "suggestion_code": "  if (Object.prototype.hasOwnProperty.call(PRIMITIVE_REGISTRY, value)) return value as PrimitiveName;\n  return Object.prototype.hasOwnProperty.call(ALIAS_TO_CANONICAL, value) ? ALIAS_TO_CANONICAL[value] : null;",
+   "existing_code": "  if (value in PRIMITIVE_REGISTRY) return value as PrimitiveName;\n  return ALIAS_TO_CANONICAL[value] ?? null;",
+   "start_line": 308,
+   "end_line": 309,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/show-planner/src/primitives.ts",
+   "content": "This nested ternary (format prohibited by the project's code-quality rules) is hard to read and easy to get wrong when new high-restraint primitives are added. Extract the mapping into a lookup table keyed by `PrimitiveName` (defaulting to 1).",
+   "suggestion_code": "      restraintCost: RESTRAINT_COST[name] ?? 1,",
+   "existing_code": "      restraintCost: name === \"StrobeBurst\" || name === \"SplitAlternate\" ? 2 : name === \"WhiteHit\" || name === \"Impact\" ? 3 : 1,",
+   "start_line": 286,
+   "end_line": 286,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-planner/src/primitives.ts",
+   "content": "`rateHz === null` (unknown fixture rate) is treated as passing for primitives that require a minimum fixture rate. For `StrobeBurst`/`SplitAlternate` this means an unknown/unreported fixture rate silently clears the safety gate even though the requirement is a 24 Hz minimum. If null should mean 'cannot verify', this should fail (or at least warn) rather than pass; confirm the intended semantics.",
+   "suggestion_code": "  if (meta.needsFixtureRateHz !== null && (rateHz === null || rateHz < meta.needsFixtureRateHz)) {",
+   "existing_code": "  if (meta.needsFixtureRateHz !== null && rateHz !== null && rateHz < meta.needsFixtureRateHz) {",
+   "start_line": 339,
+   "end_line": 339,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/show-runtime/src/fastpath.test.ts": [
+  {
+   "path": "packages/show-runtime/src/fastpath.test.ts",
+   "content": "Wall-clock timing assertions make this test load-sensitive. The cold load reads and JSON-parses the fixture from disk inside the 100ms budget, so on a loaded/slow CI host `totalMs` can exceed 100ms and flake. The second assertion is also redundant with `totalMs` (it measures from the same starting point plus the intervening assertions) and equally host-dependent. Prefer asserting the deterministic contract (e.g. `installed`, `miss`, `cacheHit`, or a stubbed clock / injected budget) instead of raw wall-clock durations, or raise/relax the bound so it guards against real regressions rather than scheduling jitter.",
+   "existing_code": "    expect(loaded.totalMs).toBeLessThan(100);\n    expect(performance.now() - before).toBeLessThan(1000);",
+   "start_line": 96,
+   "end_line": 97,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-runtime/src/fastpath.test.ts",
+   "content": "The process-global fast-path LRU is never reset before the first test (only the second test calls `clearFastPathCache()`), and because `makeId`'s counter `n` is reset per test while the alias store is recreated, `resolveLiveTrack` yields the same generated `trackId` (\"t1\") in both tests. The cache key (`styleHash`/`venueClass`/`configHash`/`sourceFingerprint`/versions + `trackId`) is therefore identical across tests, so test 2's probe silently hits test 1's cached TrackModel/ShowPlan objects \u2014 whose backing temp dir was already removed by `afterEach`. That weakens the \"real store\" premise of the probe and couples the suite to execution order. Add a `clearFastPathCache()` (ideally in `beforeEach`/`afterEach`) so each test starts from a cold cache.",
+   "existing_code": "    const probeWorld = createDeckWorld(9);\n    const probe = loadGeneration(",
+   "start_line": 68,
+   "end_line": 69,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-runtime/src/fastpath.test.ts",
+   "content": "Mutating the database via `store.exec(\"DELETE FROM show_plans\")` reaches into an internal schema rather than the public Store API. The no-plan path is therefore exercised against a state the production save/delete flow may never produce (and it will silently stop working if the table is renamed). Prefer a Store method (e.g. a plan-delete API) or a fresh store/save sequence that reproduces the real \"artifact present, plan absent\" state.",
+   "existing_code": "    store.exec(\"DELETE FROM show_plans\");",
+   "start_line": 114,
+   "end_line": 114,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-runtime/src/fastpath.test.ts",
+   "content": "`seedKey` duplicates the exact cache-key derivation already built in `seedStore` (same versions, `styleHash`, `venueClassHash([\"segments\"])`, `configSnapshotHash` and `sourceFingerprint`). Any divergence between the two silently invalidates the premise that the seeded artifact is retrievable, producing a false pass/fail with no shared source of truth. Extract one helper that builds the key parts and have both the seeding and the probe request spread it.",
+   "existing_code": "/** Key shape without touching the database (for the probe load). */\nfunction seedKey(): { analyzerVersion: string; plannerVersion: string; styleHash: string; venueClass: string; configHash: string; sourceFingerprint: string } {",
+   "start_line": 48,
+   "end_line": 49,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-runtime/src/fastpath.test.ts",
+   "content": "The no-future-boundary case only asserts `installAtBeat`; `waitBeats` (and `boundary`) are left unchecked on this fallback path. A regression in the fallback (e.g. returning a non-zero wait or reporting a wrong boundary) would go undetected here. Assert the whole decision object, e.g. `expect(noFuture).toEqual({ installAtBeat: 200, waitBeats: 0, boundary: \"phrase\" })`.",
+   "existing_code": "    const noFuture = upgradeAtBoundary({ plan: showPlan, beat: 200, boundary: \"phrase\", phraseBoundaries: [32, 64], sectionBoundaries: [] });\n    expect(noFuture.installAtBeat).toBe(200);",
+   "start_line": 149,
+   "end_line": 150,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-runtime/src/fastpath.test.ts",
+   "content": "This case is titled \"installs the model and compiles when the plan is missing\", but nothing verifies the model was actually installed \u2014 only that a track was returned and `compileNow` fired. A regression that returns the model without installing it into the world would still pass. Add `expect(miss.installed).toBe(true)` (and ideally assert the world's installed model/generation).",
+   "existing_code": "    expect(miss.miss).toBe(\"no-plan\");\n    expect(compiled).toBe(1);",
+   "start_line": 127,
+   "end_line": 128,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/venue/src/index.ts": [
+  {
+   "path": "packages/venue/src/index.ts",
+   "content": "The `LEFT`/`RIGHT`/`CENTER` thirding is not a valid partition and produces incorrect/overlapping target sets for small fixture counts:\n\nThe ranges are `LEFT = [0, ceil(n/3))`, `RIGHT = [n - ceil(n/3), n)`, `CENTER = [ceil(n/3), n - ceil(n/3))`.\n\n- n = 1: `LEFT = [0]` and `RIGHT = [0]` \u2014 the same cell is returned by two different targets, so an operation applied to both (or a `LEFT` + `RIGHT` mapping) is applied twice.\n- n = 2: `CENTER = [1, 1)` is empty.\n- n = 4: `CENTER = [2, 2)` is empty while `LEFT`/`RIGHT` each take 2 cells.\n\n`CENTER` silently becomes empty and `LEFT`/`RIGHT` can overlap, so callers get wrong target sets with no error. Please guard the boundaries (e.g. compute `third = Math.floor(n/3)` and clamp/deriving `CENTER` from the leftover after `LEFT`/`RIGHT`, or handle `n < 3` explicitly) so the three sets are disjoint and cover the intended cells.",
+   "existing_code": "  if (target === \"LEFT\") return order.filter((_, i) => i < Math.ceil(order.length / 3));\n  if (target === \"RIGHT\") return order.filter((_, i) => i >= order.length - Math.ceil(order.length / 3));\n  if (target === \"CENTER\") return order.filter((_, i) => i >= Math.ceil(order.length / 3) && i < order.length - Math.ceil(order.length / 3));",
+   "start_line": 47,
+   "end_line": 49,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/venue/src/index.ts",
+   "content": "`placeFixtures` re-looks-up every cell by scanning `fixtures` (O(f)) and then scanning `f.cells` (O(c)) for each of the N ordered cells, making this O(N * (f + c)) with two `find(...)!` non-null assertions. The assertions hide any mismatch (a ref produced by `globalCellOrder` that is not found would throw an unhandled `TypeError` rather than a graceful failure) and the whole method recomputes data `globalCellOrder` already visited. Prefer building a single `Map` keyed by `fixtureId`/`cellIndex` (or have `globalCellOrder` return the positions) to keep it O(N) and avoid the non-null assertions.",
+   "existing_code": "    const f = fixtures.find((x) => x.id === ref.fixtureId)!;\n    const c = f.cells.find((x) => x.index === ref.cellIndex)!;",
+   "start_line": 57,
+   "end_line": 58,
+   "category": "performance",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/venue/src/index.ts",
+   "content": "The reserved target names `\"ALL\"`, `\"LEFT\"`, `\"RIGHT\"`, `\"CENTER\"` are duplicated here as magic string literals and again in the comparisons inside `resolveTarget`. Because `resolveTarget` checks these literals before falling back to group membership, any group actually named `ALL`/`LEFT`/`RIGHT`/`CENTER` in a fixture can never be targeted, and renaming/extending `DEFAULT_GROUPS` will not be reflected in the resolution logic. Derive the literals from `DEFAULT_GROUPS` (or a shared constant/enum) so both stay in sync.",
+   "existing_code": "export const DEFAULT_GROUPS = [\"ALL\",\"LEFT\",\"RIGHT\",\"CENTER\",\"BACK\",\"FRONT\",\"VERTICALS\",\"HORIZONTALS\",\"PRIMARY\",\"SECONDARY\",\"ACCENT\",\"AMBIENT\"] as const;",
+   "start_line": 31,
+   "end_line": 31,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/venue/src/venue.test.ts": [
+  {
+   "path": "packages/venue/src/venue.test.ts",
+   "content": "This case supplies a foreign file with BOTH an invalid format (`\"other\"`) AND an invalid version (`9`), so it cannot tell which guard actually fired. `importVenue` evaluates `file.format !== \"autolight-venue\" || file.version !== 1`; if the `format` check were deleted, the version guard (`9 !== 1`) would still throw the exact same message and the test stays green. The test therefore does not protect the format rejection path it claims to cover, and the `version: 9` value is useless for isolating the version path too. Split into independent cases (valid version + wrong format, and valid format + wrong version). Note also the title promises a \"typed error\" but only a message regex is asserted.",
+   "suggestion_code": "    expect(() => importVenue({ format: \"other\", version: 1, venue: emptyVenue(rectangleRoom(5, 5)) } as never)).toThrow(\n      /unsupported venue file/,\n    );\n    expect(() => importVenue({ format: \"autolight-venue\", version: 9, venue: emptyVenue(rectangleRoom(5, 5)) } as never)).toThrow(\n      /unsupported venue file/,\n    );",
+   "existing_code": "    expect(() => importVenue({ format: \"other\", version: 9, venue: emptyVenue(rectangleRoom(5, 5)) } as never)).toThrow(\n      /unsupported venue file/,\n    );",
+   "start_line": 13,
+   "end_line": 15,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "packages/venue/src/venue.test.ts",
+   "content": "The round-trip is only asserted with `toEqual` on the whole object. `toEqual` deep-compares values, so it still passes when no serialization actually happens: if `exportVenue` stopped calling `structuredClone` and returned the same object/reference graph, `importVenue` would clone it and `toEqual` would remain green. This is precisely the regression the task's \"delete test\" targets, yet this test cannot detect it. Assert reference independence and exercise a real (string) round-trip so a missing/incorrect serializer fails the test.",
+   "suggestion_code": "    const venue = emptyVenue(rectangleRoom(5, 5));\n    const file = exportVenue(venue);\n    expect(file.venue).not.toBe(venue);\n    expect(file.venue.room).not.toBe(venue.room);\n    const back = importVenue(JSON.parse(JSON.stringify(file)) as ReturnType<typeof exportVenue>);\n    expect(back).toEqual(venue);",
+   "existing_code": "    const venue = emptyVenue(rectangleRoom(5, 5));\n    const back = importVenue(exportVenue(venue));\n    expect(back).toEqual(venue);",
+   "start_line": 7,
+   "end_line": 9,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/venue/src/venue.test.ts",
+   "content": "Only a positive, already-in-range value (0.3) is checked, and the same `importVenue(exportVenue(venue))` expression is evaluated twice. `setLogicalZero` applies a modulo wrap (`((s % 1) + 1) % 1`), so a boundary/normalization case (e.g. 0 or -0.3 -> 0.7) is what would catch a broken wrap. Reuse a single result variable instead of recomputing the round-trip.",
+   "suggestion_code": "    const venue = setLogicalZero(emptyVenue(rectangleRoom(5, 5)), 0.3);\n    const back = importVenue(exportVenue(venue));\n    expect(back.logicalZeroS).toBeCloseTo(0.3, 9);\n    expect(back.room.logicalZeroS).toBeCloseTo(0.3, 9);\n\n    const wrapped = setLogicalZero(emptyVenue(rectangleRoom(5, 5)), -0.3);\n    expect(importVenue(exportVenue(wrapped)).logicalZeroS).toBeCloseTo(0.7, 9);",
+   "existing_code": "    const venue = setLogicalZero(emptyVenue(rectangleRoom(5, 5)), 0.3);\n    expect(importVenue(exportVenue(venue)).logicalZeroS).toBeCloseTo(0.3, 9);\n    expect(importVenue(exportVenue(venue)).room.logicalZeroS).toBeCloseTo(0.3, 9);",
+   "start_line": 19,
+   "end_line": 21,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "analysis/src/autolight_analysis/harmony.py": [
+  {
+   "path": "analysis/src/autolight_analysis/harmony.py",
+   "content": "The dissonance indices are absolute pitch classes, so they are wrong for any key whose root is not C, contradicting the docstring (\"a semitone/tritone away from the key root\"). The distance term already shifts `centre` by `root` (`profile[(i - root) % 12]`), but this term does not, so the two halves of the tension score disagree about the tonal centre. E.g. for root D (root=2) the semitone-above/tritone class should be indices 3 and 8, not 1 and 6. Shift the offsets by root.",
+   "suggestion_code": "    offsets = (1, 6, 8) if major else (1, 6, 10)\n    dissonant = [(root + i) % 12 for i in offsets]\n    diss = chroma[:, dissonant].sum(axis=1) / (chroma.sum(axis=1) + 1e-9)",
+   "existing_code": "    dissonant = [1, 6, 8] if major else [1, 6, 10]\n    diss = chroma[:, dissonant].sum(axis=1) / (chroma.sum(axis=1) + 1e-9)",
+   "start_line": 117,
+   "end_line": 118,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/harmony.py",
+   "content": "The cos/sin basis vectors depend only on `f` and `t`, yet they are recomputed for every frame `n` inside the outer loop (n_frames * 2 * bins transcendental evaluations + array allocations). On real-length audio this dominates cqt_chroma runtime. Precompute the basis once outside the frame loop and reuse it. This does not change the algorithm, only hoists the loop-invariant work.",
+   "suggestion_code": "    basis = freqs[:, None] * t[None, :]\n    cos_basis = np.cos(2.0 * math.pi * basis)\n    sin_basis = np.sin(2.0 * math.pi * basis)\n    pitch = np.arange(bins_per_octave * octaves) % 12\n    for n in range(n_frames):\n        seg = mono[n * hop : n * hop + frame].astype(np.float64) * window\n        mags = np.hypot(cos_basis.dot(seg), sin_basis.dot(seg))\n        np.add.at(chroma[n], pitch, mags)",
+   "existing_code": "    for n in range(n_frames):\n        seg = mono[n * hop : n * hop + frame].astype(np.float64) * window\n        for k, f in enumerate(freqs):\n            re = float(np.dot(seg, np.cos(2.0 * math.pi * f * t)))\n            im = float(np.dot(seg, np.sin(2.0 * math.pi * f * t)))\n            chroma[n, k % 12] += math.hypot(re, im)",
+   "start_line": 69,
+   "end_line": 74,
+   "category": "performance",
+   "severity": "medium"
+  }
+ ],
+ "analysis/tests/test_decode.py": [
+  {
+   "path": "analysis/tests/test_decode.py",
+   "content": "Two defects in this error path:\n1) `pytest.skip()` raises `Skipped`, so the trailing `continue` is unreachable dead code.\n2) Catching `subprocess.CalledProcessError` and converting it to a skip means a genuine transcode/encode failure (e.g. a bad flag or broken ffmpeg build) silently turns the whole test into a pass-by-skip, and because the skip aborts the loop it also drops coverage for every remaining codec. Only skip when the codec is truly unavailable (e.g. probe the encoder first); otherwise let the exception fail the test.",
+   "existing_code": "        except subprocess.CalledProcessError:\n            pytest.skip(f\"codec {name} unavailable\")\n            continue",
+   "start_line": 60,
+   "end_line": 62,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "analysis/tests/test_decode.py",
+   "content": "This only checks that the four durations agree with each other; it never verifies the expected absolute duration (~1.0 s). A pipeline that consistently returns a wrong duration for every codec (truncated, doubled, or mis-scaled output) would still pass. Also, for lossy codecs (MP3/AAC) encoder priming/padding can shift the duration near the 0.05 s threshold, making the relative comparison flaky. Assert the absolute duration against the known signal length as well, with a tolerance that accounts for codec delay.",
+   "existing_code": "    durs = [m[\"durationSeconds\"] for m in metas.values()]\n    assert max(durs) - min(durs) < 0.05, metas",
+   "start_line": 72,
+   "end_line": 73,
+   "category": "test",
+   "severity": "medium"
+  }
+ ]
+}

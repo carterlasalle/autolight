@@ -1,0 +1,234 @@
+{
+ "packages/config/src/decisions.test.ts": [
+  {
+   "path": "packages/config/src/decisions.test.ts",
+   "content": "The comment says \"36 excepted\" but the guard on the next line exempts **DS-30** from the `>= 2` options invariant (and DS-36 has two options, so it is not the exception). This doc/code disagreement makes it easy to later exempt the wrong decision. Update the comment to reference DS-30.",
+   "suggestion_code": "      // DS-30 excepted: it is the only switch with a single option (build-time packaging).",
+   "existing_code": "      // 36 excepted: the only switch with a single option is the build-time one.",
+   "start_line": 32,
+   "end_line": 32,
+   "category": "documentation",
+   "severity": "low"
+  },
+  {
+   "path": "packages/config/src/decisions.test.ts",
+   "content": "Only DS-25/DS-30 are asserted to have `combined === null`; there is no assertion that every *other* decision has a non-null combined mode. Since `reachable` also accepts `ids.includes(decision.defaultMode)`, a decision whose `defaultMode` is a real option id (e.g. DS-07, DS-14, DS-27, DS-29) would still pass this test if its `combined` silently became `null`, losing the combined mode without any failure. Add an else-branch asserting non-null.",
+   "suggestion_code": "      if (decision.ds === \"DS-25\" || decision.ds === \"DS-30\") {\n        expect(decision.combined).toBeNull();\n      } else {\n        expect(decision.combined, decision.ds).not.toBeNull();\n      }",
+   "existing_code": "      if (decision.ds === \"DS-25\" || decision.ds === \"DS-30\") expect(decision.combined).toBeNull();",
+   "start_line": 44,
+   "end_line": 44,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/config/src/decisions.test.ts",
+   "content": "The test title promises validation of options' \"requirements\", but the body never asserts anything about `option.requires`. An option can lose its prerequisites (or a new single-option decision can ship without `requires`) and the test still passes. Either assert `option.requires` where it is defined or rename the test to match what it checks.",
+   "existing_code": "  it(\"documents every option with pros, cons and requirements\", () => {",
+   "start_line": 21,
+   "end_line": 21,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/config/src/decisions.test.ts",
+   "content": "`bound >= 25` is weaker than the sibling exact assertion that exactly 7 decisions are unkeyed (implying exactly 29 bound). A regression that drops a registry-key binding to 28 bound switches would still satisfy this check; only the exact unkeyed-list assertion catches it, so this magic number duplicates weaker knowledge. Prefer an exact count so the two tests cannot drift apart.",
+   "suggestion_code": "    expect(bound).toBe(29);",
+   "existing_code": "    expect(bound).toBeGreaterThanOrEqual(25);",
+   "start_line": 57,
+   "end_line": 57,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/config/src/decisions.test.ts",
+   "content": "The non-null assertion on `options[0]!` throws a `TypeError` (rather than a clear assertion failure) if DS-30's options array becomes empty, obscuring the real cause. Add an explicit length assertion before indexing.",
+   "suggestion_code": "    expect(decisionFor(\"DS-30\").options).toHaveLength(1);\n    expect(decisionFor(\"DS-30\").options[0]?.id).toBe(\"electron-builder\");",
+   "existing_code": "    expect(decisionFor(\"DS-30\").options[0]!.id).toBe(\"electron-builder\");",
+   "start_line": 72,
+   "end_line": 72,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/contracts/vitest.config.ts": [
+  {
+   "path": "packages/contracts/vitest.config.ts",
+   "content": "`readdirSync(packages)` enumerates **every** filesystem entry under `packages/` (stray files, dotfiles like `.DS_Store`, and any non-package directory such as a future `packages/fixtures` or `packages/e2e`), and unconditionally maps each one to `@autolight/<entry>` \u2192 `<entry>/src/index.ts` without verifying the directory is a real workspace package or that the entrypoint exists. Any such entry produces a bogus alias whose target does not exist, and because Vite only resolves the alias lazily, the failure surfaces as a confusing \"failed to load <path>\" at import time instead of failing at config load. Filter to directories and assert the entrypoint exists so misconfiguration fails loudly and early.",
+   "suggestion_code": "  readdirSync(packages, { withFileTypes: true })\n    .filter((entry) => entry.isDirectory())\n    .map((entry) => entry.name)\n    .filter((name) => existsSync(join(packages, name, \"src\", \"index.ts\")))\n    .map((name) => [",
+   "existing_code": "  readdirSync(packages).map((name) => [",
+   "start_line": 9,
+   "end_line": 9,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/contracts/vitest.config.ts",
+   "content": "The alias matches only the bare specifier `@autolight/<name>`, so deep subpath imports such as `@autolight/rekordbox-live/follow` or `@autolight/config/registry` (patterns that actually exist in this repo) are NOT aliased and fall through to Node/pnpm resolution, i.e. they resolve against a package `dist`/`main` build instead of the current sources. This directly contradicts the stated goal of exercising the code the app bundles. `apps/desktop/vitest.config.ts` adds a `subpathAlias` regex (`/^@autolight\\/([^/]+)\\/([^/]+)$/`) for exactly this reason; this config should mirror it (or drop the alias entirely if unused, since the current contracts tests import no workspace packages).",
+   "existing_code": "    `@autolight/${name}`,",
+   "start_line": 10,
+   "end_line": 10,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/contracts/vitest.config.ts",
+   "content": "The include glob collects only `src/**/*.test.ts`. Files named `*.test.tsx`, `*.spec.ts`, or tests placed outside `src/` are silently skipped. Combined with the `vitest run --passWithNoTests` script in this package, a renamed/misplaced test file would make the suite report green rather than failing, hiding lost coverage. Broaden the pattern (e.g. `src/**/*.{test,spec}.{ts,tsx}`) or add the extra directories if any are intended.",
+   "existing_code": "    include: [\"src/**/*.test.ts\"],",
+   "start_line": 18,
+   "end_line": 18,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/controller-flx4/src/signals.test.ts": [
+  {
+   "path": "packages/controller-flx4/src/signals.test.ts",
+   "content": "This test reimplements the decode/apply loop from `run()` inline (same 1ms base, same 10ms step) instead of reusing the helper. If the harness timing or call order ever changes (e.g. step size, base offset, applying the event before/after deriving), this test keeps its own copy and silently drifts: the hardcoded `[31_000_000n, 41_000_000n]` expectation is only valid for the duplicated 10ms/1ms timing, so a genuine state-model timestamp regression can either be masked or produce a confusing failure. Reuse `run()` (expose the model/deriver from it) or derive the expected timestamps from the same constants the harness uses, so the assertion tracks real deriver output rather than mirroring the test's own construction.",
+   "existing_code": "    const decoder = new Flx4Decoder();\n    const model = new Flx4StateModel();\n    const deriver = new Flx4SignalDeriver();\n    let atNs = 1_000_000n;",
+   "start_line": 68,
+   "end_line": 71,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/controller-flx4/src/signals.test.ts",
+   "content": "The `opts` type of `run()` only exposes `djSoftware`, and every test exercises either `serato` or `rekordbox` (or leaves it undefined for non-pad-fx paths). The null/undefined fallback branch in `fromPad` \u2014 the one that maps `pad-fx-2` to `pad-press`/`pad-release` when no DJ software is known \u2014 is never asserted for the `pad-fx-2` mode itself, nor are the `minReversalsPerSec`/`reversalWindowSeconds` options. A regression in the default branch (or in the reversal threshold, which gates every scratch assertion here) would not be caught. Add a case with no `djSoftware` (or explicit `null`) against a `pad-fx-2` pad and a case that varies the reversal threshold.",
+   "existing_code": "function run(rows: readonly Row[], opts: { djSoftware?: \"rekordbox\" | \"serato\" | null } = {}): Flx4Signal[] {",
+   "start_line": 10,
+   "end_line": 10,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/controller-flx4/src/signals.test.ts",
+   "content": "This test indexes `signals` directly without asserting the emitted `kinds`/length, unlike the other cases. If the deriver emits an extra signal before these positions (e.g. an unexpected scratch or cue signal), the indices shift and the assertions either fail on an unrelated signal or, worse, a loosely-typed `toMatchObject` on a different signal can still satisfy the shape, hiding the regression. Assert `kinds(signals)` (or `signals.length`) explicitly as the other tests do.",
+   "existing_code": "    expect(signals[0]).toMatchObject({ kind: \"hot-cue\", deck: 2, padIndex: 2 });",
+   "start_line": 175,
+   "end_line": 175,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/govee/package.json": [
+  {
+   "path": "packages/govee/package.json",
+   "content": "`--passWithNoTests` forces `vitest run` to exit 0 when no test file matches, so a mislocated/renamed test or a regression in `vitest.config.ts` (`include: [\"src/**/*.test.ts\"]`) silently reports a green suite. This package has real tests under `src/**/*.test.ts`, so the flag only masks the zero-test failure mode; drop it so an empty run fails loudly (and wire the suite so it cannot silently report success).",
+   "suggestion_code": "    \"test\": \"vitest run\",",
+   "existing_code": "    \"test\": \"vitest run --passWithNoTests\",",
+   "start_line": 9,
+   "end_line": 9,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/govee/package.json",
+   "content": "`@types/node` is not declared, yet `src` imports Node built-ins (`node:fs`, `node:dgram`, `node:os`, `node:path`, `node:url`) and uses `Buffer`/`process`, and both `build`/`lint`/`typecheck` compile `src` (including the `*.test.ts` files) with `tsc`. It only resolves today because other workspace packages (e.g. `@autolight/show-host`) hoist `@types/node` into the root `node_modules`. Under an isolated / PnP install `yarn typecheck` fails with `Cannot find module 'node:fs'`. Declare it explicitly as a dev dependency.",
+   "suggestion_code": "  \"devDependencies\": {\n    \"@types/node\": \"^22.0.0\",\n    \"typescript\": \"^5.6.3\",\n    \"vitest\": \"^4.1.11\"\n  }",
+   "existing_code": "  \"devDependencies\": {\n    \"typescript\": \"^5.6.3\",\n    \"vitest\": \"^4.1.11\"\n  }",
+   "start_line": 16,
+   "end_line": 19,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/govee/package.json",
+   "content": "The package is `\"type\": \"module\"` but exposes only the legacy `main`/`types` fields and has no `exports` map or `files` allowlist. Bare-specifier ESM imports fall back to `main`, but subpath imports (`@autolight/govee/engines`) and modern resolvers rely on legacy behavior, and without `files` a publish would ship `src/`, tests, and `tsconfig.json`/`vitest.config.ts`. Add an `exports` map and a `files` allowlist for a correct published entry surface.",
+   "suggestion_code": "  \"main\": \"./dist/index.js\",\n  \"types\": \"./dist/index.d.ts\",\n  \"exports\": {\n    \".\": {\n      \"types\": \"./dist/index.d.ts\",\n      \"default\": \"./dist/index.js\"\n    }\n  },\n  \"files\": [\n    \"dist\"\n  ],",
+   "existing_code": "  \"main\": \"./dist/index.js\",\n  \"types\": \"./dist/index.d.ts\",",
+   "start_line": 5,
+   "end_line": 6,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/govee/src/metrics.test.ts": [
+  {
+   "path": "packages/govee/src/metrics.test.ts",
+   "content": "The defensive-copy contract is only verified for `snapshot()`. `snapshotAll()` is checked solely for its hardwareId keys, so a regression where it returns the internal row objects (instead of `{ ...row }` copies) would still pass \u2014 letting the Diagnostics screen mutate the collector's store. Mutate a `snapshotAll()` row and re-read to lock in the copy semantics, matching the documented behavior.",
+   "suggestion_code": "    const all = metrics.snapshotAll();\n    const aaRow = all.find((r) => r.hardwareId === \"aa\");\n    if (aaRow) aaRow.framesSent = 999;\n    expect(metrics.snapshot(\"aa\")?.framesSent).toBe(1);\n    expect(metrics.snapshotAll().map((row) => row.hardwareId).sort()).toEqual([\"aa\", \"bb\"]);",
+   "existing_code": "    expect(metrics.snapshotAll().map((row) => row.hardwareId).sort()).toEqual([\"aa\", \"bb\"]);",
+   "start_line": 45,
+   "end_line": 45,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/govee/src/metrics.test.ts",
+   "content": "Every `record()` call here supplies `effectiveFps`/`health`, so the 'gauges only replace when explicitly provided' behavior is never exercised. A regression such as `row.effectiveFps = sample.effectiveFps ?? 0` (or resetting `health` to a default when omitted) would satisfy all current assertions. Add a record that omits these optional fields and assert the previous gauge values persist.",
+   "suggestion_code": "    expect(row.health).toBe(\"degraded\");\n    const carried = metrics.record(\"aa\", { framesSent: 1 });\n    expect(carried.effectiveFps).toBe(25);\n    expect(carried.health).toBe(\"degraded\");",
+   "existing_code": "    expect(row.health).toBe(\"degraded\");",
+   "start_line": 19,
+   "end_line": 19,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/govee/src/metrics.test.ts",
+   "content": "`recordReconnect`/`markOffline` are only called for devices that already have a row. The auto-create path (`rowFor` on an unseen id, which yields `reconnects === 1` and default gauges) and repeated `markOffline` on an unknown device are untested, so a regression in that path would pass. Add a case invoking these for a brand-new hardwareId.",
+   "suggestion_code": "    expect(metrics.recordReconnect(\"cc\")).toBe(1);\n    expect(metrics.snapshot(\"cc\")?.health).toBe(\"online\");",
+   "existing_code": "    expect(metrics.recordReconnect(\"aa\")).toBe(1);",
+   "start_line": 36,
+   "end_line": 36,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/govee/src/metrics.ts": [
+  {
+   "path": "packages/govee/src/metrics.ts",
+   "content": "`rowFor` seeds every lazily-created device with `health: \"online\"`. A row is created by `record()`, `recordReconnect()` or `markOffline()` before any real readiness sample has arrived, so a device that has merely been touched (e.g. a single `recordReconnect`) is reported as \"online\" to Devices/Diagnostics even though its actual status is still unknown. Consider deriving health from the first observed sample (or adding an explicit \"unknown\"/\"connecting\" state) so the collector does not emit a false-positive online verdict.",
+   "existing_code": "      health: \"online\",",
+   "start_line": 51,
+   "end_line": 51,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/govee/src/metrics.ts",
+   "content": "The frame counters are only ever incremented and are not validated. A sample carrying a negative or non-finite value (e.g. `NaN` from a bad delta) permanently corrupts the counter for the life of the collector, and there is no reset path. Guard the deltas (`Number.isFinite`) and/or reject/clamp negatives so a faulty upstream sample cannot silently poison the totals.",
+   "existing_code": "    row.framesRequested += sample.framesRequested ?? 0;\n    row.framesSent += sample.framesSent ?? 0;\n    row.framesSuperseded += sample.framesSuperseded ?? 0;",
+   "start_line": 63,
+   "end_line": 65,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/govee/src/metrics.ts",
+   "content": "`lastResponseAtMs` is stamped from a per-sample, optional `clock` defaulting to `Date.now`. Because the clock is supplied per call, samples from different sources can write timestamps on mismatched time bases, and the stamp records the merge time rather than the moment the reply was actually observed. Inject the clock once (constructor) so all rows share a single, consistent time base and downstream staleness/RTT diagnostics stay comparable.",
+   "existing_code": "      if (sample.statusRttMs !== null) row.lastResponseAtMs = (sample.clock ?? Date.now)();",
+   "start_line": 69,
+   "end_line": 69,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "packages/govee/src/probe.test.ts": [
+  {
+   "path": "packages/govee/src/probe.test.ts",
+   "content": "This bound does not test what the comment claims (\"resent until the deadline, then given up\"). `probe.commandsSent` already contains the single pre-arm `status` read, so any armed read-back that sends at least one datagram satisfies `> 1`. A regression that collapsed the armed resend loop into a single attempt would still pass. It is also non-deterministic: the probe here runs on real timers (options() passes no `wait`/`clock`), so with `deadlineMs: 30` / `retryMs: 5` a stalled CI can under-run the expected resend count. Make it deterministic by injecting a fake `wait`/`clock` (both are supported by `ProbeOptions`) and asserting the exact number of armed `status` sends, e.g. by excluding the initial read and checking the armed resends explicitly.",
+   "existing_code": "    expect(probe.commandsSent.filter((sent) => sent === STATUS_COMMAND).length).toBeGreaterThan(1);",
+   "start_line": 153,
+   "end_line": 153,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/govee/src/probe.test.ts",
+   "content": "In this garbage-reply scenario `armedReadBack` is \"silent\" for the wrong reason. `readB2Status` returns `status: null` (the reply never parses), so probe.ts:469 takes the `before.status !== null ? \u2026 : null` short-circuit and never performs the armed read-back at all. The FakeLamp actually does answer garbage while armed, so this assertion passes even if the armed-silence logic were broken, and it does not validate the \"answers outside the documented shape is still reachable\" claim. Either assert the observable consequence (e.g. that the armed `status` reply was consumed / `commandsSent` behaviour) or add a comment noting the armed read-back is intentionally skipped when the pre-arm status never parsed.",
+   "existing_code": "    expect(probe.reachable).toBe(true);\n    expect(probe.armedReadBack).toBe(\"silent\");",
+   "start_line": 171,
+   "end_line": 172,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/govee/src/probe.test.ts",
+   "content": "`over.armSettleMs` is never supplied by any caller (both usages pass only `answersStatusWhileArmed`), so this parameter branch always evaluates to `5` and is effectively dead configurability. Either drop the `armSettleMs` key from `over` or use it in a test that actually exercises the fake's settle window (e.g. asserting `metrics.paintsDroppedInSettle`), otherwise the fake's settle behaviour is untested.",
+   "existing_code": "    armSettleMs: over.armSettleMs ?? 5,",
+   "start_line": 34,
+   "end_line": 34,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ]
+}

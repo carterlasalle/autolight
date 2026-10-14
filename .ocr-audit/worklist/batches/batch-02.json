@@ -1,0 +1,404 @@
+{
+ "packages/govee/src/probe.ts": [
+  {
+   "path": "packages/govee/src/probe.ts",
+   "content": "After `arm(true)` the probe has no try/finally, so the closing `arm(false)` is only reached on the happy path. If `user.confirmPaint(...)` rejects, `link.sendRaw(paint(...))` throws (e.g. `paint` raises RangeError when zones > 255), or `wait` rejects, the function exits without disarming and the unit is left with an open, live razer channel \u2014 a persistent device-state leak that survives the failed probe. Wrap everything after the arm in try/finally so the disarm is always written.",
+   "suggestion_code": "  await link.sendJson(turnCommand(true));\n  await link.sendRaw(arm(true));\n  await wait(armSettleMs);\n  try {\n    // ...status read-back, B0/B4 paints, user confirmation, verdict...\n    return finish(verdict, armedReadBack, b0, b4);\n  } finally {\n    // Always release the armed channel, even if confirmation or a send throws.\n    await link.sendRaw(arm(false));\n  }",
+   "existing_code": "  await link.sendJson(turnCommand(true));\n  await link.sendRaw(arm(true));\n  await wait(armSettleMs);",
+   "start_line": 465,
+   "end_line": 467,
+   "category": "bug",
+   "severity": "critical"
+  },
+  {
+   "path": "packages/govee/src/probe.ts",
+   "content": "`attemptedZones` is clamped only from below. When `options.zones > 255`, `twoColourFrame` emits more than 255 zones and `paint()` throws `RangeError` (B0 nbSeg is one byte) inside the probe, which \u2014 combined with the missing try/finally above \u2014 aborts the probe mid-arm and never disarms. Clamp the candidate count to the protocol limit (1..255) before it is used.",
+   "suggestion_code": "  // B0 nbSeg is one byte: clamp to the protocol limit so paint() cannot throw.\n  const attemptedZones = Math.min(255, Math.max(1, Math.floor(options.zones)));",
+   "existing_code": "  const attemptedZones = Math.max(1, Math.floor(options.zones));",
+   "start_line": 400,
+   "end_line": 400,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/govee/src/probe.ts",
+   "content": "`next()` is not concurrency-safe: the read of `this.lastAt`, the `await wait(...)`, and the write of `this.lastAt` are not atomic. Two overlapping callers (e.g. the probe and an action sharing the per-device sequencer) both observe the same `lastAt` and then both send immediately, producing the back-to-back datagrams this class exists to prevent (the toolkit's third-datagram drop). Serialize calls through a chained promise/mutex so each `next()` waits for the previous one to finish before computing its spacing.",
+   "suggestion_code": "  private tail: Promise<void> = Promise.resolve();\n\n  next(): Promise<void> {\n    const run = this.tail.then(async () => {\n      const remaining = this.lastAt + this.minSpacingMs - this.clock();\n      if (remaining > 0) await this.wait(remaining);\n      this.lastAt = this.clock();\n    });\n    // Keep the chain alive even if a caller's wait rejects.\n    this.tail = run.catch(() => undefined);\n    return run;\n  }",
+   "existing_code": "  async next(): Promise<void> {\n    const remaining = this.lastAt + this.minSpacingMs - this.clock();\n    if (remaining > 0) await this.wait(remaining);\n    this.lastAt = this.clock();\n  }",
+   "start_line": 120,
+   "end_line": 124,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/govee/src/probe.ts",
+   "content": "`readB2Status`/`readDevStatus`/`paceRetry` compute the deadline, RTT and pacing with raw `Date.now()`, ignoring the clock injected via `options.clock` and consumed by `CommandSequencer`. When a caller drives the probe with a fake/paced clock, the sequencer advances on fake time while these loops advance on wall time, so the resend cadence and the \u2264 deadlineMs termination diverge and tests/qualification timing become non-deterministic. Thread an optional `clock` through `ReadbackOptions` and use it consistently for `started`, `sentAt` and `paceRetry`.",
+   "suggestion_code": "  const wait = opts.wait ?? sleep;\n  const clock = opts.clock ?? (() => Date.now());\n  const started = clock();\n  let answers = 0;\n  let rttMs: number | null = null;\n  let status: B2Readback[\"status\"] = null;",
+   "existing_code": "  const wait = opts.wait ?? sleep;\n  const started = Date.now();\n  let answers = 0;\n  let rttMs: number | null = null;\n  let status: B2Readback[\"status\"] = null;",
+   "start_line": 208,
+   "end_line": 212,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/govee/src/probe.ts",
+   "content": "`devStatus` is only read when the B2 `status` reply failed to parse (`before.status !== null ? null : ...`). A reachable unit that answers `status` therefore reports `devStatusAnswered: false` even though it may well answer `devStatus`. This makes the recorded capability (and any UI/logic keyed on it) inaccurate for the common case. Read `devStatus` unconditionally (or track whether it was skipped rather than reporting a hard false).",
+   "suggestion_code": "  const devBefore = await readDevStatus(link, readOpts);",
+   "existing_code": "  const devBefore = before.status !== null ? null : await readDevStatus(link, readOpts);",
+   "start_line": 416,
+   "end_line": 416,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/govee/src/probe.ts",
+   "content": "This `demonstration` text asserts a fact the probe never established: \"the whole-fixture colorwc mode answered read-back on this unit\". The probe never sends `colorwc` (and `devStatusCommand` is `devStatus`, not `colorwc`), and when `before.status !== null` the devStatus read-back is skipped entirely. The verdict therefore advertises a verified `colorwc` fallback that was not verified, which can send the failover down a transport that silently does nothing. Either actually probe the colorwc/devStatus read-back before claiming it, or reword the string to state the fallback is the protocol default and unverified.",
+   "suggestion_code": "            \"the segmented channel is not verified and must not be streamed; use the whole-fixture colorwc mode as the default fallback\", ",
+   "existing_code": "            \"the whole-fixture colorwc mode answered read-back on this unit, so it is the verified fallback; the segmented channel is not verified and must not be streamed\",",
+   "start_line": 502,
+   "end_line": 502,
+   "category": "bug",
+   "severity": "high"
+  }
+ ],
+ "packages/config/src/store.ts": [
+  {
+   "path": "packages/config/src/store.ts",
+   "content": "`save()` overwrites the config file in place. If the process crashes, the disk fills, or another writer truncates mid-write, the file is left partially written; `readLayersFile()` then fails JSON.parse / schema validation and silently returns `null`, so ALL persisted config is discarded on next startup with no error or backup. Write to a temp file and rename atomically (rename is atomic on the same filesystem). Also note this call is uncaught: a write error (ENOSPC/EACCES) propagates out of `set`/`reset`/`importJson` AFTER the in-memory state and mirror were already mutated and the change was emitted, leaving memory and disk diverged.",
+   "suggestion_code": "    const tmp = `${this.filePath}.tmp`;\n    writeFileSync(tmp, JSON.stringify(payload, null, 2), \"utf8\");\n    renameSync(tmp, this.filePath);\n// import { renameSync } from \"node:fs\";",
+   "existing_code": "    writeFileSync(this.filePath, JSON.stringify(payload, null, 2), \"utf8\");",
+   "start_line": 233,
+   "end_line": 233,
+   "category": "bug",
+   "severity": "critical"
+  },
+  {
+   "path": "packages/config/src/store.ts",
+   "content": "`emit()` invokes listeners without isolation. A subscriber that throws aborts the loop, so later subscribers never receive the change; worse, in `set`/`reset`/`importJson` `emit()` runs BEFORE `this.save()`, so a throwing listener also skips persistence entirely, leaving the in-memory state changed but the file stale (change silently lost on restart). Wrap each listener call in try/catch (and/or move `save()` before `emit()`).",
+   "suggestion_code": "    for (const fn of Array.from(this.listeners)) {\n      try {\n        fn(change);\n      } catch {\n        // a misbehaving subscriber must not drop the save or starve later listeners\n      }\n    }",
+   "existing_code": "    for (const fn of Array.from(this.listeners)) fn(change);",
+   "start_line": 155,
+   "end_line": 155,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/config/src/store.ts",
+   "content": "When `importPayloadSchema.safeParse` fails, `check.success` is false and `values` silently falls back to `{}`. Combined with `bad.length === 0`, the method returns `{ ok: true }` for malformed payloads that were never imported (e.g. `\"hello\"`, `42`, `{ \"values\": [1,2,3] }`), so callers believe the import succeeded while nothing changed. Return a failure when the schema does not match instead of coercing to an empty object.",
+   "suggestion_code": "    if (!check.success) return { ok: false, badKeys: [\"<invalid config payload: expected { version, values: object }>\"] };\n    const values = check.data.values ?? {};",
+   "existing_code": "    const values = check.success ? (check.data.values ?? {}) : {};",
+   "start_line": 182,
+   "end_line": 182,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/config/src/store.ts",
+   "content": "`save()` rewrites the whole file from this instance's `mirror` with no lock and no read-merge-write. Multiple `PersistentConfigStore` instances can point at the same path (e.g. show-service always constructs one on `userData/config.json` and config-service falls back to constructing its own when `opts.store` is not passed), so each instance's `set/reset/load` clobbers the other's persisted changes (last-writer-wins), silently dropping data that the other instance still holds in its stale mirror. Consider a file lock or a read-merge-before-write, or enforce a single shared instance.",
+   "existing_code": "  save(): void {",
+   "start_line": 221,
+   "end_line": 221,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/config/src/store.ts",
+   "content": "`load()` mutates the layers and mirror but never emits `config:changed`, so any subscriber (e.g. ConfigService's history, renderer caches) that has already subscribed keeps stale values when `load()` is invoked after construction. Additionally, keys whose `defineKey` throws are silently skipped, so renamed/unknown persisted overrides are dropped without any signal; and the surrounding `readLayersFile` returns `null` on any corruption, which is indistinguishable from an empty config. Consider emitting per-key changes and surfacing dropped keys.",
+   "existing_code": "    const found = readLayersFile(this.filePath);\n    if (!found) return;",
+   "start_line": 200,
+   "end_line": 201,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/controller-flx4/src/backend.ts": [
+  {
+   "path": "packages/controller-flx4/src/backend.ts",
+   "content": "Overlapping-poll / stop race. The interval callback fires `poll()` without awaiting it and without any in-flight guard, so a slow `listPorts`/`open` can overlap with the next tick. More seriously, there is no `stopped` flag: if `stop()` runs while a `poll()` is suspended on an await, the resumed `poll()` will fall through to `selectAndOpen()` and re-open the port, leaving the service `connected` (and leaking a new input) after teardown. Even in the connected branch, `this.input` becomes null during the await, so the comparison after `await` mis-detects a loss and emits a spurious `lost` status after stop. Serialize polls and add a stopped/generation guard checked after every await; also have `stop()` notify listeners.",
+   "existing_code": "      this.timer = this.scheduler.setInterval(() => {\n        void this.poll();\n      }, this.hotplugPollMs);",
+   "start_line": 201,
+   "end_line": 203,
+   "category": "bug",
+   "severity": "critical"
+  },
+  {
+   "path": "packages/controller-flx4/src/backend.ts",
+   "content": "Any error from `listPorts` is swallowed and coerced to an empty list, which the hotplug branch then interprets as \"the controller port disappeared\". A transient backend hiccup (driver busy, temporary failure) therefore produces a false `lost` transition, closes a still-valid input, and discards the real cause. Distinguish a real failure from an empty list (e.g. only treat it as loss when the call actually succeeded and the port is absent, otherwise surface the error).",
+   "existing_code": "      const ports = await this.driver.listPorts().catch(() => [] as Flx4PortInfo[]);",
+   "start_line": 222,
+   "end_line": 222,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/controller-flx4/src/backend.ts",
+   "content": "Same swallowing here: a failed `listPorts` becomes an empty list, so the backend is reported as `no input port matches ...` and the true error is lost. This can also mask a real port that exists, causing failover to a worse backend or a misleading `searching` state. Capture the error and report it in the attempt reason instead of silently converting to [].",
+   "existing_code": "      const ports = await driver.listPorts().catch(() => [] as Flx4PortInfo[]);",
+   "start_line": 310,
+   "end_line": 310,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/controller-flx4/src/backend.ts",
+   "content": "Native handle leak on open failure. `openPort` is called before any error handling; on Windows WinMM this is exactly the single-client case the file exists to report \u2014 `openPort` throws when another app holds the port and the freshly constructed `Input` is never closed, leaking a native RtMidi handle on every failed open attempt (which the hotplug poll repeats indefinitely). Wrap the construction/open/message-registration in try/catch and call `closePort()` on failure.",
+   "suggestion_code": "      const input = new (asRtMidiModule(await load()).Input)();\n      try {\n        input.openPort(Number(port.id));\n        input.on(\"message\", (_deltaTime, message) => {\n          onMessage(message);\n        });\n      } catch (error) {\n        try {\n          input.closePort();\n        } catch {\n          // the port never opened; ignore teardown failure\n        }\n        throw error;\n      }",
+   "existing_code": "      const input = new (asRtMidiModule(await load()).Input)();\n      input.openPort(Number(port.id));",
+   "start_line": 451,
+   "end_line": 452,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/controller-flx4/src/backend.ts",
+   "content": "Failover state is misclassified. `lastUnavailable` is overwritten by every later probe/open failure, so the final `unavailable-on-this-device` classification reflects the *last* failure rather than a real \"held by another client\" condition. Consequences: (a) when all backends simply fail to load/probe (e.g. nothing installed), the service still reports `unavailable-on-this-device` instead of `failed`/`searching`; (b) on macOS a Windows-only probe failure can become the user-facing reason, so the remedy tells the user to install Windows MIDI Services. Also, if a port *was* matched but only the open failed, the `sawPort` branch is unreachable because `lastUnavailable` is set, so a genuinely openable-port failure is reported as a device-availability problem. Track availability separately from load/probe failures and prefer the `sawPort`\u2192`failed` classification when a matching port existed.",
+   "existing_code": "        lastUnavailable = { reason: message, remedy: heldSingleClient ? WINDOWS_HELD_REMEDY : remedyFor(name) };",
+   "start_line": 333,
+   "end_line": 333,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/controller-flx4/src/backend.ts",
+   "content": "A single throwing event listener aborts delivery to the remaining listeners *and* propagates through the driver's message callback (`acceptBytes` is invoked directly from the backend's `onMessage`), which can disrupt the MIDI backend's read loop. Invoke listeners defensively (try/catch per listener) so one bad subscriber cannot break message delivery.",
+   "existing_code": "    for (const listener of this.eventListeners) listener(event);",
+   "start_line": 364,
+   "end_line": 364,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/controller-flx4/src/backend.ts",
+   "content": "Same for status listeners: an exception from one subscriber prevents every subsequent listener from receiving the status update. Wrap each call in try/catch (or isolate per-listener).",
+   "existing_code": "    for (const listener of this.statusListeners) listener(status);",
+   "start_line": 379,
+   "end_line": 379,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/controller-flx4/src/backend.ts",
+   "content": "Edge-case bug: `Array.prototype.slice(-0)` is equivalent to `slice(0)`, so `recent(0)` returns the *entire* buffer instead of an empty result. This affects `recentMessages`/`recentEvents` for any caller that passes 0. Guard for non-positive limits.",
+   "suggestion_code": "    return limit <= 0 ? [] : this.items.slice(-limit);",
+   "existing_code": "    return this.items.slice(-limit);",
+   "start_line": 114,
+   "end_line": 114,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/src/routes/live/manual-intents.ts": [
+  {
+   "path": "apps/desktop/src/routes/live/manual-intents.ts",
+   "content": "Clamp range [0.5, 2] is incompatible with the `master/intensity` request schema. `packages/ipc/src/index.ts:34` declares `value: z.number().min(0).max(1)`, and `ipc-router.ts:140` runs `channels[name].request.parse(payload)` before dispatch. Any sensitivity > 1 (e.g. `sensitivityIntent(9)` \u2192 2, or the `sensitivityIntent(1.5)` used in the test) yields a value above the schema max, so `parse` throws a ZodError and the router returns `{ ok:false, error:{ code:'E_HANDLER' } }` \u2014 the control simply fails instead of applying intensity. Additionally, `Math.min/Math.max` propagate `NaN`, so a non-finite input yields `value: NaN` (also rejected by the schema) rather than a safe default. Clamp to the schema bounds and guard non-finite input.",
+   "suggestion_code": "  const clamped = Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0;\n  return { channel: \"master/intensity\", payload: { version: 1, value: clamped } };",
+   "existing_code": "  const clamped = Math.min(2, Math.max(0.5, value));\n  return { channel: \"master/intensity\", payload: { version: 1, value: clamped } };",
+   "start_line": 45,
+   "end_line": 46,
+   "category": "bug",
+   "severity": "critical"
+  },
+  {
+   "path": "apps/desktop/src/routes/live/manual-intents.ts",
+   "content": "The `at` field is silently discarded, so the blinder is indistinguishable from a plain build. The `show/trigger-build` request schema (`packages/ipc/src/index.ts:64`) is `z.object({ version: v1 })` \u2014 there is no `at` \u2014 and zod's default object parsing strips unknown keys, so `at: nextPhraseBeat` never reaches the backend. The router handler `triggerBuild()` (`ipc-router.ts:43`) also takes no argument. Result: the \"restraint-aware blinder carrying the next-phrase beat\" advertised by the header comment is a no-op; the intended phrase-synced blinder fires as an immediate full build. If the blinder needs a distinct action/beat, it requires its own channel + schema (the `ManualChannel` union has no blinder/at-bearing channel today).",
+   "existing_code": "  return { channel: \"show/trigger-build\", payload: { version: 1, at: nextPhraseBeat } };",
+   "start_line": 31,
+   "end_line": 31,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/src/routes/live/manual-intents.ts",
+   "content": "The `custom` flag never reaches the backend. The `venue/set-color` request schema (`packages/ipc/src/index.ts:80`) is `z.object({ version: v1, rgb: z.tuple([z.number(), z.number(), z.number()]) })` \u2014 no `custom` \u2014 and zod strips unknown keys during `request.parse`, so the \"explicit custom free-colour opt-in\" is a no-op and the handler `setVenueColor(req.rgb)` never sees it. Also, `rgb` is forwarded unvalidated: the schema only requires three `number`s, so floats, negatives, or values > 255 (and `NaN`) are accepted and forwarded to the driver. Add `custom` to the channel schema (or drop it here) and clamp/round rgb components to 0-255 integers.",
+   "existing_code": "  return { channel: \"venue/set-color\", payload: { version: 1, rgb, custom } };",
+   "start_line": 35,
+   "end_line": 35,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/src/routes/live/manual-intents.ts",
+   "content": "Semantics of a momentary `flash` look inverted/unbalanced. `flashIntent(true)` maps to `master/resume` (run) and `flashIntent(false)` to `master/freeze` (persistent stop). A momentary flash control releasing to `master/freeze` would leave the master latched-frozen rather than releasing to the prior state, and the name \"flash\" does not match resume/freeze. Both payloads are individually schema-valid (`master/resume` `at: \"bar\"`, `master/freeze` `frozen: true`), so this is a behavioural/polarity concern rather than a schema error \u2014 confirm the intended on/off action before shipping.",
+   "existing_code": "    : { channel: \"master/freeze\", payload: { version: 1, frozen: true } };",
+   "start_line": 41,
+   "end_line": 41,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/routes/live/manual-intents.ts",
+   "content": "Unknown section kinds silently resolve to white, masking contracts schema drift. If `@autolight/contracts` adds a new section kind (or the kind casing changes), `trackPalette` will quietly emit a white swatch with no signal that the `SWATCH_BY_KIND` map is out of date. Consider surfacing unmapped kinds (log/dev warning) so missing mappings are detectable.",
+   "existing_code": "  return kinds.map((k) => SWATCH_BY_KIND[k] ?? [255, 255, 255]);",
+   "start_line": 62,
+   "end_line": 62,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/config/src/registry.ts": [
+  {
+   "path": "packages/config/src/registry.ts",
+   "content": "Malformed JSON defaults are silently swallowed. `defaultFor` catches `JSON.parse` failures and returns the raw string, so json-typed keys whose `defaultRaw` is not valid JSON yield a `string` instead of the promised object/array, with no error. Confirmed malformed payloads: `mixer.owner.factorWeights` (line 58, unquoted keys), `planner.sectionEnergy` (line 69, unquoted keys / `.3` literals), `analysis.bands` (line 113, unquoted keys), `govee.lan.interfaces` (line 130, `\"[] (all eligible)\"`) and `live.prolink.interfaces` (line 191, `\"[] (all eligible)\"`). Downstream consumers expecting objects/arrays will receive strings and fail silently or crash at a distance. Fix the registry payloads (e.g. quote JSON keys / drop the prose suffix) and make the parser fail loudly instead of returning a wrong-typed value.",
+   "suggestion_code": "  if (def.type === \"json\") {\n    try { return JSON.parse(def.defaultRaw); }\n    catch { throw new Error(`invalid-json-default: ${key} -> ${def.defaultRaw}`); }\n  }",
+   "existing_code": "  if (def.type === \"json\") { try { return JSON.parse(def.defaultRaw); } catch { return def.defaultRaw; } }",
+   "start_line": 276,
+   "end_line": 276,
+   "category": "bug",
+   "severity": "critical"
+  },
+  {
+   "path": "packages/config/src/registry.ts",
+   "content": "Wildcard/placeholder keys are registered as literal keys but are unusable. `defineKey` performs an exact `Map` lookup, so any concrete key under a pattern (e.g. `ui.shortcuts.blackout`, `qa.faults.cpu`, `govee.device.<fixtureId>.transportMode`) throws `unknown-config-key: ...`, even though the registry advertises these as configurable. Affected entries: `ui.shortcuts.*`, `qa.faults.*`, and both `govee.device.<fixtureId>.*` keys. Either implement prefix/parameterized matching in `defineKey`, or model these as pattern metadata separate from the resolvable key set so callers don't hit spurious `unknown-config-key` failures.",
+   "existing_code": "  { key: \"ui.shortcuts.*\", type: \"string\", defaultRaw: \"B blackout, W white, F freeze, A auto, M manual, Up and Down master, 1 to 9 presets\", unit: \"map\", range: \"\", receipt: \"spec 94\", liveSafe: true, scope: \"app\" },",
+   "start_line": 245,
+   "end_line": 245,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/config/src/registry.ts",
+   "content": "`defaultsObject()` emits the literal pattern keys into the defaults object (e.g. `\"ui.shortcuts.*\"`, `\"qa.faults.*\"`, `\"govee.device.<fixtureId>.transportMode\"`) because `defaultFor` resolves them via the exact-match `byKey` map. These are not real config keys and will pollute every materialized defaults snapshot, producing spurious entries and masking the fact that no concrete sub-keys were materialized. Skip pattern keys (or expand them) when building the defaults object.",
+   "existing_code": "  for (const k of KEYS) out[k.key] = defaultFor(k.key);",
+   "start_line": 282,
+   "end_line": 282,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/config/src/registry.ts",
+   "content": "Declared `type` contradicts `defaultRaw` semantics. `analysis.ml.offlineOnly` is typed `string` with `unit: \"bool\"` and a non-boolean default, so `defaultFor` returns a string that callers will compare/negate incorrectly. The same mismatch applies to `govee.lan.stream.keepaliveMs` (typed `string`, value `\"0 (off)\"` while consumers treat it as `0` = disabled) and `govee.ble.colorQuantizeLevels` (typed `string`, value `\"0 (off)\"`, unit \"levels per channel\"). Align `type` and `defaultRaw` (use `boolean`/`number` with a sentinel like `0`/`false` and document the \"off\" meaning) so `defaultFor` returns the type consumers expect.",
+   "existing_code": "  { key: \"analysis.ml.offlineOnly\", type: \"string\", defaultRaw: \"true during Live\", unit: \"bool\", range: \"\", receipt: \"spec 110\", liveSafe: false, scope: \"app\" },",
+   "start_line": 107,
+   "end_line": 107,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/config/src/registry.ts",
+   "content": "No invariant enforcement when building the lookup. A duplicated `key` in `KEYS` would silently overwrite the earlier entry in `byKey` (and the earlier default in `defaultsObject`), and the header's stated \"240 keys\" invariant is never validated at load time. Add a build-time assertion that fails on duplicate keys and verifies the expected key count so registry drift is caught immediately rather than at runtime.",
+   "suggestion_code": "const byKey = new Map<string, KeyDef>();\nfor (const k of KEYS) {\n  if (byKey.has(k.key)) throw new Error(`duplicate-config-key: ${k.key}`);\n  byKey.set(k.key, k);\n}\nif (KEYS.length !== 240) throw new Error(`unexpected-key-count: ${KEYS.length}`);",
+   "existing_code": "const byKey = new Map(KEYS.map((k) => [k.key, k]));",
+   "start_line": 264,
+   "end_line": 264,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/config/src/registry.ts",
+   "content": "`defaultsSchema` validates nothing: `z.record(z.string(), z.unknown())` accepts any object shape, so none of the type/default mismatches in this registry (malformed json payloads, string-typed boolean/number keys) are detected. If this schema is meant to guard resolved config, derive it from `KEYS` (per-key validators with correct types and defaults) so invalid values are rejected instead of passing through silently.",
+   "existing_code": "export const defaultsSchema = z.record(z.string(), z.unknown());",
+   "start_line": 286,
+   "end_line": 286,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/config/src/secrets.ts": [
+  {
+   "path": "packages/config/src/secrets.ts",
+   "content": "Data-loss bug in `flush()`: the persisted blob is rebuilt exclusively from `this.memory`, so any persistent id that is on disk but not currently loaded into memory is silently dropped, and if the resulting map is empty the whole blob is wiped via `clearBlob()`.\n\nConcrete failure: a vault whose blob contains `govee.cloud.apiKey` and whose memory is empty (no `get`/`presence` call yet this session) receives `set(\"agent.apiToken\", token)` (a MEMORY_ONLY id) or `remove(\"agent.apiToken\")`. `persist` ends up empty, so `clearBlob()` erases the stored Govee key. A later `get(\"govee.cloud.apiKey\")` returns `null` even though the user had stored it. The same structure breaks whenever more persistent ids are added: a `set` of one id overwrites the blob with only the ids currently in memory.\n\nFix: merge with the decrypted on-disk blob and only drop ids explicitly removed (e.g., track a `removed` set), instead of deriving disk state solely from live memory.",
+   "existing_code": "    if (Object.keys(persist).length === 0) {\n      this.blobs.clearBlob();\n      return;\n    }",
+   "start_line": 129,
+   "end_line": 132,
+   "category": "bug",
+   "severity": "critical"
+  },
+  {
+   "path": "packages/config/src/secrets.ts",
+   "content": "Two problems here:\n1) `set()` mutates `this.memory` *before* `flush()` can throw. In degraded mode (`isEncryptionAvailable()` false, e.g. no OS keychain), `set(\"govee.cloud.apiKey\", v)` throws from `flush()`, but the value stays in memory \u2014 so `get()`/`has()`/`presence()` report it as \"stored\" even though the caller was told the write failed. Worse, that retained persistent value makes every later `set(\"agent.apiToken\", ...)`/`remove(...)` throw again (`persist` is non-empty), so the memory-only token can never be set.\n2) `flush()` runs unconditionally even for MEMORY_ONLY ids, causing a needless disk write for the agent token and tying its success/failure to unrelated persistent state.\n\nValidate encryption availability before mutating memory, and only persist when a persistent id actually changed.",
+   "suggestion_code": "  set(id: SecretId, value: string): void {\n    const persistent = MEMORY_ONLY_TABLE[id] !== true;\n    if (persistent && !this.crypto.isEncryptionAvailable()) {\n      throw new Error(\"secret encryption unavailable: OS keychain missing, refusing plain-text write\");\n    }\n    this.memory.set(id, value);\n    if (persistent) this.flush();\n  }",
+   "existing_code": "  set(id: SecretId, value: string): void {\n    this.memory.set(id, value);\n    this.flush();\n  }",
+   "start_line": 80,
+   "end_line": 83,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/config/src/secrets.ts",
+   "content": "Silent failure: any `decryptString`/JSON parse error is swallowed and reported identically to \"not set\". A corrupt blob or a keychain/OS-account mismatch therefore shows the key as `missing` in Settings, and the next `set()` silently overwrites the unrecoverable ciphertext (see the `flush()`/`clearBlob()` path), destroying the last chance to recover it. At minimum distinguish \"unreadable\" from \"absent\" (log/return a diagnostic) so corruption is not masked as an unset secret.",
+   "existing_code": "    } catch {\n      return null;\n    }",
+   "start_line": 93,
+   "end_line": 95,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/config/src/secrets.ts",
+   "content": "Sequential `split`/`join` replacement leaks part of a secret when one secret is a substring of another: with `secrets = [\"abc\", \"abcdef\"]`, replacing `\"abc\"` first turns `\"abcdef\"` into `\"[redacted]def\"`, then the `\"abcdef\"` pass matches nothing, leaving `def` in the output. This helper is the guard that keeps secrets out of logs/exports/crash reports, so a partial leak is a real exposure. Sort secrets by descending length (and de-duplicate) before redacting.",
+   "existing_code": "    out = out.split(s).join(\"[redacted]\");",
+   "start_line": 35,
+   "end_line": 35,
+   "category": "security",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/config/src/secrets.ts",
+   "content": "`toBase64`/`fromBase64` rely on the browser globals `btoa`/`atob`. This module deliberately avoids importing Electron to stay unit-testable, so it may be loaded in a Node/main context where these globals are absent (older Node/runtimes). When missing, `fromBase64` throws inside `get()` \u2192 swallowed by the catch \u2192 silently reported as \"not set\", while `toBase64` throws out of `flush()` \u2192 hard failure on every write. Use a runtime-agnostic base64 codec (e.g. `Buffer` when available, or feature-detect `btoa`) instead of assuming the globals exist.",
+   "existing_code": "function toBase64(bytes: Uint8Array): string {",
+   "start_line": 55,
+   "end_line": 55,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "packages/config/src/secrets.ts",
+   "content": "The secret id list is duplicated across four places (`SECRET_IDS`, `SECRET_TABLE`, `MEMORY_ONLY_TABLE`, and these hardcoded keys in `presence()`). Adding a new secret requires editing all of them; forgetting `SECRET_TABLE` makes `isSecretId` reject the new id, and forgetting `presence()` silently hides it from Settings/diagnostics. Derive `SECRET_TABLE`/`MEMORY_ONLY_TABLE` and build `presence()` by iterating `SECRET_IDS` so the id set has a single source of truth.",
+   "existing_code": "    return {\n      \"govee.cloud.apiKey\": this.has(\"govee.cloud.apiKey\") ? SECRET_STORED_LABEL : \"missing\",\n      \"agent.apiToken\": this.has(\"agent.apiToken\") ? SECRET_STORED_LABEL : \"missing\",\n    };",
+   "start_line": 118,
+   "end_line": 121,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/rekordbox-live/src/osc.ts": [
+  {
+   "path": "packages/rekordbox-live/src/osc.ts",
+   "content": "The top-level header pre-read runs outside the visitor's try/catch, so any datagram of >=8 bytes that does not contain a NUL within the buffer (e.g. `Uint8Array(8) {0x01,...}` with no 0x00, or a 4-7 byte NUL-terminated string whose 4-byte padding overruns) makes `readPaddedString` throw `RangeError(\"unterminated OSC string\")` directly out of `decodeOscDatagram`. This violates the documented contract (\"Malformed elements are reported, never thrown at the caller (S26)\") and, since the only caller `ingestDatagram` (rkbx-osc.ts:193) does not wrap the call, an attacker can crash the caller with a single malformed UDP packet. The `bytes.length < 8` branch pushes the error into `malformed`, so the behavior is inconsistent between short and long un-terminated inputs. Prefer eliminating this duplicate read (see the unused `timetag` below) or at minimum wrap it in try/catch and push to `malformed`.",
+   "suggestion_code": "  let t = \"\";\n  try {\n    t = bytes.length >= 8 ? readPaddedString(bytes, 0).text : \"\";\n  } catch (err) {\n    malformed.push(err instanceof Error ? err.message : String(err));\n  }\n  visit(bytes, 0);",
+   "existing_code": "  const t = bytes.length >= 8 ? readPaddedString(bytes, 0).text : \"\";\n  visit(bytes, 0);",
+   "start_line": 173,
+   "end_line": 174,
+   "category": "bug",
+   "severity": "critical"
+  },
+  {
+   "path": "packages/rekordbox-live/src/osc.ts",
+   "content": "The 4-byte blob length prefix is bounds-checked, but the blob payload/padding is not: `at + 4 + len` is never validated against `data.length`. When `len` overruns the buffer, `data.slice()` silently truncates the blob and `at` is advanced past the end of the datagram, so the remaining args are no longer parsed at the correct offsets and the element is NOT reported in `malformed` \u2014 corrupting the parse instead of rejecting it. Validate the full padded length before slicing.",
+   "suggestion_code": "      assertOffset(data, at, 4);\n      const len = new DataView(data.buffer, data.byteOffset + at, 4).getUint32(0, false);\n      const padded = Math.ceil(len / 4) * 4;\n      assertOffset(data, at, 4 + padded);\n      args.push(data.slice(at + 4, at + 4 + len));\n      at += 4 + padded;",
+   "existing_code": "      assertOffset(data, at, 4);\n      const len = new DataView(data.buffer, data.byteOffset + at, 4).getUint32(0, false);\n      args.push(data.slice(at + 4, at + 4 + len));\n      at += 4 + Math.ceil(len / 4) * 4;",
+   "start_line": 131,
+   "end_line": 134,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-live/src/osc.ts",
+   "content": "The bundle element loop condition `at + 4 <= data.length` silently ignores any residual 1-3 bytes left in the bundle (or a size prefix that cannot be fully read). A structurally malformed bundle is therefore accepted and reported as clean rather than added to `malformed`. After the loop, flag any leftover bytes.",
+   "suggestion_code": "          visit(data.subarray(at, at + size), depth + 1);\n          at += size;\n        }\n        if (at !== data.length) malformed.push(`bundle has ${data.length - at} trailing bytes`);",
+   "existing_code": "          visit(data.subarray(at, at + size), depth + 1);\n          at += size;\n        }",
+   "start_line": 163,
+   "end_line": 165,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/osc.ts",
+   "content": "`timetag` is read here but never used inside `visit` (the return value for the top level is recomputed separately at the end of `decodeOscDatagram`). This is dead code and is the root cause of the duplicated `#bundle`/timetag parsing; remove it (or have `visit` return the top-level timetag so the header is parsed only once).",
+   "suggestion_code": "        assertOffset(data, 0, 16);\n        let at = 16;",
+   "existing_code": "        assertOffset(data, 0, 16);\n        const timetag = new DataView(data.buffer, data.byteOffset + 8, 8).getBigUint64(0, false);\n        let at = 16;",
+   "start_line": 156,
+   "end_line": 158,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/rekordbox-live/src/osc.ts",
+   "content": "Integers outside the int32 range fall through to the `f` (float32) branch, so e.g. `args: [5_000_000_001]` is encoded as a float tag, silently losing precision and round-tripping to a non-integer. Consider throwing for out-of-range integer arguments (or documenting the fallback) rather than emitting a precise-looking but lossy float32.",
+   "existing_code": "      if (Number.isInteger(arg) && arg >= -(2 ** 31) && arg < 2 ** 31) {",
+   "start_line": 43,
+   "end_line": 43,
+   "category": "bug",
+   "severity": "low"
+  }
+ ]
+}

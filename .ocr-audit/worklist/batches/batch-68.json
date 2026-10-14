@@ -1,0 +1,172 @@
+{
+ "packages/show-planner/src/styles.ts": [
+  {
+   "path": "packages/show-planner/src/styles.ts",
+   "content": "Weak typing hides key/ID drift: `Record<string, PlannerStyle>` does not tie the record keys to `BuiltInStyleId`, so `STYLE_IDS` and the actual entries can silently diverge (a missing key in `STYLE_IDS`, or an extra key, compiles fine) and every consumer is forced into `?? fallback` / `!` non-null assertions. Typing it as `Record<BuiltInStyleId, PlannerStyle>` (and narrowing `resolveStyle`'s parameter to `BuiltInStyleId` at the boundary) makes drift a compile error.",
+   "suggestion_code": "export const BUILT_IN_STYLES: Record<BuiltInStyleId, PlannerStyle> = {",
+   "existing_code": "export const BUILT_IN_STYLES: Record<string, PlannerStyle> = {",
+   "start_line": 29,
+   "end_line": 29,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/styles.ts",
+   "content": "These defaults in `style()` are effectively dead: all seven built-in presets pass every one of the 11 properties, so no default is ever exercised. Keeping the defaults gives a false sense of safety while `intensityRange` (the only required field) is never validated for ordering or range \u2014 an invalid `[hi, lo]` or out-of-[0,1] range flows unchecked into the compile path, where `intensityRange[0]`/`[1]` are used directly for clamping (`compile.ts:136`, `events.ts:47`). Either drop the unused defaults or validate/normalize the range here.",
+   "existing_code": "    darknessPreference: 0.3,\n    spatialDensity: 0.6,",
+   "start_line": 14,
+   "end_line": 15,
+   "category": "maintainability",
+   "severity": "medium"
+  }
+ ],
+ "packages/show-planner/src/validate.ts": [
+  {
+   "path": "packages/show-planner/src/validate.ts",
+   "content": "`intensityArc` is computed as the plain mean of every cue's intensity, which cannot distinguish a plan that builds to a peak from one that is flat, or one that releases at the end. A diagnostic named \"intensityArc\" that only reports the average will flag/reject the wrong candidates via `evaluationBounds.intensityArc` (spec 115). Either compute an actual arc shape (e.g. correlation of intensity against the expected build/hold/release curve, or compare early/late means) or rename the metric to reflect that it is a mean intensity so bounds are configured knowingly.",
+   "existing_code": "  const arc =\n    ordered.length > 1\n      ? ordered.reduce((n, c) => n + c.intensity, 0) / ordered.length\n      : 0;",
+   "start_line": 205,
+   "end_line": 208,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/validate.ts",
+   "content": "This palette identity key (`Math.round(h):c.toFixed(2)`) is re-implemented independently in `countPaletteChanges`. The validator's `paletteChangeMinBeats` check and the reported `colourChangeRate` must agree on what counts as a palette change; if one side is ever updated (e.g. including lightness or using a different rounding), the validator and the diagnostics will silently diverge. Extract a single `paletteKey(color)` helper and reuse it in both loops.",
+   "existing_code": "    const key = Math.round(c.color.h) + \":\" + c.color.c.toFixed(2);",
+   "start_line": 131,
+   "end_line": 131,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-planner/src/validate.ts",
+   "content": "The preceding comment states that zero-duration cues other than hits are \"not evaluable\", but this loop only rejects non-finite values and never rejects `durationBeats === 0`. A degenerate zero-duration non-hit cue (e.g. `pulse`) therefore passes validation, contradicting the documented invariant. Add an explicit `c.durationBeats === 0` check for non-hit primitives.",
+   "existing_code": "  for (const c of plan.cues) {\n    if (!Number.isFinite(c.startBeat) || !Number.isFinite(c.durationBeats)) {\n      problems.push(`non-deterministic position ${c.type}@${String(c.startBeat)}`);\n    }\n  }",
+   "start_line": 106,
+   "end_line": 110,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-planner/src/validate.ts",
+   "content": "Spreading `cues.map(...)` into `Math.max` creates one function argument per cue. Since this evaluator is the mechanism used to reject pathological generations, a very large cue array can exceed the engine's argument-count limit and throw `RangeError: Maximum call stack size exceeded`, turning a recoverable \"reject and try next candidate\" path into a hard crash. Use a `reduce` (or loop) to compute the max instead of an argument spread.",
+   "existing_code": "  const duration = Math.max(\n    1,\n    ...cues.map((c) => c.startBeat + c.durationBeats),\n  );",
+   "start_line": 184,
+   "end_line": 187,
+   "category": "performance",
+   "severity": "low"
+  }
+ ],
+ "packages/show-runtime/src/runtime.test.ts": [
+  {
+   "path": "packages/show-runtime/src/runtime.test.ts",
+   "content": "This equivalence check is tautological and can never fail for the reason the test claims. `seekWorld` computes its `cues` as literally `evaluateCues(world.plan, beat)` (index.ts:606), so `seekWorld(history, b, 0n).cues` is by definition `evaluateCues(plan, b)` \u2014 the seek history is never consulted for cue production, so the assertion holds regardless of any seek/loop/scratch corruption. To actually test that the rendered output after arbitrary history matches a fresh cursor, drive the real render path (`tickWorld` after `seekWorld`, i.e. ingest an identical observation into both a history world and a fresh world and compare `tick.cues`), not the pure seek helper. Also, `fresh.plan === null ? [] : ...` is a dead branch: `deckWorld` always calls `installPlan(world, 1, plan)` with a non-null plan, so `fresh.plan` is never null here.",
+   "existing_code": "      const fresh = deckWorld(9, b);\n      const expected = fresh.plan === null ? [] : evaluateCues(fresh.plan, b);\n      const actual = seekWorld(history, b, 0n).cues;\n      expect(actual, `beat ${b}`).toEqual(expected);",
+   "start_line": 140,
+   "end_line": 143,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-runtime/src/runtime.test.ts",
+   "content": "This assertion does not do what the accompanying comment claims. It only counts the distinct cue types present in the static `plan` (always 6), so it passes even if the reconstruction loop above never exercised one of those beats/types. To genuinely prove coverage, assert against the cue types actually collected from the reconstruction results, e.g. accumulate `actual` (or the union of evaluated beats) and check `new Set(seen).size === new Set(plan.cues.map(c => c.type)).size`.",
+   "existing_code": "    expect(new Set(plan.cues.map((c) => c.type)).size).toBe(6);",
+   "start_line": 146,
+   "end_line": 146,
+   "category": "test",
+   "severity": "medium"
+  }
+ ],
+ "packages/venue/package.json": [
+  {
+   "path": "packages/venue/package.json",
+   "content": "The `test` script enables `--passWithNoTests`, so `yarn workspace @autolight/venue test` (and the root `test`/`verify:all` fan-out) exits 0 even when zero test files are discovered. Because the suite relies on the `include: [\"src/**/*.test.ts\"]` glob in `vitest.config.ts`, any future breakage of that config (or a rename/regexp mistake in test filenames) silently degrades to a green build with no coverage, defeating the CI gate. The config already guarantees matching files exist, so this flag only hides failures \u2014 consider dropping it.",
+   "existing_code": "    \"test\": \"vitest run --passWithNoTests\",",
+   "start_line": 9,
+   "end_line": 9,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/venue/package.json",
+   "content": "There is no `files` field and no `.npmignore`, while the repository root `.gitignore` ignores `dist/`. When packing/publishing with npm (which falls back to `.gitignore` when `.npmignore` is absent), only the single file referenced by `main` (`./dist/index.js`) is force-included; `./dist/index.d.ts` (referenced by `types`) and any other emitted artifacts are excluded. Consumers would then resolve runtime JS but fail to resolve the declared types. Add an explicit allowlist (e.g. `\"files\": [\"dist\"]`) or a `.npmignore` to guarantee the full `dist/` output ships.",
+   "existing_code": "  \"main\": \"./dist/index.js\",\n  \"types\": \"./dist/index.d.ts\",",
+   "start_line": 5,
+   "end_line": 6,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/venue/vitest.config.ts": [
+  {
+   "path": "packages/venue/vitest.config.ts",
+   "content": "`readdirSync(workspaceSrc)` enumerates every entry in `packages/` \u2014 including regular files and dotfiles, not just package directories \u2014 and blindly turns each into an alias. Any stray file (e.g. a README, `.DS_Store`, a script) becomes a bogus alias `@autolight/<file>` pointing at `<file>/src/index.ts`, which does not exist. The repo's canonical pattern (root `vitest.config.ts`, `packages/renderer/vitest.config.ts`, `packages/show-*/vitest.config.ts`) already guards against this with `{ withFileTypes: true }` + `.filter((e) => e.isDirectory())`; this file should match it.",
+   "suggestion_code": "  readdirSync(workspaceSrc, { withFileTypes: true })\n    .filter((e) => e.isDirectory())\n    .map((e) => [`@autolight/${e.name}`, join(workspaceSrc, e.name, \"src\", \"index.ts\")]),",
+   "existing_code": "  readdirSync(workspaceSrc).map((p) => [`@autolight/${p}`, join(workspaceSrc, p, \"src\", \"index.ts\")]),",
+   "start_line": 12,
+   "end_line": 12,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/venue/vitest.config.ts",
+   "content": "The alias target is built from the directory name only, assuming (a) every sibling directory is a workspace package and (b) its folder name equals the package.json `name` and (c) it exposes `src/index.ts`. Any package whose `name` differs from its folder, or that lacks `src/index.ts`, produces a wrong/dangling alias that fails resolution only at import time with a confusing error. Consider validating the target (e.g. `existsSync(join(dir, \"src\", \"index.ts\"))`) and/or deriving the key from the package's `package.json` name so misconfigured entries surface early.",
+   "existing_code": "const workspaceAlias = Object.fromEntries(",
+   "start_line": 11,
+   "end_line": 11,
+   "category": "maintainability",
+   "severity": "medium"
+  }
+ ],
+ "protocol-fixtures/rekordbox/golden/prolink-vectors.json": [
+  {
+   "path": "protocol-fixtures/rekordbox/golden/prolink-vectors.json",
+   "content": "Both `nextBeat100us` and `secondBeat100us` keys carry a 10\u00d7 unit mislabel. The decoder computes `nextBeatMs = getUint32(0x24, true) / 100` and `secondBeatMs = getUint32(0x28, true) / 100`, so the raw field is in 1/100 ms = 10 \u00b5s, not 100 \u00b5s. Naming the keys '100us' claims a unit under which 50000 would mean 5 s and 25000 would mean 2.5 s\u201410\u00d7 the documented contract. Rename to reflect 10 \u00b5s (or 1/100 ms) so the fixture keys cannot mislead.",
+   "suggestion_code": "        \"nextBeat10us\": { \"offset\": \"0x24\", \"value\": 50000 },",
+   "existing_code": "        \"nextBeat100us\": { \"offset\": \"0x24\", \"value\": 50000 },",
+   "start_line": 20,
+   "end_line": 20,
+   "category": "documentation",
+   "severity": "medium"
+  },
+  {
+   "path": "protocol-fixtures/rekordbox/golden/prolink-vectors.json",
+   "content": "These `offsets` objects are never parsed by any consumer: prolink.test.ts hard-codes the same raw numbers (getUint32(0x24)=50000, getUint16(0x5a)=12800, bytes[0x75]=0x30, ...) instead of iterating `vector.offsets`, and a repo-wide search finds no reader of the `offsets`/`nextBeat100us`/`bpmTimes100` keys. Consequently a typo in an offset key, an offset, or a value here silently passes and the \"documented raw offsets\" can drift from the packet bytes without any test failing (the top-level `note` overstates what is validated). Either drive the raw-offset assertions from this block or remove it so the fixture has a single source of truth.",
+   "existing_code": "        \"bpmTimes100\": { \"offset\": \"0x5a\", \"value\": 12800 },",
+   "start_line": 23,
+   "end_line": 23,
+   "category": "maintainability",
+   "severity": "medium"
+  }
+ ],
+ ".gitignore": [
+  {
+   "path": ".gitignore",
+   "content": "These negations force `.scc/plugins.toml` and `.scc/plugins.lock` to be tracked. Lock/config files for package or plugin resolvers frequently embed resolved source URLs that carry credentials (authenticated registry URLs, Artifactory/Nexus API keys, GitHub Packages tokens). Verify that neither file contains secrets/tokens before committing them; if they can hold credentials, keep them ignored or scrub the tokens (e.g. via env-var indirection) rather than un-ignoring them wholesale.",
+   "existing_code": "!.scc/plugins.toml\n!.scc/plugins.lock",
+   "start_line": 19,
+   "end_line": 20,
+   "category": "security",
+   "severity": "medium"
+  },
+  {
+   "path": ".gitignore",
+   "content": "The `.scc` negations are split across the file: `!.scc/intent.yaml` sits directly under `.scc/*`, but the `plugins.toml`/`plugins.lock` negations appear ~18 lines later, grouped under the unrelated T-OPS-05 comment. Because gitignore evaluates patterns in order, any broad ignore rule added before these two lines would silently re-ignore the files you intend to track. Keep all `.scc` negations immediately after `.scc/*` so the dependency is obvious and resilient.",
+   "existing_code": ".scc/*",
+   "start_line": 1,
+   "end_line": 1,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": ".gitignore",
+   "content": "The DB sidecar patterns cover WAL-mode SQLite (`*.db`, `*.db-wal`, `*.db-shm`) but not the rollback-journal file (`*.db-journal`) or other SQLite extensions such as `*.sqlite`/`*.sqlite3`. If any tool uses rollback-journal mode or a different extension, those generated files will be committed accidentally. Consider broadening coverage if such files are produced.",
+   "existing_code": "*.db-wal\n*.db-shm",
+   "start_line": 8,
+   "end_line": 9,
+   "category": "bug",
+   "severity": "low"
+  }
+ ]
+}

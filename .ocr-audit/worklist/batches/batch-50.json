@@ -1,0 +1,272 @@
+{
+ "apps/desktop/electron/services/storage-service.ts": [
+  {
+   "path": "apps/desktop/electron/services/storage-service.ts",
+   "content": "The file header claims this service \"applies the WAL, synchronous, busy-timeout and foreign-key pragmas from config\", but only `synchronous` and `busyTimeoutMs` are forwarded to `Store`. WAL is always forced by `openDatabase` (`requireWal` defaults to `true` for file DBs) and `foreign_keys` is always ON (`options.foreignKeys ?? true`); there are no `storage.journal_mode` / foreign-key keys in the config registry (only `storage.driver`, `storage.sqlite.synchronous`, `storage.sqlite.busyTimeoutMs`). The comment therefore overstates what config actually controls and will mislead anyone auditing the DS-06/security posture. Please correct the comment (or wire the intended keys) so it matches the real behaviour.",
+   "existing_code": "    synchronous: configString(options.config, \"storage.sqlite.synchronous\", SYNCHRONOUS_DEFAULT),\n    busyTimeoutMs: configNumber(options.config, \"storage.sqlite.busyTimeoutMs\", BUSY_TIMEOUT_DEFAULT),",
+   "start_line": 109,
+   "end_line": 110,
+   "category": "documentation",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/services/storage-service.ts",
+   "content": "`configNumber` only rejects non-numeric values, but `Store.openDatabase` additionally requires `Number.isInteger(busyRaw) && busyRaw >= 0`. A config value such as `5000.5` or `-1` passes this helper and is forwarded to the driver, which then throws (\"invalid storage.sqlite.busyTimeoutMs ...\") and makes `openStorageService` crash instead of falling back to the safe `BUSY_TIMEOUT_DEFAULT` this helper is supposed to provide. Validate integrality/range here so malformed config degrades to the default rather than aborting service startup.",
+   "suggestion_code": "function configNumber(config: StorageConfig | undefined, key: string, fallback: number): number {\n  const value = config?.get(key);\n  return typeof value === \"number\" && Number.isInteger(value) && value >= 0 ? value : fallback;\n}",
+   "existing_code": "function configNumber(config: StorageConfig | undefined, key: string, fallback: number): number {\n  const value = config?.get(key);\n  return typeof value === \"number\" && Number.isFinite(value) ? value : fallback;\n}",
+   "start_line": 77,
+   "end_line": 80,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/services/storage-service.ts",
+   "content": "`status()`/`driverLine` serve a snapshot frozen at open time: `schemaVersion`, `pendingMigrations` and `tables` are captured once and never refreshed. The Store constructor does run all migrations up front (so `pending` is empty here), but if the schema/table set changes at any point during the process lifetime, `status()` will silently report stale values and `stop()` will keep presenting the open-time schema as if it were current. Prefer re-querying `store.version`/`store.pendingMigrations`/`store.tables` inside `snapshot()` while the store is open, and fall back to the cached copy only after `close()`.",
+   "existing_code": "  const opened = {\n    driverStatus: store.status,",
+   "start_line": 117,
+   "end_line": 118,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "apps/desktop/electron/services/storage-service.ts",
+   "content": "`resolveUserDataDir` silently falls back to `process.cwd()` when `app.getPath(\"userData\")` throws, and trusts `AUTOLIGHT_USER_DATA_DIR` verbatim (including relative paths). The service will then open/create `autolight.db` in an unexpected working directory with no error surfaced, risking user data being written to a transient cwd. Consider surfacing/logging the fallback and resolving the override to an absolute path.",
+   "existing_code": "  } catch {\n    return process.cwd();\n  }",
+   "start_line": 95,
+   "end_line": 97,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "apps/desktop/electron/services/storage-service.ts",
+   "content": "`opened.driverStatus.nodeSqlite` already contains the `moduleStatus(\"node:sqlite\")` probe computed inside `openDatabase`; calling `moduleStatus(\"node:sqlite\")` again duplicates the probe (extra require/exists work) and could disagree with the driver's own report. Reuse `opened.driverStatus.nodeSqlite` for `nodeSqliteAvailable`/`nodeSqliteDetail`.",
+   "existing_code": "  const nodeSqlite = moduleStatus(\"node:sqlite\");",
+   "start_line": 112,
+   "end_line": 112,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/src/features/setup/setup-view.tsx": [
+  {
+   "path": "apps/desktop/src/features/setup/setup-view.tsx",
+   "content": "The scenario picker only updates local `useState`; the value is sent to the backend solely inside the toggle Button handler (`simulator/mode` with `enabled: !simulatorMode`). While the simulator is already enabled, selecting a different scenario never reaches the backend until the user exits and re-enters simulator mode, so the UI and the running simulation disagree. Propagate scenario changes when active, e.g. fire `simulator/mode` with `enabled: simulatorMode` on change (or lift `scenario` into the shell store so the toggle always reads the latest value).",
+   "suggestion_code": "            <Select value={scenario} onValueChange={(v) => { const next = v as SimulatorScenario; setScenario(next); if (simulatorMode) void invoke(\"simulator/mode\", { version: 1, enabled: true, scenario: next }); }}>",
+   "existing_code": "            <Select value={scenario} onValueChange={(v) => setScenario(v as SimulatorScenario)}>",
+   "start_line": 68,
+   "end_line": 68,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/features/setup/setup-view.tsx",
+   "content": "Both the store write and the IPC payload are derived from the render-time `simulatorMode` snapshot. The same store field is also toggled from another component (chrome.tsx reads `useShell.getState().simulatorMode` and sends `enabled: next`), so if the store changes between this render and the click, this handler sends an `enabled` value that contradicts the store/backend (e.g. backend ends up toggled the opposite way from the UI). Read fresh state at click time (or use a functional update) so the local mutation and the IPC payload cannot diverge.",
+   "suggestion_code": "          <Button size=\"sm\" variant=\"outline\" onClick={() => { const next = !useShell.getState().simulatorMode; set({ simulatorMode: next }); void invoke(\"simulator/mode\", { version: 1, enabled: next, scenario }); }}>",
+   "existing_code": "          <Button size=\"sm\" variant=\"outline\" onClick={() => { set({ simulatorMode: !simulatorMode }); void invoke(\"simulator/mode\", { version: 1, enabled: !simulatorMode, scenario }); }}>",
+   "start_line": 73,
+   "end_line": 73,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/features/setup/setup-view.tsx",
+   "content": "Fire-and-forget IPC after an optimistic store write. `invoke` swallows errors and resolves to `null` on failure (`store.ts`), and the result here is discarded, so if `follow/mode` fails the local `followMode` still shows the new selection while the persisted `live.follow.mode` keeps the old value \u2014 a silent UI/backend desync only discoverable via diagnostics. Await the call and revert/notify on a null/failed response.",
+   "existing_code": "              onClick={() => { set({ followMode: m.id }); void invoke(\"follow/mode\", { version: 1, mode: m.id }); }}",
+   "start_line": 55,
+   "end_line": 55,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "apps/desktop/src/routes/diagnostics/diagnostics-model.ts": [
+  {
+   "path": "apps/desktop/src/routes/diagnostics/diagnostics-model.ts",
+   "content": "`isFresh` treats any `updatedAtMs` that is ahead of `nowMs` as fresh: the delta `nowMs - updatedAtMs` is negative and always satisfies `<= staleAfterMs`. A clock-skewed or bogus future timestamp will therefore never be reported stale. Since the only caller (`diagnostics-view.tsx`) does `!isFresh(seenAt, Date.now())`, a future `seenAt` silently suppresses the stale badge. Guard invalid/future timestamps explicitly.",
+   "suggestion_code": "  if (updatedAtMs === null || updatedAtMs > nowMs) return false;\n  return nowMs - updatedAtMs <= staleAfterMs;",
+   "existing_code": "  return nowMs - updatedAtMs <= staleAfterMs;",
+   "start_line": 14,
+   "end_line": 14,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/routes/diagnostics/diagnostics-model.ts",
+   "content": "`djEventRow` hardcodes `recordToNdjson: true`, so the `boolean` field can never be `false` and carries no information \u2014 the decision is silently taken here rather than by the caller/recorder. Callers that need to model a non-recorded row have no way to express it. Expose it as a parameter (defaulting to `true` to preserve documented behavior).",
+   "suggestion_code": "export function djEventRow(timestampMs: number, source: string, deck: number, event: string, recordToNdjson = true): DjEventRow {\n  return { timestampMs, source, deck, event, recordToNdjson };\n}",
+   "existing_code": "  return { timestampMs, source, deck, event, recordToNdjson: true };",
+   "start_line": 26,
+   "end_line": 26,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/routes/diagnostics/diagnostics-model.ts",
+   "content": "The name `drainPendingQueue` implies the queue is consumed/emptied, but the implementation only returns a shallow copy and never mutates or clears the source. A caller relying on the name (or on the source being cleared) would re-apply the same pending changes, causing duplicate `config/set` invocations. Either rename to reflect the copy semantics (e.g. `snapshotPendingQueue`) or make the drain contract explicit.",
+   "suggestion_code": "export function drainPendingQueue(queue: PendingChange[]): PendingChange[] {\n  const drained = [...queue];\n  queue.length = 0;\n  return drained;\n}",
+   "existing_code": "export function drainPendingQueue(queue: PendingChange[]): PendingChange[] {\n  return [...queue];\n}",
+   "start_line": 47,
+   "end_line": 49,
+   "category": "maintainability",
+   "severity": "medium"
+  }
+ ],
+ "eslint.config.mjs": [
+  {
+   "path": "eslint.config.mjs",
+   "content": "This disable contradicts the S5 comment directly above it (`no swallowed errors, no empty catches`). With `preserve-caught-error` off, `catch (e) { throw new Error(\"...\") }` is accepted and the original cause is silently dropped, defeating the error-propagation guarantee the block claims to enforce. If the intent is only to avoid noisy hits on legacy call sites, scope it with a `files`-based override (or add an explicit justification comment); otherwise remove the disable.",
+   "existing_code": "      \"preserve-caught-error\": \"off\",",
+   "start_line": 53,
+   "end_line": 53,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "eslint.config.mjs",
+   "content": "Dead config: `analysis/.venv/**` is already matched by the earlier `**/.venv/**` glob (line 19), so this entry has no effect. Remove it to keep the ignore list accurate.",
+   "existing_code": "      \"analysis/.venv/**\",",
+   "start_line": 22,
+   "end_line": 22,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "eslint.config.mjs",
+   "content": "This globals map no longer serves its primary purpose: `no-undef` is turned off below (line 60), and flat config no longer auto-provides Node/browser globals, so the declarations mainly exist to satisfy `no-undef`. The only rule still consuming them is `no-global-assign`. Consider removing the block or documenting why these specific globals must be declared, so it doesn't imply the runtime environment boundary is being enforced.",
+   "existing_code": "      globals: {",
+   "start_line": 31,
+   "end_line": 31,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "eslint.config.mjs",
+   "content": "The ignore list excludes `dist`/`node_modules` but not other generated output that `yarn eslint .` will still traverse/lint \u2014 notably `coverage/**` (vitest coverage is configured via `@vitest/coverage-v8`), plus build/turbo caches such as `**/build/**`, `**/out/**`, `.turbo/**`, and `**/*.tsbuildinfo`. Add the generated directories so lint does not waste time on artifacts.",
+   "existing_code": "      \"playwright-report/**\",",
+   "start_line": 26,
+   "end_line": 26,
+   "category": "performance",
+   "severity": "low"
+  },
+  {
+   "path": "eslint.config.mjs",
+   "content": "This config object has no `files` scope, so `prefer-const`, `no-useless-assignment`, and `no-useless-escape` are disabled for the entire monorepo \u2014 far beyond the test-fixture / dual-import rationale the header describes for `no-unused-vars`. These rules catch real ordering and immutability defects in production code. Prefer scoping the disables to test globs (a separate override with `files`) rather than switching them off globally.",
+   "existing_code": "      \"prefer-const\": \"off\",",
+   "start_line": 54,
+   "end_line": 54,
+   "category": "maintainability",
+   "severity": "medium"
+  }
+ ],
+ "packages/ble/src/commands.test.ts": [
+  {
+   "path": "packages/ble/src/commands.test.ts",
+   "content": "This assertion can never fail: it spreads `dialect`, overwrites `brightnessScale` with the literal `255`, then asserts the value it just wrote is `255`. It provides zero coverage of the \"records the dialect per device, never assumed\" guarantee (and of the 255-scale family). Assert real dialect facts instead, e.g. that a fresh dialect is returned and is a distinct object.",
+   "suggestion_code": "    expect(defaultBleDialect()).not.toBe(dialect);\n    expect(dialect.supportsMaskedBrightness).toBe(false);",
+   "existing_code": "    expect({ ...dialect, brightnessScale: 255 as const }.brightnessScale).toBe(255);",
+   "start_line": 120,
+   "end_line": 120,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/ble/src/commands.test.ts",
+   "content": "Only `ack.status` is captured, so the final `expect(acks).toEqual([0, 0])` passes for any 0x00 ack regardless of which command it answers. A wrong/duplicated ack (e.g. the device acking cmd 0x04 for a 0x05 write) would still satisfy the assertion, so the ack contents are effectively unverified. Capture the full ack (`cmd` + `status`) and assert each cmd matches the command just written.",
+   "existing_code": "    connection.subscribe((notify) => {\n      const ack = parseBleAck(notify);\n      if (ack !== null) acks.push(ack.status);\n    });",
+   "start_line": 178,
+   "end_line": 181,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/ble/src/commands.test.ts",
+   "content": "`disconnect()` and `adapter.close()` only execute when every preceding assertion passes. If any assertion (or the `write`/`scan` await) throws, the simulated connection/adapter and its clock-backed state leak into subsequent tests. Wrap the body in try/finally (or register an `afterEach` cleanup) so the link is always torn down.",
+   "suggestion_code": "    try {\n      // ... assertions ...\n    } finally {\n      await connection.disconnect();\n      await adapter.close();\n    }",
+   "existing_code": "    await connection.disconnect();\n    await adapter.close();",
+   "start_line": 189,
+   "end_line": 190,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/ble/src/commands.test.ts",
+   "content": "The test title claims coverage of \"single, masked and legacy colours\", but `bleColorLegacy` (the 0x02 legacy payload path) is never exercised or even imported. A regression in the legacy encoder would not be caught. Either add a legacy assertion or drop \"legacy\" from the title.",
+   "existing_code": "  it(\"encodes single, masked and legacy colours\", () => {",
+   "start_line": 62,
+   "end_line": 62,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/ble/src/commands.test.ts",
+   "content": "The \"XOR checksum\" claim is only validated against `simGoldenFrame`, which is an independent encoder but lives in this repo. If the production encoder and the sim share the same misreading of the 20-byte XOR layout, every assertion here still passes. Pin at least one checksum with a literal spec byte vector (hardcoded hex) so a shared bug cannot slip through.",
+   "existing_code": "  it(\"encodes 20 byte frames with the XOR checksum\", () => {",
+   "start_line": 37,
+   "end_line": 37,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/cloud/vitest.config.ts": [
+  {
+   "path": "packages/cloud/vitest.config.ts",
+   "content": "`readdirSync(packages)` returns every entry name, including plain files (`README.md`, `.DS_Store`, lockfiles) and non-package directories (e.g. `.cache`, `.turbo`). Each one is turned into an `@autolight/<name>` alias pointing at a nonexistent `<name>/src/index.ts`. A bogus alias can silently shadow a real module resolution (especially with a file/extensionless name) and produces confusing errors instead of failing fast.\n\nThe repo's root `vitest.config.ts` already guards against this with `readdirSync(workspaceSrc, { withFileTypes: true }).filter((e) => e.isDirectory())`; mirror that here (optionally also skip hidden dirs).",
+   "suggestion_code": "const workspaceAlias = Object.fromEntries(\n  readdirSync(packages, { withFileTypes: true })\n    .filter((entry) => entry.isDirectory())\n    .map((entry) => [\n      `@autolight/${entry.name}`,\n      join(packages, entry.name, \"src\", \"index.ts\"),\n    ]),\n);",
+   "existing_code": "const workspaceAlias = Object.fromEntries(\n  readdirSync(packages).map((name) => [\n    `@autolight/${name}`,\n    join(packages, name, \"src\", \"index.ts\"),\n  ]),\n);",
+   "start_line": 8,
+   "end_line": 13,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/cloud/vitest.config.ts",
+   "content": "Two problems with this alias set:\n1. Every alias maps a package name to a concrete *file* (`<pkg>/src/index.ts`). Vite string aliases match on `<find> === id || id.startsWith(find + '/')`, so a subpath import such as `@autolight/contracts/schema` does not resolve to `<pkg>/src/schema.ts` \u2014 it is rewritten to `<pkg>/src/index.ts/schema`, an invalid path. The root `vitest.config.ts` adds a dedicated regex subpath alias (`/^@autolight\\/([^/]+)\\/([^/]+)$/` \u2192 `packages/$1/src/$2.ts`) precisely to avoid this.\n2. Blindly assuming `<pkg>/src/index.ts` exists means any package whose entry differs (root `index.ts`, an `exports` map, or no `src/`) silently resolves to a missing file. Prefer a subpath/directory alias or validate the entry exists when building the map.",
+   "existing_code": "  resolve: { alias: workspaceAlias },",
+   "start_line": 16,
+   "end_line": 16,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/cloud/vitest.config.ts",
+   "content": "Supplying `exclude` replaces Vitest's default exclude list rather than extending it. The patterns here are also root-relative and unanchored (`node_modules/**`, `dist/**`), whereas Vitest's defaults use `**/node_modules/**` / `**/dist/**`. As a result, nested `node_modules`/`dist` directories under `src` (e.g. `src/<nested>/node_modules/...`) are no longer excluded and could be collected as tests, and defaults like `**/*.config.*` are dropped too.\n\nAnchor these globs (use `**/` prefixes) or extend the defaults instead of overriding them.",
+   "suggestion_code": "    exclude: [\"**/node_modules/**\", \"**/dist/**\"],",
+   "existing_code": "    exclude: [\"node_modules/**\", \"dist/**\"],",
+   "start_line": 18,
+   "end_line": 18,
+   "category": "maintainability",
+   "severity": "medium"
+  }
+ ],
+ "packages/config/package.json": [
+  {
+   "path": "packages/config/package.json",
+   "content": "`--passWithNoTests` makes the test step exit 0 even when zero tests are discovered (e.g. if the `src/**/*.test.ts` files are removed/renamed, or a bad `include` glob stops matching). CI would then silently report success for a broken/missing suite. Since the package already ships tests, this flag buys nothing and only hides regressions \u2014 drop it so a missing suite fails the build.",
+   "suggestion_code": "\"test\": \"vitest run\",",
+   "existing_code": "\"test\": \"vitest run --passWithNoTests\",",
+   "start_line": 19,
+   "end_line": 19,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/config/package.json",
+   "content": "This package is publishable (no `\"private\": true`) yet declares no `files` allowlist. `npm pack`/`npm publish` will therefore include `src/` (incl. `*.test.ts`), `tsconfig.json`, `vitest.config.ts`, and `scripts/export.mjs` alongside `dist/`, leaking internals and potentially shipping stale sources. Add an explicit `files` allowlist (or mark the package private if it is internal-only).",
+   "suggestion_code": "  \"main\": \"./dist/index.js\",\n  \"files\": [\n    \"dist\"\n  ],",
+   "existing_code": "  \"main\": \"./dist/index.js\",",
+   "start_line": 5,
+   "end_line": 5,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/config/package.json",
+   "content": "`main`/`exports` all target `./dist/*`, but nothing builds `dist` before it is consumed/published: there is no `prepare`/`prepublishOnly`/`prepack` script. A consumer installing from a symlink/git ref, or a publish that forgets `yarn build`, gets a package whose entry points do not exist (ERR_MODULE_NOT_FOUND for `@autolight/config` and the `./registry` subpath). Add a build-before-publish hook.",
+   "suggestion_code": "    \"build\": \"tsc -p tsconfig.json\",\n    \"prepublishOnly\": \"tsc -p tsconfig.json\",",
+   "existing_code": "    \"build\": \"tsc -p tsconfig.json\",",
+   "start_line": 18,
+   "end_line": 18,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ]
+}

@@ -1,0 +1,254 @@
+{
+ "apps/desktop/src/routes/venue/device-screens.ts": [
+  {
+   "path": "apps/desktop/src/routes/venue/device-screens.ts",
+   "content": "Inconsistent gating between `segments` and `qualifiedResolution`. When `qualified` is true but `tile.segments` is 0 (or negative), `segments` is nulled while `qualifiedResolution` still renders a \"measured\" caption (e.g. \"0 segments\"). Consumers can therefore show a measured segment string that contradicts the nulled count. Apply the same `> 0` guard to both (note `fps`/`latencyMs` below also lack the positive-value guard that `segments` uses).",
+   "suggestion_code": "    segments: qualified && tile.segments > 0 ? tile.segments : null,\n    qualifiedResolution: qualified && tile.segments > 0 ? `${tile.segments} segments` : \"unmeasured\",",
+   "existing_code": "    segments: qualified && tile.segments > 0 ? tile.segments : null,\n    qualifiedResolution: qualified ? `${tile.segments} segments` : \"unmeasured\",",
+   "start_line": 37,
+   "end_line": 38,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/routes/venue/device-screens.ts",
+   "content": "`latencySource` declares `\"sku-default\"` but `deviceScreenRow` only ever emits `\"measured\"` or `\"unmeasured\"`. Per DS-17 the intended behavior is `measured-else-sku` with a visible unmeasured badge, so the SKU-default fallback path is never produced by this mapper and any downstream branch handling `\"sku-default\"` is dead. Either implement the SKU-default fallback (e.g. carry a per-SKU latency default into the tile) or narrow the union so the type cannot advertise an unreachable state.",
+   "existing_code": "  latencySource: \"measured\" | \"sku-default\" | \"unmeasured\";",
+   "start_line": 20,
+   "end_line": 20,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/routes/venue/device-screens.ts",
+   "content": "`bleAddress` (and `lastResponse` on line 44) are part of the row contract but unconditionally hardcoded to null. `TransportMode` allows `\"ble\"`, so selecting BLE transport yields a row with no address, and any consumer displaying last-response/BLE binding silently loses data. Populate these from the tile/source (and widen the `deviceScreenRow` input accordingly) or remove them from the contract to avoid a misleading always-null field.",
+   "existing_code": "    bleAddress: null,",
+   "start_line": 35,
+   "end_line": 35,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "packages/ble/src/constants.ts": [
+  {
+   "path": "packages/ble/src/constants.ts",
+   "content": "`BLE_HOST_COLOR` is documented as \"Host colour channel sub commands\", but `0x90`/`0x83` are not the sub-command \u2014 the sub-command is `0x02` and these are payload opcodes. The package's own encoder reflects this: `encodeHostColor(sub, payload)` is called in `commands.ts` as `encodeHostColor(0x02, [0x90])` / `encodeHostColor(0x02, [0x83, r, g, b])`, i.e. `0x02` is the sub byte. A caller that trusts this name and does `encodeHostColor(BLE_HOST_COLOR.PROBE, ...)` would emit `a5 90 ...`, a malformed host-colour frame. Please align the name/comment with the actual layering (sub-command `0x02` + opcode byte).",
+   "suggestion_code": "/** Host colour channel payload opcodes sent after the 0xA5 0x02 sub-command (WP04). */\nexport const BLE_HOST_COLOR = {\n  PROBE: 0x90,\n  ONE_COLOR: 0x83,\n} as const;",
+   "existing_code": "/** Host colour channel sub commands (WP04). */\nexport const BLE_HOST_COLOR = {\n  PROBE: 0x90,\n  ONE_COLOR: 0x83,\n} as const;",
+   "start_line": 67,
+   "end_line": 71,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/ble/src/constants.ts",
+   "content": "`BLE_READ_CMD` (and likewise `BLE_WRITE_CMD`, `BLE_COLOR_MODE` above) is declared here as the single source of truth but is never read anywhere in the repo \u2014 only re-exported from `index.ts`. The command builders in `commands.ts` instead hardcode the same literals and define a second copy, `BLE_READS`, which has already drifted: this table lists `EXTRA_07: 0x07` while `BLE_READS` omits it. That defeats the stated invariant-tables intent and guarantees future divergence. Either wire `commands.ts` to consume these tables, or delete the unused duplicates here.",
+   "existing_code": "export const BLE_READ_CMD = {\n  POWER: 0x01,\n  BRIGHTNESS: 0x04,\n  SUB_MODE: 0x05,\n  EXTRA_06: 0x06,\n  EXTRA_07: 0x07,",
+   "start_line": 52,
+   "end_line": 57,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/ble/src/constants.ts",
+   "content": "`BLE_DEFAULTS` claims \"call sites read them, never literals\", but `SCAN_TIMEOUT_MS` is never referenced by any code (the BLE package has no scan-timeout implementation that uses it), so this mirror of `govee.ble.scanTimeoutMs` is currently dead. Remove it until a call site consumes it, or implement the scan timeout using it, to avoid an unenforced duplicate default that can silently drift from the config registry.",
+   "existing_code": "  /** govee.ble.scanTimeoutMs. */\n  SCAN_TIMEOUT_MS: 10000,",
+   "start_line": 85,
+   "end_line": 86,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/ble/src/encrypted.test.ts": [
+  {
+   "path": "packages/ble/src/encrypted.test.ts",
+   "content": "`seedAcks` is populated by the notify subscriber but never read/asserted, so it is effectively dead and the ACK path is unverified. Because `handshakeDone` is set inside `answerHandshake` regardless of whether `notify` is wired, this test would still pass if the sim stopped emitting the `0x33 0x01` / `0x33 0x02` ack frames (e.g. a broken `ack()`/`subscribe()` path). Assert the captured acks.",
+   "suggestion_code": "    seedSim.handleWrite(seed.e701, 1000);\n    seedSim.handleWrite(seed.e702, 2000);\n    expect(seedSim.handshakeDone).toBe(true);\n    expect(seedAcks).toEqual([1, 2]);",
+   "existing_code": "    seedSim.handleWrite(seed.e701, 1000);\n    seedSim.handleWrite(seed.e702, 2000);\n    expect(seedSim.handshakeDone).toBe(true);",
+   "start_line": 115,
+   "end_line": 117,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/ble/src/encrypted.test.ts",
+   "content": "For `frames.e702` only the two header bytes are checked. A bug that writes the wrong seed bytes into the E7 02 payload (or truncates/pads the frame incorrectly) would not be caught, even though the sibling `e701` assertions do validate payload and length. Add the same payload/length assertions for `e702`.",
+   "suggestion_code": "    expect(frames.e702[0]).toBe(0xe7);\n    expect(frames.e702[1]).toBe(0x02);\n    expect([...frames.e702.slice(2, 6)]).toEqual([1, 2, 3, 4]);\n    expect(frames.e702).toHaveLength(20);",
+   "existing_code": "    expect(frames.e702[0]).toBe(0xe7);\n    expect(frames.e702[1]).toBe(0x02);",
+   "start_line": 49,
+   "end_line": 50,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/ble/src/encrypted.test.ts",
+   "content": "`verifyBleV2Reply` compares with `text.includes(sku)` and a squashed-substring MAC check, so it accepts over-permissive matches (e.g. `sku=H60761` or `mac=...ff00`). The test only covers case-insensitive exact matches, so a substring/prefix regression would pass. Add negative cases with a longer SKU/MAC value.",
+   "suggestion_code": "    expect(verifyBleV2Reply(reply, \"H6076\", \"11:22:33:44:55:66\")).toBe(false);\n    expect(verifyBleV2Reply(new TextEncoder().encode(\"sku=H60761 mac=aa:bb:cc:dd:ee:ff00\"), \"H6076\", \"aa:bb:cc:dd:ee:ff\")).toBe(false);",
+   "existing_code": "    expect(verifyBleV2Reply(reply, \"H6076\", \"11:22:33:44:55:66\")).toBe(false);",
+   "start_line": 78,
+   "end_line": 78,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/ble/src/encrypted.test.ts",
+   "content": "`loadBleKeysFile` is only exercised on a well-formed existing file. The failure path (nonexistent/unreadable path, read error) is untested, so a regression that turns the intended rejection into an unhandled rejection or a different error would be missed. Add a rejects assertion for a missing file.",
+   "suggestion_code": "    const loaded = await loadBleKeysFile(path);\n    expect(loaded.key).toHaveLength(16);\n    await expect(loadBleKeysFile(join(dir, \"missing.json\"))).rejects.toThrow();",
+   "existing_code": "    const loaded = await loadBleKeysFile(path);\n    expect(loaded.key).toHaveLength(16);",
+   "start_line": 93,
+   "end_line": 94,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/ble/src/encrypted.test.ts",
+   "content": "`parseBleKeysFile` accepts both 16-byte (32 hex) and 32-byte (64 hex) keys, but only the 16-byte path is asserted. A regression that wrongly rejected 32-byte keys (or the `/32 or 64/` message) would go unnoticed. Add a valid 64-hex key case.",
+   "suggestion_code": "    expect(parseBleKeysFile(JSON.stringify({ version: 1, keyHex: hex })).key).toHaveLength(16);\n    expect(parseBleKeysFile(JSON.stringify({ version: 1, keyHex: randomBytes(32).toString(\"hex\") })).key).toHaveLength(32);",
+   "existing_code": "    expect(parseBleKeysFile(JSON.stringify({ version: 1, keyHex: hex })).key).toHaveLength(16);",
+   "start_line": 95,
+   "end_line": 95,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/ble/src/encrypted.ts": [
+  {
+   "path": "packages/ble/src/encrypted.ts",
+   "content": "`verifyBleV2Reply` only rejects an *empty* `mac` (`mac.length === 0`), but the actual comparison uses `squashed(mac)`, which strips every non-hex character. A MAC with no hex characters (e.g. `\"zz:zz:zz\"`, or a placeholder like `\"--\"`) squashes to `\"\"`, and `String.prototype.includes(\"\")` is always `true`, so the MAC half of the check silently passes and any reply that merely contains the SKU is accepted \u2014 the session verification fails open. Even a truncated/typo'd MAC (e.g. one hex digit) trivially matches. Also note `squashed(text)` strips non-hex from the *entire* reply, so the MAC can be \"found\" as a run of hex digits assembled from the SKU/other fields. Validate the squashed MAC before comparing.",
+   "suggestion_code": "  const squashedMac = squashed(mac);\n  if (sku.length === 0 || squashedMac.length === 0) return false;\n  return text.includes(sku) && squashed(text).includes(squashedMac);",
+   "existing_code": "  if (sku.length === 0 || mac.length === 0) return false;\n  return text.includes(sku) && squashed(text).includes(squashed(mac));",
+   "start_line": 235,
+   "end_line": 236,
+   "category": "security",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/ble/src/encrypted.ts",
+   "content": "`bleV2Decrypt` builds the decipher without the `authTagLength` option while `bleV2Encrypt` pins `{ authTagLength: BLE_V2_TAG_LEN }`. Today this happens to work because GCM's default auth tag length is 16 and `BLE_V2_TAG_LEN` is 16, so the two paths agree only by coincidence. If `BLE_V2_TAG_LEN` is ever changed, a tag of the new length passes the `tag.length !== BLE_V2_TAG_LEN` guard but then fails inside `setAuthTag` with an obscure Node `ERR_CRYPTO_INVALID_AUTH_TAG` instead of the intended message. Pass the constant explicitly for symmetry with the encrypt path.",
+   "suggestion_code": "  const decipher = createDecipheriv(v2Algorithm(key.key), Buffer.from(key.key), Buffer.from(iv), { authTagLength: BLE_V2_TAG_LEN });",
+   "existing_code": "  const decipher = createDecipheriv(v2Algorithm(key.key), Buffer.from(key.key), Buffer.from(iv));",
+   "start_line": 163,
+   "end_line": 163,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/ble/src/encrypted.ts",
+   "content": "`loadBleKeysFile` awaits `readFile` with no error handling, so a missing/unreadable key file surfaces a raw Node error (e.g. `ENOENT: no such file or directory, open '...'`) instead of a user-friendly message, unlike the carefully-worded errors in `parseBleKeysFile`. Since this is the entry point Setup uses for the owner key file, wrap the read and rethrow with context (without leaking the key content) so the UI can render the keys-needed state consistently.",
+   "existing_code": "export async function loadBleKeysFile(path: string): Promise<BleV2Key> {\n  return parseBleKeysFile(await readFile(path, \"utf8\"));\n}",
+   "start_line": 206,
+   "end_line": 208,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "packages/ble/src/qualify.test.ts": [
+  {
+   "path": "packages/ble/src/qualify.test.ts",
+   "content": "Tautological wizard-order assertion: `steps` is compared against `BLE_WIZARD_STEPS`, which is imported from the very module under test (`./qualify.js`) and is also the source (`runBleQualification` pushes the step ids literally). If a step is reordered/renamed in `BLE_WIZARD_STEPS` together with the pushes, this test still passes, so it cannot independently pin the documented wizard order. Assert against a literal expected order so the spec lives in the test, not in the code under test.",
+   "suggestion_code": "    expect(steps.map((s) => s.step)).toEqual([\n      \"connect\",\n      \"versions\",\n      \"segment-count\",\n      \"ic-count\",\n      \"masked-write\",\n      \"write-budget\",\n      \"write-drain\",\n      \"render-hold\",\n      \"latency\",\n    ]);",
+   "existing_code": "    expect(steps.map((s) => s.step)).toEqual([...BLE_WIZARD_STEPS]);",
+   "start_line": 54,
+   "end_line": 54,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/ble/src/qualify.test.ts",
+   "content": "Mock fidelity gap: `confirmMaskedWrite` discards `_pattern` and unconditionally returns `true`, and `readLatencyMs` always returns a fixed constant. As a result the tests can never fail if `qualify.ts` passes the wrong pattern to `confirmMaskedWrite` (e.g. \"masked-line\") or stops calling `await user.confirmMaskedWrite(...)`/`await user.readLatencyMs()` and hardcodes the value. Record the received pattern and call counts and assert them (e.g. expect the recorded pattern to equal \"masked-stripe\") so the masked-write verification path is actually exercised.",
+   "existing_code": "  confirmMaskedWrite: async (_pattern: \"masked-stripe\"): Promise<boolean> => {\n    void _pattern;\n    return true;\n  },",
+   "start_line": 19,
+   "end_line": 22,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/ble/src/qualify.test.ts",
+   "content": "Dead mutation: `now` is only read through the `() => now` closure passed into `runBleQualification`, which has already resolved by this line, so `now += 3000` has no observable effect. It looks like the intent was to verify timing behaviour (recoveryMs/writeDrainMs/renderHoldMs), but those fields are not derived from the clock here and the assertions below just restate the hardcoded implementation constants (300/2000/2000). Either remove the dead increment or use it to actually assert time-dependent behaviour.",
+   "existing_code": "    now += 3000;",
+   "start_line": 53,
+   "end_line": 53,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/ble/src/qualify.test.ts",
+   "content": "Redundant/vacuous gate assertion: `bleQualificationSimReady` is defined as `simContractChecks(peripherals, now).every((c) => c.ok)`, so this line is a tautology that can never add signal beyond the next line. It is also vacuously true if `simContractChecks` ever returns an empty array (`.every` on `[]` is `true`), and the hardcoded `999` \"now\" argument is never validated because the only time-dependent check merely asserts `typeof ... === \"boolean\"`. Assert something falsifiable instead, e.g. that a mutated/incomplete family set produces a specific failing check, or that at least one check exists.",
+   "existing_code": "    expect(simContractChecks(family, 999).every((c) => c.ok)).toBe(true);",
+   "start_line": 113,
+   "end_line": 113,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/ble/src/qualify.test.ts",
+   "content": "Handshake classification is not isolated: the v2 case sets `manufacturer[0] = 0x40` (encoded bit set) *and* `versionByte: 2`, while the seed case uses the same `0x40` with `versionByte: 1`. There is no case where `versionByte === 2` while the encoded bit is clear (manufacturer 0x00). Because of that, a regression that wrongly requires the encoded bit to report \"v2\" (or that ignores `protocolV2` when the bit is set in some other combination) would still pass every \"v2\" assertion. Add a peripheral with `manufacturer: new Uint8Array([0x00, 4, 7])` and `versionByte: 2` and assert `encryptedHandshake === \"v2\"`.",
+   "existing_code": "    const v2 = new SimPeripheral({\n      address: \"AA:BB:CC:DD:EE:63\",\n      name: \"GVH607663AA\",\n      manufacturer: new Uint8Array([0x40, 4, 7]),",
+   "start_line": 73,
+   "end_line": 76,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/cloud/package.json": [
+  {
+   "path": "packages/cloud/package.json",
+   "content": "`vitest run --passWithNoTests` makes the test step exit 0 when zero test files are matched. Combined with the glob in vitest.config.ts (`include: [\"src/**/*.test.ts\"]`), a renamed/moved test file, a changed include pattern, or a broken alias/transform will silently produce a green CI with tests never executed. Prefer failing when no tests are found (drop the flag) so missing discovery is caught.",
+   "existing_code": "    \"test\": \"vitest run --passWithNoTests\",",
+   "start_line": 9,
+   "end_line": 9,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/cloud/package.json",
+   "content": "`lint` and `typecheck` are byte-for-byte the same `tsc --noEmit` invocation, so the package has no actual linter (no eslint/prettier is declared in devDependencies). Any lint-only rule \u2014 including the repo's dependency-pinning rules \u2014 is never enforced for this package. Either point `lint` at a real linter (and declare it) or drop the redundant script to avoid a false sense that linting runs.",
+   "existing_code": "    \"lint\": \"tsc --noEmit -p tsconfig.json\",\n    \"typecheck\": \"tsc --noEmit -p tsconfig.json\"",
+   "start_line": 10,
+   "end_line": 11,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/cloud/package.json",
+   "content": "`main`/`types` point into `./dist`, but there is no `files` allowlist and no `exports` map. `npm publish` from this directory will therefore ship everything not covered by a root .npmignore/.gitignore (src/, tests, tsconfig.json, vitest.config.ts), and consumers installing an unbuilt checkout get a broken entry point with no export boundary. Add a `files` allowlist (e.g. `[\"dist\"]`) and an `exports` map so published contents and public entry points are explicit.",
+   "existing_code": "  \"main\": \"./dist/index.js\",\n  \"types\": \"./dist/index.d.ts\",",
+   "start_line": 5,
+   "end_line": 6,
+   "category": "maintainability",
+   "severity": "medium"
+  }
+ ],
+ "packages/cloud/src/cross-check.ts": [
+  {
+   "path": "packages/cloud/src/cross-check.ts",
+   "content": "`input.cloud?.capabilities.declaredSegmentCount` only guards `cloud` being null; it still dereferences `.capabilities` unconditionally. If a partially-populated `CloudDevice` (missing/drifted `capabilities`) is passed at runtime \u2014 which the `CloudDevice | null` signature does not prevent for hand-built or externally-sourced objects \u2014 this throws a `TypeError` instead of degrading to the intended `cloud-silent` outcome. Add optional chaining on `capabilities` as well so a missing payload still yields the safe null path.",
+   "suggestion_code": "  const declared = input.cloud?.capabilities?.declaredSegmentCount ?? null;",
+   "existing_code": "  const declared = input.cloud?.capabilities.declaredSegmentCount ?? null;",
+   "start_line": 45,
+   "end_line": 45,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/cloud/src/cross-check.ts",
+   "content": "`CrossCheckInput.hardwareId` is declared but never referenced anywhere in this module; the `evidenceNote` identifies the device only by `input.model`. Model strings are shared across many identical units, so a recorded mismatch cannot be traced back to the specific unit it came from. Either include `hardwareId` in the evidence note (and/or the outcome) so the evidence is attributable, or drop the field from the input contract.",
+   "suggestion_code": "  /** Unique per unit; identifies which device the evidence belongs to. */\n  hardwareId: string;",
+   "existing_code": "  hardwareId: string;",
+   "start_line": 13,
+   "end_line": 13,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/cloud/src/cross-check.ts",
+   "content": "`measured` is never validated before comparison. A `NaN`, negative, non-integer, or non-finite measured value (bad sensor/calibration input) will silently fall through to `disagree` (`NaN === declared` is false) and be recorded as a cloud mismatch with `evidenceNote` interpolating `NaN`, masking the real problem as a cloud disagreement. Consider rejecting/clamping invalid measurements before comparing.",
+   "suggestion_code": "  if (declared === null) return \"cloud-silent\";\n  if (!Number.isFinite(measured)) return \"disagree\";\n  return measured === declared ? \"agree\" : \"disagree\";",
+   "existing_code": "  if (declared === null) return \"cloud-silent\";\n  return measured === declared ? \"agree\" : \"disagree\";",
+   "start_line": 39,
+   "end_line": 40,
+   "category": "bug",
+   "severity": "low"
+  }
+ ]
+}

@@ -1,0 +1,367 @@
+{
+ "analysis/src/autolight_analysis/decode.py": [
+  {
+   "path": "analysis/src/autolight_analysis/decode.py",
+   "content": "The intermediate file name is deterministic per source (`{key}.tmp`), so two processes/threads decoding the same source concurrently write to the exact same path and interleave their f32le bytes. Since `tmp.rename(raw)` then promotes whatever is on disk, a corrupt `{key}.f32le` can be published (directly violating the content-keyed cache contract). Also, on `decode()` failure the partial tmp file is never removed, leaving an orphan that a later run silently overwrites. Use a process/task-unique temp name and clean it up on failure.",
+   "suggestion_code": "    tmp = cache / f\"{key}.{os.getpid()}.tmp\"\n    try:\n        decode(src, tmp, resampler)\n    except Exception:\n        tmp.unlink(missing_ok=True)\n        raise",
+   "existing_code": "    tmp = cache / f\"{key}.tmp\"\n    decode(src, tmp, resampler)",
+   "start_line": 141,
+   "end_line": 142,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/decode.py",
+   "content": "The sidecar is written before the raw file is renamed into place, so the two artifacts are not published atomically. A crash (or concurrent reader) between these lines observes a half-written cache: sidecar present without the raw `.f32le`. The guard `raw.exists() and sidecar.exists()` then either forces a re-decode or, worse, a reader may consume a sidecar whose raw file does not exist yet. Publish the raw file first (atomic rename) and then the sidecar, or write the sidecar to a temp name and rename it into place as well.",
+   "suggestion_code": "    tmp.rename(raw)\n    sidecar.write_text(json.dumps(meta))",
+   "existing_code": "    sidecar.write_text(json.dumps(meta))\n    tmp.rename(raw)",
+   "start_line": 156,
+   "end_line": 157,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/decode.py",
+   "content": "`resampler` is validated against `RESAMPLERS` but never actually applied: this always emits the same fixed `aresample=44100` filter regardless of whether the caller asked for `soxr` or `swr`. As a result requesting `swr` silently produces identical (soxr/default) audio, and because `decode_key` embeds `{resampler}` into the cache key, two cache entries with byte-identical content are created for the same source. Either honor the requested engine (when the build supports it) or stop embedding `resampler` in the cache key so the configured preference is not silently ignored.",
+   "existing_code": "    return [\"-af\", \"aresample=44100\"]",
+   "start_line": 55,
+   "end_line": 55,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/decode.py",
+   "content": "Any ffprobe failure (binary missing, parse error, non-numeric output) is swallowed and reported as a start offset of exactly 0.0s. A real priming/`start_time` offset therefore gets recorded as zero with no warning, which misaligns the analysis timebase and DJ grid (explicitly the use case in the module docstring). Distinguish \"genuinely no offset\" from \"could not measure\" \u2014 at minimum log a warning on the error path instead of returning a silent 0.0.",
+   "suggestion_code": "    except (OSError, subprocess.CalledProcessError, ValueError) as exc:\n        logging.warning(\"ffprobe start_time unavailable for %s: %s\", src, exc)\n    return 0.0",
+   "existing_code": "    except (OSError, subprocess.CalledProcessError, ValueError):\n        pass\n    return 0.0",
+   "start_line": 105,
+   "end_line": 107,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/decode.py",
+   "content": "`src` is passed straight after `-i`, so a filename beginning with `-` (user- or attacker-supplied) is parsed by FFmpeg as an option/URL rather than an input file \u2014 an argument-injection/correctness hazard. Resolve the path (or otherwise terminate option parsing) before passing it to the decoder so leading dashes cannot be reinterpreted as flags.",
+   "suggestion_code": "        \"-i\",\n        str(Path(src).resolve()),",
+   "existing_code": "        \"-i\",\n        src,",
+   "start_line": 62,
+   "end_line": 63,
+   "category": "security",
+   "severity": "medium"
+  }
+ ],
+ "apps/desktop/electron/services/lifecycle.ts": [
+  {
+   "path": "apps/desktop/electron/services/lifecycle.ts",
+   "content": "Singleton captures only the first caller's options. `instance ??= new LifecycleService(opts)` means that if `getLifecycleService()` is invoked before `userDataDir` is known (e.g. a module-level call during boot), every later call passing `userDataDir` is silently ignored and `crashPath()` returns `null` forever, so crash-record persistence is permanently disabled. Either make `userDataDir` injectable/updatable on the singleton, or require the caller to resolve `userDataDir` before the first access.",
+   "suggestion_code": "  instance ??= new LifecycleService(opts);\n  // A later userDataDir must not be silently dropped when the singleton was\n  // first created without one; expose a setter or resolve the dir eagerly.\n  if (opts.userDataDir !== undefined) instance.setUserDataDir(opts.userDataDir);",
+   "existing_code": "  instance ??= new LifecycleService(opts);",
+   "start_line": 250,
+   "end_line": 250,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/services/lifecycle.ts",
+   "content": "The crash-hold timer is `unref`'d, so it does not keep the event loop alive. If the crash occurs on the last thing keeping the process up (or the app begins quitting), Node/Electron can exit before the timer fires, meaning `safeLook(\"dim\")` never runs and the returned `dimmed` promise never resolves. That defeats the \"hold then dim\" crash contract. Remove the `unref()` so the dim phase is guaranteed to run, or document that callers must keep the process alive.",
+   "suggestion_code": "  // Do NOT unref: the safe-look dim must run even when nothing else keeps\n  // the loop alive, otherwise `dimmed` never resolves.",
+   "existing_code": "  handle.unref?.();",
+   "start_line": 139,
+   "end_line": 139,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/services/lifecycle.ts",
+   "content": "On timeout `Promise.race` settles but the `port()` promise is never cancelled; the wedged step keeps executing concurrently with all subsequent teardown steps (e.g. `flush-db` runs while `analysis` is still shutting down), which can cause data races/lost writes. Additionally, if that still-running promise later rejects, the rejection is unhandled. Attach a rejection handler and/or await the underlying promise with its own guard so a timed-out step cannot corrupt later steps.",
+   "suggestion_code": "        const portPromise = Promise.resolve(port());\n        // The port cannot be cancelled; swallow its late rejection so a wedged\n        // step never produces an unhandled rejection or races later steps.\n        portPromise.catch(() => {});\n        const result = await Promise.race([portPromise, timer.promise]);",
+   "existing_code": "        const result = await Promise.race([Promise.resolve(port()), timer.promise]);",
+   "start_line": 93,
+   "end_line": 93,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/electron/services/lifecycle.ts",
+   "content": "`nextStage()` selects any stage that is not `ok`/`degraded`, which includes terminal `failed` states. A stage already marked `failed` will be returned again, so callers that loop `advance(nextStage(), ...)` can retry a permanently dead stage or spin forever instead of surfacing the terminal failure. Exclude `failed` (and only return `pending`/`running`).",
+   "suggestion_code": "    const next = this.stages.find((s) => s.state === \"pending\" || s.state === \"running\");",
+   "existing_code": "    const next = this.stages.find((s) => s.state !== \"ok\" && s.state !== \"degraded\");",
+   "start_line": 211,
+   "end_line": 211,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/electron/services/lifecycle.ts",
+   "content": "`advance()` has two timing/state problems: (1) it overwrites `startedAtMs` on every `running` call, so a re-entry resets the measured duration; (2) it only records `ms` when `startedAtMs` already exists, so a stage that transitions straight to `ok`/`degraded`/`failed` without a prior `running` reports no duration. There is also no guard against illegal transitions (e.g. `ok` back to `running`). Guard the transition and seed `startedAtMs` on first entry so timing is always meaningful.",
+   "suggestion_code": "    if (state === \"running\") found.startedAtMs ??= Date.now();\n    if (state !== \"running\" && state !== \"pending\") {\n      found.startedAtMs ??= Date.now();\n      found.ms = Date.now() - found.startedAtMs;\n    }",
+   "existing_code": "    if (state === \"running\") found.startedAtMs = Date.now();",
+   "start_line": 203,
+   "end_line": 203,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "apps/desktop/electron/services/provider-manager.ts": [
+  {
+   "path": "apps/desktop/electron/services/provider-manager.ts",
+   "content": "`prolinkBindError` is a module-level flag that is only ever *set* (on `error`) and never cleared. After one transient bind failure, `providers()` will permanently report `deaf on :50001` even if a later `start()` binds successfully and `observation.peerPresent` becomes true. Clear the flag once the bind is confirmed via the `listening` event (and reset it in `stop()`/on the cleanup path).",
+   "suggestion_code": "    socket.on(\"listening\", () => {\n      prolinkBindError = null;\n    });\n    socket.bind(50001);",
+   "existing_code": "    socket.bind(50001);",
+   "start_line": 152,
+   "end_line": 152,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/electron/services/provider-manager.ts",
+   "content": "On a bind error the socket is never closed/destroyed. The observer is left in a half-configured, unbound state and the fd is only released when `stop()` happens to run (the returned closer is the only teardown). On repeated start/stop or reset cycles (e.g. `resetProviderManagerForTest`) this leaks file descriptors. Destroy the socket inside the error handler.",
+   "suggestion_code": "    socket.on(\"error\", (err: Error) => {\n      // EADDRINUSE/ENOTSUP here means Rekordbox owns :50001 without sharing:\n      // the observer is deaf, not broken. Record it where Diagnostics reads.\n      prolinkBindError = err instanceof Error ? err.message : String(err);\n      try { socket?.close(); } catch { /* already closed */ }\n      socket = null;\n    });",
+   "existing_code": "    socket.on(\"error\", (err: Error) => {\n      // EADDRINUSE/ENOTSUP here means Rekordbox owns :50001 without sharing:\n      // the observer is deaf, not broken. Record it where Diagnostics reads.\n      prolinkBindError = err instanceof Error ? err.message : String(err);\n    });",
+   "start_line": 147,
+   "end_line": 151,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/services/provider-manager.ts",
+   "content": "Race: `boot()` is fire-and-forget and its promise is not tracked. If `stop()` runs while the boot is in flight, `stop()` sets `this.composite = null` / `compositeStarted = false`, but the late-resolving `.then` then re-assigns `this.composite = result`, resurrecting composite state after shutdown (so `providers()` reports `composite-flx4` running again). Guard the continuation against the current lifecycle (e.g. an epoch/generation counter incremented in `stop()`).",
+   "suggestion_code": "      const epoch = this.lifecycleEpoch;\n      void boot()\n        .then((result) => {\n          if (epoch !== this.lifecycleEpoch) return;\n          this.composite = result;\n          this.tracker.count(\"compositeBoots\");\n        })\n        .catch(() => {\n          if (epoch !== this.lifecycleEpoch) return;\n          this.compositeStarted = false;\n        });",
+   "existing_code": "      void boot()\n        .then((result) => {\n          this.composite = result;\n          this.tracker.count(\"compositeBoots\");\n        })",
+   "start_line": 237,
+   "end_line": 241,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/electron/services/provider-manager.ts",
+   "content": "`setInterval` fires `tick` every `pollMs` regardless of whether the previous `await poll()` has settled. A slow osascript/helper call (up to 8s/3s timeouts) overlaps with subsequent ticks, so several polls run concurrently and a late-finishing earlier poll can overwrite `this.readings` with stale data; `axTicks` is also over-counted. Add an in-flight guard so only one poll runs at a time.",
+   "suggestion_code": "      this.axTimer = setInterval(() => {\n        if (this.axPolling) return;\n        this.axPolling = true;\n        void tick().finally(() => { this.axPolling = false; });\n      }, this.opts.pollMs ?? 1000);",
+   "existing_code": "      this.axTimer = setInterval(() => { void tick(); }, this.opts.pollMs ?? 1000);",
+   "start_line": 225,
+   "end_line": 225,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/services/provider-manager.ts",
+   "content": "The osascript fallback flattens all static texts from every Rekordbox window into one comma-joined stream, matches clock pairs with a global regex, then maps them positionally (`decks[deckId - 1]`). Any extra/missing text or a different window/deck ordering silently shifts readings onto the wrong deck instead of being reported unreadable. Since the regex already discards all positional metadata, deck identity cannot be recovered reliably; at minimum validate the expected count and mark unreadable otherwise.",
+   "suggestion_code": "  const decks = [...out.matchAll(/(-?\\d+:\\d{2}),\\s*\\.(\\d)\\s*,\\s*(\\d+:\\d{2}),\\s*\\.(\\d)/g)].map(",
+   "existing_code": "  const decks = [...out.matchAll(/(-?\\d+:\\d{2}),\\s*\\.(\\d)\\s*,\\s*(\\d+:\\d{2}),\\s*\\.(\\d)/g)].map(",
+   "start_line": 92,
+   "end_line": 92,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/ble/src/backends.ts": [
+  {
+   "path": "packages/ble/src/backends.ts",
+   "content": "Resource leak in `close()`: if `this.deps.primary.close()` rejects, execution never reaches the secondary `close()`, so the secondary adapter (GATT/scanner handle, native context) is leaked. Close both adapters and aggregate failures, e.g. via `Promise.allSettled`, so a primary close failure does not skip the secondary.",
+   "suggestion_code": "  async close(): Promise<void> {\n    const secondary = this.deps.secondary;\n    const targets = [this.deps.primary.close()];\n    if (secondary !== null && secondary !== this.deps.primary) targets.push(secondary.close());\n    const results = await Promise.allSettled(targets);\n    const failed = results.find((r) => r.status === \"rejected\");\n    if (failed !== undefined && failed.status === \"rejected\") throw failed.reason;\n  }",
+   "existing_code": "  async close(): Promise<void> {\n    await this.deps.primary.close();\n    const secondary = this.deps.secondary;\n    if (secondary !== null && secondary !== this.deps.primary) await secondary.close();\n  }",
+   "start_line": 163,
+   "end_line": 167,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/ble/src/backends.ts",
+   "content": "`frame.slice()` is not guaranteed to copy. The parameter is typed `Uint8Array`, but BLE notification frames are frequently Node `Buffer`s, and `Buffer.prototype.slice` returns a *view* sharing the underlying memory (unlike `Uint8Array.prototype.slice`). The channel then holds a live view of the caller's buffer, so later in-place mutation of the source frame silently changes what `take()` returns and defeats the latest-wins copy intent. Use an explicit copy that is subclass-safe: `Uint8Array.from(frame)` / `new Uint8Array(frame)`.",
+   "suggestion_code": "    this.pending = Uint8Array.from(frame);",
+   "existing_code": "    this.pending = frame.slice();",
+   "start_line": 273,
+   "end_line": 273,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/ble/src/backends.ts",
+   "content": "`primaryReason` is sticky and mutated from a shared, non-racy-safe location: a failed `scan()` sets it, but a subsequent *successful* scan never clears it, so `summary()`/`report()`/`decision()` keep reporting a stale failure cause forever. Because `decision(address)` returns the scan-level `primaryReason` for every device without an override, a single scan-level fallback also leaks a bogus per-device reason onto healthy devices. Concurrent scans/connects writing here interleave and overwrite each other's typed reason. Consider resetting `primaryReason` to `null` on a successful primary scan, and keep per-device reasons in `overrides` separate from the scan-level cause.",
+   "existing_code": "      this.deps.primaryReason = bleReasonText(reasonClass, detail);\n      return secondary.scan(timeoutMs);",
+   "start_line": 133,
+   "end_line": 134,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/ble/src/backends.ts",
+   "content": "`noteFallback()` silently discards the typed reason when there is no secondary adapter (`return` without recording anything). A caller that reports a per-device failure (e.g. the link manager observing a stream error) believes the reason was persisted for the tile, but nothing is stored, so the displayed decision diverges from the actual failure. Either store the reason/decision even without a secondary, or make the no-op explicit to callers (throw/return a boolean) so the drop is not silent.",
+   "existing_code": "  noteFallback(address: string, reason: string): void {\n    const other = this.deps.secondary;\n    if (other === null) return;",
+   "start_line": 157,
+   "end_line": 159,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/ble/src/backends.ts",
+   "content": "`available` is hardcoded to `true` and there is no code path that can ever set it to `false`, even when `primaryReason` shows the primary backend failed to load/scan. Consumers reading `report().available` get no signal of unavailability. Either derive it (e.g. `available: this.deps.primaryReason === null`) or drop the field so telemetry does not report a failed backend as available.",
+   "existing_code": "    const out: { kind: BleBackendKind; available: boolean; reason?: string } = {\n      kind: this.deps.primaryKind,\n      available: true,\n    };",
+   "start_line": 116,
+   "end_line": 119,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/govee/src/engines/index.ts": [
+  {
+   "path": "packages/govee/src/engines/index.ts",
+   "content": "Concurrent `openStream` calls for the same device are not serialized. Two overlapping calls both read `engineFor(deviceId)` before either records an override, so both invoke the toolkit; if both fail (or one fails after the other already fell back) each call independently runs `noteFallback` and opens its own native stream. The result is two live streams for one device and a leaked/armed toolkit stream, violating the 'one stream per device' invariant. Add a per-device in-flight promise (or a lock keyed by deviceId) so opens for the same device are serialized and the decision is re-read after the await.",
+   "existing_code": "    const engine = this.engineFor(deviceId);\n    if (engine === this.deps.native || this.deps.primaryKind === \"native-ts\") {\n      return engine.openStream(deviceId, opts);\n    }",
+   "start_line": 99,
+   "end_line": 102,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/govee/src/engines/index.ts",
+   "content": "On the toolkit error path the code records the override and opens a native stream, but never closes the toolkit stream that may already be open for this device from an earlier successful `openStream`. The old toolkit pacing loop keeps running and its channel stays armed, so the device is driven by two engines at once (and `metrics()` later double-reports it). Close/disarm the device's existing stream before returning the native one.",
+   "existing_code": "      this.noteFallback(deviceId, reasonText(reasonClass, detail));\n      return this.deps.native.openStream(deviceId, opts);",
+   "start_line": 108,
+   "end_line": 109,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/govee/src/engines/index.ts",
+   "content": "`close()` awaits the two engines sequentially. If `primary.close()` rejects, `native.close()` is never invoked, leaking the native engine's sockets/streams (and vice-versa is impossible only because primary runs first). Isolate the two shutdowns, e.g. `await Promise.allSettled([this.deps.primary.close(), this.deps.native.close()])`, so one failure cannot strand the other engine's resources.",
+   "existing_code": "    if (this.deps.primary !== this.deps.native) {\n      await this.deps.primary.close();\n      await this.deps.native.close();\n      return;\n    }",
+   "start_line": 148,
+   "end_line": 152,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/govee/src/engines/index.ts",
+   "content": "The typed reason class is discarded here. `isUnavailableError(err)` narrows to `ToolkitUnavailableError`, which carries the real `reasonClass` ('load' | 'context' | 'platform'), yet the code hard-codes 'context'. A `load`/`platform` failure surfacing during a stream open (e.g. propagated from `handleFor` -> `sdk()`) would be mislabeled as \"unavailable in this context\" on the device tile, contradicting the DS-02/\u00a744 requirement that the typed reason is preserved. Use the error's own class: `isUnavailableError(err) ? err.reasonClass : \"error-class\"`.",
+   "suggestion_code": "      const reasonClass: UnavailableReason = isUnavailableError(err) ? err.reasonClass : \"error-class\";",
+   "existing_code": "      const reasonClass: UnavailableReason = isUnavailableError(err) ? \"context\" : \"error-class\";",
+   "start_line": 107,
+   "end_line": 107,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/govee/src/engines/index.ts",
+   "content": "When `deviceId` is omitted the metrics of both engines are concatenated blindly. Because the toolkit's `metrics()` keys off its `streams` map (its entries are never removed on fallback), a device that flipped to native-ts appears from both engines, so per-device counters are duplicated/inflated. Split/merge the lists by device id (preferring the engine that currently owns each device) instead of concatenating. Also note the `target` binding computed above is unused on this branch.",
+   "existing_code": "    if (deviceId === undefined && this.deps.primary !== this.deps.native) {\n      return [...this.deps.primary.metrics(), ...this.deps.native.metrics()];\n    }",
+   "start_line": 141,
+   "end_line": 143,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/rekordbox-live/src/ax-provider.ts": [
+  {
+   "path": "packages/rekordbox-live/src/ax-provider.ts",
+   "content": "`remainingSeconds` is a countdown (time left), not a playhead position, and it is substituted for `elapsedSeconds` here and then reused for both `playheadSeconds` and the grid beat lookup. For a deck where only the remaining-time field is readable (ax.ts returns elapsed=null, remaining=non-null and marks the reading readable), this reports the countdown as the playhead (e.g. a 2:30 remaining shows playheadSeconds=150) and computes a beat far past the end of the track, while still labelling quality `estimated`. Keep the two fields distinct and only derive a playhead from remaining when a track duration is known; otherwise the deck should not emit a playhead.",
+   "existing_code": "    const elapsed = reading?.elapsedSeconds ?? reading?.remainingSeconds ?? null;",
+   "start_line": 132,
+   "end_line": 132,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-live/src/ax-provider.ts",
+   "content": "`lastPollAtNs` is advanced before the permission check and before any tree is parsed, so a poll rejected for missing Accessibility permission still counts as \"the last poll\". After `setPermission(true)`, the next ingest that arrives within `intervalMs` of that rejected poll is silently dropped despite carrying valid data, delaying live updates by up to a full interval. Also note the comment claims in-flight coalescing, but `ingestTree` is synchronous and there is no in-flight tracking \u2014 this is purely an elapsed-time rate limit. Move `this.lastPollAtNs = at;` after the permission check (and update it only when a poll is actually processed).",
+   "existing_code": "    if (this.lastPollAtNs !== null && Number(at - this.lastPollAtNs) / 1e6 < this.intervalMs) {\n      return [];\n    }\n    this.lastPollAtNs = at;\n    if (!this.permissionGranted) {",
+   "start_line": 96,
+   "end_line": 100,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/ax-provider.ts",
+   "content": "`stateFor` is called by the read-only `getDecks()` accessor, yet it mutates shared mapper state via `mapper.update`. Worse, when `reading?.title` is falsy this passes `track: null`, which DeckGenerationMapper treats as an unload and *increments `generation`* and clears the stored track. Because `getDecks()` runs `stateFor` for unreadable decks too (whose title is often null), merely reading the deck list can bump the generation and make downstream consumers believe the track was unloaded/replaced, then bump it again when the next readable poll restores the title. A transient missing title on a readable deck has the same effect. Derive deck snapshots without mutating generation (only `ingestTree` should drive the mapper), and don't send `null` for a title that is merely unreadable.",
+   "existing_code": "    const state = this.mapper.update(this.id, {\n      deckId: deck,",
+   "start_line": 135,
+   "end_line": 136,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-live/src/ax-provider.ts",
+   "content": "Entries in `readings` (and `grids`) are never removed when a deck disappears from the dumped AX tree. `getDecks()`/`latestReadings()` keep returning the vanished deck with its last reading so consumers continue to see a deck that no longer exists in rekordbox; the stale grid can also produce a bogus beat if the same deck id is later reused. Evict readings/grids for decks absent from the current tree (marking them stale) instead of retaining them indefinitely.",
+   "existing_code": "    const readings = readAxDecks(root);",
+   "start_line": 105,
+   "end_line": 105,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/ax-provider.ts",
+   "content": "Re-granting permission only flips the flag. When `granted` becomes true the status is left as `unavailable` (and stale readings/`lastPollAtNs` are retained), so the provider keeps reporting \"Accessibility permission not granted\" until the next successful `ingestTree`. Transition the status on re-grant (e.g. back to `starting`) and reset `lastPollAtNs` so the first post-grant poll is not coalesced away.",
+   "existing_code": "  setPermission(granted: boolean): void {\n    this.permissionGranted = granted;\n    if (!granted) {",
+   "start_line": 76,
+   "end_line": 78,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/renderer/src/spatial.ts": [
+  {
+   "path": "packages/renderer/src/spatial.ts",
+   "content": "`duty` is effectively ignored. `on` is always 0 or 1, and `on >= p.duty` is just `on` for every `duty` in (0,1] (and `true` for `duty <= 0`), so changing `duty` from 0.1 to 0.9 produces identical output. The documented duty cycle (validated `min:0,max:1`, default 0.5) should gate the lit fraction of each `rateBeats` step using the intra-step phase; note the existing tests only exercise the default duty=0.5, so they pass despite `duty` being a no-op.",
+   "suggestion_code": "      const step = Math.max(1e-9, p.rateBeats);\n      const half = Math.floor(localBeat / step) % 2;\n      const side = split >= 0 ? 0 : 1;\n      const on = half === side ? 1 : 0;\n      const phase = ((localBeat / step) % 1 + 1) % 1;\n      return { level: on === 1 && phase < p.duty ? 1 : 0, hueShift: 0 };",
+   "existing_code": "      const half = Math.floor(localBeat / Math.max(1e-9, p.rateBeats)) % 2;\n      const side = split >= 0 ? 0 : 1;\n      const on = half === side ? 1 : 0;\n      return { level: on >= p.duty ? 1 : 0, hueShift: 0 };",
+   "start_line": 139,
+   "end_line": 142,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/renderer/src/spatial.ts",
+   "content": "`dirOut` has no observable effect: `head` and `head2` are always `from \u00b1 prog*0.5`, and the return takes the `Math.max` of the two `gauss` values, so swapping them changes nothing. Consequently `Diverge` is exactly `Converge` shifted by 0.5 in `from` (both heads start together at `originS+0.5` and re-meet at `originS`), i.e. it never actually diverges from `originS`. Please implement distinct semantics (e.g. Converge's heads start at `originS\u00b10.5` and meet at `originS`, Diverge's heads start at `originS` and spread outward) rather than relying on the no-op sign flip.",
+   "existing_code": "      const dirOut = name === \"Converge\" ? 1 : -1;\n      const from = name === \"Converge\" ? p.originS : (p.originS + 0.5) % 1;\n      const head = (from + dirOut * prog * 0.5 + 1) % 1;\n      const head2 = (from - dirOut * prog * 0.5 + 1) % 1;",
+   "start_line": 123,
+   "end_line": 126,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/renderer/src/spatial.ts",
+   "content": "`d2` is dead and algebraically identical to `d1`: `|(1 - g*0.5) - (1 - front)| == |front - g*0.5| == d1`. It is computed and discarded, and the expression inlined in the `gauss` call recomputes the same quantity. This makes the second opposed front anchor identical to the first and hides the intended two-front interaction; either remove the redundant `d2` or use the correct opposite-front distance. Also note `p.originS` is never read in this case, so the fronts are not anchored to the parameter.",
+   "existing_code": "      const d2 = Math.abs((1 - g * 0.5) - (1 - front));\n      void d2;\n      const v = gauss(Math.min(d1, Math.abs(g * 0.5 - (1 - front))), p.width);",
+   "start_line": 114,
+   "end_line": 116,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/renderer/src/spatial.ts",
+   "content": "`EnvelopeKind` advertises an `\"adsr\"` variant, but `Envelope` and `envelopeLevel` only model attack/release (no decay/sustain). Any consumer branching on `kind === \"adsr\"` will silently receive AR behaviour. Either add the ADSR fields (decay/sustain) or narrow the union to `\"attack-release\"`. (Also, this exported type is not referenced anywhere.)",
+   "existing_code": "export type EnvelopeKind = \"attack-release\" | \"adsr\";",
+   "start_line": 5,
+   "end_line": 5,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/renderer/src/spatial.ts",
+   "content": "Dead code: `ext0` is computed and immediately `void`-ed, never used. Remove the local and the `void` to avoid misleading readers into thinking extent integration happens here.",
+   "existing_code": "  const ext0 = (fields.extent[i * 6] ?? 0) + (fields.extent[i * 6 + 3] ?? 0);\n  void ext0;",
+   "start_line": 70,
+   "end_line": 71,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/renderer/src/spatial.ts",
+   "content": "Dead code: `dir` is assigned then `void`-ed; the orbit direction is actually applied later via `p.direction`. Drop this unused local.",
+   "existing_code": "      const dir = p.direction === \"clockwise\" ? 1 : -1;\n      void dir;",
+   "start_line": 77,
+   "end_line": 78,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/renderer/src/spatial.ts",
+   "content": "`void p;` is a pointless statement: `p` is already used on the preceding line to compute `t`. Remove it.",
+   "existing_code": "      void p;\n      return { level: 0.4 + 0.6 * (chainN * (1 - t) + (1 - chainN) * t), hueShift: 0 };",
+   "start_line": 206,
+   "end_line": 207,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ]
+}

@@ -1,0 +1,146 @@
+{
+ "packages/simulator/package.json": [
+  {
+   "path": "packages/simulator/package.json",
+   "content": "`--passWithNoTests` makes the test step succeed even when zero test files are discovered (e.g. the `src` include/glob is misconfigured, or test files are renamed/moved). CI then reports green while coverage has silently disappeared. Since this package does ship tests (`src/index.test.ts`, `src/govee-lan.test.ts`), consider dropping the flag so an empty suite fails the build, or enforce a minimum test count separately.",
+   "existing_code": "    \"test\": \"vitest run --passWithNoTests\",",
+   "start_line": 9,
+   "end_line": 9,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/simulator/package.json",
+   "content": "`lint` and `typecheck` are byte-for-byte identical `tsc --noEmit` invocations, so no actual linting (e.g. the repo's oxlint/eslint tooling) ever runs for this package. Any lint-only regressions go undetected by the `lint` script. Either point `lint` at the real linter (and declare it) or remove the duplicated script to avoid the false impression that linting occurs.",
+   "existing_code": "    \"lint\": \"tsc --noEmit -p tsconfig.json\",",
+   "start_line": 10,
+   "end_line": 10,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/storage/schema.sql": [
+  {
+   "path": "packages/storage/schema.sql",
+   "content": "These track-scoped tables (`analysis_artifacts`, `show_plans`, `show_edits`) and device/fixture-scoped tables (`qualification_records`, `room_anchors`, `fixture_placements`) lack `REFERENCES ... ON DELETE CASCADE` on their parent key, unlike sibling tables. Deleting the parent therefore leaves orphaned rows, stale cache entries, and dangling references. Add the FK/cascade clauses and mirror them in the migration definitions.",
+   "suggestion_code": "CREATE TABLE IF NOT EXISTS analysis_artifacts (\n  track_id TEXT NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,",
+   "existing_code": "CREATE TABLE IF NOT EXISTS analysis_artifacts (\n  track_id TEXT NOT NULL,",
+   "start_line": 53,
+   "end_line": 54,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/storage/schema.sql",
+   "content": "No indexes are declared for any foreign-key child column. SQLite does not auto-index FK columns, and the code issues `DELETE FROM analysis_artifacts WHERE track_id = ?` / `DELETE FROM show_plans WHERE track_id = ?` plus `ON DELETE CASCADE` parent deletes. These become full table scans on `track_id`, `venue_id`, `room_id`, `device_id`, `hardware_id` as the cache grows. Add `CREATE INDEX` statements (and matching ones in the migrations) for the FK columns that are queried or cascade-deleted.",
+   "existing_code": "CREATE TABLE IF NOT EXISTS source_identities (\n  track_id TEXT NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,\n  source TEXT NOT NULL,",
+   "start_line": 22,
+   "end_line": 24,
+   "category": "performance",
+   "severity": "low"
+  }
+ ],
+ "packages/track-identity/vitest.config.ts": [
+  {
+   "path": "packages/track-identity/vitest.config.ts",
+   "content": "The workspace scan is unguarded: `readdirSync` returns every entry under `packages/` (including non-directories), and nothing verifies that `<entry>/src/index.ts` actually exists. Any stray file or a sibling whose entry point is not `src/index.ts` produces an alias pointing at a non-existent path. Worse, because Vite/Rollup treat a string alias as a prefix match (`find` or `find + '/'`), an invalid entry can shadow or mis-rewrite resolution (e.g. `@autolight/<pkg>/sub` is rewritten to `<pkg>/src/index.ts/sub`). Filter to real package directories whose source entry exists so the alias map cannot silently point at nothing. (Requires importing `existsSync` from `node:fs`.)",
+   "suggestion_code": "const workspaceAlias = Object.fromEntries(\n  readdirSync(workspaceSrc, { withFileTypes: true })\n    .filter(\n      (entry) =>\n        entry.isDirectory() && existsSync(join(workspaceSrc, entry.name, \"src\", \"index.ts\")),\n    )\n    .map((entry) => [\n      `@autolight/${entry.name}`,\n      join(workspaceSrc, entry.name, \"src\", \"index.ts\"),\n    ]),\n);",
+   "existing_code": "  readdirSync(workspaceSrc).map((p) => [`@autolight/${p}`, join(workspaceSrc, p, \"src\", \"index.ts\")]),",
+   "start_line": 12,
+   "end_line": 12,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/track-identity/vitest.config.ts",
+   "content": "This diverges from the referenced `apps/desktop/vitest.config.ts`, which registers a subpath alias (`/^@autolight\\/([^/]+)\\/([^/]+)$/` -> `<pkg>/src/$2.ts`) *before* the exact per-package aliases. Here only the exact aliases exist, so if any test in this package imports a workspace subpath (`@autolight/<pkg>/<sub>`), the string alias prefix-matches and resolves it to `<pkg>/src/index.ts/<sub>`, failing with a confusing resolution error instead of hitting the intended source file. Add the same subpath alias (placed before the exact aliases) to keep the resolution parity the comment claims.",
+   "suggestion_code": "  resolve: {\n    alias: [\n      {\n        find: /^@autolight\\/([^/]+)\\/([^/]+)$/,\n        replacement: join(workspaceSrc, \"$1\", \"src\", \"$2.ts\"),\n      },\n      ...Object.entries(workspaceAlias).map(([find, replacement]) => ({ find, replacement })),\n    ],\n  },",
+   "existing_code": "  resolve: { alias: workspaceAlias },",
+   "start_line": 16,
+   "end_line": 16,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "protocol-fixtures/rekordbox/7.2.10/macos/load-deck-1/capture.json": [
+  {
+   "path": "protocol-fixtures/rekordbox/7.2.10/macos/load-deck-1/capture.json",
+   "content": "The `capture` field in this and the sibling `both-decks-loaded/capture.json` holds a synthetic description instead of the raw transport bytes required by the fixture contract (`docs/rekordbox-capture.md`, `CONTRIBUTING.md`). `fixtureSchema` only enforces `min(1)`, and `replayFixture` ignores `capture` entirely and echoes `expectedEvents`, so these fixtures can never fail and do not exercise the Rekordbox decoder. They therefore do not provide the T-LIVE-09 / T-QA-03 qualification their directories imply. Mark them as pending or exclude them from qualification runs until a real capture replaces the placeholder.",
+   "existing_code": "  \"capture\": \"handwritten-synthetic: real Lighting capture pending owner runbook HW-RB-LIGHT-01 (T-LIVE-09); decoder replays expectations until then\",",
+   "start_line": 4,
+   "end_line": 4,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "protocol-fixtures/rekordbox/7.2.10/macos/load-deck-1/capture.json",
+   "content": "The `effectiveBpm` values in this and the sibling `both-decks-loaded/capture.json` are exactly double the tracks' known tempos (186.92 = 2 \u00d7 93.46 for 'Nice For What'; 173.98 = 2 \u00d7 86.99 for 'Homecoming'). Since these values are the oracle for `replayFixture` and downstream beat mapping, a double-time value would either reject correct decoder output or certify a decoder doubling bug as correct. Verify against the ANLZ/session data before committing.",
+   "existing_code": "      \"effectiveBpm\": 186.92,",
+   "start_line": 21,
+   "end_line": 21,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "protocol-fixtures/serato/3.3.5/macos/loop-roll/capture.json": [
+  {
+   "path": "protocol-fixtures/serato/3.3.5/macos/loop-roll/capture.json",
+   "content": "This fixture's only distinguishing frames are `/Status/Deck/Loop/LoopRollOn` = 1 (64 ms) followed by 0 (160 ms), but the expected state asserts only the `loop` object. In the decoder, `loop.active` is driven by `/Status/Deck/Loop/AutoLoopOn` (`remote-provider.ts` -> `publish()`: `active: acc.loop.autoLoopOn === true`), and the roll state lives in the separate `loopRoll` field (`loopRoll: acc.loop.loopRollOn === true ? {...} : null`). `SeratoRemoteProvider` emits `loopRoll` on the deck state, but the fixture schema (`seratoFixtureSchema.expectedEvents = deckStateSchema.omit({receivedAtNs:true})`, non-strict) has no `loopRoll` key, so it is silently stripped and never compared. Consequence: a decoder that ignores `/Status/Deck/Loop/LoopRollOn` entirely still replays to these exact states and this fixture stays green, i.e. the 'loop-roll' action is not actually tested. Assert the roll state so the toggle is verified (this requires the fixture/contract schema to carry `loopRoll`).",
+   "suggestion_code": "      \"loop\": {\n        \"active\": false,\n        \"startSeconds\": null,\n        \"endSeconds\": null,\n        \"beatLength\": 0.5\n      },\n      \"loopRoll\": {\n        \"active\": true,\n        \"beatLength\": 0.5\n      },",
+   "existing_code": "      \"loop\": {\n        \"active\": false,\n        \"startSeconds\": null,\n        \"endSeconds\": null,\n        \"beatLength\": 0.5\n      },",
+   "start_line": 28,
+   "end_line": 33,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "protocol-fixtures/serato/3.3.5/macos/loop-roll/capture.json",
+   "content": "5 frames split into 2 bursts (0-64 ms, then 160 ms) yield exactly 2 events, so the count matches `compareSequences`' length check. However, the 160 ms burst carries only `LoopRollOn=0`, which changes no field this fixture asserts (`loop.active` stays false from AutoLoopOn, `beatLength` stays 0.5), so the two `expectedEvents` are byte-for-byte identical. The second event therefore verifies nothing the first did not, and the roll-off transition it was presumably added for is unverified. Because the event must remain (the wire emits a second state for the second burst), give it a distinguishing assertion rather than an exact copy of the first.",
+   "existing_code": "  \"frameTimesMs\": [\n    0,\n    20,\n    60,\n    64,\n    160\n  ],",
+   "start_line": 6,
+   "end_line": 12,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "protocol-fixtures/serato/3.3.5/macos/play/capture.json": [
+  {
+   "path": "protocol-fixtures/serato/3.3.5/macos/play/capture.json",
+   "content": "Fixture semantics are correct but implicitly depend on a decoder-side constant. The three frames at 0/20/120 ms are split by `SERATO_BURST_GAP_MS = 50` in `packages/serato/src/replay.ts`: frames 0 and 20 coalesce into one burst (one event), while the 100 ms gap to the 120 ms frame makes it a second burst (second event). So 3 frames \u2192 2 events is intentional, not a dropped frame. The problem is that the committed expectation (`expectedEvents.length === 2`) is derived from a 50 ms heuristic rather than from protocol structure: if the gap constant is retuned to match the real Serato playhead cadence (~30-40 ms, exactly what HW-SER-01 is likely to reveal), this fixture and every sibling will silently decode into a different number of events and the hand-written expectations become wrong for a reason that looks like a decoder regression. Suggest recording the frame\u2192burst\u2192event mapping for this action (fixture note/README) and adding an assertion that the expected event count equals the number of bursts derived from `frameTimesMs`, so a gap-constant change fails at the fixture-window level instead of being misattributed to the provider.",
+   "existing_code": "  \"frameTimesMs\": [\n    0,\n    20,\n    120\n  ],",
+   "start_line": 6,
+   "end_line": 10,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "protocol-fixtures/serato/3.3.5/macos/play/capture.json",
+   "content": "The expected state for the `play` action is not physically derivable from the wire data it asserts. The burst timestamp is 120 ms (the third frame) and the burst start is 20 ms, so the playhead is expected to jump 0 s \u2192 2 s (~4.1 beats at the asserted 124 BPM) in 100 ms while `playRate` stays 1. A pure play advances the playhead by rate \u00d7 \u0394t \u2248 0.1 s; a 2 s change is only reachable via seek/scratch. Consequence: this fixture pins the decoder's contract for a transition the action it claims to cover cannot produce, and any later playhead-continuity/rate validation or seek-vs-play classifier would be exercised against impossible input (and either fail or be forced to accept a 2 s jump as \"playing\"). Suggest either using a rate-consistent marker (\u22480.1 s at 120 ms) or documenting explicitly that playhead values in these scripted fixtures are synthetic markers rather than real times, so the fixture is not mistaken for a reference capture.",
+   "existing_code": "      \"playheadSeconds\": 2,\n      \"playRate\": 1,",
+   "start_line": 47,
+   "end_line": 48,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "protocol-fixtures/serato/3.3.5/macos/replace-track/capture.json": [
+  {
+   "path": "protocol-fixtures/serato/3.3.5/macos/replace-track/capture.json",
+   "content": "expectedEvents[1] asserts the loop is off (active=false, beatLength=null), but the capture contains no wire record that turns the loop off \u2014 the only loop records set AutoLoopOn=1 and BeatLength=4. The \"off\" state is produced solely by the decoder's implicit \"clear loop on track-identity change\" heuristic (`noteTrackFieldsChanged` in packages/serato/src/remote-provider.ts resets `loop: {}` when the filepath id changes). The fixture therefore bakes decoder behavior into the \"expected Serato\" baseline: it cannot detect a regression/change in that reset rule, and it asserts an end-state (loop cleared on replace) that real hardware has not confirmed (provenance: HW-SER-01 pending). Consider adding an explicit `/Status/Deck/Loop/AutoLoopOn = 0` record (with its frameTime) or a comment documenting that loop-off here is a decoder-side reset, not a wire assertion.",
+   "existing_code": "      \"loop\": {\n        \"active\": false,\n        \"startSeconds\": null,\n        \"endSeconds\": null,\n        \"beatLength\": null\n      },",
+   "start_line": 58,
+   "end_line": 63,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "protocol-fixtures/serato/3.3.5/macos/replace-track/capture.json",
+   "content": "The capture delivers the replaced track's Title/Artist *before* its Filepath (all within one <50 ms burst). At that moment the decoder's accumulator still points at fixture-a, so this fixture's correctness relies entirely on burst coalescing publishing only one state per burst. If a frame-time gap ever reaches SERATO_BURST_GAP_MS (50 ms) between Title/Artist and Filepath, an intermediate state would be published with fixture-a carrying \"Fixture C\"/\"Emulator\", and this fixture's two expected events would neither cover nor catch that mis-association. Worth recording the dependency on Title/Artist/Filepath landing in the same burst so a future timing edit does not silently invalidate the expectation.",
+   "existing_code": "        \"canonicalPath\": \"/music/fixture-c.mp3\",\n        \"title\": \"Fixture C\",\n        \"artist\": \"Emulator\"",
+   "start_line": 50,
+   "end_line": 52,
+   "category": "test",
+   "severity": "low"
+  }
+ ]
+}

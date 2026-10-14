@@ -1,0 +1,210 @@
+{
+ "packages/rekordbox-library/src/watch.test.ts": [
+  {
+   "path": "packages/rekordbox-library/src/watch.test.ts",
+   "content": "This assertion enshrines incorrect suppression. The native event only reported the *first* write (`audio-changed`); the second write (`audio-changed-twice-longer`) was deliberately emitted without `native.fire(...)`, i.e. it simulates exactly the OS-event miss that `missedChanges()` exists to count. Because `LibraryWatcher.sweep()` clears `nativeReported` only *after* running and the native event never refreshes `this.snapshots`, the path is still marked as reported when the sweep detects the cumulative delta, so the un-reported change is silently attributed to the earlier event. The test therefore passes even when the missed-change counter drops a genuinely missed change. Refresh the snapshot path on native events (or clear/match `nativeReported` per detected change) and assert `missedChanges()` is `1` here, otherwise this test locks in a counter bug.",
+   "existing_code": "      writeFileSync(audioPath, \"audio-changed-twice-longer\");\n      watcher.sweep();\n      expect(watcher.missedChanges()).toBe(0);",
+   "start_line": 144,
+   "end_line": 146,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-library/src/watch.test.ts",
+   "content": "This test drives real OS events with a re-write loop and a fixed 4s budget, so completion depends on platform watcher latency (kqueue/inotify) rather than on a deterministic signal. It will intermittently time out on slow or heavily loaded CI. It also never asserts `seen.at(-1)?.source === \"native\"`, so a change routed through the wrong code path would still satisfy the assertions as long as the audio invalidation scopes are present. Consider asserting the source and/or making the watched condition deterministic instead of relying on repeated real writes.",
+   "existing_code": "      await vi.waitFor(\n        () => {\n          writeFileSync(audioPath, `audio-changed-${probes++}`);\n          expect(seen.length).toBeGreaterThan(0);\n        },\n        { timeout: 4000, interval: 25 },\n      );",
+   "start_line": 169,
+   "end_line": 175,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/rekordbox-library/src/watch.test.ts",
+   "content": "The mock always resolves `start`/`stop` and can never reject, so the watcher's native-start error handling and partial-start teardown paths are never exercised. If `LibraryWatcher.start()` fails midway through `native.start()` (e.g. `createNativeWatch()` throws or the subscription fails on the second directory in `ParcelWatcher.start`), the already-registered file watchers would leak because `stop()` is only invoked on the success path. Adding a rejecting variant of this mock plus an assertion that `stop()` was called would cover that failure scenario.",
+   "existing_code": "  start(files: readonly WatchedFile[], onEvent: (path: string) => void): Promise<void> {\n    this.started = [...files];\n    this.onEvent = onEvent;\n    return Promise.resolve();\n  }",
+   "start_line": 43,
+   "end_line": 47,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/rekordbox-live/src/contract-suite.test.ts": [
+  {
+   "path": "packages/rekordbox-live/src/contract-suite.test.ts",
+   "content": "The awaited `received.promise` has no timeout and `provider.stop()` is outside any `try/finally`. If a loopback datagram is dropped, `await received.promise` blocks forever (until the global vitest timeout), and if any assertion above throws, the bound UDP socket is never closed, leaking it into subsequent tests. The same pattern exists in the prolink test below. Wrap the wait+assertions in `try { ... } finally { await provider.stop(); }` and race the promise against a timeout so a missed datagram fails fast with a clear message instead of hanging.",
+   "suggestion_code": "    expect(sent).toBe(2);\n    try {\n      await Promise.race([\n        received.promise,\n        new Promise<never>((_, reject) =>\n          setTimeout(() => reject(new Error(\"OSC datagram not received within 2s\")), 2000),\n        ),\n      ]);\n      expect(provider.getDecks()[0]?.playheadSeconds).toBe(1.5);\n      expect(provider.getStatus().state).toBe(\"live\");\n    } finally {\n      await provider.stop();\n    }",
+   "existing_code": "    expect(sent).toBe(2);\n    await received.promise;\n    expect(provider.getDecks()[0]?.playheadSeconds).toBe(1.5);\n    expect(provider.getStatus().state).toBe(\"live\");\n    await provider.stop();",
+   "start_line": 209,
+   "end_line": 213,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/contract-suite.test.ts",
+   "content": "`void track;` is a no-op that discards the contract-supplied track while an internal `trackCounter` synthesizes the track id. Because the harness never maps the contract's `track.id`, prolink's track-identity/generation mapping is not actually exercised against the contract's track ids, and the discard hides that gap. Prefer deriving the PRO DJ LINK trackId deterministically from `track.id` (or add an explicit comment explaining why the contract track is intentionally unused).",
+   "existing_code": "          clock.advance(10);\n          trackCounter += 1;\n          const at = clock.nowNs();\n          void track;",
+   "start_line": 102,
+   "end_line": 105,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/rekordbox-live/src/contract-suite.test.ts",
+   "content": "`127.0.0.1:${port ?? 0}` silently falls back to port 0 if `port` is ever null (bypassing the earlier non-null assertion). Sending to port 0 would make the datagram unreachable and, combined with the unbounded `await received.promise`, hang the test with a misleading failure. Capture the port once after the assertion and fail loudly if it is missing rather than silently defaulting to 0.",
+   "existing_code": "    const sent = await sendUdpDatagrams(\n      [\n        { atMs: 0, bytes: encodeOscMessage({ address: \"/1/time\", args: [1.5] }) },\n        { atMs: 1, bytes: encodeOscMessage({ address: \"/1/bpm/current\", args: [128] }) },\n      ],\n      `127.0.0.1:${port ?? 0}`,\n    );",
+   "start_line": 202,
+   "end_line": 208,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "packages/rekordbox-live/src/fusion.test.ts": [
+  {
+   "path": "packages/rekordbox-live/src/fusion.test.ts",
+   "content": "This \"agree within threshold \u2192 no diagnostic\" assertion is vacuous. `now += 1_000n * 1_000_000n` advances the clock by 1000 ms, but the default `staleMs` is 500 ms, so `rkbx-osc` (last seen at the earlier timestamp) is filtered out by `isFresh` inside `checkDisagreement`. With only one fresh provider left, `checkDisagreement` returns early (`fresh.length < 2`) and `drainDiagnostics()` is empty regardless of the playhead delta or the `disagreeBeats` threshold. The test therefore passes even if the threshold/agreement logic were completely broken. Advance less than `staleMs` and re-ingest the other provider so both states stay fresh and the near-equal spread is genuinely evaluated.",
+   "suggestion_code": "    now += 100n * 1_000_000n;\n    deckState(rkbx, 10.0, now);\n    engine.ingest(\"rkbx-osc\", rkbx.getDecks()[0]!);\n    deckState(prolink, 10.01, now);\n    engine.ingest(\"prolink\", prolink.getDecks()[0]!);\n    expect(engine.drainDiagnostics()).toHaveLength(0);",
+   "existing_code": "    now += 1_000n * 1_000_000n;\n    deckState(prolink, 10.01, now);\n    engine.ingest(\"prolink\", prolink.getDecks()[0]!);\n    expect(engine.drainDiagnostics()).toHaveLength(0);",
+   "start_line": 125,
+   "end_line": 128,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/fusion.test.ts",
+   "content": "`now` is module-level mutable state captured by the `clock` closure, and every test in the file mutates it. This makes the suite order-dependent: any test that forgets to reset `now` at its start (the `describeStatus` test already does not) will inherit the previous test's timestamp and silently change freshness/hold-window behavior. Prefer resetting the clock in a `beforeEach` (or creating a per-test clock) so timing state can never leak between tests.",
+   "existing_code": "let now = 1_000n * 1_000_000_000n;\nconst clock = (): bigint => now;",
+   "start_line": 5,
+   "end_line": 6,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/rekordbox-live/src/fusion.test.ts",
+   "content": "This only weakly validates latest-wins. Pushing states for seconds 1/2/3 without flushing, then calling `drainPending()` asserts coalescing but immediately discards the result, so the later `expect(received).toEqual([4])` holds simply because a fresh `push(latest)` was made after the map was cleared \u2014 it would pass even if `flush()` forwarded every pushed state instead of the coalesced one. Consider asserting `drainPending()`/`flush()` output directly (e.g. expect the listener to receive the single coalesced value) so the forwarding path is actually exercised.",
+   "existing_code": "    expect(port.drainPending()).toHaveLength(1);\n    deckState(provider, 4, now);",
+   "start_line": 144,
+   "end_line": 145,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/rekordbox-live/src/test-tracks.ts": [
+  {
+   "path": "packages/rekordbox-live/src/test-tracks.ts",
+   "content": "`as const` only freezes the *types* at compile time; it does not prevent runtime mutation. These are module-level singletons shared across every test in the same Vitest worker, so a single consumer that mutates them (e.g. `Object.assign(VIRTUAL_TRACK_A, {...})`, or a spread-and-mutate helper) silently corrupts the fixture for all other tests and can mask ordering-dependent failures. Freeze them at runtime.",
+   "suggestion_code": "export const VIRTUAL_TRACK_A = Object.freeze({ id: \"virtual-a\", title: \"Virtual Track A\", artist: \"Suite\" } as const);",
+   "existing_code": "export const VIRTUAL_TRACK_A = { id: \"virtual-a\", title: \"Virtual Track A\", artist: \"Suite\" } as const;",
+   "start_line": 4,
+   "end_line": 4,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/test-tracks.ts",
+   "content": "The `id` field is never consumed by any caller: the only importer (`master-fields.test.ts`) reads `.title` exclusively, and the rkbx-osc provider derives its track id as `rkbx:${title}` (`rkbx-osc.ts:379`), so `\"virtual-a\"` can never equal a real provider-produced id. This makes the field dead and actively misleading \u2014 a future assertion like `expect(deck.track.id).toBe(VIRTUAL_TRACK_A.id)` can never pass. Also, since `artist` is the identical `\"Suite\"` for both fixtures, artist can never be used as a discriminator; uniqueness relies solely on `title`. Either drop the unused fields or align `id` with the real id format.",
+   "existing_code": "export const VIRTUAL_TRACK_B = { id: \"virtual-b\", title: \"Virtual Track B\", artist: \"Suite\" } as const;",
+   "start_line": 5,
+   "end_line": 5,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/rekordbox-live/src/test-tracks.ts",
+   "content": "The header comment claims these fixtures drive \"generation and leak checks\", but the leak check in `contract-suite.ts:100` uses its own inline literals (`\"Generation A\"`, `track.title`) and does not import these fixtures. The stated guarantee is therefore not exercised; either wire the leak-check test to these fixtures or correct the comment so it does not imply coverage that does not exist.",
+   "existing_code": "// synthetic titles (never real library rows) so generation and leak checks",
+   "start_line": 2,
+   "end_line": 2,
+   "category": "documentation",
+   "severity": "low"
+  }
+ ],
+ "packages/serato/src/replay.ts": [
+  {
+   "path": "packages/serato/src/replay.ts",
+   "content": "`framesFromFixture` verifies the frame count but never checks that `frameTimesMs` is non-decreasing. A fixture whose timestamps are out of order (e.g. `[0, 100, 50]`) passes validation, but `seratoBursts` then treats the negative delta as \"same burst\" and `replayOnVirtualClock` computes `nowNs` that goes *backwards* (burst at 50 ms is stamped before the burst at 100 ms). The provider then sees non-monotonic `atNs`, which corrupts its rate window / playhead keep-window logic and yields misleading emissions that can still compare \"successfully\" against a hand-written expectation. Add a monotonicity check alongside the existing length check.",
+   "suggestion_code": "  if (frames.length !== fixture.frameTimesMs.length) {\n    throw new Error(`capture holds ${frames.length} frame(s) but frameTimesMs has ${fixture.frameTimesMs.length}`);\n  }\n  for (let index = 1; index < fixture.frameTimesMs.length; index += 1) {\n    if ((fixture.frameTimesMs[index] ?? 0) < (fixture.frameTimesMs[index - 1] ?? 0)) {\n      throw new Error(`frameTimesMs must be non-decreasing (index ${index})`);\n    }\n  }",
+   "existing_code": "  if (frames.length !== fixture.frameTimesMs.length) {\n    throw new Error(`capture holds ${frames.length} frame(s) but frameTimesMs has ${fixture.frameTimesMs.length}`);\n  }",
+   "start_line": 72,
+   "end_line": 74,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/serato/src/replay.ts",
+   "content": "`splitFrames` assumes the delimiter is non-empty. If `seratoFrameDelimiter()` ever returns a zero-length buffer, `stream.indexOf(delimiter, offset)` returns `offset` on every iteration, `offset` never advances, and the loop pushes an empty frame forever \u2014 an unbounded hang/OOM rather than a clear error. Since the delimiter comes from an external dependency (`frameOsc`), guard the length explicitly.",
+   "suggestion_code": "  const delimiter = seratoFrameDelimiter();\n  if (delimiter.length === 0) throw new Error(\"frame delimiter is empty: cannot split capture\");\n  const frames: Buffer[] = [];\n  let offset = 0;",
+   "existing_code": "  const delimiter = seratoFrameDelimiter();\n  const frames: Buffer[] = [];\n  let offset = 0;",
+   "start_line": 79,
+   "end_line": 81,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "packages/serato/src/replay.ts",
+   "content": "`withoutStamp` is exported (and re-exported through the package barrel) but has no consumer: callers/tests each define their own identical local copy instead of importing this one. Either have the callers import it (the whole point of exporting it) or remove it \u2014 otherwise this is duplicated, effectively dead code that will drift from the copies.",
+   "existing_code": "export function withoutStamp(state: DeckState): Omit<DeckState, \"receivedAtNs\"> {\n  const { receivedAtNs: _stamp, ...rest } = state;\n  return rest;\n}",
+   "start_line": 161,
+   "end_line": 164,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/show-director/vitest.config.ts": [
+  {
+   "path": "packages/show-director/vitest.config.ts",
+   "content": "String (non-regex) aliases in Vite are prefix-matched: an importee equal to the key OR starting with `key + '/'` is replaced by the (string) replacement, leaving the trailing subpath appended. So an import such as `@autolight/config/registry` (used elsewhere in this repo, e.g. apps/desktop/src/features/settings/settings-view.tsx) resolves to `packages/config/src/index.ts/registry` -> module-not-found, instead of `packages/config/src/registry.ts`. The repo's root `vitest.config.ts` (lines 13-20) explicitly documents this exact trap (\"regex first so barrels never swallow `/follow`, `/registry`, `/setup-assistant`\") and adds a regex `subpathAlias` for `@autolight/<pkg>/<subpath>` before the barrel alias. This per-package config is missing that fix, so any subpath import from show-director or its tests will fail; mirror the root config's regex subpath alias here.",
+   "existing_code": "    .map((e) => [`@autolight/${e.name}`, join(workspaceSrc, e.name, \"src\", \"index.ts\")]),",
+   "start_line": 11,
+   "end_line": 11,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-director/vitest.config.ts",
+   "content": "The scan treats every sibling directory as a package whose entry is exactly `src/index.ts`, with no validation (no package.json check, no existence check, no support for `.tsx`/other entries). If a non-package directory is added under `packages/`, or a package uses a different entry point, the alias silently points at a nonexistent file and Vitest fails later with a confusing \"Cannot find module\" rather than at config load. Consider filtering on `package.json` presence / `src/index.ts` existence (and skipping `node_modules`) so misconfiguration surfaces clearly.",
+   "existing_code": "const workspaceAlias = Object.fromEntries(\n  readdirSync(workspaceSrc, { withFileTypes: true })\n    .filter((e) => e.isDirectory())\n    .map((e) => [`@autolight/${e.name}`, join(workspaceSrc, e.name, \"src\", \"index.ts\")]),\n);",
+   "start_line": 8,
+   "end_line": 12,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-director/vitest.config.ts",
+   "content": "This alias-building logic is duplicated verbatim across every `packages/*/vitest.config.ts` and the root `vitest.config.ts` (it is byte-for-byte identical to packages/show-planner/vitest.config.ts), and the copies have already drifted - only the root config got the subpath-regex fix. Extract a shared workspace-config factory (e.g. in a small dev tooling module) so the alias/include/exclude rules live in one place and stay consistent.",
+   "existing_code": "const root = dirname(fileURLToPath(import.meta.url));\nconst workspaceSrc = join(root, \"..\");",
+   "start_line": 6,
+   "end_line": 7,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/show-host/src/clock.test.ts": [
+  {
+   "path": "packages/show-host/src/clock.test.ts",
+   "content": "Fragile/flaky anchoring assertion. `ticks[0]` and `ticks[1]` are not guaranteed to be adjacent (the code's own comment admits a starved loop skips missed ticks; `clock.ts` re-anchors `next = behind`, e.g. indices can be [0,3,4,5,6]). When the first pair is gapped, `nominal` becomes a multiple (`(i1-i0)*nominalNs`) of the true interval, so a normal single-interval gap fails `gap % nominal === 0n` (and any gap that isn't a multiple of that spuriously passes). The test can therefore fail under CI load even though the clock behaves exactly as designed. Derive the reference interval from `handle.nominalNs` (returned by `startClock`) or from the smallest observed gap instead of an arbitrary tick pair.",
+   "existing_code": "    const nominal = ticks[1]!.scheduledNs - ticks[0]!.scheduledNs;",
+   "start_line": 49,
+   "end_line": 49,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-host/src/clock.test.ts",
+   "content": "The rejection timer is never cleared. After the promise resolves, this real 5s `setTimeout` remains pending (retaining `got`/`reject` and keeping the event loop alive, which can delay worker/test-process exit). It should be cleared on the resolve path (e.g. capture the id and `clearTimeout` when `resolve` runs) or `.unref()`ed. Additionally, on rejection `handle.stop()` is never called \u2014 `maxTicks` mitigates this only when the clock eventually reaches `ticks`, otherwise the interval keeps running.",
+   "existing_code": "  setTimeout(() => reject(new Error(`${strategy} fired ${got.length}/${ticks} ticks in time`)), 5000);",
+   "start_line": 24,
+   "end_line": 24,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-host/src/clock.test.ts",
+   "content": "`handle` is referenced inside `onTick` before its `const` binding is initialized. For the `interval` strategy `startClock` calls `fire(0)` synchronously before returning (clock.ts:122), so `onTick` runs while `handle` is still in the temporal dead zone. It happens to be safe today only because `collect` is always called with `ticks = 5` (tick 0 never reaches the `got.length >= ticks` branch); with `ticks <= 1` this throws a `ReferenceError` and the collector hangs until the 5s reject. Capture the handle via a `let handle` assigned after `startClock` returns, or rely on `startClock`'s own auto-stop rather than self-referencing.",
+   "existing_code": "        handle.stop();\n        resolve(got);",
+   "start_line": 19,
+   "end_line": 20,
+   "category": "bug",
+   "severity": "low"
+  }
+ ]
+}

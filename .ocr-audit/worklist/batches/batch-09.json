@@ -1,0 +1,387 @@
+{
+ "packages/rekordbox-live/src/os2l.ts": [
+  {
+   "path": "packages/rekordbox-live/src/os2l.ts",
+   "content": "`estimatePlayhead` divides by `this.buffer.bpm`, but `os2lBeatSchema` only enforces `z.number()` and JSON permits any numeric value. A beat such as `{\"evt\":\"beat\",\"pos\":1,\"bpm\":0}` produces `Infinity`/`NaN` for `playheadSeconds` (and a negative bpm produces a garbage playhead), which then propagates into the deck state. Reject/clamp non-positive bpm before computing.",
+   "suggestion_code": "    if (!(this.buffer.bpm > 0)) return 0;\n    const elapsedBeats = (Number(atNs - this.lastBeatAtNs) / 1e9) * (this.buffer.bpm / 60);\n    return Math.max(0, (this.buffer.beat + elapsedBeats) * 60 / this.buffer.bpm);",
+   "existing_code": "    const elapsedBeats = (Number(atNs - this.lastBeatAtNs) / 1e9) * (this.buffer.bpm / 60);\n    return Math.max(0, (this.buffer.beat + elapsedBeats) * 60 / this.buffer.bpm);",
+   "start_line": 345,
+   "end_line": 346,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-live/src/os2l.ts",
+   "content": "The wrap counter `this.buffer.epoch` is incremented here whenever `pos` goes backwards (loop/reset) but is never read anywhere else in the file, so the detection has no effect on the emitted state: `stateFor` still uses the raw beat counter, meaning `playheadSeconds` jumps backwards on every loop/reset even though its quality is labelled `estimated`. Either consume `epoch` to keep the playhead monotonic, or remove the dead field and increment.",
+   "existing_code": "      if (previous !== null && message.pos < previous) {\n        this.buffer.epoch += 1;\n      }",
+   "start_line": 314,
+   "end_line": 316,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/os2l.ts",
+   "content": "When a line contains non-JSON text before an `{` that does not close on the same line, the accumulated `outside` text is discarded: only `tail = part.slice(start)` is kept. That contradicts the documented contract (\"Text that can never become part of a message ... is reported as garbage\") and `decodeOs2lText`'s malformed reporting, so input like `garbage{\"evt\":\"beat\"` silently swallows `garbage` and it is never counted or rejected. Emit the collected `outside` as garbage before overwriting `tail`.",
+   "suggestion_code": "    if (start >= 0) {\n      if (outside.trim().length > 0) garbage.push(outside.trim());\n      tail = part.slice(start);\n    } else if (outside.trim().length > 0) garbage.push(outside.trim());",
+   "existing_code": "    if (start >= 0) tail = part.slice(start);\n    else if (outside.trim().length > 0) garbage.push(outside.trim());",
+   "start_line": 136,
+   "end_line": 137,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/os2l.ts",
+   "content": "The 1 MiB guard is evaluated on `tail + chunk` *before* splitting, so an oversized chunk that already contains complete valid frames (e.g. a big batch followed by an unclosed object) is dropped in full and those valid messages are lost. Since `this.tail` is also cleared, the connection resynchronises only on the next chunk. Consider splitting first and bounding only the unparsable tail (or preserving the complete messages found in the chunk).",
+   "existing_code": "    if (combined.length > OS2L_MAX_BUFFER) {\n      this.tail = \"\";\n      this.markRejected(\"os2l buffer over 1 MiB, dropped\");\n      return { messages: [], malformed: [\"buffer over 1 MiB\"] };\n    }",
+   "start_line": 287,
+   "end_line": 291,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/os2l.ts",
+   "content": "Because this is an `else if`, any chunk that mixes malformed text with valid messages skips the transition to `live`. `markRejected` only downgrades an already `live`/`degraded` provider, so for the very first chunk `x\\n{\"evt\":\"beat\",\"pos\":1,\"bpm\":120}` the beat is applied and deck state is emitted while the provider stays in `starting` until a fully clean chunk arrives. Evaluate the live transition independently of the malformed handling.",
+   "suggestion_code": "    if (malformed.length > 0) this.markRejected(malformed[0] ?? \"malformed OS2L input\");\n    if (messages.length > 0) this.setStatus({ state: \"live\", updateHz: 0, ageMs: 0 });",
+   "existing_code": "    if (malformed.length > 0) this.markRejected(malformed[0] ?? \"malformed OS2L input\");\n    else if (messages.length > 0) this.setStatus({ state: \"live\", updateHz: 0, ageMs: 0 });",
+   "start_line": 305,
+   "end_line": 306,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/os2l.ts",
+   "content": "Using `lastIndexOf(\":\")` breaks bare IPv6 hosts: `'::1'` is parsed as host `':'` and port `1`, so the server binds the wrong interface/port. In addition the parsed port is never range-checked against `OS2L_PORT_MIN`/`OS2L_PORT_MAX`, so out-of-range values (or `NaN` from a non-numeric suffix such as `'host:abc'`) are passed straight to `server.listen`. Parse `[host]:port` / bare host explicitly and validate the port falls within the advertised range.",
+   "existing_code": "      const at = opts.bind.lastIndexOf(\":\");\n      this.bindHost = at >= 0 ? opts.bind.slice(0, at) : opts.bind;\n      this.bindPort = at >= 0 ? Number(opts.bind.slice(at + 1)) : 0;",
+   "start_line": 215,
+   "end_line": 217,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/os2l.ts",
+   "content": "Two error handlers are registered on the same server: this permanent listener plus the `server.once(\"error\", reject)` below. On a listen failure both fire, so `setStatus({state:\"failed\"})` is called twice (and a third time from the catch in `onStart`), and because the permanent listener is never removed in `onStop` a late socket error after shutdown will overwrite the provider status again. Keep a single handler and detach it in `onStop`.",
+   "existing_code": "    server.once(\"error\", reject);",
+   "start_line": 238,
+   "end_line": 238,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "packages/rekordbox-live/src/os2l.ts",
+   "content": "`sendFeedback` writes to every tracked socket without checking `writable`/`destroyed`. A socket that was reset or half-closed by the peer will emit `ERR_STREAM_DESTROYED`/`EPIPE`, which is only swallowed by the socket's `error` listener; guard the write (skip !socket.writable or cleaned-up sockets) so feedback is not silently lost.",
+   "suggestion_code": "    for (const socket of this.sockets) {\n      if (socket.writable && !socket.destroyed) socket.write(line);\n    }",
+   "existing_code": "    for (const socket of this.sockets) socket.write(line);",
+   "start_line": 277,
+   "end_line": 277,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "packages/rekordbox-live/src/os2l.ts",
+   "content": "`decodeOs2lText` re-implements the exact parsing `ingestChunk` performs lower in this file (splitting, `JSON.parse`, the same zod schema, and identical `bad OS2L ...` message formatting) but through a different code path (`safeParse` vs `try/catch`). Any schema or message-format change now has to be made in two places and the two can drift. Extract a single parse helper and have both entry points call it.",
+   "existing_code": "export function decodeOs2lText(text: string): Os2lDecodeResult {",
+   "start_line": 142,
+   "end_line": 142,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/os2l.ts",
+   "content": "The `slot === 1 || ... || slot === 4` guard is always true for the finite numbers JSON normally carries, and the `null` return is only reachable for a non-finite `pos` (e.g. `1e999` parses to `Infinity`), in which case the bar position is silently reported as `null` instead of the message being rejected. Since `pos` is unconstrained in `os2lBeatSchema`, validate it as a finite/non-negative number in the schema rather than relying on this effectively-dead branch.",
+   "existing_code": "  const slot = ((Math.floor(pos) % 4) + 4) % 4 + 1;\n  return slot === 1 || slot === 2 || slot === 3 || slot === 4 ? slot : null;",
+   "start_line": 168,
+   "end_line": 169,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/rekordbox-live/src/os2l.ts",
+   "content": "`os2lFeedbackSchema` is part of the inbound union accepted from clients, yet `applyMessage` has no branch for `evt === \"feedback\"` (it is documented as the message *we* send). Inbound feedback frames are therefore counted as valid messages and trigger an `emit` while silently doing nothing. Either drop the feedback schema from the inbound union or handle/explicitly ignore it, so valid-looking no-op traffic is not reported as processed.",
+   "existing_code": "const os2lMessageSchema = z.union([os2lBeatSchema, os2lButtonSchema, os2lCommandSchema, os2lFeedbackSchema]);",
+   "start_line": 84,
+   "end_line": 84,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/serato/src/serato-dod.test.ts": [
+  {
+   "path": "packages/serato/src/serato-dod.test.ts",
+   "content": "Items 1 and 2 use `expect(true).toBe(true)`, which always passes and exercises nothing. Yet the file header claims these items \"assert the module surface exists\" and the suite is named \"definition of done\". A regression in Remote discovery or the auth handshake would go undetected while the suite still reports green. Either assert the real exported surface (e.g. `SeratoRemoteProvider` from `./remote-provider.js`, `checkSeratoSetup` from `./setup.js`) or convert these entries to `it.todo(...)` so uncovered items are visibly pending rather than falsely passing.",
+   "suggestion_code": "    { item: 1, name: \"automatic Remote discovery\", run: () => expect(typeof SeratoRemoteProvider).toBe(\"function\") },\n    { item: 2, name: \"auth handshake\", run: () => expect(typeof checkSeratoSetup).toBe(\"function\") },",
+   "existing_code": "    { item: 1, name: \"automatic Remote discovery\", run: () => expect(true).toBe(true) },\n    { item: 2, name: \"auth handshake\", run: () => expect(true).toBe(true) },",
+   "start_line": 10,
+   "end_line": 11,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "packages/serato/src/serato-dod.test.ts",
+   "content": "Item 16 (\"deterministic replay tests\") is another `expect(true).toBe(true)` placeholder, so replay determinism is not actually verified. Import and exercise the replay harness (`replaySeratoFixture` / `withoutStamp` from `./replay.js`) to make the probe meaningful, or mark it as `it.todo`.",
+   "suggestion_code": "    { item: 16, name: \"deterministic replay tests\", run: () => expect(withoutStamp(replaySeratoFixture(fixture)[0]!)).toEqual(withoutStamp(replaySeratoFixture(fixture)[0]!)) },",
+   "existing_code": "    { item: 16, name: \"deterministic replay tests\", run: () => expect(true).toBe(true) },",
+   "start_line": 225,
+   "end_line": 225,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "packages/serato/src/serato-dod.test.ts",
+   "content": "Item 13 is named \"cues and loops from GEOB\" but only asserts `typeof parseCrate === \"function\"`, which is trivially true for any imported symbol and never calls the parser. A broken crate/GEOB decoder would still pass. Feed a real `.crate` fixture (or a GEOB cue/loop payload) through `parseCrate` and assert the decoded path/cue values instead of the type of the function reference.",
+   "suggestion_code": "        const crate = parseCrate(new Uint8Array([...(\"vrsn\").split(\"\").map((c) => c.charCodeAt(0)), 0, 0, 0, 0]));\n        expect(crate).toEqual([]);",
+   "existing_code": "        expect(typeof parseCrate).toBe(\"function\");",
+   "start_line": 175,
+   "end_line": 175,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/serato/src/serato-dod.test.ts",
+   "content": "Item 9 (\"loop rolls\") only asserts `state.loop.active === false` for an idle input, which merely re-checks the `loopActive: false` field supplied above \u2014 any roll-mapping defect passes. The comment acknowledges the roll channel is unavailable, but a probe that can never fail still inflates the DoD count. Consider asserting an observable roll invariant derived from the supplied fields (or `it.todo` it) so the item's status reflects the missing capability.",
+   "existing_code": "        expect(state.loop.active).toBe(false);",
+   "start_line": 123,
+   "end_line": 123,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/serato/src/serato-dod.test.ts",
+   "content": "Item 15 is tautological: `before` inputs 10s and `after` inputs 90s are hard-coded, so `after - before === 80` just recomputes 90 - 10 and tells us nothing about seek/transport handling (a pure pass-through mapper satisfies it). Assert the absolute post-seek value (`expect(after.playheadSeconds).toBe(90)`) and/or drive a real seek transition (seek event \u2192 new snapshot) so the probe exercises behavior rather than arithmetic on literals.",
+   "suggestion_code": "        expect(after.playheadSeconds).toBe(90);",
+   "existing_code": "        expect(after.playheadSeconds - before.playheadSeconds).toBeCloseTo(80);",
+   "start_line": 222,
+   "end_line": 222,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/serato/src/serato-dod.test.ts",
+   "content": "The same 4-byte `pos` buffer is reused for both the position field and the BPM field, so both decode to 128. This makes the probe unable to detect field-order/offset errors in `parseBeatGrid`: if the parser read BPM from offset 6 and position from offset 10 (or swapped the two 8-byte strides) the assertion would still pass. Use distinct values for position vs BPM and assert both (e.g. position 1.0s, BPM 128, then verify `beats[0].sourceTimeMs` and `beats[0].bpm`). The trailing extra `0` byte is also misleading since the parser reads exactly `6 + count*8` bytes.",
+   "suggestion_code": "        const posBytes = [...new Uint8Array(buf)];\n        const bpmBuf = new ArrayBuffer(4);\n        new DataView(bpmBuf).setFloat32(0, 128, false);\n        const bpmBytes = [...new Uint8Array(bpmBuf)];\n        const regions = parseBeatGrid(new Uint8Array([1, 0, 0, 0, 0, 1, ...posBytes, ...bpmBytes]));",
+   "existing_code": "        const pos = [...new Uint8Array(buf)];\n        const regions = parseBeatGrid(new Uint8Array([1, 0, 0, 0, 0, 1, ...pos, ...pos, 0]));",
+   "start_line": 162,
+   "end_line": 163,
+   "category": "test",
+   "severity": "medium"
+  }
+ ],
+ "packages/show-planner/src/compile.ts": [
+  {
+   "path": "packages/show-planner/src/compile.ts",
+   "content": "Non-null assertion on the motif lookup can abort the whole compile. If `motifId` is non-null but no matching motif exists in `recurrence.map.motifs` (e.g. a motif referenced by `motifOf` that the recurrence pass did not emit), `find(...)` returns `undefined`, `!` suppresses the type error, and `.sections.indexOf(idx)` throws a TypeError mid-loop, discarding the entire plan. Use optional chaining with a safe fallback instead.",
+   "suggestion_code": "    const occ = motifId ? (recurrence.map.motifs.find((m) => m.id === motifId)?.sections.indexOf(idx) ?? 0) : 0;",
+   "existing_code": "    const occ = motifId ? recurrence.map.motifs.find((m) => m.id === motifId)!.sections.indexOf(idx) : 0;",
+   "start_line": 166,
+   "end_line": 166,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/show-planner/src/compile.ts",
+   "content": "The forced-impact branch fabricates a `substitute` verdict without ever calling `restrain()`. `restrain(..., { impact: true })` is what increments `wholeTrackImpactCount` / `sectionImpactCount` (restraint.ts lines 170-186), so on a failed white-hit draw the impact is emitted but not counted against the track/section impact budgets. Repeated drops therefore keep landing full-colour impacts past `trackImpactMax`, and the reported `budgetsUsed`/`budgetsRemaining` diverge from the cues actually emitted. Always call `restrain()` for budget accounting and then layer the draw decision on top of its verdict.",
+   "existing_code": "          const forceImpact = draw >= secStyle.whiteHitFrequency;\n          const r = forceImpact\n            ? { state: restraint, verdict: { decision: \"substitute\", substitute: \"impact\", reason: \"white-hit frequency draw favours a full-colour impact\" } as const }\n            : restrain(restraint, \"white-hit\", at, c.durationBeats, secStyle, config, { impact: true });",
+   "start_line": 334,
+   "end_line": 337,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/show-planner/src/compile.ts",
+   "content": "The event layer drops the `substitute` verdict for blackout/dip cues: only `reject` is handled, so a blackout that `restrain()` substitutes to `dip` (blackout too close to the previous one, restraint.ts lines 121-132) still falls through and is emitted as `blackout`. This defeats the blackout spacing constraint. Apply `r.verdict.substitute` as the emitted type (as the white-hit branch above does) instead of always re-emitting `p.cueType`.",
+   "existing_code": "    if (p.cueType === \"blackout\" || p.cueType === \"dip\") {\n      const r = restrain(restraint, p.cueType === \"blackout\" ? \"blackout\" : \"dip\", p.beat, p.durationBeats, style, config);\n      if (r.verdict.decision === \"reject\") {\n        rejected.push({ candidate: candidateNo++, reasons: [r.verdict.reason] });\n        continue;\n      }\n    }",
+   "start_line": 471,
+   "end_line": 477,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/compile.ts",
+   "content": "`pickCandidate`'s `winner` is consumed into `chosen` and then immediately discarded via `void chosen`, so the entire candidate-selection / mode-scoring / veto mechanism has no effect on the generated plan \u2014 `variants` only serve to emit rejection diagnostics. Either feed `chosen`'s `meanIntensity`/`darkness`/`density` into the section cues, or remove the dead `chosen`/`winner` plumbing to avoid the misleading impression that mode selection is applied.",
+   "existing_code": "    const chosen = variants[winner] ?? variants[0]!;\n    candidateNo += perSection;\n    void chosen;",
+   "start_line": 187,
+   "end_line": 189,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/compile.ts",
+   "content": "`rand` is declared but never referenced anywhere in the file (all randomness flows through `seed`/`planIdentity`). This is dead code that should be removed to avoid confusion about the RNG source.",
+   "existing_code": "  const rand = mulberry32(seed);",
+   "start_line": 105,
+   "end_line": 105,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-planner/src/compile.ts",
+   "content": "`phraseStarts` is computed (a flatMap over every section) and then discarded with `void phraseStarts;`. This is an O(sections) computation whose result is never used \u2014 remove it (and the now-unused `phraseStartsIn` import) or actually apply it.",
+   "existing_code": "  const phraseStarts = input.track.sections.flatMap((s) => phraseStartsIn(s.startBeat, s.endBeat));\n  void phraseStarts;",
+   "start_line": 126,
+   "end_line": 127,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-planner/src/compile.ts",
+   "content": "`dropByBeat` is built and then never used: `dropByBeat.get(section.startBeat)` is looked up but its result is discarded (`void drop`), and `void dropByBeat;` / `void sectionStarts;` explicitly discard the maps. Drops are already handled by the `drops` loop below, so these constructions (and the `sectionStarts` destructure) are dead code that should be removed.",
+   "existing_code": "    const drop = dropByBeat.get(section.startBeat) ?? null;\n    void drop;",
+   "start_line": 192,
+   "end_line": 193,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-planner/src/compile.ts",
+   "content": "`candidateNo` is advanced by `perSection` once per section but also incremented (`candidateNo++`) on every rejection, so the two accounting schemes collide: rejection indices shift subsequent section base ranges, producing rejected candidate ids that overlap or skip the per-section ranges and making diagnostics ambiguous. Use a separate counter (or `candidateNo + localIndex`) for rejections so the section candidate ranges stay stable.",
+   "existing_code": "    candidateNo += perSection;",
+   "start_line": 188,
+   "end_line": 188,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-planner/src/compile.ts",
+   "content": "The strobe budget ceiling is hardcoded as `32`, duplicating the configured `config.evaluationBounds.strobeBeats[1]` (and the project's rule that all planner numbers live in config). Derive it from config so the reported remaining budget tracks configuration changes.",
+   "suggestion_code": "    strobeBeats: Math.max(0, config.evaluationBounds.strobeBeats[1]! - restraint.strobeBeats),",
+   "existing_code": "    strobeBeats: Math.max(0, 32 - restraint.strobeBeats),",
+   "start_line": 537,
+   "end_line": 537,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/show-planner/src/styles.test.ts": [
+  {
+   "path": "packages/show-planner/src/styles.test.ts",
+   "content": "Non-isolated comparison: `compileShow` derives its RNG seed from the style itself (`sHash = styleHash(style)`, seed = hashValue([...sHash...])), and `compile()` here does not pass `seedOverride`. So `metricFor(c.low)` and `metricFor(c.high)` run two DIFFERENT random streams \u2014 every property variant changes the seed and thus all mulberry32-driven decisions, not just the property under test. As a result the per-property assertions can differ (or fail to differ) because of RNG noise rather than the property, which makes the 'every property moves the plan' test unreliable/vacuous. Fix the seed so both variants share the same RNG stream and only the edited property varies.",
+   "suggestion_code": "function compile(style: PlannerStyle): CompileResult {\n  return compileShow({ track: model(), venue: DEFAULT_VENUE_CLASS, style, config: DEFAULT_CONFIG, seedOverride: \"styles-test\" });\n}",
+   "existing_code": "function compile(style: PlannerStyle): CompileResult {\n  return compileShow({ track: model(), venue: DEFAULT_VENUE_CLASS, style, config: DEFAULT_CONFIG });\n}",
+   "start_line": 59,
+   "end_line": 61,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/show-planner/src/styles.test.ts",
+   "content": "Weak assertion that does not verify direction: `check: (l, h) => h !== l` only proves the metric changed, so an inverted, saturated, or otherwise mis-wired property still passes. This applies to colorSaturation, paletteChangeRate, symmetry and reactiveAmount (and the `h >= l` cases for spatialDensity/movementDensity/strobeFrequency). Use directional comparisons with a margin (e.g. `h > l + epsilon`) so wrong-direction wiring is caught.",
+   "existing_code": "        low: { ...base, colorSaturation: 0 },\n        high: { ...base, colorSaturation: 1 },\n        check: (l, h) => h !== l,",
+   "start_line": 97,
+   "end_line": 99,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "packages/show-planner/src/styles.test.ts",
+   "content": "Composite metric dilutes per-property signal: the default metric sums `cues.length + intensityArc + chroma + hue + secondary + exclusive`, so a property whose effect is a no-op or mis-wired can still make `h !== l` / `h >= l` pass because an unrelated term moved. Prefer a metric that isolates the property under test (e.g. count/measure only the cues or diagnostic that the property is defined to influence).",
+   "existing_code": "      return r.plan.cues.length + d.intensityArc + chroma + hue + secondary + exclusive;",
+   "start_line": 156,
+   "end_line": 156,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/styles.test.ts",
+   "content": "Brittle coupling to an internal implementation string: filtering dip cues via `c.reason.includes(\"darkness preference\")` hardcodes the exact reason text emitted in compile.ts (`\"darkness preference shade\"`). If that wording changes, the dip contribution silently drops to 0 and the metric becomes vacuous rather than failing loudly. Also the metric is named `\"darknessPct\"` but is NOT the diagnostics `darknessPct` (which is blackoutBeats/total in validate.ts) \u2014 this is misleading. Derive the measurement from a stable field/type instead of a free-text reason.",
+   "existing_code": "      if (which === \"darknessPct\") { const r2 = compile(s); const dip = r2.plan.cues.filter((c) => c.type === \"dip\" && c.reason.includes(\"darkness preference\")).reduce((n, c) => n + c.durationBeats, 0); const sec = r2.plan.sections.reduce((n, x) => n + x.darkness, 0); return dip + sec; }",
+   "start_line": 151,
+   "end_line": 151,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/styles.test.ts",
+   "content": "Non-strict separations allow vacuous passes: with `>=`/`<=`, if the planner returns equal (or all-zero) values for dark/festival/minimal these assertions still pass, so the test does not actually prove the styles are separated. Use strict `>`/`<` (with a margin) so a collapsed/no-op style set fails.",
+   "existing_code": "    expect(dark.darknessPct).toBeGreaterThanOrEqual(fest.darknessPct);\n    expect(minimal.activeDensity).toBeLessThanOrEqual(fest.activeDensity);\n    expect(fest.whiteHits).toBeGreaterThanOrEqual(dark.whiteHits);",
+   "start_line": 167,
+   "end_line": 169,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/styles.test.ts",
+   "content": "Dead/redundant computation: `r` and `d` are computed eagerly but the `intensity`, `whiteHits` and `darknessPct` branches ignore them and call `compile(s)` again (the `intensity` branch also re-runs `evaluateCompiledPlan`). This needlessly recompiles the plan up to twice per case and obscures which value is under test. Compute lazily inside the default branch, or reuse `r`/`d` in the other branches.",
+   "existing_code": "      const r = compile(s);\n      const d = evaluateCompiledPlan(r.plan, DEFAULT_CONFIG);",
+   "start_line": 147,
+   "end_line": 148,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-planner/src/styles.test.ts",
+   "content": "Duplicate literal `\"intensity\"` in the union type (both the `cases` element type and `metricFor`'s parameter list). Harmless but redundant; drop the duplicate.",
+   "existing_code": "    const cases: Array<{ prop: string; low: PlannerStyle; high: PlannerStyle; check: (l: number, h: number) => boolean; metric?: \"default\" | \"darknessPct\" | \"intensity\" | \"whiteHits\" | \"intensity\" }> = [",
+   "start_line": 75,
+   "end_line": 75,
+   "category": "style",
+   "severity": "low"
+  }
+ ],
+ "packages/show-runtime/src/fastpath.ts": [
+  {
+   "path": "packages/show-runtime/src/fastpath.ts",
+   "content": "`aliasStore` defaults to a brand-new `MemoryAliasStore()` on every call. Since this store is what `resolveLiveTrack` learns alias mappings into, any caller that relies on the default silently starts from empty state each generation, so learned identity aliases never persist and resolution is repeated/degraded. Default to a module-level store (or make the parameter required) so identity state survives across generations.",
+   "suggestion_code": "const defaultAliasStore = new MemoryAliasStore();\n...\n  aliasStore: MemoryAliasStore = defaultAliasStore,",
+   "existing_code": "  aliasStore: MemoryAliasStore = new MemoryAliasStore(),",
+   "start_line": 60,
+   "end_line": 60,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-runtime/src/fastpath.ts",
+   "content": "When a cached model exists but the plan is missing, the result reports `installed: true` while `plan` is `null`. The `GenerationLoad.installed` doc states it signals a completed install (\"Install when true; when false the load is parked for the boundary\"), so downstream code can mistake a plan-less load for a fully installed, upgrade-ready generation. Either set `installed: false` here or split the flag (e.g. `modelInstalled`) to make the partial state unambiguous.",
+   "existing_code": "      cacheHit: loaded.timings.cacheHit, totalMs: performance.now() - started, installed: true,",
+   "start_line": 89,
+   "end_line": 89,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-runtime/src/fastpath.ts",
+   "content": "When no boundary at/after the current beat is found, the function returns `installAtBeat: proposal.beat` with `waitBeats: 0`, i.e. it installs immediately at the current beat \u2014 which is exactly mid-phrase playback. This contradicts the documented guarantee (\"a better plan or a style change never lands mid-phrase during audible playback\"). Instead of falling back to the current beat, the upgrade should keep waiting until the next boundary is known (or extend the search window) rather than swapping mid-phrase.",
+   "existing_code": "  if (next === undefined) return { installAtBeat: proposal.beat, waitBeats: 0, boundary: proposal.boundary };",
+   "start_line": 129,
+   "end_line": 129,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/show-runtime/src/fastpath.ts",
+   "content": "`phraseOrBar` is only invoked for the `\"bar\"` boundary, yet it returns `phraseBoundaries` whenever they are present. That makes the bar setting behave like (or coarser than) phrase boundaries instead of landing on the next bar. When phrase boundaries are absent it emits one candidate per beat over a hardcoded 64-beat window, and because that window starts at `Math.ceil(beat)` (>= current beat) the first candidate is immediately selected (waitBeats 0) \u2014 so bar mode never actually waits for a bar. Bar length/window should be derived from real bar boundaries rather than hardcoded.",
+   "existing_code": "  if (proposal.phraseBoundaries.length > 0) return proposal.phraseBoundaries;",
+   "start_line": 134,
+   "end_line": 134,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/show-runtime/src/fastpath.ts",
+   "content": "Nested ternary for boundary selection violates the project's no-nested-ternary rule and obscures the fallback semantics (notably that `phraseOrBar` is used only for the `bar` case). Refactor to a switch/if-else chain or a lookup map.",
+   "suggestion_code": "  let pool: number[];\n  if (proposal.boundary === \"phrase\") {\n    pool = proposal.phraseBoundaries;\n  } else if (proposal.boundary === \"section\") {\n    pool = proposal.sectionBoundaries;\n  } else {\n    pool = phraseOrBar(proposal);\n  }",
+   "existing_code": "  const pool = proposal.boundary === \"phrase\"\n    ? proposal.phraseBoundaries\n    : proposal.boundary === \"section\"\n      ? proposal.sectionBoundaries\n      : phraseOrBar(proposal);",
+   "start_line": 123,
+   "end_line": 127,
+   "category": "style",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-runtime/src/fastpath.ts",
+   "content": "This branch hardcodes `cacheHit: false` instead of propagating `loaded.timings.cacheHit` like the other two branches. Any partial cache hit on the fast path is therefore reported as a full miss, skewing telemetry. Use `loaded.timings.cacheHit` for consistency.",
+   "suggestion_code": "    detail: loaded.detail, cacheHit: loaded.timings.cacheHit, totalMs: performance.now() - started, installed: false,",
+   "existing_code": "    detail: loaded.detail, cacheHit: false, totalMs: performance.now() - started, installed: false,",
+   "start_line": 95,
+   "end_line": 95,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-runtime/src/fastpath.ts",
+   "content": "`DEFAULT_FAST_PATH_BUDGET_MS` is exported but never referenced anywhere in the codebase (only the literal `100` is used in tests), so the declared load-event-to-installed-plan latency budget is never enforced \u2014 a slow load exceeds the budget silently. Either enforce the budget in `loadGeneration` (and surface a warning/telemetry) or remove the dead constant.",
+   "existing_code": "export const DEFAULT_FAST_PATH_BUDGET_MS = 100;",
+   "start_line": 22,
+   "end_line": 22,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ]
+}

@@ -1,0 +1,255 @@
+{
+ "packages/ble/src/e2e.test.ts": [
+  {
+   "path": "packages/ble/src/e2e.test.ts",
+   "content": "The selector is created and asserted (`currentKind()` === \"toolkit-ble\") but the data path never uses it: `nobleSim.scan(...)` and `new BleLink(..., nobleSim, ...)` bypass `BackendSelector.scan/connect` entirely. So the header claim \"selectable by the DS-04 decision switch\" and the auto/failover behaviour are not exercised end to end \u2014 indeed the only peripheral is registered on `nobleSim`, so a scan through the selected toolkit primary would return zero results. Drive scan/connect through `selector` (or add the peripheral to the primary) to actually verify the decision switch.",
+   "existing_code": "    const found = await nobleSim.scan(10);",
+   "start_line": 56,
+   "end_line": 56,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/ble/src/e2e.test.ts",
+   "content": "The per-frame assertion only checks the link's own counter (`writesSent`), which is incremented before/independently of `connection.write()`. A codec/serialization regression or dropped write would keep this at 80 while nothing reaches the device. Assert the bytes that actually landed (e.g. `peripheral.metrics.writes` and `peripheral.written`/`painted`) so delivery is proven, not just the internal count.",
+   "existing_code": "    expect(link.status().writesSent).toBe(80);",
+   "start_line": 99,
+   "end_line": 99,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/ble/src/e2e.test.ts",
+   "content": "`catch(() => null)` swallows every failure mode into `null`, so the one-connection guarantee passes for the wrong reason (e.g. a wrong address would also resolve the chain to `null`), and it does not confirm the adapter rejected the second connect with the expected error. Assert the rejection explicitly.",
+   "suggestion_code": "    await expect(nobleSim.connect(binding.bleAddress)).rejects.toThrow(/one connection/);",
+   "existing_code": "    const second = await nobleSim.connect(binding.bleAddress).catch(() => null);",
+   "start_line": 74,
+   "end_line": 74,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/ble/src/e2e.test.ts",
+   "content": "`advance` re-scans `this.tasks` and processes any timer whose `at <= target`, so a callback that re-arms a timer at the current instant (a 0 ms delay, which this harness allows via `writeDrainMs: 0`) keeps being selected and the `for (;;)` loop never terminates, hanging the suite instead of failing it. Bound the loop or ignore timers whose fire time does not advance the clock past the previous one.",
+   "existing_code": "    for (;;) {\n      let earliest: [number, { at: number; fn: () => void }] | null = null;",
+   "start_line": 24,
+   "end_line": 25,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/ble/src/stream.ts": [
+  {
+   "path": "packages/ble/src/stream.ts",
+   "content": "Redundant plan computation / divergence risk: `encodeBleStreamFrame` already calls `planBleFrame` (with the same options), then `streamBleRendererFrame` computes it a second time just to read the feedback. This doubles the per-frame grouping work (on the hot render path) and means any future change to how `encodeBleStreamFrame` invokes the planner (e.g. different defaults or validation) silently desynchronises `writes` from `feedback`. Compute the plan once and derive both from it (e.g. have the encoder accept/return the plan, or extract a `encodePlan(plan, opts)` helper).",
+   "existing_code": "  const writes = encodeBleStreamFrame(frame, opts);\n  const plan = planBleFrame(frame, opts.zoneCount, opts.budgetHz, opts.quantizeLevels ?? 0);",
+   "start_line": 117,
+   "end_line": 118,
+   "category": "performance",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/ble/src/stream.ts",
+   "content": "Quantisation groups by the quantised bucket key but stores the raw first-seen RGB as the group colour, so the emitted masked write carries an *unquantised* colour while all later zones in the same bucket are forced onto that first zone's exact value. The quantised palette is therefore never actually transmitted: e.g. with `quantizeLevels: 4`, `[250,0,0]` and `[255,5,5]` collapse into one bucket and both zones are written as `250,0,0`. If the intent is to snap zones to a representative palette value, store the bucketed colour instead; if the intent really is \"first-seen colour wins the bucket\", document it explicitly, because the current code contradicts the \"quantisation reduces distinct colours\" description at the top of the file.",
+   "existing_code": "    const key = keyOf(color, quantizeLevels);\n    const held = groups.get(key);\n    if (held === undefined) groups.set(key, { color, zones: [z] });\n    else held.zones.push(z);",
+   "start_line": 49,
+   "end_line": 52,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/ble/src/stream.ts",
+   "content": "Empty-frame fast path emits a spurious write. When `zoneCount` is 0 (or the frame is otherwise empty) `distinctColours` is 0 and `singleColour` becomes true, so `encodeBleStreamFrame` falls into the fast path with `writes[0]` undefined and synthesises a black `bleColorSingle`/`bleHostColorOne`. That is a whole-fixture colour command (no mask) emitted for a frame with no zones, and it makes `writes` (length 1) disagree with `feedback.distinctColours` (0). Return `[]` for zero zones instead of a fabricated colour write.",
+   "existing_code": "    const first = plan.writes[0];\n    const color: BleRgb = first === undefined ? { r: 0, g: 0, b: 0 } : first.color;",
+   "start_line": 83,
+   "end_line": 84,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/ble/src/stream.ts",
+   "content": "`budgetHz` is never validated, so a zero/negative/NaN budget silently produces `Infinity`, a negative, or `NaN` in `effectiveFps` (and only the `distinctColours === 0` branch avoids a divide-by-zero). Downstream planner/mixer code that simplifies patterns on `effectiveFps < showRate` will silently never trigger on `NaN` comparisons. Validate `budgetHz` (finite, > 0) at entry, or clamp the result, and surface a clear error for bad planner input rather than emitting misleading feedback.",
+   "existing_code": "    effectiveFps: distinctColours === 0 ? budgetHz : budgetHz / distinctColours,",
+   "start_line": 59,
+   "end_line": 59,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "packages/controller-flx4/src/map.ts": [
+  {
+   "path": "packages/controller-flx4/src/map.ts",
+   "content": "The header comment misstates the effect channel bytes. 0x94 and 0xB4 are MIDI channel 5 (0xB0/0x90 + 4), not channel 7; only 0xB6/0x96 are channel 7. EFFECT_FX2_STATUS (0x95, channel 6) is also omitted entirely. Since the whole decoder relies on exact status bytes, an incorrect channel claim here invites a future editor to \"fix\" the constants to match the comment (or vice-versa). Please correct the channels and include 0x95.",
+   "existing_code": "// mixer and effect rows are channel 7 (0xB6/0x96/0x94/0xB4), the pads are\n// channels 8 to 11 (0x97 to 0x9A).",
+   "start_line": 7,
+   "end_line": 8,
+   "category": "documentation",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/controller-flx4/src/map.ts",
+   "content": "The LSB lookup key is built from the unmasked byte (`data1 - 0x20`) while the MSB branch stores under the masked key (`${status & 0xff}:${data1 & 0x7f}`). For any input where the LSB's data1 carries a stray high bit (or is below 0x20) the two keys never match and the 14-bit pair silently stays incomplete forever \u2014 no error is surfaced beyond `complete:false`. Mask consistently (and ideally derive the MSB number from the control definition instead of assuming a fixed +0x20 offset). Note also the incomplete branch returns `(data2 & 0x7f) / 16383` (~0) whereas the MSB branch returns `data2/127` (full scale); a consumer that applies `value` without checking `complete` will snap a 14-bit control to minimum.",
+   "suggestion_code": "        const msbKey = `${status & 0xff}:${(data1 & 0x7f) - 0x20}`;\n        const msb = this.msb.get(msbKey);",
+   "existing_code": "        const msb = this.msb.get(`${status & 0xff}:${data1 - 0x20}`);",
+   "start_line": 336,
+   "end_line": 336,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/controller-flx4/src/map.ts",
+   "content": "`raw` masks all three bytes (`& 0xff` / `& 0x7f`) but the switch below consumes the raw, unmasked `data2` and `data1`. `decode()` is a public entry point taking plain `number`s, so an out-of-range byte produces a jog delta / button state that disagrees with the `raw` tuple reported in the same event. Mask once and reuse the masked values in the switch (and mask the `decodeBytes` fallback raw too, which currently emits unmasked bytes).",
+   "existing_code": "    const raw = [status & 0xff, data1 & 0x7f, data2 & 0x7f] as const;",
+   "start_line": 304,
+   "end_line": 304,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "packages/controller-flx4/src/map.ts",
+   "content": "Defaulting to a fresh `new Flx4Decoder()` on every call makes this helper stateless, so it can never complete an MSB/LSB pair: every returned value is `complete:false`, and an LSB-only message yields `lsb/16383` (\u22480). The repo docs explicitly point deck-aware callers at `decodeMessage`, so anyone using it for tempo/crossfader/channel-fader gets silently wrong continuous values. Require the caller to pass a retained decoder, or rename/document it to make the 14-bit limitation explicit.",
+   "existing_code": "export function decodeMessage(message: Flx4RawMessage, decoder = new Flx4Decoder()): Flx4Event {",
+   "start_line": 360,
+   "end_line": 360,
+   "category": "maintainability",
+   "severity": "medium"
+  }
+ ],
+ "packages/dj-core/src/index.test.ts": [
+  {
+   "path": "packages/dj-core/src/index.test.ts",
+   "content": "This test cannot distinguish delta-time logic from absolute-time logic, nor catch a rate bug. `base.receivedAtNs` is `0n`, so `nowNs - receivedAtNs === nowNs`, and the only exercised rate is `playRate: 1`. Concrete failure: if `estimatePosition` were implemented as `obs.playheadSeconds + Number(nowNs) / NS_PER_SECOND * obs.playRate` (ignoring `receivedAtNs`), or if it dropped `playRate` entirely, this assertion still yields 11 and passes. Add a case with a non-zero `receivedAtNs` and a `playRate !== 1`.",
+   "suggestion_code": "  it(\"extrapolates while playing\", () => {\n    expect(estimatePosition(base, 1_000_000_000n)).toBeCloseTo(11);\n    // non-zero receivedAtNs + playRate != 1 pins delta-time and the rate factor.\n    expect(estimatePosition({ ...base, receivedAtNs: 2_000_000_000n, playRate: 1.5 }, 3_000_000_000n)).toBeCloseTo(11.5);\n  });",
+   "existing_code": "  it(\"extrapolates while playing\", () => { expect(estimatePosition(base, 1_000_000_000n)).toBeCloseTo(11); });",
+   "start_line": 18,
+   "end_line": 18,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/dj-core/src/index.test.ts",
+   "content": "`audibleWeight` is only exercised through its `track: null` early-return, so the actual weighting path (channel fader \u00d7 crossfader \u00d7 master bonus, clamped to [0,1]) is never validated. Concrete failure: a bug in that formula (e.g. swapping `channel`/`crossfader`, or dropping the `masterFactor`) would not be detected. Add at least one case with a non-null `track`.",
+   "suggestion_code": "  it(\"weights silence when no track\", () => {\n    expect(audibleWeight(base)).toBe(0);\n    // with a track: channel 0.8 * crossfader 0.5 = 0.4, then master bonus.\n    expect(audibleWeight({ ...base, track }, { masterBonus: 0 })).toBeCloseTo(0.4, 6);\n    expect(audibleWeight({ ...base, track }, { masterBonus: 0.1 })).toBeCloseTo(0.44, 6);\n  });",
+   "existing_code": "  it(\"weights silence when no track\", () => { expect(audibleWeight(base)).toBe(0); });",
+   "start_line": 21,
+   "end_line": 21,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/dj-core/src/index.test.ts",
+   "content": "The `auto` fallback case asserts only the `fellBack` flag, not the returned `position`/`source`, so a wrong fallback value or a wrong reported source would go unnoticed. More importantly, the suite never covers the case that matters for DS-26: a present-but-stale/zero reading masking a live one. Concrete failure: `resolveCrossfader(\"auto\", { software: 0, controller: 0.9 })` currently returns `position: 0, source: \"software\"` (0 is treated as a valid finite reading), silently discarding the live controller value, yet every existing assertion still passes. Add a masking case and assert the fallback position/source.",
+   "suggestion_code": "    const fallback = resolveCrossfader(\"auto\", {});\n    expect(fallback.fellBack).toBe(true);\n    expect(fallback.position).toBe(0.5);\n    expect(fallback.source).toBe(\"software\");\n    // a zero (stale/default) software reading must not mask a live controller value.\n    expect(resolveCrossfader(\"auto\", { software: 0, controller: 0.9 }).position).toBe(0.9);",
+   "existing_code": "    expect(resolveCrossfader(\"auto\", {}).fellBack).toBe(true);",
+   "start_line": 67,
+   "end_line": 67,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/dj-core/src/index.test.ts",
+   "content": "The sharp-cut boundary is only probed from the A side below/at center and B at center. B just below 0.5 (which must be 0) is never asserted. Concrete failure: an implementation of the form `side === \"A\" ? (p < 0.5 ? 1 : 0) : (p <= 0.5 ? 1 : 0)` keeps both decks audible across the center, yet all three existing sharp-cut assertions still pass. Add the B-side lower-boundary cases.",
+   "suggestion_code": "    expect(crossfaderGain(0.49, \"A\", \"sharp-cut\")).toBe(1);\n    expect(crossfaderGain(0.49, \"B\", \"sharp-cut\")).toBe(0);\n    expect(crossfaderGain(0.51, \"B\", \"sharp-cut\")).toBe(1);",
+   "existing_code": "    expect(crossfaderGain(0.49, \"A\", \"sharp-cut\")).toBe(1);",
+   "start_line": 44,
+   "end_line": 44,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/govee/src/scenes.test.ts": [
+  {
+   "path": "packages/govee/src/scenes.test.ts",
+   "content": "The test name claims scene resolution returns *copies*, but `toEqual` only compares values and never mutates the returned array or checks reference identity. A regression where `sceneFromCatalog` returns the catalogue's own array (violating the copy contract at scenes.ts:38) would still pass, silently allowing callers to mutate shared catalogue state. Mutate the result and assert the catalogue is untouched (or assert `not.toBe`).",
+   "suggestion_code": "    const bytes = sceneFromCatalog(CATALOG, \"sunset\");\n    expect(bytes).toEqual([\"ab12\", \"cd34\"]);\n    expect(bytes).not.toBe(CATALOG.scenes.sunset);\n    bytes.push(\"zzzz\");\n    expect(CATALOG.scenes.sunset).toEqual([\"ab12\", \"cd34\"]);",
+   "existing_code": "    const bytes = sceneFromCatalog(CATALOG, \"sunset\");\n    expect(bytes).toEqual([\"ab12\", \"cd34\"]);",
+   "start_line": 34,
+   "end_line": 35,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/govee/src/scenes.test.ts",
+   "content": "The round-trip only checks `msg.cmd` and that the encoder decodes back to the same array; it never pins the actual wire field (`msg.data.command`, the byte strings). Because both sides of the assertion go through the same module, a self-consistent but wrong envelope (wrong field name/encoding) would still pass, and this module's whole purpose is matching the govee2mqtt LAN wire shape. Assert the full envelope literal.",
+   "suggestion_code": "    const json = ptRealCommand([\"ab12\", \"cd34\"]);\n    expect(JSON.parse(json)).toEqual({ msg: { cmd: \"ptReal\", data: { command: [\"ab12\", \"cd34\"] } } });\n    expect(parsePtRealCommand(JSON.parse(json))).toEqual([\"ab12\", \"cd34\"]);",
+   "existing_code": "    const json = ptRealCommand([\"ab12\", \"cd34\"]);\n    expect(JSON.parse(json).msg.cmd).toBe(\"ptReal\");\n    expect(parsePtRealCommand(JSON.parse(json))).toEqual([\"ab12\", \"cd34\"]);",
+   "start_line": 21,
+   "end_line": 23,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/govee/src/scenes.test.ts",
+   "content": "The file header asserts scene code resolves for setup/idle/ending moments and never for show frames, but only the `ending` branch is exercised here. The `setup` and `idle` moments are never tested, so a regression that (for example) resolves only for `ending` would pass unnoticed. Add assertions for the other moments (the type `SceneMoment` already excludes \"show\", so at minimum cover setup and idle).",
+   "suggestion_code": "    const ok = sceneCommand({ scene: \"sunset\", moment: \"ending\", catalog: CATALOG });\n    for (const moment of [\"setup\", \"idle\", \"ending\"] as const) {\n      expect(\"json\" in sceneCommand({ scene: \"sunset\", moment, catalog: CATALOG })).toBe(true);\n    }",
+   "existing_code": "    const ok = sceneCommand({ scene: \"sunset\", moment: \"ending\", catalog: CATALOG });",
+   "start_line": 40,
+   "end_line": 40,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/govee/src/scenes.test.ts",
+   "content": "This rejection case only covers the empty-array path. `parsePtRealCommand` also rejects non-array payloads and entries that are non-strings or empty strings (scenes.ts:31-32), but none of those are asserted, so a regression relaxing that entry validation would go unnoticed. Add explicit cases (e.g. `command: \"ab12\"`, `command: [\"\"]`, `command: [1]`).",
+   "suggestion_code": "    expect(parsePtRealCommand({ msg: { cmd: \"ptReal\", data: { command: [] } } })).toBeNull();\n    expect(parsePtRealCommand({ msg: { cmd: \"ptReal\", data: { command: \"ab12\" } } })).toBeNull();\n    expect(parsePtRealCommand({ msg: { cmd: \"ptReal\", data: { command: [\"\"] } } })).toBeNull();\n    expect(parsePtRealCommand({ msg: { cmd: \"ptReal\", data: { command: [1] } } })).toBeNull();",
+   "existing_code": "    expect(parsePtRealCommand({ msg: { cmd: \"ptReal\", data: { command: [] } } })).toBeNull();",
+   "start_line": 29,
+   "end_line": 29,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/renderer/src/color.ts": [
+  {
+   "path": "packages/renderer/src/color.ts",
+   "content": "`gamma`'s type is inferred from the default `\"srgb\"`, so it is `string` (not `number | \"srgb\"`). Consequently the `typeof gamma === \"number\"` branch below is dead code under the type system, and any caller passing a numeric gamma (the contract the branch implies) is a TypeScript error even though the runtime path expects a number. The intended number-or-\"srgb\" contract is not expressed. Type the parameter explicitly.",
+   "suggestion_code": "export function linearToSrgbByte(value: number, gamma: number | \"srgb\" = \"srgb\"): number {",
+   "existing_code": "export function linearToSrgbByte(value: number, gamma = \"srgb\"): number {",
+   "start_line": 102,
+   "end_line": 102,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/renderer/src/color.ts",
+   "content": "`fixtureBytes` re-implements the numeric gamma transfer instead of delegating to `linearToSrgbByte`. Unlike `linearToSrgbByte`, this copy (a) has no `gamma > 0` guard, so a calibration gamma of 0 or negative is used directly (`1/gamma` becomes Infinity or negative), and (b) does not clamp the `pow` result before `Math.round(... * 255)`. For example `gamma = -1, v = 0.5` yields `Math.round(0.5**-1 * 255) = 510`, a byte value outside 0-255, while `linearToSrgbByte` would fall back to `DEFAULT_GAMMA`. It also propagates NaN silently (Math.min/Math.max pass NaN through, Math.round(NaN) => NaN, which a Uint8Array store then truncates to 0). Delegate to `linearToSrgbByte` so both paths share the guard and clamp.",
+   "suggestion_code": "  const gamma = calibration.gamma ?? \"srgb\";\n  const transfer = (v: number): number => linearToSrgbByte(v, gamma);",
+   "existing_code": "  const gamma = calibration.gamma ?? \"srgb\";\n  const transfer = (v: number): number =>\n    gamma === \"srgb\" ? linearToSrgbByte(v) : Math.round(Math.pow(Math.min(1, Math.max(0, v)), 1 / gamma) * 255);",
+   "start_line": 124,
+   "end_line": 126,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/renderer/src/color.ts",
+   "content": "`orientation` is declared and documented as \"Physical segment order; reversed writes flip it\", but `fixtureBytes` never reads it \u2014 it always returns bytes in forward order. A caller that passes `{ orientation: \"reverse\" }` here silently gets the wrong physical segment order (no error, no effect). Either apply the reversal inside `fixtureBytes` (e.g. via `orientCells`) or remove the field and let callers apply orientation explicitly, so the API contract is honest.",
+   "existing_code": "  /** Physical segment order; reversed writes flip it. */\n  orientation?: \"forward\" | \"reverse\";",
+   "start_line": 39,
+   "end_line": 40,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/renderer/src/color.ts",
+   "content": "`Math.cbrt` is well defined for negative inputs (it returns the negative real cube root), so clamping LMS to 0 here is unnecessary and discards information: any out-of-gamut linear RGB with a negative LMS component (reachable after `applyWhiteBalance`/matrix operations) is mapped incorrectly, making `linearToOklab` no longer the inverse of `oklabToLinear`. Drop the `Math.max(0, ...)` wrappers.",
+   "suggestion_code": "  const l1 = Math.cbrt(l);\n  const m1 = Math.cbrt(m);\n  const s1 = Math.cbrt(s);",
+   "existing_code": "  const l1 = Math.cbrt(Math.max(0, l));\n  const m1 = Math.cbrt(Math.max(0, m));\n  const s1 = Math.cbrt(Math.max(0, s));",
+   "start_line": 70,
+   "end_line": 72,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "packages/serato/package.json": [
+  {
+   "path": "packages/serato/package.json",
+   "content": "Missing runtime dependency: `zod` is directly imported at runtime by `src/replay.ts` (`import { z } from \"zod\"`, with `seratoFixtureSchema = z.object(...)` evaluated at module load), and `replay.ts` is re-exported from the public entrypoint `src/index.ts` (`export * from \"./replay.js\"`). It is not declared here, so resolution relies on the transitive `zod` from `@autolight/contracts` being hoisted. This is a phantom/undeclared dependency that fails under pnpm/strict node_modules layouts and when this package is consumed with `npm install --omit=dev` in isolation. Add `zod` explicitly to `dependencies`.",
+   "suggestion_code": "  \"dependencies\": {\n    \"@autolight/contracts\": \"^0.1.0\",\n    \"zod\": \"^3.23.8\",",
+   "existing_code": "  \"dependencies\": {\n    \"@autolight/contracts\": \"^0.1.0\",",
+   "start_line": 13,
+   "end_line": 14,
+   "category": "bug",
+   "severity": "high"
+  }
+ ]
+}

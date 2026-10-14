@@ -1,0 +1,368 @@
+{
+ "packages/storage/src/metrics.ts": [
+  {
+   "path": "packages/storage/src/metrics.ts",
+   "content": "Unbounded label cardinality: `this.labels` gains a new entry for every distinct `label` and no entry is ever removed. `WINDOW` only bounds each per-label array, so if labels are dynamic (e.g. per-device / per-session / per-show IDs used by callers), the map grows without limit and leaks memory for the life of the process. Consider capping the number of label keys (LRU/FIFO eviction) or documenting that labels must be a fixed, low-cardinality set.",
+   "existing_code": "  private readonly labels = new Map<string, number[]>();",
+   "start_line": 78,
+   "end_line": 78,
+   "category": "performance",
+   "severity": "high"
+  },
+  {
+   "path": "packages/storage/src/metrics.ts",
+   "content": "`count()` computes the total by reducing *all* values currently stored under the key and then overwrites them with a single-element array. This assumes the array holds exactly one accumulated total, but `observe()` accepts every `MetricName` (including the counter names allowed by `count`) and pushes raw samples into the same array. Failure scenario: `observe(\"queueDrops\", 5); observe(\"queueDrops\", 3); count(\"queueDrops\", 1)` reduces `[5,3]` to `8` and stores `[9]`, silently folding histogram samples into the counter and over-counting. Likewise `count()` then `observe()` then `count()` corrupts the total. Either forbid mixing (assert the array is a single counter cell) or keep counters in a separate scalar map so observe/count cannot corrupt each other.",
+   "existing_code": "    const current = (store.get(key as MetricName) ?? []).reduce((sum, v) => sum + v, 0);",
+   "start_line": 96,
+   "end_line": 96,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/storage/src/metrics.ts",
+   "content": "Diagnostics only read `this.samples`. Any metric exercised exclusively with a label (`observe(name, value, label)` / `count(name, by, label)` \u2014 e.g. the `count(\"queueDrops\", 1, \"lan\")` usage in ops.test.ts) is stored in `this.labels` and therefore never appears in `snapshot()` or `observedNames()`. This contradicts the stated invariant above that every exercised metric is reported, so label-scoped metrics are invisible to diagnostics. `observedNames()` has the same gap.",
+   "existing_code": "      const samples = this.samples.get(name) ?? [];",
+   "start_line": 110,
+   "end_line": 110,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/storage/src/metrics.ts",
+   "content": "Counter metrics (`queueDrops`, `failoverSwitches`, `supersededFrames`, `fusionAuthoritySwitches`, `missedWatcherChanges`) share the sample map with real histograms, so `snapshot()` runs `histogramOf()` over a single-element `[total]` counter cell and emits meaningless `p50/p95/p99` (they all just equal the total). Consumers must know to read `.max`, which is fragile. Consider tagging which metrics are counters and reporting them as scalars so percentiles are not fabricated for counters.",
+   "existing_code": "      if (samples.length > 0) out[name] = histogramOf(samples);",
+   "start_line": 111,
+   "end_line": 111,
+   "category": "maintainability",
+   "severity": "medium"
+  }
+ ],
+ "packages/storage/src/replay.ts": [
+  {
+   "path": "packages/storage/src/replay.ts",
+   "content": "`ReplayOptions.toleranceMs` is declared and re-plumbed through `runReplayAllSpeeds`, and the project docs advertise `runReplay(events, decode, { speed, tickHz, toleranceMs })`, but `runReplay` never reads it (it is not stored on `ReplayResult` either). Callers who pass a tolerance to the replay get a silent no-op; tolerance is only honored later by `compareSequences`. Remove the dead option or actually apply/forward it so the API is not misleading.",
+   "existing_code": "  tickHz?: number;\n  toleranceMs?: number;\n}",
+   "start_line": 63,
+   "end_line": 65,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/storage/src/replay.ts",
+   "content": "`tickMs` is not validated. A non-positive or `NaN` `tickHz` (both reachable via public `ReplayOptions`) yields `captureNow = tick * NaN/negative`, the condition `atMs <= captureNow` never becomes true, and the `while (index < sorted.length)` loop spins forever. Validate `tickHz` is a positive finite number before use (throw a descriptive error otherwise).",
+   "existing_code": "  const tickMs = 1000 / (options.tickHz ?? 60);",
+   "start_line": 124,
+   "end_line": 124,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/storage/src/replay.ts",
+   "content": "Timed-mode stamping contradicts the documented contract. The docstring says \"a replay at speed N puts every capture timestamp at captureTime / N on the virtual clock\", but the clock is parked on the tick boundary `captureNow / factor` before `decodeAt` runs, so `stampsMs` records the delivery tick time, not `event.atMs / factor`. For events not aligned to the tick grid the stamp is later than the event's own capture time (e.g. with `tickHz=60` an event at `atMs=10` is stamped at `~16.67/factor`), and all events delivered in the same tick share one identical stamp. Either advance the clock to `event.atMs / factor` per event, or update the docstring/comments to state stamps are tick-quantized.",
+   "existing_code": "    clock.tickTo(captureNow / factor);",
+   "start_line": 132,
+   "end_line": 132,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/storage/src/replay.ts",
+   "content": "Null decodes are silently dropped: `states`/`stampsMs` only get an entry when `state !== null`. Because `compareSequences` enforces `expected.length === actual.length` and compares index-by-index, an event that decodes to `null` in the middle of a capture shifts every later state up one index, producing misleading positional mismatches instead of an explicit \"event dropped\" signal. Consider recording dropped events (e.g. push `null` and let the comparator handle it, or return a drop count) so callers can distinguish a legitimate filter from a decode failure.",
+   "existing_code": "    if (state !== null) {\n      states.push(state);\n      stampsMs.push(clock.nowMs());\n    }",
+   "start_line": 99,
+   "end_line": 102,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/storage/src/replay.ts",
+   "content": "`nowNs()` uses `Math.round(currentMs * 1e6)` instead of truncation, so nanosecond stamps can be off by up to 0.5 ms from the true value and disagree with a truncating/absolute source of truth at exact boundaries. Also, once virtual time exceeds ~2^53 ns (~104 days) the product exceeds `Number.MAX_SAFE_INTEGER` and `BigInt` conversion loses precision silently. Prefer computing from milliseconds with an explicit, documented rounding mode (or `BigInt(Math.trunc(...))`) and consider guarding the safe range.",
+   "existing_code": "  nowNs(): bigint {\n    return BigInt(Math.round(this.currentMs * 1e6));\n  }",
+   "start_line": 15,
+   "end_line": 17,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "packages/storage/src/replay.ts",
+   "content": "The timing-field key is derived with `path.split(\".\").pop()`, which breaks for array-element paths: a path like `stampsMs[0]` or `events[0]` yields the key `\"stampsMs[0]\"`, so `isTimingField` returns false and the configured tolerance is silently skipped for real timing fields that live inside arrays. Strip a trailing array index before checking the suffix, e.g. `path.split(\".\").pop()?.replace(/\\[\\d+\\]$/, \"\") ?? \"\"`.",
+   "existing_code": "      const key = path.split(\".\").pop() ?? \"\";",
+   "start_line": 197,
+   "end_line": 197,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/storage/src/replay.ts",
+   "content": "NaN failures leak through this assertion. If `expected` (or `actual`) is `NaN`, `Math.abs(expected - actual)` is `NaN` and `NaN > tolerance` is `false`, so no problem is recorded and a broken value passes the comparison. Handle `NaN` explicitly so non-finite numeric mismatches are reported.",
+   "suggestion_code": "      if (Number.isNaN(expected) || Number.isNaN(actual)) {\n        if (!(Number.isNaN(expected) && Number.isNaN(actual))) {\n          problems.push({ index, path, expected, actual });\n        }\n      } else if (Math.abs(expected - actual) > tolerance) {\n        problems.push({ index, path, expected, actual });\n      }",
+   "existing_code": "      if (Math.abs(expected - actual) > tolerance) problems.push({ index, path, expected, actual });",
+   "start_line": 199,
+   "end_line": 199,
+   "category": "bug",
+   "severity": "high"
+  }
+ ],
+ "packages/rekordbox-library/src/service.ts": [
+  {
+   "path": "packages/rekordbox-library/src/service.ts",
+   "content": "startWatching() overwrites this.watcher without stopping an already-running watcher. A second call leaks the previous LibraryWatcher (its polling interval / native subscription keeps running) and its 'on' callback keeps firing; both callbacks then race on the shared this.rowSnapshot, producing duplicate or stale change events. Guard against re-entry by stopping the current watcher first.",
+   "suggestion_code": "  async startWatching(): Promise<void> {\n    if (this.watcherFiles.length === 0) return;\n    await this.stopWatching();\n    this.watcher = new LibraryWatcher({",
+   "existing_code": "  async startWatching(): Promise<void> {\n    if (this.watcherFiles.length === 0) return;\n    this.watcher = new LibraryWatcher({",
+   "start_line": 212,
+   "end_line": 214,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-library/src/service.ts",
+   "content": "snapshotRows() reads only the first SNAPSHOT_LIMIT (5000) rows. For libraries with more tracks, diffLibraryRows never observes rows beyond the window, so adds/removes/changes past the cap are silently dropped from LibraryChangeEvent.diff (invariant T-RBL-06). Because trackRows orders by c.ID and applies LIMIT/OFFSET, inserts/deletes around the boundary can also make a row shift in/out of the window and be misreported as added/removed. Consider diffing without a hard cap, or splitting the snapshot into a stable, ID-keyed window.",
+   "existing_code": "  private snapshotRows(): LibraryRowSnapshot[] {\n    return this.source.trackRows({ limit: SNAPSHOT_LIMIT }).map((row) => {",
+   "start_line": 337,
+   "end_line": 338,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-library/src/service.ts",
+   "content": "compareWithSidecar only iterates the rows the sidecar returned (result.playlists / result.tracks), so entries present in the TypeScript reader but absent from the pyrekordbox result are never reported \u2014 the comparison is one-directional. Add the reverse check (iterate TS-side playlists/tracks and flag any missing from py) so a truncated/partial sidecar response cannot report status 'agree' despite real divergence.",
+   "existing_code": "    for (const row of result.playlists ?? []) {",
+   "start_line": 360,
+   "end_line": 360,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-library/src/service.ts",
+   "content": "When the sidecar omits counts (a partial/ok result), the count comparison is skipped entirely, yet runCrossCheck still sets status 'agree' whenever mismatches is empty. A partial sidecar payload therefore passes as agreement. Treat a missing counts (or otherwise partial result) as 'unavailable' rather than 'agree'.",
+   "existing_code": "    if (result.counts !== undefined) {",
+   "start_line": 352,
+   "end_line": 352,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-library/src/service.ts",
+   "content": "The auto fallback only triggers for LibraryDbError codes cipher-module-missing / not-a-database; other open failures (e.g. driver-failed) rethrow instead of trying the sidecar. Worse, the fallback call is unguarded: if openSidecar() rejects, the original LibraryDbError that triggered the fallback is discarded, so the caller sees an opaque sidecar error with no root cause. Consider attempting the sidecar for any reader-open failure and preserving/wrapping the original error.",
+   "existing_code": "      if (resolved.mode !== \"auto\" || !recoverable) throw error;\n\n      return new LibraryService(resolved, await openSidecar(resolved), \"pyrekordbox\");",
+   "start_line": 139,
+   "end_line": 141,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-library/src/service.ts",
+   "content": "Nested ternary expressions are prohibited by the project rules and are harder to read here. Use an if/else chain instead.",
+   "suggestion_code": "    if (!config.crossCheck) {\n      this.crossCheckResult = { status: \"disabled\", mismatches: [] };\n    } else if (activeReader === \"pyrekordbox\") {\n      this.crossCheckResult = { status: \"disabled\", mismatches: [], note: \"pyrekordbox is the active reader\" };\n    } else {\n      this.crossCheckResult = { status: \"unavailable\", mismatches: [], note: \"not run\" };\n    }",
+   "existing_code": "    this.crossCheckResult = !config.crossCheck\n      ? { status: \"disabled\", mismatches: [] }\n      : activeReader === \"pyrekordbox\"",
+   "start_line": 112,
+   "end_line": 114,
+   "category": "style",
+   "severity": "low"
+  },
+  {
+   "path": "packages/rekordbox-library/src/service.ts",
+   "content": "history() runs one songHistoryRows() query per history session (N+1). The reader already computes these counts in a single GROUP BY query (historyTrackCounts) but it is not exposed on the LibrarySource interface; expose/reuse that batched query for libraries with many sessions.",
+   "existing_code": "    return rows.map((row) => mapHistoryRow(row, this.source.songHistoryRows(String(row[\"ID\"] ?? \"\")).length));",
+   "start_line": 177,
+   "end_line": 177,
+   "category": "performance",
+   "severity": "low"
+  },
+  {
+   "path": "packages/rekordbox-library/src/service.ts",
+   "content": "tracksForEntries resolves every entry with a separate trackRow() query (N+1). For large playlists/history lists this becomes thousands of SQLite round-trips; fetch all entry IDs in a single query (e.g. a trackRowsByIds helper) instead.",
+   "existing_code": "      const track = this.track(entry.rekordboxId);",
+   "start_line": 329,
+   "end_line": 329,
+   "category": "performance",
+   "severity": "low"
+  }
+ ],
+ "packages/rekordbox-live/src/rkbx-osc.test.ts": [
+  {
+   "path": "packages/rekordbox-live/src/rkbx-osc.test.ts",
+   "content": "This assertion block effectively never executes. `buildRkbxDatagrams` (rkbx-osc.ts:478) emits datagrams at multiples of `period = 1000/hz = 1000/120 \u2248 8.3333...`, accumulated with floating-point `atMs += period`, so no datagram's `atMs` is ever exactly `500`. The `if (datagram.atMs === 500)` guard is therefore false for every datagram and the core playhead/playing check is silently skipped \u2014 the test passes even if playhead tracking is completely broken. Trigger the assertion on the first datagram at/after 500ms (guarded by a flag) so it always runs.",
+   "suggestion_code": "      if (datagram.atMs >= 500 && !midpointChecked) {\n        midpointChecked = true;\n        const state = provider.getDecks()[0];\n        expect(state?.playing).toBe(true);\n        expect(Math.abs((state?.playheadSeconds ?? 0) * 1000 - 500)).toBeLessThan(20);\n      }",
+   "existing_code": "      if (datagram.atMs === 500) {\n        const state = provider.getDecks()[0];\n        expect(state?.playing).toBe(true);\n        expect(Math.abs((state?.playheadSeconds ?? 0) * 1000 - 500)).toBeLessThan(20);\n      }",
+   "start_line": 158,
+   "end_line": 162,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-live/src/rkbx-osc.test.ts",
+   "content": "`sendUdpDatagrams`'s return value only counts datagrams handed to the OS; it does not prove they were received. Because the `seen` promise resolves solely on the `/1/time` payload, the test never verifies that the `/1/bpm/current` datagram was received or processed and can pass even if BPM messages are dropped. After `await`, assert on the observed BPM state (e.g. `provider.getDecks()[0]?.effectiveBpm`).",
+   "existing_code": "      expect(sent).toBe(2);",
+   "start_line": 226,
+   "end_line": 226,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/rkbx-osc.test.ts",
+   "content": "No timeout guards `await seen.promise`. If the loopback UDP datagrams are dropped or blocked, the promise never resolves, the test hangs indefinitely and the `finally` block (which calls `provider.stop()`) never runs \u2014 leaking the bound port 4460 and breaking any subsequent test that binds the same port. Race the promise against a timeout (or otherwise guarantee `stop()` runs) so a missed packet fails fast instead of hanging.",
+   "existing_code": "      await seen.promise;",
+   "start_line": 227,
+   "end_line": 227,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-live/src/rkbx-osc.test.ts",
+   "content": "Negating the state is a weak assertion: it does not confirm the expected state or that error/rejection metadata is preserved. The provider could transition to any unintended non-`live` state and the test would still pass. Assert the specific expected state.",
+   "existing_code": "    expect(provider.getStatus().state).not.toBe(\"live\");",
+   "start_line": 132,
+   "end_line": 132,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/rekordbox-live/src/rkbx-osc.test.ts",
+   "content": "The bind address is hardcoded here instead of reusing the `EXPECTED_DESTINATION` constant declared at the top of the file, duplicating the `127.0.0.1:4460` magic value. If the constant is ever changed, this test would silently bind a different (stale) port. Use `EXPECTED_DESTINATION`.",
+   "suggestion_code": "    const provider = new RkbxOscProvider({ bind: EXPECTED_DESTINATION });",
+   "existing_code": "    const provider = new RkbxOscProvider({ bind: \"127.0.0.1:4460\" });",
+   "start_line": 211,
+   "end_line": 211,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/serato/src/capture.ts": [
+  {
+   "path": "packages/serato/src/capture.ts",
+   "content": "The outbound (server\u2192us) direction passes a hardcoded `null` carry, so unlike the inbound path it never rejoins a frame whose delimiter spans two TCP chunks. Two consequences: (1) the trailing partial frame returned by `splitInto` is discarded, silently dropping bytes; (2) once a delimiter is split, all subsequent outbound frames in that connection become misaligned (a frame boundary is only detected when a full delimiter happens to fit in a single chunk). Thread the carry through the Connection just like the inbound path.",
+   "suggestion_code": "    upstream.on(\"data\", (chunk: Buffer) => {\n      connection.pendingOutbound = this.splitInto(this.capturedOutbound, chunk, connection.pendingOutbound, now());\n    });",
+   "existing_code": "    upstream.on(\"data\", (chunk: Buffer) => {\n      this.splitInto(this.capturedOutbound, chunk, null, now());\n    });",
+   "start_line": 101,
+   "end_line": 103,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/serato/src/capture.ts",
+   "content": "`server.once(\"error\", reject)` is used to surface listen failures, but it is never removed after a successful `listen()`. The first error after startup triggers `reject` on an already-settled promise (a silent no-op) and consumes the one-shot listener, leaving the server with no `error` handler. A second server error is then an unhandled 'error' event, which crashes the process. Either remove the listener once listening succeeds, or attach a persistent error handler.",
+   "existing_code": "    server.once(\"error\", reject);",
+   "start_line": 51,
+   "end_line": 51,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/serato/src/capture.ts",
+   "content": "On the unexpected-address branch, `start()` rejects without closing the server, so the bound socket and its OS-assigned port leak. Because `start()` never resolves, the caller never receives the port and `stop()` cannot clean it up (it would also need the handle). Close the server before rejecting.",
+   "suggestion_code": "      if (address === null || typeof address === \"string\") {\n        server.close();\n        reject(new Error(\"capture proxy bound to an unexpected address\"));\n        return;\n      }",
+   "existing_code": "      if (address === null || typeof address === \"string\") {\n        reject(new Error(\"capture proxy bound to an unexpected address\"));\n        return;\n      }",
+   "start_line": 54,
+   "end_line": 57,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/serato/src/capture.ts",
+   "content": "Frame timestamps use `now()` of the chunk that *completes* a frame, not the time its bytes started arriving. When a frame's delimiter spans chunks (or a chunk contains several frames), all frames in that chunk get the later chunk's timestamp, skewing time-synchronized replay of the capture. If accurate timing matters, capture the timestamp at the chunk boundary where the frame starts.",
+   "existing_code": "  private splitInto(sink: SeratoFrame[], chunk: Buffer, carry: Buffer | null, atMs: number): Buffer {",
+   "start_line": 120,
+   "end_line": 120,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "packages/serato/src/capture.ts",
+   "content": "`private port` is written in `start()` and reset in `stop()` but never read anywhere; `start()` resolves with `address.port` directly. This is dead state. Remove the field (or actually use it, e.g. return it from `stop()`/expose it) to avoid confusion.",
+   "existing_code": "  private port: number | null = null;",
+   "start_line": 37,
+   "end_line": 37,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/show-host/src/snapshot.test.ts": [
+  {
+   "path": "packages/show-host/src/snapshot.test.ts",
+   "content": "Circular/tautological comparison. The bytes fed to the \"recording transport\" are produced by `frameBytesOf(snap)`/`cellsToFrames(snap)` from the *same snapshot* that was read off the wire, and the assertion then compares `cellsToFrames(snapshot)` of that identical snapshot back to `match.bytesByFixture`. Both sides derive from the same `HostSnapshot`, so the check can never detect an incorrect host frame \u2014 it only proves `cellsToFrames` is deterministic. Consequently `expect(transport?.records.length).toBe(recorded.length)`/`byKind(\"razer\")` are also trivially true (one send per push). To actually test the claim, the recorded bytes must come from the host's pre-calibration logical frame (e.g. the renderer frame captured inside the host) rather than from the published snapshot.",
+   "existing_code": "          transport.send(razerDatagram(frameBytesOf(snap)));\n          recorded.push({ tick: snap.tick, bytesByFixture: cellsToFrames(snap) });",
+   "start_line": 270,
+   "end_line": 271,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "packages/show-host/src/snapshot.test.ts",
+   "content": "The replayed snapshot is injected back into `seen`, the same array used to compute `published` below. Because `replay` is itself added to `published`, the later assertion `Math.max(...published.filter(t => t <= replayed)) === replayed` is guaranteed true and cannot fail, even if the renderer actually replayed a stale frame. Additionally `replay` is sourced from `latestPublishedSnapshot(...)` (which returns the max-tick snapshot), so it is by definition the latest published \u2014 the property under test is assumed, not verified. The test should observe the snapshot the reloaded renderer actually receives (a real replay path) and must not push it into the same list it is checked against.",
+   "existing_code": "          seen.push({ type: \"snapshot\", snapshot: replay });",
+   "start_line": 361,
+   "end_line": 361,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "packages/show-host/src/snapshot.test.ts",
+   "content": "\"Zero frame gap at the transport\" is not measured at a transport. No `RecordingTransport` is instantiated in this test; `transportTicks` collects `host.getMetrics().ticks`, so the loop below only proves the host's own tick counter increments by one. It never exercises transport-side frame continuity (the reload/drop is simulated purely by the `rendererLive` flag gating `seen`). The test name and comments overstate what is verified; either wire an actual recording transport and assert on its per-tick records, or rename to reflect that only host tick continuity is checked.",
+   "existing_code": "      transportTicks.push(host.getMetrics().ticks);\n      tick += 1;",
+   "start_line": 335,
+   "end_line": 336,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-host/src/snapshot.test.ts",
+   "content": "Dead fallback. `latest` and `wire` are both derived from the same `seen` array (`wire = snapshotsOf(seen)`), so when `latestPublishedSnapshot` returns `null` the `seen`-derived `wire` is empty and `wire[wire.length - 1]` is `undefined`. The documented fallback (`?? wire[wire.length - 1] ?? null`) can therefore never produce a value, masking the case where no genuine replay snapshot was observed at all. Capture the pre-reload snapshot before the dark window (or use a real replay source) instead of a fallback that is unreachable in practice.",
+   "existing_code": "        const replay = latest ?? wire[wire.length - 1] ?? null;",
+   "start_line": 357,
+   "end_line": 357,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-host/src/snapshot.test.ts",
+   "content": "No bounds check before writing. `cell.cellIndex * 3` (and +1/+2) are written into a `Uint8Array` sized to `fixture.cells.length * 3`; if a snapshot ever carries an out-of-range `cellIndex`, the typed-array store is silently ignored (no throw), so cells are dropped without any signal. In `frameBytesOf`/`cellsToFrames` this would let byte comparisons pass while real cells are missing, hiding host output that exceeds the fixture cell count. Guard `cell.cellIndex` against `[0, fixture.cells.length)` and assert/fail explicitly on an out-of-range index.",
+   "existing_code": "    buf[cell.cellIndex * 3] = cell.color[0] ?? 0;",
+   "start_line": 213,
+   "end_line": 213,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/src/features/live/live.ts": [
+  {
+   "path": "apps/desktop/src/features/live/live.ts",
+   "content": "The per-deck frames render the raw `mixA.cues`/`mixB.cues`, bypassing the `mixed = mixDown(...)` result computed just above (F-MIX-04). `mixDown` is the only place that enforces exclusive-resource ownership and introduction-stage admission (show-mixer `contribute`: non-owner white-hit/blackout/strobe/impact are translated or dropped). Because both frames are then blended by weight, a non-owner deck's raw exclusive cue (e.g. a `white-hit` on deck B) still reaches the pixels even though the mixer decided deck A owns it. Render the per-side cues that `mixDown` actually kept (via `mixed.layers`, which carries `side`), not the pre-mix cue arrays.",
+   "suggestion_code": "  const keptA = mixed.layers.filter((l) => l.side === \"a\").flatMap((l) => l.cues);\n  const keptB = mixed.layers.filter((l) => l.side === \"b\").flatMap((l) => l.cues);\n  const fa = renderFrame({ schemaVersion: 1, plannerVersion: \"live\", trackId: \"a\", styleId: \"live\", seed: \"live\", cues: keptA }, beatA, fixtures);\n  const fb = renderFrame({ schemaVersion: 1, plannerVersion: \"live\", trackId: \"b\", styleId: \"live\", seed: \"live\", cues: keptB }, beatB, fixtures);",
+   "existing_code": "  const fa = renderFrame({ schemaVersion: 1, plannerVersion: \"live\", trackId: \"a\", styleId: \"live\", seed: \"live\", cues: mixA.cues }, beatA, fixtures);\n  const fb = renderFrame({ schemaVersion: 1, plannerVersion: \"live\", trackId: \"b\", styleId: \"live\", seed: \"live\", cues: mixB.cues }, beatB, fixtures);",
+   "start_line": 41,
+   "end_line": 42,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/src/features/live/live.ts",
+   "content": "`mixed.cues` merges cues from both decks, but their `startBeat` values live on two independent timelines; `beat` here is a single deck's beat (chosen by `wa >= wb`, which also does not match the impact-based `mixed.owner`). When the decks play at different positions (the normal mixing case) every cue from the non-selected deck is filtered against the wrong timeline, silently hiding still-upcoming cues or surfacing already-played ones (F-MIX-05). Filter each deck's cues against its own beat (using `mixA.cues`/`mixB.cues` or the side-tagged `mixed.layers` with `beatA`/`beatB`) and then merge, instead of comparing all merged cues to one `beat`.",
+   "suggestion_code": "  const upcoming = [...mixA.cues.filter((c) => c.startBeat + c.durationBeats > beatA), ...mixB.cues.filter((c) => c.startBeat + c.durationBeats > beatB)]",
+   "existing_code": "  const beat = wa >= wb ? beatA : beatB;\n  const upcoming = mixed.cues\n    .filter((c: { startBeat: number; durationBeats: number }) => c.startBeat + c.durationBeats > beat)",
+   "start_line": 34,
+   "end_line": 36,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/src/features/live/live.ts",
+   "content": "`renderFrame` writes each fixture buffer at `cell.cellIndex * 3`, where `cellIndex` is the cell's own `index` field (see venue `globalCellOrder` \u2192 `c.index`), not its position in `f.cells`. This loop indexes with the array position `i`, so whenever `cell.index !== i` (the contracts schema does not require the array to be ordered by `index`, and `makeFixture` only happens to align them) every channel is read from the wrong cell / wrong stride, producing wrong colors. The `?? 0` fallback silently masks the out-of-range reads instead of surfacing the mismatch. Index by `c.index`.",
+   "suggestion_code": "    f.cells.forEach((c) => {\n      const base = c.index * 3;\n      const chan = (k: number): number => {\n        const blended = ((ba[base + k] ?? 0) * wa + (bb[base + k] ?? 0) * wb) / total / 255;",
+   "existing_code": "    f.cells.forEach((c, i) => {\n      const chan = (k: number): number => {\n        const blended = ((ba[i * 3 + k] ?? 0) * wa + (bb[i * 3 + k] ?? 0) * wb) / total / 255;",
+   "start_line": 49,
+   "end_line": 51,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/features/live/live.ts",
+   "content": "The two decks are blended in gamma-encoded sRGB byte space (values come from `renderFrame`, which converts linear light to sRGB bytes): a weighted average of encoded bytes is not the same as blending in linear light, so mid-level crossfades of two differently-lit decks render darker/off-color than the incident light warrants (F-MIX-05). Decode to linear before blending (or have the renderer expose linear values) and re-encode on output.",
+   "existing_code": "        const blended = ((ba[i * 3 + k] ?? 0) * wa + (bb[i * 3 + k] ?? 0) * wb) / total / 255;",
+   "start_line": 51,
+   "end_line": 51,
+   "category": "bug",
+   "severity": "low"
+  }
+ ]
+}

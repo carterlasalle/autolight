@@ -1,0 +1,345 @@
+{
+ "packages/ble/src/provisioning.ts": [
+  {
+   "path": "packages/ble/src/provisioning.ts",
+   "content": "No rollback on failure: if any `transport.write`/`transport.sleep` throws after `bleProvisionStart()` has been written, the stop frame `33 17 00` is never sent, leaving the device stuck in provisioning mode (the sim's `provisionStarted` stays true and `provisionComplete` false). Wrap the transfer in try/finally (or catch+rethrow) and issue a best-effort `bleProvisionStop()` on any failure path.",
+   "existing_code": "  await transport.write(bleProvisionStart());\n  await transport.sleep(startWait);",
+   "start_line": 109,
+   "end_line": 110,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/ble/src/provisioning.ts",
+   "content": "Credential scrubbing is ineffective as written. Reassigning `password = \"\"` cannot erase the immutable JS string, and `payload` plus every entry of `chunks` still hold the plaintext password (and are only released on GC). Additionally, on the error path this line is never reached, so the local is not even reassigned. Zero the buffers and clear the local in a `finally` block so the credential does not persist in memory after the transfer.",
+   "suggestion_code": "  password = \"\";\n  payload.fill(0);\n  for (const chunk of chunks) chunk.fill(0);",
+   "existing_code": "  password = \"\";",
+   "start_line": 121,
+   "end_line": 121,
+   "category": "security",
+   "severity": "high"
+  },
+  {
+   "path": "packages/ble/src/provisioning.ts",
+   "content": "Hardcoded protocol magic: `0xa1` duplicates `BLE_PROTYPE.PROVISION` (0xa1) already defined in `constants.ts` and used by the other builders. A typo or protocol change here would silently diverge from the decoder/sim and the constant. Use the named constant for consistency.",
+   "suggestion_code": "  return encodeBleFrame(BLE_PROTYPE.PROVISION, 0x11, chunk);",
+   "existing_code": "  return encodeBleFrame(0xa1, 0x11, chunk);",
+   "start_line": 22,
+   "end_line": 22,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/ble/src/provisioning.ts",
+   "content": "Insufficient credential validation. Only an empty SSID is rejected; a `null`/`undefined` password (e.g. from an unsafe IPC boundary) is coerced by `TextEncoder.encode` to the literal bytes `\"null\"`/`\"undefined\"` and sent to the device as the Wi-Fi password, producing a silent provisioning failure. There is also no upper bound on the SSID+NUL+password payload length. Validate that `ssid` and `password` are strings (and non-empty/within expected length) before building the payload.",
+   "existing_code": "  if (creds.ssid.length === 0) throw new Error(\"provisioning needs an SSID\");",
+   "start_line": 80,
+   "end_line": 80,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/ble/src/provisioning.ts",
+   "content": "No in-flight guard / serialization: two concurrent `provisionBleWifi` calls sharing the same transport will interleave their start/chunk/stop frames (the awaits yield between writes), corrupting the provisioning sequence for one or both devices. Add a re-entrancy guard or document/enforce that callers must serialize calls per transport.",
+   "existing_code": "export async function provisionBleWifi(",
+   "start_line": 97,
+   "end_line": 97,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/config/src/index.test.ts": [
+  {
+   "path": "packages/config/src/index.test.ts",
+   "content": "This assertion only proves the *key name* appears in the message, not that the key was rejected as a secret. `validateImportValues` emits a message containing the key both for secret ids (`... is a secret id, use the secrets-service ...`) AND for unknown keys (`... unknown key ...`). If `agent.apiToken` were accidentally dropped from `SECRET_IDS`/`SECRET_TABLE`, it would fall through to the unknown-key branch and this line would still pass \u2014 so the test cannot detect a broken secrets boundary (T-SEC-01). Assert on the rejection reason instead.",
+   "suggestion_code": "    const agentMsg = validateImportValues({ \"agent.apiToken\": \"PLAIN\" }).join(\"\\n\");\n    expect(agentMsg).toContain(\"agent.apiToken\");\n    expect(agentMsg).toContain(\"secrets-service\");",
+   "existing_code": "    expect(validateImportValues({ \"agent.apiToken\": \"PLAIN\" }).join(\"\\n\")).toContain(\"agent.apiToken\");",
+   "start_line": 60,
+   "end_line": 60,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "packages/config/src/index.test.ts",
+   "content": "Same weakness for the `govee.cloud.apiKey` path: it only checks the key substring, which is present in both the secret-rejection and unknown-key messages. If the key lost its secret classification, `s.importJson(...)` would report it as an unknown key and `bad.badKeys.join(\"\\n\")` would still contain `govee.cloud.apiKey`, so the test would pass with the boundary broken. Assert the rejection is specifically the secrets-service message.",
+   "suggestion_code": "    if (!bad.ok) {\n      expect(bad.badKeys.join(\"\\n\")).toContain(\"govee.cloud.apiKey\");\n      expect(bad.badKeys.join(\"\\n\")).toContain(\"secrets-service\");\n    }",
+   "existing_code": "    if (!bad.ok) expect(bad.badKeys.join(\"\\n\")).toContain(\"govee.cloud.apiKey\");",
+   "start_line": 59,
+   "end_line": 59,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "packages/config/src/index.test.ts",
+   "content": "Atomicity of a failed import is never checked here. The payload contains only invalid entries, so even if `importJson` applied the valid subset before rejecting (a partial-apply regression), nothing would be observable and the test would still pass. Add a mixed payload (one valid key + one invalid key) and assert the valid key was NOT applied, i.e. the store still returns the default 60.",
+   "suggestion_code": "    const bad = s.importJson(JSON.stringify({ version: 1, values: {\n      \"nope.key\": 1,\n      \"runtime.clock.tickHz\": \"fast\",\n    } }));\n    // atomicity: a rejected import must not partially apply valid values\n    const mixed = s.importJson(JSON.stringify({ version: 1, values: {\n      \"runtime.snapshot.uiRateHz\": 45,\n      \"nope.key\": 1,\n    } }));\n    expect(mixed.ok).toBe(false);\n    expect(s.get(\"runtime.snapshot.uiRateHz\")).toBe(30);",
+   "existing_code": "    const bad = s.importJson(JSON.stringify({ version: 1, values: {\n      \"nope.key\": 1,\n      \"runtime.clock.tickHz\": \"fast\",\n    } }));",
+   "start_line": 33,
+   "end_line": 36,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/config/src/index.test.ts",
+   "content": "The change-notification contract is only spot-checked with a single listener and a single diff. It never verifies that `before` reflects the previously-set value on a *successive* set (only the default\u219245 transition), nor that multiple subscribers are each notified, nor that `off()` removes only the unsubscribed listener while others keep receiving events. A regression in `PersistentConfigStore.emit` (e.g. mutating the listener set during iteration or dropping `before`) could slip through.",
+   "existing_code": "    const off = store.subscribe((c) => { seen.push(c); });",
+   "start_line": 112,
+   "end_line": 112,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/config/src/index.test.ts",
+   "content": "Several assertions pin exact message internals rather than behavior: the range text `\"30 to 120\"`, the sentinel `\"<unparseable JSON>\"`, and the exact bad-key count `3` are duplicated literals. A benign reword of any mitigation message (e.g. changing the range separator or the unparseable sentinel) silently desynchronizes these tests from the intended invariant without any functional regression, making the suite brittle. Prefer asserting on stable, semantic substrings (the key name plus a category word like \"range\"/\"secrets-service\") rather than exact formatting.",
+   "existing_code": "    expect(joined).toContain(\"30 to 120\");",
+   "start_line": 94,
+   "end_line": 94,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/diagnostics/src/index.ts": [
+  {
+   "path": "packages/diagnostics/src/index.ts",
+   "content": "`parseNdjson` splits on \"\\n\" and parses every element, so a trailing newline (explicitly allowed by the NDJSON spec and common for files written by other tools) or any blank/interstitial line becomes `\"\"`, `JSON.parse(\"\")` throws, and the whole replay fails with e.g. `session line 3`. `this.toNdjson()` happens to avoid this by using `join(\"\\n\")` with no trailing newline, which is why the existing round-trip test passes. Filter out blank lines while preserving the original 1-based line number for error messages.",
+   "suggestion_code": "  return ndjson\n    .split(\"\\n\")\n    .map((line, i) => ({ line, i }))\n    .filter(({ line }) => line.trim() !== \"\")\n    .map(({ line, i }) => {",
+   "existing_code": "  return ndjson.split(\"\\n\").map((line, i) => {",
+   "start_line": 48,
+   "end_line": 48,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/diagnostics/src/index.ts",
+   "content": "The shape check is too weak: `typeof null === \"object\"` and `typeof [] === \"object\"`, so a `payload` of `null` or an array passes validation and can later cause a null/array dereference in the simulator; `tNs` is never checked to exist or be a string. Additionally the function returns `tNs: string` while `SessionEvent.tNs` is `bigint`, so the parse/record types are mismatched at the replay boundary. Tighten the validation to reject null/array payloads and missing/non-string `tNs`.",
+   "suggestion_code": "      if (\n        typeof row.kind !== \"string\" ||\n        typeof row.tNs !== \"string\" ||\n        typeof row.payload !== \"object\" ||\n        row.payload === null ||\n        Array.isArray(row.payload)\n      ) throw new Error(\"bad shape\");",
+   "existing_code": "      if (typeof row.kind !== \"string\" || typeof row.payload !== \"object\") throw new Error(\"bad shape\");",
+   "start_line": 51,
+   "end_line": 51,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/diagnostics/src/index.ts",
+   "content": "`toNdjson` calls `JSON.stringify` without error handling. Since payloads are typed as `Record<string, unknown>`, a payload containing a `bigint` (e.g. a raw `tNs` from a `SessionEvent`) or a circular reference throws, and a single bad event aborts serialization of the entire buffered session. Guard per-event stringify (or sanitize bigint/circular values) so one bad payload cannot destroy the whole recording.",
+   "existing_code": "    return this.events.map((e) => JSON.stringify({ ...e, tNs: e.tNs.toString() })).join(\"\\n\");",
+   "start_line": 37,
+   "end_line": 37,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/diagnostics/src/index.ts",
+   "content": "Two issues in `record`: (1) once `maxEvents` is reached, the oldest event is silently discarded with no counter or log, so data loss is invisible to callers monitoring the recording; (2) `Array.prototype.shift()` is O(n), making each `record` call O(n) once the buffer is saturated (100k events by default), which is a real hot-path cost for a per-frame/per-beat recorder. Consider a ring buffer or an explicit dropped-event counter/signal.",
+   "existing_code": "    if (this.events.length >= this.maxEvents) this.events.shift();",
+   "start_line": 33,
+   "end_line": 33,
+   "category": "performance",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/diagnostics/src/index.ts",
+   "content": "`performance.now()` has a per-context time origin (main thread vs. each worker) and is deliberately coarsened/clamped by the browser, and multiplying a float64 millisecond value by 1e6 does not yield true nanosecond resolution. Since `log()` events from different contexts may be recorded into the same session, `monoNs` values are not reliably comparable across contexts nor suitable for precise clock/beat-error comparisons. At minimum this limitation should be documented, or a shared origin should be used when correlating timestamps.",
+   "existing_code": "const nowNs = (): bigint => BigInt(Math.round(performance.now() * 1e6));",
+   "start_line": 3,
+   "end_line": 3,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "packages/rekordbox-library/src/driver.ts": [
+  {
+   "path": "packages/rekordbox-library/src/driver.ts",
+   "content": "Untrusted caller-supplied key is interpolated directly into a PRAGMA statement. A passphrase containing a single quote (e.g. `p'wd`) produces a malformed/broken statement, and crafted input such as `x'; PRAGMA journal_mode=...; --` can inject additional pragmas/SQL. Escape/validate before use, or use a driver API that accepts the key as a value.",
+   "suggestion_code": "    handle.pragma(`key='${key.replace(/'/g, \"''\")}'`);",
+   "existing_code": "    handle.pragma(`key='${key}'`);",
+   "start_line": 116,
+   "end_line": 116,
+   "category": "security",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-library/src/driver.ts",
+   "content": "`openWithCipher` returns `undefined` for EVERY post-import failure, including a wrong key, a corrupt/undecryptable database, or a present-but-unloadable native binding. Because the caller cannot distinguish \"module absent\" from \"open failed\", `openReadOnly` unconditionally reports `cipher-module-missing` here whenever the module IS installed but the key/file is bad. The caller then silently falls back to the sidecar reader even though the real problem is decryptability. Have `openWithCipher` distinguish module-absence from open-failure (e.g. a discriminated result or throw a typed error) and surface the real cause.",
+   "existing_code": "    const cipher = await openWithCipher(dbPath, key);\n    if (cipher !== undefined) return cipher;\n    throw new LibraryDbError(\n      `${CIPHER_MODULE} is not installed; the pyrekordbox reader covers this database`,\n      \"cipher-module-missing\",\n    );",
+   "start_line": 192,
+   "end_line": 197,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-library/src/driver.ts",
+   "content": "`openWithNodeSqlite` maps any non-driver-failed error (corrupt/truncated file, permission denied, locked file, I/O error) to `not-a-database`, and this block then relabels all of them as \"is encrypted\", discarding the original cause. A corrupt or unreadable plain SQLite file is thus misreported as encrypted, diverting the caller. Note also the `existsSync` check above races the open (TOCTOU): the file can be deleted/replaced between the check and `open`. Preserve the underlying `describe(error)` message / `cause` and only claim encryption when the failure is genuinely consistent with an encrypted database.",
+   "existing_code": "    if (error instanceof LibraryDbError && error.code === \"not-a-database\") {\n      throw new LibraryDbError(`${dbPath} is encrypted; a SQLCipher driver is required`, \"not-a-database\");\n    }",
+   "start_line": 202,
+   "end_line": 204,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-library/src/driver.ts",
+   "content": "The `query_only` verification (read back the flag and compare) is copy-pasted between the SQLCipher and node:sqlite paths, including an ad-hoc `\"query_only\" in lockRow` / `Object.values(lockRow)[0]` extraction. This security-critical check can silently drift between the two drivers and the fragile row-shape fallback may misread the flag if a driver returns a different shape. Extract a single shared helper (e.g. `assertQueryOnly(handle, dbPath)`) used by both paths.",
+   "existing_code": "    const lockRow = handle.prepare(\"PRAGMA query_only\").get({});\n    const lockValue = lockRow === undefined ? undefined : \"query_only\" in lockRow ? lockRow[\"query_only\"] : Object.values(lockRow)[0];",
+   "start_line": 123,
+   "end_line": 124,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-library/src/driver.ts",
+   "content": "The read-only self check depends on `db.raw.exec`, but the SQLCipher driver's declared type `CipherHandle` does not declare an `exec` method \u2014 the declared type and runtime shape diverge, so the check only works by accident on better-sqlite3. Also, since both real handles (better-sqlite3 Database and node:sqlite DatabaseSync) DO expose `exec`, this guard's false branch is effectively unreachable, and returning `rejected: false` for it conflates \"write not rejected\" with \"could not probe\". Add `exec` to `CipherHandle` and make the probe contract explicit (e.g. throw or return an `inconclusive` state) rather than reporting `rejected: false`.",
+   "existing_code": "  if (!isExecable(db.raw)) return { rejected: false, error: \"driver handle exposes no write entry point\" };",
+   "start_line": 236,
+   "end_line": 236,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/rekordbox-live/src/soundswitch-absent.test.ts": [
+  {
+   "path": "packages/rekordbox-live/src/soundswitch-absent.test.ts",
+   "content": "This exclusion assertion is vacuous: no provider id `lighting-ipc` is ever registered with the engine in this test, so `fieldSources` can never contain it. Worse, it cannot fail even if fusion breaks entirely \u2014 `fused?.fieldSources.playheadSeconds` short-circuits to `undefined` when `fused` is null, and the `?? {}` fallback makes the second line pass on an empty/absent `fieldSources`. As written the test cannot detect an absent-Lighting regression. To make it meaningful, register a real `LightingIpcProvider` (with no fixtures, so it reports unavailable and contributes no decks) alongside the others and assert it never wins, or assert the actual winning provider id rather than merely \"not lighting-ipc\".",
+   "existing_code": "    expect(fused?.fieldSources.playheadSeconds).not.toBe(\"lighting-ipc\");\n    expect(Object.values(fused?.fieldSources ?? {})).not.toContain(\"lighting-ipc\");",
+   "start_line": 32,
+   "end_line": 33,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-live/src/soundswitch-absent.test.ts",
+   "content": "Every registered provider is fed an identical payload (`playheadSeconds: 10`, `effectiveBpm: 128`), and the only winner-related assertion is the trivially-true \"not lighting-ipc\" check. Because the value is the same regardless of which provider wins, this test passes even if the authority ranking is inverted or a lower-priority provider takes over the field. Assert the expected winner explicitly (with these ids and `DEFAULT_FUSION_AUTHORITY`, `memory-cleanroom` should hold `fieldSources.playheadSeconds`) and vary the per-provider values so priority/aggregation is actually exercised.",
+   "existing_code": "      provider.update({\n        deckId: 1, track: { id: \"rb:1\", title: \"No SoundSwitch\" }, playing: true,\n        playheadSeconds: 10, effectiveBpm: 128, atNs: now,\n      });",
+   "start_line": 22,
+   "end_line": 25,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-live/src/soundswitch-absent.test.ts",
+   "content": "The title claims \"every other provider goes live\", but this test only constructs `LightingIpcProvider` instances \u2014 no non-Lighting provider is created, started, or have its status/fusion asserted, and nothing is verified after `stop()`. The absence/failover behaviour promised by the title is untested. Either add the non-Lighting providers and assert their live status/fused output, or correct the title to match what is actually covered.",
+   "existing_code": "  it(\"reports the Lighting provider MISSING while every other provider goes live\", async () => {",
+   "start_line": 36,
+   "end_line": 36,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/soundswitch-absent.test.ts",
+   "content": "`READY` is asserted purely from fixture presence (capability() only checks `fixtures.length > 0`), so this passes even if `encodeLightingCaptureBase64` / `LIGHTING_CONTAINER_DECODER_V1` produce undecodable bytes or the replay path is broken. The constructed `capture` is never fed through `decodeLightingCaptureBase64` / `replayAll` to prove the decoder actually round-trips. Add an assertion on the decoded/replayed result so a broken capture or decoder path is caught.",
+   "existing_code": "    expect(ready.capability()).toBe(\"READY\");\n    await ready.stop();",
+   "start_line": 50,
+   "end_line": 51,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/soundswitch-absent.test.ts",
+   "content": "`now` is a module-level mutable `let` shared by both tests, and only the first `it` resets it. The second test silently inherits whatever value the first left behind, creating order dependence; any future test that advances the clock (or parallel execution) can change these results. Prefer resetting the clock in a `beforeEach`, or make each test use its own clock so isolation does not rely on execution order.",
+   "existing_code": "let now = 1_000n * 1_000_000_000n;",
+   "start_line": 6,
+   "end_line": 6,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/serato/src/index.test.ts": [
+  {
+   "path": "packages/serato/src/index.test.ts",
+   "content": "`return` inside a test makes the test report as passed while executing zero assertions when the local library is absent (the common CI case). A regression in `parseCrate` would go unnoticed as a green test. Use `it.skipIf(!hasLibrary)` (or `ctx.skip()`) so the test is explicitly reported as skipped instead of silently passing.",
+   "suggestion_code": "    // Guard the whole test so it is reported as skipped (not silently passed) on CI:\n    // it.skipIf(!hasLibrary)(\"parses a real crate\", () => { ... })",
+   "existing_code": "    if (!hasLibrary) return; // CI has no ~/Music \u2014 synthetic cases below cover parsing",
+   "start_line": 17,
+   "end_line": 17,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "packages/serato/src/index.test.ts",
+   "content": "Same silent-pass problem, plus the gate is mismatched: `hasLibrary` is derived from `Subcrates/Recorded.crate`, but this branch reads `Imported/Scratch Beats_/ScratchBeat5.mp3`. If the crate exists but the mp3 does not (or vice-versa), the guard lets execution through and `readFileSync` throws, turning what should be a skip into a hard, environment-dependent failure. Gate on the exact file being read, e.g. `existsSync(mp3Path)` / `it.skipIf`.",
+   "suggestion_code": "    const bgPath = `${home}/Imported/Scratch Beats_/ScratchBeat5.mp3`;\n    if (!existsSync(bgPath)) return;\n    const buf = readFileSync(bgPath);",
+   "existing_code": "    if (!hasLibrary) return;\n    const buf = readFileSync(`${home}/Imported/Scratch Beats_/ScratchBeat5.mp3`);",
+   "start_line": 50,
+   "end_line": 51,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "packages/serato/src/index.test.ts",
+   "content": "Fragile fixed-length slice: the payload offset assumes `\"Serato BeatGrid\"` + 1 byte exactly, and always slices 15 bytes. A change in the on-disk format (different header padding, multiple tempo markers, or a longer/shorter payload) would read the wrong bytes or go out of bounds while the loose `toBeCloseTo(88)` check could still pass. Deriving the offset from the GEOB tag structure and validating `payload.length`/marker count (or asserting the full region list) would make this robust and catch layout drift.",
+   "suggestion_code": "    const payload = new Uint8Array(buf.buffer, buf.byteOffset + o, 15);\n    const regions = parseBeatGrid(payload);\n    expect(regions.length).toBeGreaterThan(0);\n    expect(regions[0]!.bpm).toBeCloseTo(88);",
+   "existing_code": "    const payload = new Uint8Array(buf.buffer, buf.byteOffset + o, 15);\n    expect(parseBeatGrid(payload)[0]!.bpm).toBeCloseTo(88);",
+   "start_line": 55,
+   "end_line": 56,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/serato/src/index.test.ts",
+   "content": "These rejection assertions only check that *something* throws. A parser failing for an unrelated reason (e.g. an out-of-bounds index on the truncated input) would still satisfy `toThrow()`, hiding a broken magic/version check. Assert on the expected error message/type (e.g. `toThrow(/version=2/)` for the bad-version case) so the tests actually validate the intended validation paths.",
+   "existing_code": "    expect(() => parseBeatGrid(new Uint8Array([2, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0]))).toThrow();\n    expect(() => parseBeatGrid(new Uint8Array([1, 0]))).toThrow();",
+   "start_line": 59,
+   "end_line": 60,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/serato/src/index.test.ts",
+   "content": "Real-file assertions are minimal: `entries[0]!` non-null asserts parser output, but the only checks are `length > 0` and a non-empty path. Subtle per-entry corruption (truncated UTF-16BE path / missing offsets) would still pass. Also, the `!` hides `undefined` if parsing returns nothing. Consider asserting a known expected path or entry count, or at least a stronger structural check.",
+   "existing_code": "    expect(entries.length).toBeGreaterThan(0);\n    expect(entries[0]!.path.length).toBeGreaterThan(0);",
+   "start_line": 20,
+   "end_line": 21,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/show-host/src/index.test.ts": [
+  {
+   "path": "packages/show-host/src/index.test.ts",
+   "content": "The `crashes` array is never wired into the host: `startHost` is called with the bare probe function form, so it uses the default `onCrash = () => undefined`. Consequently `expect(crashes.length).toBe(0)` is tautological and would still pass if the crash policy fired. `startHost` does accept `StartHostOptions.onCrash`, so pass it explicitly to make the assertion meaningful.",
+   "suggestion_code": "    const crashes: string[] = [];\n    const allowEvery: AddonProbe = (id) => ({ id, available: true, reason: null });\n    const handle = startHost(\"worker-thread\", { probe: allowEvery, onCrash: (reason) => { crashes.push(reason); } });",
+   "existing_code": "    const crashes: string[] = [];\n    const allowEvery: AddonProbe = (id) => ({ id, available: true, reason: null });\n    const handle = startHost(\"worker-thread\", allowEvery);",
+   "start_line": 146,
+   "end_line": 148,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "packages/show-host/src/index.test.ts",
+   "content": "`expect(vi.fn().mock.calls.length).toBe(0)` asserts on a freshly created mock inside the assertion itself, so it can never fail and validates nothing. Even the test's stated intent (\"stop() after the crash is a no-op that must not fire it again\") is not exercised because this host is never crashed. Replace it with an assertion on the wired crash hook, or remove it.",
+   "suggestion_code": "    handle.stop();\n    handle.port.close();\n    expect(crashes.length).toBe(0);",
+   "existing_code": "    handle.stop();\n    handle.port.close();\n    expect(vi.fn().mock.calls.length).toBe(0);",
+   "start_line": 173,
+   "end_line": 175,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-host/src/index.test.ts",
+   "content": "This test is named \"tick clock defaults to the monotonic hrtime source\" but `makeHost()` always injects `nowNs: () => now`, and `tick(nowNs)` takes the timestamp as a parameter. The default `process.hrtime.bigint` source is only ever read inside `ShowHost.start()` (index.ts:407), which this test never calls. The assertions would still hold if the production default were a wall clock, so the test does not validate what its name claims. Exercise the `start()` path with the real default, or rename the test to reflect that it only checks the intervalP50 metric of explicit ticks.",
+   "existing_code": "  it(\"tick clock defaults to the monotonic hrtime source, never the wall clock\", () => {\n    const { host } = makeHost();\n    host.tick(0n);\n    host.tick(16_666_666n);",
+   "start_line": 131,
+   "end_line": 134,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "packages/show-host/src/index.test.ts",
+   "content": "`advance` (and the `now` closure plus the `nowNs: () => now` injection) is dead code: no test destructures or calls `advance`, so `now` is never mutated and the injected clock is a constant `0n`. Since `nowNsFn` is only invoked from `ShowHost.start()` and `makeHost()` never calls `start()`, the injection is never read at all. Either use it (e.g. via `start()`/`advance`) or drop it to avoid implying the timing path is covered.",
+   "existing_code": "    nowNs: () => now,\n  });\n  return { host, crashes, advance: (ns: bigint) => { now = ns; } };",
+   "start_line": 22,
+   "end_line": 24,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-host/src/index.test.ts",
+   "content": "The extra `setImmediate` is redundant and makes this test scheduling-dependent: the test's own `close` listener is registered before `host.attach(...)`, and Node invokes all `close` listeners synchronously during the emit, so `onCrash` has already run by the time `await closed` resumes. More importantly, the no-op-once behavior is never asserted here \u2014 after `host.stop()` the crash hook should remain at exactly one call, which is the guarantee the production `crashFired` guard provides. Add that assertion instead of relying on the deferred flush.",
+   "suggestion_code": "    await closed;\n    expect(crashes.length).toBe(1);\n    host.stop();\n    expect(crashes.length).toBe(1);",
+   "existing_code": "    await closed;\n    await new Promise((resolve) => { setImmediate(resolve); });\n    expect(crashes.length).toBe(1);\n    host.stop();",
+   "start_line": 125,
+   "end_line": 128,
+   "category": "test",
+   "severity": "medium"
+  }
+ ]
+}

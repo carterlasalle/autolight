@@ -1,0 +1,370 @@
+{
+ "analysis/src/autolight_analysis/config_defaults.json": [
+  {
+   "path": "analysis/src/autolight_analysis/config_defaults.json",
+   "content": "`analysis.bands` is declared as type `json` in the registry/schema, but this default is not valid JSON (the band names are unquoted), so `defaultFor()` falls back to the raw string and the Python bridge (`config.get(\"analysis.bands\")`) also returns a string. Any consumer that indexes it as a band->range map gets the literal description instead of a structure. Emit a real object here, and fix the source default in the catalog so regeneration keeps it valid.",
+   "suggestion_code": "  \"analysis.bands\": {\"bass\": [20, 150], \"lowMid\": [150, 500], \"mid\": [500, 2000], \"high\": [2000, 20000]},",
+   "existing_code": "  \"analysis.bands\": \"{bass:[20,150], lowMid:[150,500], mid:[500,2000], high:[2000,20000]}\",",
+   "start_line": 118,
+   "end_line": 118,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/config_defaults.json",
+   "content": "`planner.sectionEnergy` is a `json`-typed key but this default is a non-parseable string (`intro:.3` has no quotes and uses a leading dot), so `JSON.parse` fails and the raw description string is what callers receive rather than the section->energy map. Same defect class as `analysis.bands`; emit valid JSON (and fix the catalog default).",
+   "suggestion_code": "  \"planner.sectionEnergy\": {\"intro\": 0.3, \"verse\": 0.45, \"prechorus\": 0.6, \"build\": 0.8, \"drop\": 1, \"chorus\": 0.9, \"breakdown\": 0.25, \"bridge\": 0.5, \"instrumental\": 0.6, \"solo\": 0.7, \"outro\": 0.3, \"transition\": 0.5, \"unknown\": 0.5},",
+   "existing_code": "  \"planner.sectionEnergy\": \"{intro:.3, verse:.45, prechorus:.6, build:.8, drop:1, chorus:.9, breakdown:.25, bridge:.5, instrumental:.6, solo:.7, outro:.3, transition:.5, unknown:.5}\",",
+   "start_line": 60,
+   "end_line": 60,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/config_defaults.json",
+   "content": "`mixer.owner.factorWeights` is typed `json` in the registry, but the stored default is an object literal with unquoted keys, so it is not parseable JSON (the loader silently returns the raw string). Consumers expecting a weight map will not get one. Store it as valid JSON (and correct the catalog default that generates it).",
+   "suggestion_code": "  \"mixer.owner.factorWeights\": {\"weight\": 1, \"master\": 0.3, \"confidence\": 0.5, \"strength\": 1, \"significance\": 0.5},",
+   "existing_code": "  \"mixer.owner.factorWeights\": \"{ weight: 1, master: 0.3, confidence: 0.5, strength: 1, significance: 0.5 }\",",
+   "start_line": 49,
+   "end_line": 49,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/config_defaults.json",
+   "content": "`govee.lan.interfaces` (and `live.prolink.interfaces`, same value below) is a `json`/list-typed key, but the default is the human-readable prose `[] (all eligible)`, which is not valid JSON. `defaultFor()` returns the string, and code iterating the value (e.g. `for iface in cfg.get(...)`) would iterate characters of the description instead of an empty list. Store the empty array and keep any clarification in the catalog's range/receipt column.",
+   "suggestion_code": "  \"govee.lan.interfaces\": [],",
+   "existing_code": "  \"govee.lan.interfaces\": \"[] (all eligible)\",",
+   "start_line": 142,
+   "end_line": 142,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/config_defaults.json",
+   "content": "Wildcard keys such as `ui.shortcuts.*` (and `qa.faults.*`) are not literal keys: exact-match lookups (`config.get()` does `key in _DEFAULTS`, and the registry's `defineKey` throws `unknown-config-key`) will never resolve a real key like `ui.shortcuts.space` to this default. Unless the loader expands the `*` family explicitly, this entry is unreachable and the value looks like a real default but is only documentation.",
+   "existing_code": "  \"ui.shortcuts.*\": \"B blackout, W white, F freeze, A auto, M manual, Up and Down master, 1 to 9 presets\",",
+   "start_line": 271,
+   "end_line": 271,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/config_defaults.json",
+   "content": "Device-scoped keys with an `<fixtureId>` placeholder (this key and `govee.device.<fixtureId>.transportOrder`) are not addressable: a lookup for a concrete fixture id (e.g. `govee.device.H1234.transportMode`) misses this entry and `defineKey` throws. If device defaults are meant to be applied, the loader must substitute the fixture id; otherwise this default can never take effect.",
+   "existing_code": "  \"govee.device.<fixtureId>.transportMode\": \"hybrid\",",
+   "start_line": 179,
+   "end_line": 179,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/config_defaults.json",
+   "content": "`live.provider.staleMs` is present here (and in `config_schema.json`/docs) but is absent from the config key registry (`packages/config/src/registry.ts`), which instead lists `live.follow.mode` \u2014 a key with no entry in this defaults file. Since all four artifacts are generated together from the same catalog and CI enforces freshness, the two lists disagreeing means one artifact is stale; a TypeScript lookup of `live.provider.staleMs` through `defineKey` throws `unknown-config-key`. Trace the catalog and regenerate so the defaults and the registry agree.",
+   "existing_code": "  \"live.provider.staleMs\": 500,",
+   "start_line": 188,
+   "end_line": 188,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/config_defaults.json",
+   "content": "`structure.py` reads `analysis.build.minStrength` and `analysis.build.minConfidence` through `cfg.get(...)`, but neither key exists in this defaults file (nor in the registry/schema). With no default entry, those reads always fall back to the hardcoded literals in code (0.05 / 0.5), so the thresholds cannot be tuned or validated via config and the `T-ANA-09` \"no tuning constant in code\" guarantee is broken. Add the two keys (defaults, schema, registry) alongside `analysis.build.windows`.",
+   "existing_code": "  \"analysis.build.windows\": [",
+   "start_line": 119,
+   "end_line": 119,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "apps/desktop/electron/services/cloud-service.ts": [
+  {
+   "path": "apps/desktop/electron/services/cloud-service.ts",
+   "content": "The module-level singleton captures the *first* caller's options via `instance ??= new CloudService(opts)` and silently ignores every later call's `enabled`/`apiKey`/`transport`. If any code (e.g. a status probe or a test helper) calls `getCloudService()` with defaults before the real wiring calls `getCloudService({ enabled: true, apiKey, transport })`, the service is permanently disabled and `devices()` will always resolve `E_CLOUD_DISABLED` \u2014 with no warning to the second caller. Either merge/honor later options or make the misconfiguration explicit.",
+   "existing_code": "export function getCloudService(opts: CloudServiceOptions = {}): CloudService {\n  instance ??= new CloudService(opts);\n  return instance;",
+   "start_line": 102,
+   "end_line": 104,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/electron/services/cloud-service.ts",
+   "content": "The array returned by the transport is assigned to `this.lastDevices` and returned to the caller in the same object, so the caller and the service share one mutable array. A caller that mutates `res.devices` (push/splice/sort/replace an element) silently corrupts the cached metadata later handed out by `deviceMetadata()`. Store and return copies so cached state cannot be aliased by callers.",
+   "suggestion_code": "      const devices = await this.opts.transport.devices(this.opts.apiKey);\n      this.lastDevices = devices.map((d) => ({ ...d }));\n      this.tracker.count(\"fetches\");\n      return { ok: true, devices: this.lastDevices.map((d) => ({ ...d })) };",
+   "existing_code": "      const devices = await this.opts.transport.devices(this.opts.apiKey);\n      this.lastDevices = devices;\n      this.tracker.count(\"fetches\");\n      return { ok: true, devices };",
+   "start_line": 83,
+   "end_line": 86,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/services/cloud-service.ts",
+   "content": "`stop()` only flips the tracker state; it does not cancel or await an in-flight `devices()` fetch. A transport call that is still pending when `stop()` runs will resolve afterwards and still write `this.lastDevices` plus bump the `fetches` counter, so a stopped service mutates its cached metadata after shutdown. Track an in-flight/generation token and drop the result (or clear `lastDevices`) once the service is no longer running.",
+   "existing_code": "  stop(): ServiceStatus {\n    this.tracker.set(\"stopped\");",
+   "start_line": 64,
+   "end_line": 65,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/services/cloud-service.ts",
+   "content": "On a fetch failure `lastDevices` is left untouched, so a previous successful fetch's devices remain cached. `deviceMetadata()` will keep returning that stale list indefinitely even though the current refresh failed, and callers cannot distinguish stale data from current data. Clear or mark the cache stale on failure (and on stop) so callers do not act on outdated metadata.",
+   "existing_code": "    } catch (err) {\n      this.tracker.count(\"failures\");\n      return { ok: false, error: { code: \"E_CLOUD_FETCH\", message: messageOf(err) } };",
+   "start_line": 87,
+   "end_line": 89,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/services/cloud-service.ts",
+   "content": "When the optional cloud service is intentionally disabled (`enabled !== true`), `start()` reports state `degraded` rather than an inactive/idle state. Per the architecture note this disabled state is the normal, expected configuration, so surfacing it as `degraded` may be picked up by health/readiness aggregation as a problem even though nothing is wrong and live shows never use the cloud. Consider a distinct non-degraded state for the deliberately-disabled case.",
+   "existing_code": "    if (this.opts.enabled !== true) {\n      this.tracker.set(\"degraded\", \"optional cloud metadata disabled (config or flag); frames never use the cloud\");",
+   "start_line": 48,
+   "end_line": 49,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/electron/services/midi-service.ts": [
+  {
+   "path": "apps/desktop/electron/services/midi-service.ts",
+   "content": "Resource leak on backend open failure. If `backend.open()` throws (e.g. it acquires the OS MIDI handle/port and then fails subscribing), the `catch` only marks the service degraded \u2014 the half-initialized backend is never `close()`d and `this.backend` stays `null`. The leaked OS handle survives, and a subsequent `start()` call (which sees `this.backend === null`) will invoke `openBackend()` again and open a second handle. Declare the backend outside the `try` and close it in the `catch` before degrading.",
+   "suggestion_code": "    } catch (err) {\n      try { backend?.close(); } catch { /* open failed; still release the partial handle */ }\n      this.tracker.set(\"degraded\", `MIDI backend failed: ${messageOf(err)}`);\n    }",
+   "existing_code": "    } catch (err) {\n      this.tracker.set(\"degraded\", `MIDI backend failed: ${messageOf(err)}`);\n    }",
+   "start_line": 67,
+   "end_line": 69,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/electron/services/midi-service.ts",
+   "content": "The lazy singleton silently ignores `opts` on every call after the first: `instance ??= new MidiService(opts)` returns the existing instance and drops the caller's `openBackend`. Tests or capture tooling that call `getMidiService({ openBackend })` with a different backend will unknowingly bind to a stale/default one and exercise the wrong code path. Either assert that `opts` is empty when an instance already exists, or provide an explicit reset/reconfigure seam for tests.",
+   "existing_code": "export function getMidiService(opts: MidiServiceOptions = {}): MidiService {\n  instance ??= new MidiService(opts);\n  return instance;\n}",
+   "start_line": 127,
+   "end_line": 130,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/services/midi-service.ts",
+   "content": "Listener fan-out is not failure-isolated. A single listener that throws aborts the `for` loop, so every listener registered after it silently misses the hint (and the exception propagates back into the MIDI backend callback / `handleCc` / `handleNote`). Iterate over a snapshot and guard each invocation so one bad subscriber cannot break delivery to the rest, nor corrupt hint ingestion.",
+   "suggestion_code": "    for (const listener of [...this.listeners]) {\n      try { listener(hint); } catch { /* one listener must not block fan-out */ }\n    }",
+   "existing_code": "    for (const listener of this.listeners) listener(hint);",
+   "start_line": 118,
+   "end_line": 118,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/services/midi-service.ts",
+   "content": "`find` returns the first match, and the imported `NOTE` map has duplicate values (PLAY_1/PLAY_2 = 0x0b, CUE_1/CUE_2 = 0x0c, SYNC_1/SYNC_2 = 0x58). As a result `controlForNote` can only ever return the `*_1` control (PLAY_1, CUE_1, SYNC_1); the deck-2 controls are unreachable and transport hints for deck 2 are mislabeled as deck 1. If deck separation is required, use the deck-aware `decodeMessage`/`FLX4_CONTROLS` path from the package instead of this channel-blind reverse lookup.",
+   "existing_code": "  return NOTE_CONTROLS.find((control) => NOTE[control] === note);",
+   "start_line": 30,
+   "end_line": 30,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/services/midi-service.ts",
+   "content": "Telemetry is inconsistent: the backend callback increments the `messages` counter, but the direct injection paths `handleCc`/`handleNote` never do, so injected traffic is invisible in `status()`. Additionally `status()` is a query that mutates tracker counters (`setCounter`) on every read, coupling observation to state. Move the counter bookkeeping into `publish()`/the injection helpers and make `status()` read-only (e.g. snapshot counters at publish time).",
+   "existing_code": "  status(): ServiceStatus {\n    this.tracker.setCounter(\"backend\", this.backend === null ? 0 : 1);\n    this.tracker.setCounter(\"hints\", this.hints.length);\n    return this.tracker.status();\n  }",
+   "start_line": 82,
+   "end_line": 86,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/journeys/live-session.journey.ts": [
+  {
+   "path": "apps/desktop/journeys/live-session.journey.ts",
+   "content": "`cuesB` is filtered against the hard-coded beat 120 but never asserted non-empty. The earlier `planB.cues.length > 0` check does not guarantee any cue lands inside this beat window, so if beat alignment or the planner regresses such that no cue covers beat 120, `mixB` renders nothing and the remaining assertions can still pass (or fail for unrelated reasons). Assert the filtered set is non-empty and hoist the magic beat into a named constant.",
+   "suggestion_code": "  const beat = 120;\n  const cuesB = planB.cues.filter((c) => beat >= c.startBeat && beat < c.startBeat + c.durationBeats);\n  expect(cuesB.length).toBeGreaterThan(0);",
+   "existing_code": "  const cuesB = planB.cues.filter((c) => 120 >= c.startBeat && 120 < c.startBeat + c.durationBeats);",
+   "start_line": 34,
+   "end_line": 34,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/journeys/live-session.journey.ts",
+   "content": "This assertion is close to vacuous: `some` passes as soon as a single cell is non-black, so it does not prove that the two loaded decks actually drive the rig, nor that `cuesB` was applied. Any fallback/idle output that lights one cell would satisfy it. Strengthen it, e.g. assert a minimum number of lit cells (or that the cue-bearing deck's cells differ from a deck-B-less render).",
+   "existing_code": "  expect(vm.cells.some((c) => c.color !== \"rgb(0,0,0)\")).toBe(true);",
+   "start_line": 44,
+   "end_line": 44,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/journeys/live-session.journey.ts",
+   "content": "The parsed `both-decks-loaded` capture is only length-checked; its deck/track identities are discarded and the view-model inputs below re-hardcode `rb:163221817` / `rb:231828222`. Because the fixture is not wired into the deck states that are actually rendered, any capture/protocol drift goes unexercised while the test still passes. Derive the deck states from `both.expectedEvents` instead of duplicating the rekordbox IDs.",
+   "existing_code": "  expect(both.expectedEvents).toHaveLength(2);",
+   "start_line": 32,
+   "end_line": 32,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/journeys/live-session.journey.ts",
+   "content": "The protocol fixture path hardcodes three `..` hops and the version `7.2.10`, and the capture is `JSON.parse`d with no validation. A repo-layout or protocol-version change surfaces as an opaque ENOENT/SyntaxError rather than a clear protocol-mismatch failure. Centralize the fixture root (reuse a single computed base instead of recomputing `dirname(fileURLToPath(...))` twice) and surface a descriptive error when the version folder is missing.",
+   "existing_code": "const fixDir = join(dirname(fileURLToPath(import.meta.url)), \"..\", \"..\", \"..\", \"protocol-fixtures\", \"rekordbox\", \"7.2.10\", \"macos\");",
+   "start_line": 12,
+   "end_line": 12,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/journeys/live-session.journey.ts",
+   "content": "The same deck state is constructed twice: once as `deckA`/`deckB` and again inside `mixA.state`/`mixB.state`, identical except that the `sourceIds` are emptied. Only `deckA`/`deckB` feed the audible weights while `mixA`/`mixB` drive `mixDown`/`renderFrame`, so a future edit to one copy can silently diverge from the other without the test catching it. Extract a single shared builder for each deck's state.",
+   "existing_code": "    mixA: { state: makeDeck({ deckId: 1, channelFader: 0.2, crossfader: 1, track: { id: \"rb:163221817\", sourceIds: {} } }), beat: 120, cues: [], impactStrength: 0.3 },",
+   "start_line": 38,
+   "end_line": 38,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/src/features/library/library-view.tsx": [
+  {
+   "path": "apps/desktop/src/features/library/library-view.tsx",
+   "content": "The preanalysis queue is held in component-level `useState`, but the file header (\"Queue persists in the store session\") and the empty-state copy (\"entries persist across restarts\") both promise durability. Since `Routes` renders exactly one screen per route (apps/desktop/src/routes/index.tsx), navigating away from Library \u2014 or any app reload \u2014 unmounts this component and silently drops every queued entry. Additionally, nothing ever reads or dispatches this queue (no store field, no IPC/`invoke` call), so the Queue/Priority/Cancel/Retry actions have no effect on analysis. Move the queue into the zustand store (or a persisted slice) and wire it to the supervisor so the documented contract holds.",
+   "existing_code": "  const [queue, setQueue] = useState<QueueEntry[]>([]);",
+   "start_line": 18,
+   "end_line": 18,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/src/features/library/library-view.tsx",
+   "content": "This empty state is shown whenever `tracks.length === 0`, which also happens when the user's search query simply matches no row (the deck track is still loaded). In that case the copy \"No tracks resolved. Load a track on a deck\u2026\" plus the \"Open Setup\" button is misleading. Distinguish the two cases (e.g. only show this message when `live` is null / no decks resolved; show a \"no matches\" message when `query` is non-empty).",
+   "existing_code": "              <p className=\"min-w-0 text-sm text-muted-foreground\">No tracks resolved. Load a track on a deck \u2014 rows appear after ANLZ + analysis.</p>",
+   "start_line": 62,
+   "end_line": 62,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/features/library/library-view.tsx",
+   "content": "User-facing text asserts \"entries persist across restarts\", which is false for the current implementation (component `useState`). This is user-visible misinformation about durability. Either implement persistence or correct the wording.",
+   "existing_code": "            <p className=\"min-w-0 text-sm text-muted-foreground\">Select playlists or crates and queue them; entries persist across restarts.</p>",
+   "start_line": 72,
+   "end_line": 72,
+   "category": "documentation",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/features/library/library-view.tsx",
+   "content": "`liveDeckRows` can only ever emit the literal ids \"deck-a\"/\"deck-b\", so the `libraryRowKey(...)` branch is unreachable dead code today (and the guard duplicates knowledge of the deck ids that already lives in library-rows.ts). More importantly, `enqueue(t.id)` below queues by these synthetic deck ids rather than a durable TrackId, so a queued entry does not identify the track it was created for. Consider deriving the key/id from the real TrackId so row identity and the queue survive a deck reload.",
+   "existing_code": "                    const key = t.id === \"deck-a\" || t.id === \"deck-b\" ? t.id : libraryRowKey({ trackId: t.id, title: t.title });",
+   "start_line": 45,
+   "end_line": 45,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "apps/desktop/src/features/library/library-view.tsx",
+   "content": "'Cancel' and 'Retry' call `advanceQueue` unconditionally, so they force a terminal `Failed` state or reset to `Queued` from ANY current state \u2014 including rewinding an already-`Ready`/`Analyzing` entry (and cancelling overwrites the real `failReason` with \"cancelled by owner\"). Guard these transitions by current state, or route them through the supervisor, so a local click cannot perform an invalid state transition.",
+   "existing_code": "                <Button size=\"sm\" variant=\"outline\" onClick={() => setQueue((prev) => advanceQueue(prev, e.trackId, \"Failed\", 1, \"cancelled by owner\"))}>Cancel</Button>\n                <Button size=\"sm\" variant=\"outline\" onClick={() => setQueue((prev) => advanceQueue(prev, e.trackId, \"Queued\", 0, null))}>Retry</Button>",
+   "start_line": 79,
+   "end_line": 80,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "apps/desktop/src/routes/diagnostics/diagnostics-model.test.ts": [
+  {
+   "path": "apps/desktop/src/routes/diagnostics/diagnostics-model.test.ts",
+   "content": "This assertion cannot detect a broken `drainPendingQueue`. The implementation (`diagnostics-model.ts:47-48`) is `return [...queue]`, which returns a *copy* and never clears/drains the input. Since `q` has length 1, both the no-op copy and a real drain return length 1, so this test passes even though nothing is actually drained. If a caller relies on the queue being emptied (as the name implies), the same change can be re-applied on the next drain (double-apply). Assert the source queue is cleared and that returned entries match the queued input, e.g.:\n```ts\nconst drained = drainPendingQueue(q);\nexpect(q).toHaveLength(0);\nexpect(drained).toEqual([{ key: \"b\", scope: \"app\", value: 1, liveSafe: false }]);\n```",
+   "existing_code": "    const q = [{ key: \"b\", scope: \"app\", value: 1, liveSafe: false }];\n    expect(drainPendingQueue(q)).toHaveLength(1);",
+   "start_line": 22,
+   "end_line": 23,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/src/routes/diagnostics/diagnostics-model.test.ts",
+   "content": "Asserting `DIAGNOSTIC_TABS` by length only does not verify the actual tab identifiers/order required by spec 101. A renamed, reordered, duplicated, or replaced tab entry would still satisfy `toHaveLength(10)`, silently hiding a registry regression. Assert against the concrete expected list (or at least `toEqual([...])` of the ten names).",
+   "existing_code": "    expect(DIAGNOSTIC_TABS).toHaveLength(10);",
+   "start_line": 6,
+   "end_line": 6,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/routes/diagnostics/diagnostics-model.test.ts",
+   "content": "Only the default `recordToNdjson` flag is checked, and only for a single call. The argument mapping (`timestampMs`, `source`, `deck`, `event`) and overall row shape are never validated, so an implementation that ignores its arguments or hardcodes `recordToNdjson: true` would pass. Assert the full returned row, e.g. `expect(djEventRow(1, \"prolink\", 2, \"beat\")).toEqual({ timestampMs: 1, source: \"prolink\", deck: 2, event: \"beat\", recordToNdjson: true })`, using distinct values to catch position swaps.",
+   "existing_code": "    expect(djEventRow(1, \"prolink\", 1, \"beat\").recordToNdjson).toBe(true);",
+   "start_line": 12,
+   "end_line": 12,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/routes/diagnostics/diagnostics-model.test.ts",
+   "content": "`isFresh` is only probed far from the default `staleAfterMs` (2000) boundary. The exact threshold (`nowMs - updatedAtMs === staleAfterMs` should be fresh, `=== staleAfterMs + 1` stale), zero delta, and future timestamps (clock skew where `nowMs < updatedAtMs`, currently returns `true`) are untested, so an off-by-one in the `<=` comparison or an inverted condition could pass. Add boundary cases: `isFresh(1000, 3000)` (exact limit, expect true), `isFresh(1000, 3001)` (expect false), and `isFresh(1000, 500)` (future/clock-skew case).",
+   "existing_code": "    expect(isFresh(1000, 2500)).toBe(true);\n    expect(isFresh(1000, 5000)).toBe(false);\n    expect(isFresh(null, 5000)).toBe(false);",
+   "start_line": 7,
+   "end_line": 9,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/routes/diagnostics/diagnostics-model.test.ts",
+   "content": "The `routeConfigChange` matrix is incomplete: it never covers `liveSafe: true` while Live is inactive, non-`app` scopes, or a missing/undefined `liveSafe`. As a result the `scope` field's influence (if any) on routing is unverified and a wrong branch order could still pass. Add `expect(routeConfigChange({ key: \"a\", scope: \"app\", value: 1, liveSafe: true }, false)).toBe(\"apply-now\")` and a case with a non-`app` scope to confirm scope does not silently change routing.",
+   "existing_code": "    expect(routeConfigChange({ key: \"a\", scope: \"app\", value: 1, liveSafe: true }, true)).toBe(\"apply-at-bar\");",
+   "start_line": 19,
+   "end_line": 19,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/src/routes/live/live-fields.ts": [
+  {
+   "path": "apps/desktop/src/routes/live/live-fields.ts",
+   "content": "Drop cue is selected by type priority (earliest `white-hit` first), not by nearest start time, and there is no re-search after the horizon check. Two failure modes:\n1) A far-away white-hit/impact masks a nearer `drop` (e.g. `[{white-hit,200},{drop,40}]`, beat=32 \u2192 says \"DROP IN 168\"... actually fails horizon and falls through, hiding the drop at 8 beats).\n2) If the matched drop is beyond `horizonBeats`, `drop` is still non-null so the branch is skipped and the code falls to breakdown/build, returning `null` even though a plain `drop` sits inside the horizon.\nConcrete: `predictiveLabel([{type:'white-hit',startBeat:200},{type:'drop',startBeat:40}], 32)` returns `null` instead of \"DROP IN 8\".\nSelect the earliest cue among all drop-family types (which `after` is already sorted for):",
+   "suggestion_code": "  const DROP_TYPES = [\"white-hit\", \"impact\", \"drop\"];\n  const drop = after.find((c) => DROP_TYPES.includes(c.type));",
+   "existing_code": "  const drop = at(\"white-hit\") ?? at(\"impact\") ?? after.find((c) => c.type === \"drop\");",
+   "start_line": 67,
+   "end_line": 67,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/src/routes/live/live-fields.ts",
+   "content": "`pitchPercent` is unguarded: `playRate` is only a `z.number()` (0 / negative allowed), so a stopped deck reporting `playRate: 0` yields `-100` and a non-finite/missing value yields `NaN`. This violates the module contract stated at the top (\"Missing data renders as null ... never a guessed number\"). Guard for a positive, finite rate and emit `null` otherwise.",
+   "suggestion_code": "    pitchPercent: Number.isFinite(state.playRate) && state.playRate > 0 ? (state.playRate - 1) * 100 : null,",
+   "existing_code": "    pitchPercent: state.playRate === 1 ? 0 : (state.playRate - 1) * 100,",
+   "start_line": 49,
+   "end_line": 49,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/routes/live/live-fields.ts",
+   "content": "`nativeBpm` is always taken from the first grid anchor (`grid[0]`), which ignores per-beat tempo and is wrong when the current beat lies in a different grid segment (the contract's `nativeBeatSchema.bpm` is per-anchor and adaptive grids carry an empty `beats` array). Derive the BPM from the anchor at/around the current position (falling back to `grid[0]`) instead of the first element.",
+   "existing_code": "    nativeBpm: grid[0]?.bpm ?? null,",
+   "start_line": 47,
+   "end_line": 47,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/routes/live/live-fields.ts",
+   "content": "`nextPhraseBeat` returns the boundary `at` the beat, not the next one: when `beat` is exactly on a phrase boundary (e.g. 32) it returns `32`, so a caller like `invoke(\"show/trigger-build\", { at: nextPhraseBeat(s.liveBeat) })` can schedule at the current beat instead of the upcoming phrase. Negative beats also silently clamp. If strictly-next semantics are intended, add `phraseBeats` to the floored boundary.",
+   "suggestion_code": "  return Math.floor(beat / phraseBeats) * phraseBeats + phraseBeats;",
+   "existing_code": "  return Math.ceil(beat / phraseBeats) * phraseBeats;",
+   "start_line": 83,
+   "end_line": 83,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/routes/live/live-fields.ts",
+   "content": "Since `upcoming` only contains cues with `startBeat > beat`, the difference can be < 0.5 and rounds to 0, producing a misleading \"<type> in 0 beats\" while the cue is still in the future. `predictiveLabel` guards this with `Math.max(1, ...)` but this branch does not \u2014 apply the same clamp for consistency.",
+   "suggestion_code": "    nextEvent: upcoming[0] ? `${upcoming[0].type} in ${Math.max(1, Math.round(upcoming[0].startBeat - beat))} beats` : null,",
+   "existing_code": "    nextEvent: upcoming[0] ? `${upcoming[0].type} in ${Math.round(upcoming[0].startBeat - beat)} beats` : null,",
+   "start_line": 54,
+   "end_line": 54,
+   "category": "bug",
+   "severity": "low"
+  }
+ ]
+}

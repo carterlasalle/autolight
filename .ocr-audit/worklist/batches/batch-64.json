@@ -1,0 +1,221 @@
+{
+ "analysis/src/autolight_analysis/readiness.py": [
+  {
+   "path": "analysis/src/autolight_analysis/readiness.py",
+   "content": "The `structured` branch does not match the documented level rule. The docstring specifies STRUCTURED requires \"DJ grid + native structure (PSSI), without accessible audio or without ML\", but this branch only checks `has_grid and has_native_structure`. As written, an input map with `source.audio` and `ml.allinone.structure` both PRESENT (plus dsp/events) but `plan.generated` missing returns `\"structured\"`, even though neither \"without audio\" nor \"without ML\" holds \u2014 diverging from the documented rule. Additionally `has_native_structure` includes `fusion.structure`, which the docstring's PSSI-only wording excludes. Either tighten the branch (e.g. require `has_native_structure and (not has_audio or not has_ml)`) or correct the docstring so the level rule stated in the module matches the implementation.",
+   "existing_code": "    if has_grid and has_native_structure:\n        return \"structured\"",
+   "start_line": 102,
+   "end_line": 103,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/readiness.py",
+   "content": "`describe_inputs` spreads the stored entry directly with `**inputs.get(...)`, so a malformed entry that is not a mapping (e.g. `None`, a `str`, or a `list`) raises `TypeError: ... is not a mapping`, crashing the Library Inspector. This is inconsistent with `compute_readiness`, which routes every entry through `_get` and guards `isinstance(entry, dict)`. Since both functions consume the same artifact `analysisCoverage.inputs` data, `describe_inputs` should be equally tolerant of malformed entries.",
+   "suggestion_code": "    return [\n        {\n            \"key\": key,\n            **(\n                entry\n                if isinstance(entry := inputs.get(key), dict)\n                else input_entry(ABSENT, \"unknown\")\n            ),\n        }\n        for key in INPUT_KEYS\n    ]",
+   "existing_code": "    return [\n        {\"key\": key, **inputs.get(key, input_entry(ABSENT, \"unknown\"))}\n        for key in INPUT_KEYS\n    ]",
+   "start_line": 109,
+   "end_line": 112,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "analysis/src/autolight_analysis/structure.py": [
+  {
+   "path": "analysis/src/autolight_analysis/structure.py",
+   "content": "Merging loses the ramp's earliest start. When the later-starting `b` is stronger it replaces `merged[-1]` wholesale, so the merged entry's `startBeat` becomes `b[\"startBeat\"]` (the later start) and the previous candidate's `startBeat` is discarded. Because `merged[-1]` is now `b`, the following `max(merged[-1].get(\"impactBeat\") or 0, b.get(\"impactBeat\") or 0)` also computes `max(b_impact, b_impact)`, silently dropping the replaced candidate's impact from the range. Net effect: a merged ramp can begin later than the earliest detected start and end earlier than the latest impact, contradicting the \"starts under 8 beats apart merge into one ramp\" contract and misplacing the emitted `build-start` beat. Compute the group's min start / max impact explicitly.",
+   "suggestion_code": "        if merged and b[\"startBeat\"] - merged[-1][\"startBeat\"] < 8:\n            prev = merged[-1]\n            keep = b if (b[\"len\"], b[\"rel\"]) > (prev[\"len\"], prev[\"rel\"]) else prev\n            merged[-1] = {\n                **keep,\n                \"startBeat\": min(prev[\"startBeat\"], b[\"startBeat\"]),\n                \"endBeat\": max(prev.get(\"impactBeat\") or 0, b.get(\"impactBeat\") or 0),\n            }",
+   "existing_code": "        if merged and b[\"startBeat\"] - merged[-1][\"startBeat\"] < 8:\n            if (b[\"len\"], b[\"rel\"]) > (merged[-1][\"len\"], merged[-1][\"rel\"]):\n                merged[-1] = b\n            merged[-1][\"endBeat\"] = max(\n                merged[-1].get(\"impactBeat\") or 0, b.get(\"impactBeat\") or 0\n            )",
+   "start_line": 118,
+   "end_line": 123,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/structure.py",
+   "content": "Unguarded indexing of the optional `silence` array. `silence[n - 4]` is read here (and again in the `no_context` computation below) assuming at least `len(beats)` entries, while the sibling helper `_fake_pairs` guards the same parameter with `n < len(silence)`. If a caller passes a `silence` array shorter than `beats` (e.g. features aggregated over a different beat count), this raises `IndexError`. Add a length guard consistent with `_fake_pairs` (e.g. `(silence and n < len(silence) and silence[n - 4] > 0.5)`).",
+   "suggestion_code": "            preceded_by_dip=(\n                silence is not None and n < len(silence) and silence[n - 4] > 0.5\n            ),",
+   "existing_code": "            preceded_by_dip=(silence[n - 4] > 0.5) if silence else False,",
+   "start_line": 275,
+   "end_line": 275,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/structure.py",
+   "content": "This override is neutralized for lone decisive jumps. Inside this branch `s[\"confidence\"]` is always `< min_conf` (0.6), so `max(s[\"confidence\"], min_conf)` yields exactly 0.6. The later gate `if no_context and s[\"confidence\"] < 0.8: continue` then drops the candidate whenever there is no build/ML/dip context. Since the branch only requires `on_boundary or ml_hit`, a jump supported by a boundary alone (no build/ML/dip) \u2014 exactly the \"lone-jump downbeat\" the comment claims to keep \u2014 is always discarded. Either raise the override confidence above 0.8 or relax the `no_context` threshold so the documented behavior holds.",
+   "existing_code": "                \"confidence\": max(s[\"confidence\"], min_conf),\n                \"evidence\": [*s[\"evidence\"], \"jump:decisive\"],",
+   "start_line": 290,
+   "end_line": 291,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/structure.py",
+   "content": "Fallback contradicts the stated contract. The docstring (and the module docstring: \"Candidates are real downbeats from the grid (beatInBar == 1)\") promises this never returns array-index multiples, but when `beat_in_bar` is missing or length-mismatched the fallback returns `range(0, len(beats), 4)` \u2014 i.e. pure index multiples \u2014 which downstream detectors (`detect_builds`, `detect_drops`) then treat as real downbeat impacts. Either document the fallback explicitly or make it derive real downbeats so T-ANA-10 is honored.",
+   "existing_code": "    return list(range(0, len(beats), 4))",
+   "start_line": 21,
+   "end_line": 21,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "analysis/tests/test_protocol.py": [
+  {
+   "path": "analysis/tests/test_protocol.py",
+   "content": "`io` is never actually used by any test; `_ = io` is a no-op that only suppresses the unused-import warning. This masks genuine dead code and defeats linting. Remove both the `import io` at the top and this statement.",
+   "existing_code": "    _ = io  # silence unused import in minimal check",
+   "start_line": 65,
+   "end_line": 65,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "analysis/tests/test_protocol.py",
+   "content": "This test hand-builds the frame via `error_frame(None, \"malformed-frame\", str(e))` but only asserts `type`/`v`, so a regression that drops/corrupts the `code` or `detail` fields (the actual diagnostic payload) would still pass. Assert the typed payload too, e.g. `frame[\"code\"] == \"malformed-frame\"` and that `str(e)` appears in `frame[\"detail\"]`. Preferably also exercise the worker's real malformed-frame guard rather than constructing the frame directly.",
+   "existing_code": "    assert frame[\"type\"] == \"error\"\n    assert frame[\"v\"] == 1",
+   "start_line": 22,
+   "end_line": 23,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/tests/test_protocol.py",
+   "content": "The test name says the FrameWriter \"uses preserved fd\", but it constructs `FrameWriter(fd=w)` with an explicit fd, so the `protect_stdout()` / `_PROTOCOL_FD` path the name implies is never exercised. Either rename the test or add a case that goes through `protect_stdout()`. Separately, `tmp_path` is declared but never used \u2014 drop the fixture parameter.",
+   "existing_code": "def test_frame_writer_uses_preserved_fd(tmp_path):",
+   "start_line": 55,
+   "end_line": 55,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "analysis/tests/test_protocol.py",
+   "content": "`os.close(w)` is not guarded by try/finally, so if `writer.write(...)` raises, the write-end fd leaks and the test fails while leaving the pipe half-open (`f.read()` would then block on the read end). Wrap the fd handling so the write end is always closed, e.g. `try: writer.write(...) finally: os.close(w)`.",
+   "existing_code": "    os.close(w)",
+   "start_line": 61,
+   "end_line": 61,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "analysis/tests/test_readiness.py": [
+  {
+   "path": "analysis/tests/test_readiness.py",
+   "content": "`test_full_requires_every_input` is named for requiring *every* input, but the removal loop never drops `native.rekordbox.grid`. Since `inputs` always keeps the grid present, a regression where `compute_readiness` stops requiring the grid (e.g. `has_grid` no longer part of the FULL condition) would still satisfy every assertion here and the test would pass. Add the grid key to the loop so the name matches the coverage.",
+   "suggestion_code": "        \"source.audio\",\n        \"native.rekordbox.pssi\",\n        \"native.rekordbox.grid\",\n    ):",
+   "existing_code": "        \"source.audio\",\n        \"native.rekordbox.pssi\",\n    ):",
+   "start_line": 46,
+   "end_line": 48,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/tests/test_readiness.py",
+   "content": "The TS mirror is parsed with `split(\"INPUT_KEYS = [\")[1].split(\"]\")[0]`. This raises `IndexError` (and thus a hard test error, not a drift failure) if either delimiter is edited/removed, and `.split(\"]\")[0]` truncates at the *first* `]` anywhere after the marker, so a quoted `]` in a comment or a nested array would silently cut the block short (false pass). Extract the array with a tolerant regex and fail with an explicit drift message instead.",
+   "suggestion_code": "    match = re.search(r\"INPUT_KEYS\\s*=\\s*\\[(.*?)\\]\", TS.read_text(), re.S)\n    assert match, \"readiness.ts mirror drifted; INPUT_KEYS array not found\"\n    block = match.group(1)",
+   "existing_code": "    block = TS.read_text().split(\"INPUT_KEYS = [\")[1].split(\"]\")[0]",
+   "start_line": 94,
+   "end_line": 94,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "analysis/tests/test_readiness.py",
+   "content": "The test claims `no_code_path_sets_full_directly`, but it only parses `worker.py`. Other modules can legitimately build or assign the coverage value (e.g. `readiness.py` returns `\"full\"`, `fusion.py`/`schema.py` reference the literal), and any non-worker code path that hard-codes `\"full\"` for an artifact's coverage would go undetected while this test still passes. Broaden the scan to all `autolight_analysis` sources (or the specific modules that build coverage), and note that a formatted/concatenated `\"fu\" + \"ll\"` string also escapes this constant-only scan.",
+   "existing_code": "    assert literals == [], \"worker must compute readiness, never set full\"",
+   "start_line": 113,
+   "end_line": 113,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "analysis/tests/test_readiness.py",
+   "content": "`test_describe_inputs_covers_spec_137_click_through` only checks the row keys, which `describe_inputs` derives by iterating `INPUT_KEYS` \u2014 so the first assertion is near-tautological and the second hard-codes `19` (duplicating `len(INPUT_KEYS)`). Neither validates the actual described content (status/reason per key), so a `describe_inputs` that returned empty or wrong statuses/reasons would still pass. Assert the status/reason values against the input map instead.",
+   "existing_code": "    assert [r[\"key\"] for r in rows] == list(INPUT_KEYS)\n    assert len(rows) == 19",
+   "start_line": 89,
+   "end_line": 90,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "analysis/tests/validation/test_validation_set.py": [
+  {
+   "path": "analysis/tests/validation/test_validation_set.py",
+   "content": "`assert data[\"tracks\"] == []` pins the shipped manifest to an empty list, so this test is green exactly while the validation set is unimplemented and will start failing the moment owner tracks (OD-10) are added \u2014 the opposite of what a manifest-shape test should do. It also means no test ever runs `coverage`/`missing_categories` against a populated manifest. Assert the shape instead (e.g. `isinstance(data[\"tracks\"], list)`) and express the \"empty today\" expectation as an explicit xfail/TODO, so a real manifest can land without a spurious failure.",
+   "existing_code": "    assert data[\"tracks\"] == []",
+   "start_line": 28,
+   "end_line": 28,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/tests/validation/test_validation_set.py",
+   "content": "Coverage is only exercised with exactly `min_per` (3) confirmed rows and with the helper's default `min_per=3`; the just-below-threshold case (2 confirmed \u2192 still missing) and an explicit non-default `min_per` are never asserted. Add a 2-confirmed case and pass `min_per=data[\"minPerCategory\"]` so the manifest's own minimum is verified to drive coverage rather than an implicitly hardcoded default.",
+   "existing_code": "    assert coverage(tracks)[\"house\"] == 3",
+   "start_line": 43,
+   "end_line": 43,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "analysis/tests/validation/test_validation_set.py",
+   "content": "`aspect in sheet` (and `\"spec 115\" in sheet`) only check for substring presence anywhere in the output, so a review sheet that lists the eight aspect names with no observation/verdict fields, or that omits the spec 115 diagnostics line, still passes. Assert the generated structure (e.g. the `## {aspect}` heading immediately followed by the \"- observation:\" and \"- verdict:\" fields) so the test verifies the sheet is actually usable.",
+   "existing_code": "        assert aspect in sheet",
+   "start_line": 51,
+   "end_line": 51,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "analysis/tests/validation/test_validation_set.py",
+   "content": "Despite its name, this test never exercises any render tool: `MANIFEST.parent.name == \"qa\"` is guaranteed by how `MANIFEST` is constructed in validation_set.py (`parents[3] / \"qa\"`), and `MANIFEST.exists()` only asserts repo layout. Both assertions pass even if the render/pre-filled-sheet behavior is entirely absent, giving false confidence. Either assert observable render output (e.g. that a `review_sheet` for a manifest track is written next to the manifest) or mark the placeholder `xfail`/`skip` with a TODO referencing OD-10.",
+   "existing_code": "    assert MANIFEST.parent.name == \"qa\"",
+   "start_line": 60,
+   "end_line": 60,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/src/app/shortcuts.ts": [
+  {
+   "path": "apps/desktop/src/app/shortcuts.ts",
+   "content": "`Record<string, string>` erases the typed-channel guarantee that the file's header comment relies on. The repo already has a typed channel table (`channels` in `@autolight/ipc`), and `command-palette.tsx` constrains the same four names with a literal union. With `Record<string, string>`, a typo such as `\"master/blckout\"` or a renamed channel compiles cleanly and the key then silently does nothing \u2014 exactly the failure mode the comment above claims is prevented. Constrain the value type so any drift from the real IPC channels is a compile error.",
+   "suggestion_code": "export type ShortcutChannel =\n  | \"master/blackout\"\n  | \"master/full\"\n  | \"master/freeze\"\n  | \"master/resume\";\nexport const SHORTCUTS: Record<string, ShortcutChannel> = {",
+   "existing_code": "export const SHORTCUTS: Record<string, string> = {",
+   "start_line": 7,
+   "end_line": 7,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/app/shortcuts.ts",
+   "content": "`isModalAllowed` is exported but has no production caller \u2014 the only references are test files (`shortcuts.test.ts`, `settings/simulator-mode.test.ts`). The no-modal policy it is supposed to enforce is therefore never applied by the app (the repo's own findings register, F-UI-13, records this: \"`isModalAllowed` is unused ... no-modal policy is not enforced\"). Either wire it into the code path that would otherwise open a dialog/Toaster while Live is active, or remove it so the guarantee is not falsely advertised as implemented.",
+   "existing_code": "export function isModalAllowed(liveActive: boolean): boolean {",
+   "start_line": 19,
+   "end_line": 19,
+   "category": "maintainability",
+   "severity": "medium"
+  }
+ ],
+ "apps/desktop/src/components/command-palette.tsx": [
+  {
+   "path": "apps/desktop/src/components/command-palette.tsx",
+   "content": "The route union here re-declares the `Route` type already exported from `store.ts` (line 42), and the array below re-lists the same route names again. There is no exhaustiveness check tying them together, so adding/renaming a route in `Route` silently leaves the palette stale (missing or dead nav entries) with no compile error. Import and reuse the canonical type instead of a hand-maintained copy.",
+   "suggestion_code": "import type { Route } from \"../app/store.js\";\n// ...\n  const go = (route: Route): void => {",
+   "existing_code": "  const go = (route: \"live\" | \"library\" | \"inspector\" | \"venue\" | \"setup\" | \"diagnostics\" | \"settings\"): void => {",
+   "start_line": 19,
+   "end_line": 19,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/components/command-palette.tsx",
+   "content": "This channel union plus the per-channel payload branching duplicates the emergency dispatch logic in `shell.tsx` (keydown handler lines 44-47) and the channel list in `shortcuts.ts` (`SHORTCUTS`). The T-UI-03 evidence explicitly requires the keypress and palette paths to stay in lockstep, yet any change to a payload shape (e.g. a different `at` quantize or a new freeze toggle) or to the set of emergency channels must now be edited in two places and can silently diverge. Extract a single shared `fireEmergency(channel)` helper (with the channel union derived from the intent source) and call it from both the palette and the shell shortcut handler.",
+   "existing_code": "  const fire = (channel: \"master/blackout\" | \"master/full\" | \"master/freeze\" | \"master/resume\"): void => {\n    if (channel === \"master/freeze\") void invoke(channel, { version: 1, frozen: true });\n    else if (channel === \"master/resume\") void invoke(channel, { version: 1, at: \"bar\" });\n    else void invoke(channel, { version: 1 });\n    setOpen(false);\n  };",
+   "start_line": 23,
+   "end_line": 28,
+   "category": "maintainability",
+   "severity": "medium"
+  }
+ ]
+}

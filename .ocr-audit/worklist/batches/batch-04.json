@@ -1,0 +1,314 @@
+{
+ "apps/desktop/electron/services/show-host-supervisor.ts": [
+  {
+   "path": "apps/desktop/electron/services/show-host-supervisor.ts",
+   "content": "stop() tears down the worker (worker=null, spawned=false) but never neutralizes the global intent forwarder installed in start(). Because the forwarder closure calls `this.ensureWorker()` unconditionally, any master intent arriving after stop() silently respawns a new worker thread and flips the tracked state back to 'running', violating the stopped contract and leaking a thread the owner believes is gone. Clear/reset the forwarder in stop() (or gate ensureWorker on a stopped flag).",
+   "suggestion_code": "    setHostIntentForwarder((channel, request) => {\n      if (this.tracker.current === \"stopped\") return;\n      this.ensureWorker().postMessage({ type: \"intent\", channel, request });\n    });",
+   "existing_code": "    setHostIntentForwarder((channel, request) => {\n      this.ensureWorker().postMessage({ type: \"intent\", channel, request });\n    });",
+   "start_line": 70,
+   "end_line": 72,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/electron/services/show-host-supervisor.ts",
+   "content": "`new Worker(this.opts.workerEntryUrl, ...)` can throw synchronously when the entry URL is broken (which is exactly the degraded stage this lazy spawn is meant to tolerate). The throw propagates out of ensureWorker()/start() with no try/catch and no tracker 'degraded'/'failed' transition. Additionally there are no 'error'/'exit' listeners on the worker, so a worker that crashes after spawn leaves the service reporting 'running' forever with no degraded failover. Wrap the spawn in try/catch and register error/exit handling that sets a degraded state and clears this.worker.",
+   "existing_code": "    const worker: ShowHostPort = this.opts.createWorker?.() ?? workerPortFrom(new Worker(this.opts.workerEntryUrl, {",
+   "start_line": 111,
+   "end_line": 111,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/electron/services/show-host-supervisor.ts",
+   "content": "If worker.onMessage(...) throws, the tracker is set to 'degraded', but the immediately-following `this.spawned = true; this.tracker.set(\"running\", ...)` overwrites that state. The message-tap failure is masked: metrics are silently never collected yet the service reports healthy 'running'. Preserve the degraded state (e.g. only set 'running' when the tap succeeded, or re-apply degraded after the running transition).",
+   "existing_code": "        this.tracker.set(\"degraded\", `show host worker message tap failed: ${messageOf(err)}`);",
+   "start_line": 124,
+   "end_line": 124,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/electron/services/show-host-supervisor.ts",
+   "content": "isMetricsMessage only verifies that `metrics` is an object; it never validates the numeric fields. A malformed payload (missing/non-numeric ticks/intervalP99Ms/missedTicksPerHour) is stored as lastMetrics and then status() computes NaN counters (`metrics.intervalP99Ms * 1000`) and NaN spreads into diagnostics. Validate the required numeric fields before accepting the snapshot (or guard in status() with Number.isFinite).",
+   "existing_code": "  return \"metrics\" in message && message.metrics !== null && typeof message.metrics === \"object\";",
+   "start_line": 41,
+   "end_line": 41,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/services/show-host-supervisor.ts",
+   "content": "getShowHostSupervisor silently discards any opts after the first call (`instance ??=`), so a later call with different tickHz/uiRateHz/maxBytes/workerEntryUrl is ignored and the supervisor keeps running with stale config. resetShowHostSupervisorForTest() sets instance=null without terminating the existing worker, leaking a thread across tests/runs. Either merge/compare opts or terminate on reset.",
+   "suggestion_code": "export function getShowHostSupervisor(opts: ShowHostSupervisorOptions): ShowHostSupervisor {\n  instance ??= new ShowHostSupervisor(opts);\n  return instance;\n}",
+   "existing_code": "export function getShowHostSupervisor(opts: ShowHostSupervisorOptions): ShowHostSupervisor {\n  instance ??= new ShowHostSupervisor(opts);\n  return instance;\n}",
+   "start_line": 137,
+   "end_line": 140,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/services/show-host-supervisor.ts",
+   "content": "show-service.ts exposes setShowHostMetricsReader and its comment states \"the supervisor registers its metrics reader at startup\", but this supervisor never calls it (it is never invoked anywhere). As a result readShowHostMetrics() always returns null and the showHost metrics (intervalP50/P99/max) never surface in diagnostics/all, contradicting this file's own doc comment. Register the reader (e.g. setShowHostMetricsReader(() => this.metrics())) in start() and clear it in stop().",
+   "existing_code": "  metrics(): HostMetricsSnapshot | null {\n    return this.lastMetrics;\n  }",
+   "start_line": 101,
+   "end_line": 103,
+   "category": "bug",
+   "severity": "high"
+  }
+ ],
+ "apps/desktop/src/components/audio-sync.tsx": [
+  {
+   "path": "apps/desktop/src/components/audio-sync.tsx",
+   "content": "The `Input` select is purely cosmetic: `start()` always opens the default microphone (`{ audio: true }`) and never passes `deviceId: { exact: ... }` derived from the chosen `s.audioDevice`. The user can pick a different input and still capture the default device, so the UI lies about which mic is active. Additionally, the store only holds a numeric `audioDevice` index (never a `deviceId`), and that index is the position in the filtered `enumerateDevices()` array, not a stable device identifier \u2014 so it cannot be mapped to a real constraint as-is. Resolve the selected entry to its `deviceId` (store it) and pass it here.",
+   "existing_code": "      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });",
+   "start_line": 43,
+   "end_line": 43,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/src/components/audio-sync.tsx",
+   "content": "A new `AudioContext` is created on every Start, but no reference is retained and neither `stop()` nor the unmount cleanup ever calls `ctx.close()`. Every start/stop cycle leaks a live AudioContext plus its MediaStreamSource; repeated toggling accumulates audio contexts until the browser's per-page limit is hit and new contexts start failing. Keep the context in a ref and close it in `stop()` and in the effect cleanup.",
+   "suggestion_code": "      const ctx = new AudioContext();\n      ctxRef.current = ctx;\n      // in stop(): await ctxRef.current?.close(); ctxRef.current = null;",
+   "existing_code": "      const ctx = new AudioContext();",
+   "start_line": 46,
+   "end_line": 46,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/src/components/audio-sync.tsx",
+   "content": "The `tick` closure captures the `s` snapshot from the render that created this `start()` call, so `s.sensitivity` is read from stale state for the lifetime of the RAF loop. Any sensitivity change made after Start is ignored, and `reactiveLevel` is computed with an outdated multiplier (unlike `resolve-live.ts`, which reads sensitivity via a selector at use time). Read the latest value inside the loop, e.g. `useShell.getState().sensitivity`, or use a ref that tracks the current sensitivity.",
+   "existing_code": "        s.set({ audioLevel: peak, reactiveLevel: Math.min(1, peak * s.sensitivity) });",
+   "start_line": 57,
+   "end_line": 57,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/src/components/audio-sync.tsx",
+   "content": "`start()` is re-entrant: pressing Start again overwrites `streamRef.current` with the new stream, orphaning the previous MediaStream tracks (never stopped, mic indicator stays on) and overwriting `rafRef.current`, leaving the earlier requestAnimationFrame loop running forever. Stop afterwards only cancels the last raf and the last stream, so the leaked contexts/loops/mic persist. Guard against a second start (e.g. early-return if `streamRef.current` is set) or tear down the existing stream/context before creating a new one.",
+   "existing_code": "      streamRef.current = stream;",
+   "start_line": 44,
+   "end_line": 44,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/src/components/audio-sync.tsx",
+   "content": "`enumerateDevices()` returning a device list does NOT mean microphone permission is granted \u2014 labels are empty and permission is still 'unknown' until a successful `getUserMedia`. Setting `audioPermission: \"granted\"` here marks the app as authorized prematurely (so the 'Mic blocked' hint and any permission-gated behavior are wrong). Only set 'granted' after a successful getUserMedia; leave/derive it from the actual permission state here.",
+   "existing_code": "        s.set({ audioDevices: inputs, audioPermission: \"granted\" });",
+   "start_line": 35,
+   "end_line": 35,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/components/audio-sync.tsx",
+   "content": "Two independent writers race on `s.audioDevices`: the IPC `audio/devices` effect and this `enumerateDevices` effect both call `s.set({ audioDevices })` with different index semantics (IPC-provided index vs. filtered position `i`) and no ordering guarantee, so whichever resolves last wins. A previously persisted `s.audioDevice` index can then point at a different device than the one shown, and the select resets unpredictably. Use a single source of truth (prefer enumerating once and mapping index\u2192deviceId) rather than merging both lists.",
+   "existing_code": "        .map((d, i) => ({ index: i, name: d.label || `Input ${i + 1}` }));",
+   "start_line": 33,
+   "end_line": 33,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/rekordbox-library/src/watch.ts": [
+  {
+   "path": "packages/rekordbox-library/src/watch.ts",
+   "content": "Duplicate emission in `auto` mode: native events feed `queue()` -> debounced `emit()` but never update `this.snapshots`. When the periodic sweep later runs, it compares the stale snapshot against the fresh stat, sees the same change, and emits again (the `nativeReported` set only guards the `missedNow` counter, not the emission). A single Rekordbox write therefore produces two `WatchChange`s with invalidations, and can run downstream invalidation twice. Consider having the native path also update snapshots (or skip emitting files already reported by native events within the same window).",
+   "existing_code": "        changed.push({ path: after.path, kind: after.kind, ...(this.trackOf(after.path) ?? {}) });\n        if (!this.nativeReported.has(after.path)) missedNow++;",
+   "start_line": 180,
+   "end_line": 181,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-library/src/watch.ts",
+   "content": "The changed-column set is derived only from `Object.keys(row.columns)` of the NEW row, so a column that disappears from the schema (present in `old`, absent in `row.columns`) is never compared and the change is silently missed. Additionally, `old[column] !== row.columns[column]` mis-reports values that are never reference-equal: `NaN` (NaN !== NaN) and structurally-equal objects/arrays (`{a:1} !== {a:1}`) are always flagged as changed, which can wrongly trigger native-analysis/model/plan invalidation. Consider iterating the union of both key sets and using a value-aware comparison (or document/require primitive column values).",
+   "existing_code": "    const columns = Object.keys(row.columns).filter((column) => old[column] !== row.columns[column]);",
+   "start_line": 271,
+   "end_line": 271,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-library/src/watch.ts",
+   "content": "No re-entrancy guard around start(). Because the RHS of `??=` is an `await`, a second concurrent `start()` call sees `this.native` still `undefined` (the first call has not assigned yet) and creates a second native watcher; both subscribe, and the later assignment overwrites the reference so the first watcher leaks (never stopped). Each call also registers its own `setInterval`, so timers and events are doubled. Likewise, if `stop()` runs while `createNativeWatch()`/`native.start()` is still awaiting, the watcher is created after shutdown and leaks. Guard with an in-flight flag/promise so concurrent/overlapping start() are serialized.",
+   "existing_code": "      this.native ??= await createNativeWatch();",
+   "start_line": 144,
+   "end_line": 144,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-library/src/watch.ts",
+   "content": "queue() merges files from any source into a single `this.pending` array, but the source is captured from whichever call last re-armed the timer. If a `native` burst and a `poll`/`manual` call interleave within the debounce window, the combined batch is attributed to the last source (e.g. a native-only change reported as `poll`), corrupting Diagnostics/attribution. Consider keying the pending buffer/timer per source, or storing the source alongside the queued files.",
+   "existing_code": "    this.pending.push(...files);\n    clearTimeout(this.timer);",
+   "start_line": 217,
+   "end_line": 218,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-library/src/watch.ts",
+   "content": "stop() clears the debounce timer without flushing `this.pending`, so a change already queued by a native event (or a merged batch) is silently dropped on shutdown \u2014 data loss. It also leaves `this.pending` populated. Flush the pending files before clearing, or emit them synchronously as part of stop().",
+   "existing_code": "  async stop(): Promise<void> {\n    if (this.timer !== undefined) clearTimeout(this.timer);",
+   "start_line": 157,
+   "end_line": 158,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-library/src/watch.ts",
+   "content": "Directory derivation assumes POSIX separators: `file.path.slice(0, file.path.lastIndexOf(\"/\"))`. On Windows the paths use backslashes, so `lastIndexOf(\"/\")` returns -1 and `slice(0, -1)` yields a mangled path; `parcel.subscribe()` then fails to watch the real directory and no OS events are delivered, silently breaking the native engine (no error surfaced). Even on POSIX, a filename with no separator produces the same issue. Use `node:path.dirname` for platform-correct directory extraction.",
+   "existing_code": "    const dirs = new Set(files.map((file) => file.path.slice(0, file.path.lastIndexOf(\"/\"))));",
+   "start_line": 337,
+   "end_line": 337,
+   "category": "bug",
+   "severity": "high"
+  }
+ ],
+ "packages/ble/src/link.ts": [
+  {
+   "path": "packages/ble/src/link.ts",
+   "content": "`wallClock.clearTimeout` is a no-op that ignores its handle, so in production neither `cancelReconnect()` nor the drain-timer reset in `close()` actually cancels anything. A pending backoff timer will still fire after `close()`, driving a reconnect attempt on a closed link, and the drain timer handle can never be cleared. The test clocks implement this correctly, so tests pass while production leaks timers. Delegate to the real clearTimeout.",
+   "suggestion_code": "  clearTimeout: (handle) => clearTimeout(handle),",
+   "existing_code": "  clearTimeout: () => undefined,",
+   "start_line": 29,
+   "end_line": 29,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/ble/src/link.ts",
+   "content": "On the fast path `writesSent` is incremented and `lastFlushAt`/`lastWriteAt`/`lastSeenAt` are advanced even when `connection` is null (i.e. while `state` is `connected`/`reconnecting` during a reconnect). The frame is then silently discarded: it is never sent and never queued, so `writesSent` over-reports real transmissions, the drain/`busy` accounting is corrupted, and the command is lost. Only take the fast path when a connection actually exists; otherwise fall through so the frame is queued and flushed once the link recovers.",
+   "suggestion_code": "      if (connection === null) return;\n      this.writesSent += 1;\n      if (connection !== null) {",
+   "existing_code": "      this.writesSent += 1;\n      if (connection !== null) {",
+   "start_line": 135,
+   "end_line": 136,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/ble/src/link.ts",
+   "content": "`cancelReconnect()` clears the pending backoff timer but does not settle the Promise that `reconnect()` is awaiting. Because that Promise only resolves from inside the timer callback, calling `open()` or `close()` while a backoff delay is in flight leaves `reconnect()` suspended forever: the async operation never completes, `reconnectTimer`/`reconnectResolve` state is inconsistent, and any work after the `await` (including `finishReconnect()`) is never reached. Store the resolver and invoke it in `cancelReconnect()` so the awaiting `reconnect()` can observe the cancellation and return.",
+   "existing_code": "  private cancelReconnect(): void {\n    if (this.reconnectTimer !== null) {\n      this.clock.clearTimeout(this.reconnectTimer);\n      this.reconnectTimer = null;\n    }\n  }",
+   "start_line": 255,
+   "end_line": 260,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/ble/src/link.ts",
+   "content": "On a failed connect the catch block sets `this.state = \"connected\"` while `this.connection` is still null, only to bypass the `state === \"reconnecting\"` guard in `reconnect()` on the very next line. This produces an invalid transient state: `status()` reports `connected` with no connection, and any `send()` in that window takes the fast path and silently drops frames. The retry should be driven by an explicit flag rather than by faking a connected state.",
+   "existing_code": "      this.state = \"connected\";\n      void this.reconnect();",
+   "start_line": 250,
+   "end_line": 251,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/ble/src/link.ts",
+   "content": "The success path never re-checks `this.closed` after `await this.adapter.connect(...)`. If `close()` runs while the connect is in flight (close sets `closed = true` and clears `this.connection`), the resolving connect here then assigns `this.connection` and sets `state = \"connected\"` on an already-closed link, leaking the freshly opened connection (its `disconnect()` is never called) and reverting the terminal `closed` state. Add a `if (this.closed) { await this.connection?.disconnect(); this.connection = null; return; }` guard immediately after the await.",
+   "existing_code": "  private async finishReconnect(): Promise<void> {\n    try {\n      this.connection = await this.adapter.connect(this.address);",
+   "start_line": 235,
+   "end_line": 237,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/ble/src/link.ts",
+   "content": "`lastSeenAt` is refreshed on every outgoing write (here and in `pump()`), not just on notify, yet it is the sole heartbeat for the advertise-gap watchdog in `tick()`. As a result an idle-but-alive link that stops notifying will be torn down after `gapMs`, while a write-heavy but unresponsive link (no notifies arriving) keeps `lastSeenAt` fresh and is never reconnected \u2014 the dead-link detection is defeated in both directions. Track notify liveness separately from write activity.",
+   "existing_code": "    if (this.state === \"connected\" && this.connection !== null && this.clock.now() - this.lastSeenAt > this.gapMs) {",
+   "start_line": 171,
+   "end_line": 171,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/ble/src/link.ts",
+   "content": "`close()` clears `this.queue` and drops every pending write without sending them and without incrementing any drop counter, so callers lose commands with no signal (`writesDroppedBudget` stays flat). Additionally, the drain wait resolves only via the injected timer; if the timer handle is cleared (see the wallClock `clearTimeout` issue) or never fires, `close()` hangs indefinitely. Surface dropped writes in status and make the drain wait tolerant of cancellation.",
+   "existing_code": "    this.queue = [];\n    const connection = this.connection;\n    this.connection = null;\n    this.state = \"closed\";",
+   "start_line": 198,
+   "end_line": 201,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/ble/src/link.ts",
+   "content": "On write failure `onDrop()` sets `this.connection = null` without calling `disconnect()` on the failed connection. The subsequent `reconnect()` reads `stale = this.connection` (now null) and skips its disconnect step, so the underlying connection object is orphaned and never released. It also unconditionally nulls `this.connection`, so a write from a superseded connection failing late can null out a newer, healthy connection. Disconnect the failed connection (or guard the null-out to the connection that actually failed).",
+   "existing_code": "  private onDrop(): void {\n    this.dropped += 1;\n    this.connection = null;",
+   "start_line": 205,
+   "end_line": 207,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/rekordbox-library/src/sidecar.ts": [
+  {
+   "path": "packages/rekordbox-library/src/sidecar.ts",
+   "content": "The dump fetches at most `limit` (default 5000) track rows, but `trackRows`/`trackCount` paginate and count in memory over that truncated window. For libraries larger than the cap, rows beyond 5000 are silently dropped and every offset >= 5000 returns an empty slice, so callers can never page past the first 5000 tracks even though `counts().tracks` reports the true full-table count (the script computes counts with an un-limited `select count(*)`). This silently loses data and produces inconsistent paging versus the TypeScript reader, which issues LIMIT/OFFSET to SQL on every call and can reach any offset. Consider paging the SQL query per call (respecting offset), or at minimum document/return the cap so callers don't assume the full library is present.",
+   "existing_code": "    out[\"tracks\"] = rows(cur, TRACK_SELECT, (int(req.get(\"limit\", 5000)),))",
+   "start_line": 124,
+   "end_line": 124,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-library/src/sidecar.ts",
+   "content": "Parity break with the TS reader: when `query.limit` is undefined the TypeScript reader defaults the SQL LIMIT to `DEFAULT_PAGE_SIZE` (=50), but this in-memory slice returns every remaining row of the dump (up to the 5000-row cap). The same `trackRows()` call therefore returns 50 rows via the TS driver and up to 5000 via the sidecar, so a paging UI behaves differently depending on which reader mode is active. Apply the same default limit here (e.g. `offset + (query.limit ?? DEFAULT_PAGE_SIZE)`).",
+   "existing_code": "    const offset = query.offset ?? 0;\n    return searched.slice(offset, query.limit === undefined ? undefined : offset + query.limit);",
+   "start_line": 291,
+   "end_line": 292,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-library/src/sidecar.ts",
+   "content": "Inconsistent counting: with no search term this returns the full-table count from SQL (`counts().tracks`), but the search branch counts only the (zero-or-more) rows present in the truncated dump. So `trackCount()` and `trackCount(search)` are computed over different populations, and the returned count can exceed the number of rows `trackRows` can actually yield (see the cap issue). Derive the no-search count from the same bounded row set as `trackRows`, or fetch the full table so both agree with the TS reader.",
+   "existing_code": "    if (search === undefined || search === \"\") return this.counts().tracks;\n    return (this.payload.tracks ?? []).filter((row) => matchesSearch(row, search)).length;",
+   "start_line": 300,
+   "end_line": 301,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-library/src/sidecar.ts",
+   "content": "Both the database path and the SQLCipher key are interpolated unescaped. A `key`/passphrase containing a single quote (`) breaks out of `PRAGMA key='...'`, producing a malformed statement (or letting the caller smuggle additional SQL into the PRAGMA), and special URI characters in `dbPath` (`?`, `#`, spaces) corrupt the `file:...?mode=ro` URI so the wrong file/mode is opened. These surface as confusing runtime failures instead of a clean typed error. Use a parameterized/bound PRAGMA key or escape the string, and properly URI-encode the path (e.g. `pathlib.Path.as_uri()` or `urllib.parse.quote`).",
+   "existing_code": "    con = driver.connect(\"file:%s?mode=ro\" % db_path, uri=True)\n    if encrypted:\n        con.execute(\"PRAGMA key='%s'\" % key)",
+   "start_line": 105,
+   "end_line": 107,
+   "category": "security",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-library/src/sidecar.ts",
+   "content": "The output cap is ineffective in two ways: (1) `stdout` is a JS string, so `.length` counts UTF-16 code units, not bytes \u2014 a payload of multibyte characters can exceed 64 MB of real memory while staying under the constant; (2) on exceeding the cap the child is merely SIGKILLed, after which the `close` handler still `resolve()`s with the fully accumulated (oversized) stdout, so oversized output is never rejected and the accumulated buffer is still handed back for parsing. The intent seems to be to reject runaway output: track byte length (e.g. `Buffer.byteLength`/incremental byte counters) and reject with a distinct error (setting `settled` so `close` doesn't resolve). Note `stderr` is also accumulated without any cap.",
+   "existing_code": "      if (stdout.length > SIDECAR_MAX_OUTPUT_BYTES) child.kill(\"SIGKILL\");",
+   "start_line": 171,
+   "end_line": 171,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-library/src/sidecar.ts",
+   "content": "When the sidecar reports a payload without a `writeProbe` field (e.g. the run failed and `result.ok` is false, or the script errored before the probe), this returns `{ rejected: false, error: ... }`. `rejected: false` is the same value the probe would return if a write actually SUCCEEDED, so a caller/security check cannot distinguish 'write was rejected' from 'the probe never ran' \u2014 it may silently treat an unverified handle as write-permitted. Return an explicit failure (throw, or a distinct result such as `rejected: false` only when the probe genuinely executed) when `writeProbe` is absent.",
+   "existing_code": "    const result = await readLibraryViaSidecar({ ...this.request, probeWrite: true }, this.options);\n    return result.writeProbe ?? { rejected: false, error: result.error ?? \"sidecar reported no probe outcome\" };",
+   "start_line": 326,
+   "end_line": 327,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-library/src/sidecar.ts",
+   "content": "No error listener is attached to `child.stdin`. If the child exits before consuming stdin (e.g. `uv` is missing and the spawn fails, or `uv run` errors out immediately), the write stream can emit an `EPIPE`/`ERR_STREAM_DESTROYED` 'error' event; with no listener this becomes an unhandled error and crashes the host process instead of being reported through the typed `{ ok: false }` result. Attach a `child.stdin.on(\"error\", () => {})` handler (or guard the write) since the outcome is already observed via the process `error`/`close` handlers.",
+   "existing_code": "    child.stdin.end(stdin);",
+   "start_line": 188,
+   "end_line": 188,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ]
+}

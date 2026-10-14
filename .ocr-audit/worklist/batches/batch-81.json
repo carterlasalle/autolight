@@ -1,0 +1,107 @@
+{
+ "qa/validation-set.yaml": [
+  {
+   "path": "qa/validation-set.yaml",
+   "content": "This flat `minPerCategory: 3` duplicates the namespaced config knob referenced in the header comment (`qa.validation.minPerCategory`, registry.ts default `3` / config_defaults.json `3`), but it is not the value that actually drives coverage: `validation_set.coverage()`/`missing_categories()` hardcode `min_per=3`, and the only reader of this manifest field is the test assertion `data[\"minPerCategory\"] == 3` (analysis/tests/validation/test_validation_set.py:26). If the registry value is ever overridden (e.g. to 5), the manifest and the lint logic silently stay at 3 and disagree with the configured minimum. Consider either dropping the field in favor of reading `qa.validation.minPerCategory`, or having the loader pass `data[\"minPerCategory\"]` into `coverage`/`missing_categories` so the manifest value is authoritative instead of decorative.",
+   "existing_code": "minPerCategory: 3",
+   "start_line": 5,
+   "end_line": 5,
+   "category": "maintainability",
+   "severity": "medium"
+  }
+ ],
+ "test-fixtures/analysis/real-track-1.trackmodel.json": [
+  {
+   "path": "test-fixtures/analysis/real-track-1.trackmodel.json",
+   "content": "Section coverage does not extend to the end of the beat grid: the final section/phrase ends at an `endBeat` below the last grid beat, leaving the trailing beats unclassified. Consumers that look up the current section with the half-open test (`startBeat <= beat < endBeat`) resolve `undefined`/kind `\"unknown\"` for the track tail, and any test that assumes full section coverage over the grid silently passes on truncated ranges. Confirm whether the outro should extend to the last grid beat and make the fixture self-consistent.",
+   "existing_code": "{\"beatInBar\": 2, \"bpm\": 142.0, \"index\": 585, \"sourceTimeMs\": 247234.0}",
+   "start_line": 0,
+   "end_line": 0,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "test-fixtures/analysis/reference-track.json": [
+  {
+   "path": "test-fixtures/analysis/reference-track.json",
+   "content": "`analysisCoverage` is \"full\" while `readinessLevel` and `analysisCoverage2.level` are both \"structured\", and the input map only marks `source.audio`, `native.rekordbox.grid`, `native.rekordbox.pssi` and `fusion.structure` as `present` (everything else `absent`). `compute_readiness()` (analysis/src/autolight_analysis/readiness.py) therefore returns \"structured\", and the producer `_model()` (analysis/src/autolight_analysis/worker.py:435-438) explicitly enforces `analysisCoverage === readinessLevel === compute_readiness(inputs)` (\"readiness is computed, never set by hand\"). So this fixture could not have been emitted by the analysis worker; it violates a documented invariant. Downstream `coverageOf()` (packages/track-model/src/index.ts:33) returns \"full\" from this field (since sections are present), so consumers treat only-structured data as full coverage. Neither the TS `superRefine` nor Python `validate_track_model` cross-checks `analysisCoverage` against the input map, so the inconsistency is silent. Set `analysisCoverage` to \"structured\".",
+   "suggestion_code": "\"analysisCoverage\": \"structured\"",
+   "existing_code": "\"analysisCoverage\": \"full\"",
+   "start_line": 0,
+   "end_line": 0,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "tsconfig.base.json": [
+  {
+   "path": "tsconfig.base.json",
+   "content": "`target` is ES2022 but `lib` is ES2024. The explicit `lib` overrides the target-derived default library, so type-checking exposes ES2023/ES2024 APIs (e.g. `Array.prototype.toSorted`/`toReversed`, `Object.groupBy`, `Promise.withResolvers`, `Map.groupBy`) that are not guaranteed to exist on an ES2022 runtime. Such calls will type-check cleanly but throw `TypeError: ... is not a function` at runtime. Align `lib` with the runtime baseline (e.g. `ES2022`) or raise `target` to match the lib (and document the required runtime) so the type surface and runtime guarantees stay in sync.",
+   "existing_code": "    \"target\": \"ES2022\",\n    \"lib\": [\"ES2024\", \"DOM\"],",
+   "start_line": 7,
+   "end_line": 8,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "apps/desktop/src/components/ui/badge.tsx": [
+  {
+   "path": "apps/desktop/src/components/ui/badge.tsx",
+   "content": "The `asChild` flag makes `Badge` polymorphic, but the props are declared as `React.ComponentProps<\"span\">`. When `asChild` renders a non-span element (e.g. `<Badge asChild><a href=\"...\">`), the allowed prop set no longer corresponds to the element actually rendered: element-specific attributes (`href`, `type`, `disabled`, etc.) cannot be typed, while span-only attributes are still accepted and blindly forwarded by the Slot. Consider a discriminated/generic prop type keyed on `asChild` so the child element's props are honored.",
+   "existing_code": "}: React.ComponentProps<\"span\"> &\n  VariantProps<typeof badgeVariants> & { asChild?: boolean }) {",
+   "start_line": 34,
+   "end_line": 35,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "apps/desktop/src/components/ui/badge.tsx",
+   "content": "When `asChild` is true, `Comp` becomes `Slot.Root`, which internally enforces `React.Children.only` and throws at render time if the child is not exactly one valid element (text, fragment, or multiple children). Because there is no guard/fallback, misuse degrades into an uncaught render crash rather than a graceful fallback. Consider documenting this contract (or validating `children`) at the call site.",
+   "existing_code": "  const Comp = asChild ? Slot.Root : \"span\"",
+   "start_line": 36,
+   "end_line": 36,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/src/components/ui/dropdown-menu.tsx": [
+  {
+   "path": "apps/desktop/src/components/ui/dropdown-menu.tsx",
+   "content": "`w-(--radix-dropdown-menu-trigger-width)` pins the menu width to the trigger width (Select-like behavior) and, combined with `overflow-x-hidden`, silently truncates any item label longer than the trigger. For an action menu whose trigger may be a narrow icon button, this yields a menu sized by the trigger rather than its own content (only `min-w-32` protects the very-small case, `max-w` is unbounded). Prefer sizing to content (e.g. drop the fixed width or use `min-w-32` + `max-w`), or confirm this matches the intended design.",
+   "existing_code": "className={cn(\"z-50 max-h-(--radix-dropdown-menu-content-available-height) w-(--radix-dropdown-menu-trigger-width) min-w-32 origin-(--radix-dropdown-menu-content-transform-origin)",
+   "start_line": 0,
+   "end_line": 0,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "apps/desktop/src/components/ui/dropdown-menu.tsx",
+   "content": "The absolute-positioned indicator block (`<span ... absolute right-2 ...><ItemIndicator><CheckIcon/></ItemIndicator></span>`) is duplicated almost verbatim in `DropdownMenuCheckboxItem` and `DropdownMenuRadioItem` (differing only in `data-slot`). Extracting a small shared indicator render helper would remove the drift risk between the two items.",
+   "existing_code": "        className=\"pointer-events-none absolute right-2 flex items-center justify-center\"\n        data-slot=\"dropdown-menu-checkbox-item-indicator\"",
+   "start_line": 102,
+   "end_line": 103,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/src/components/ui/toggle.tsx": [
+  {
+   "path": "apps/desktop/src/components/ui/toggle.tsx",
+   "content": "Duplicate/ineffective defaults: `variant` and `size` are given defaults here in the destructuring, and the same defaults are declared again in `defaultVariants`. Because the props always have a value by the time they reach `toggleVariants`, the `defaultVariants` entries for `variant`/`size` are effectively dead \u2014 if someone later changes `defaultVariants` (e.g. `size: \"sm\"`), it will be silently overridden by these destructuring defaults and diverge. Consider keeping the defaults in only one place (preferably only `defaultVariants`, passing raw props through).",
+   "existing_code": "  variant = \"default\",\n  size = \"default\",",
+   "start_line": 32,
+   "end_line": 33,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "apps/desktop/src/components/ui/toggle.tsx",
+   "content": "Redundant pressed-state styling: both `aria-pressed:bg-muted` and `data-[state=on]:bg-muted` target the same toggle-on state and set the identical background. Radix's Toggle sets both attributes, so this is duplicated logic. Keep a single selector to avoid future drift (e.g. changing one and forgetting the other), which would make the pressed style inconsistent between the two hooks.",
+   "existing_code": "aria-pressed:bg-muted data-[state=on]:bg-muted",
+   "start_line": 0,
+   "end_line": 0,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ]
+}

@@ -1,0 +1,209 @@
+{
+ "packages/config/src/decisions.ts": [
+  {
+   "path": "packages/config/src/decisions.ts",
+   "content": "DS-16 is inconsistent with the rest of the registry: every other entry's `combined`/`defaultMode` is a concrete mode id (e.g. \"auto\", \"hybrid\", \"fusion\"), whereas here it is the prose phrase \"all enabled\". Since `decisionModes()` appends `combined` to the option ids whenever it is not itself an option id, `decisionModes(\"DS-16\")` emits `[\"multicast\", \"per-interface-broadcast\", \"global-broadcast\", \"scan-list\", \"all enabled\"]`. A consumer that renders this list or round-trips the selection back into config gets a value that is not a real option id, and DS-16 is keyless (`key: null`) so \"all enabled\" can never be persisted as a mode. Use a real mode id (e.g. \"all\") or special-case DS-16 so `decisionModes` does not surface prose as a selectable mode.",
+   "existing_code": "    combined: \"all enabled\",\n    defaultMode: \"all enabled\",",
+   "start_line": 258,
+   "end_line": 259,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/config/src/decisions.ts",
+   "content": "Both lookup maps are built with `new Map(...)` over the full array without any uniqueness guard. If a future edit introduces a duplicate `ds` id or a duplicate `key`, the later entry silently shadows the earlier one and no build-time or test-time error surfaces (the existing `decisions.test.ts` only checks key/registry agreement, not map uniqueness). Add a load-time assertion (or a dedicated uniqueness test) that `byDs.size === DECISIONS.length` and that the count of non-null keys equals `byKey.size`, so collisions fail loudly.",
+   "existing_code": "const byDs = new Map(DECISIONS.map((d) => [d.ds, d]));\nconst byKey = new Map(",
+   "start_line": 546,
+   "end_line": 547,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/config/src/decisions.ts",
+   "content": "This key is stored as the literal template string, so `byKey` is keyed by `\"govee.device.<fixtureId>.transportMode\"` and `decisionForConfigKey` only resolves when a caller passes that exact literal. Any caller that builds a concrete per-fixture key (substituting a real fixture id, e.g. `govee.device.<id>.transportMode`) will get `null` and lose the DS-31 metadata. Note in a comment (or normalize in `decisionForConfigKey`) that per-device callers must use the placeholder verbatim, so this contract does not silently break.",
+   "existing_code": "    key: \"govee.device.<fixtureId>.transportMode\",",
+   "start_line": 465,
+   "end_line": 465,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "packages/controller-flx4/src/map.test.ts": [
+  {
+   "path": "packages/controller-flx4/src/map.test.ts",
+   "content": "The 14-bit composition tests only ever emit an MSB immediately followed by its own LSB for the same control, so a decoder that keyed pending MSB state on the status/channel byte alone (ignoring Data 1) would still pass. Real interleaving on one channel is never exercised \u2014 e.g. `0xB0:0x00` (tempo MSB) and `0xB0:0x07` (eq-high MSB) arriving before either LSB. Add an interleaved case (send msb1, msb2, lsb1, lsb2) and assert both reconstructed values so wrong MSB pairing is detected.",
+   "existing_code": "        const partial = decoder.decode({ status: pair.status, data1: pair.msb, data2: msb, receivedAtNs: atNs });",
+   "start_line": 248,
+   "end_line": 248,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/controller-flx4/src/map.test.ts",
+   "content": "`centred.type === \"control\" && centred.on` short-circuits to `false` when the decode returns an `unknown` event, so this assertion passes even though the jog control was never resolved (it does not fail with the neighbours only because the value assertions above happen to catch it). Assert the discriminant first, e.g. `expect(centred.type).toBe(\"control\"); if (centred.type === \"control\") expect(centred.on).toBe(false);` so the check is meaningful on its own.",
+   "existing_code": "    expect(centred.type === \"control\" && centred.on).toBe(false);",
+   "start_line": 273,
+   "end_line": 273,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/controller-flx4/src/map.test.ts",
+   "content": "The coverage key omits `deck` and `kind` (and `padMode`/`padIndex`), so a map entry whose deck or kind drifted is still treated as \"captured\" by this test \u2014 the name promises a whole-map guarantee that is not actually enforced here. Include those fields in the key (or assert them) so drift in deck/kind is reported as missing rather than only caught indirectly by the first test.",
+   "existing_code": "    const captured = new Set(allRows().map((row) => `${row.status}:${row.data1}:${row.id}:${row.shift}`));",
+   "start_line": 204,
+   "end_line": 204,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/govee/src/profiles.test.ts": [
+  {
+   "path": "packages/govee/src/profiles.test.ts",
+   "content": "Misleading claim + missing negative test. The header (lines 1-5) states 'the loader refuses a profile that breaks either rule', where rule two is 'nothing claims a hardware measurement'. But no test exercises loader rejection of a hardware claim, and the loader in profiles.ts does not reject one: `measured()` accepts `hardware-measured` as a valid source for any field, and `lintDeviceProfile` only guards `capabilities.segmented === true`. This `not.toBe(HARDWARE_SOURCE)` assertion only inspects the checked-in fixtures; if the loader regressed to silently accept `source: hardware-measured` (e.g. for `length_m`), this suite would still pass. Add a temp-dir fixture mutated to `source: hardware-measured` asserting `loadDeviceCatalog` throws, or correct the header comment to match the loader's actual behavior.",
+   "existing_code": "        expect(measured.source, `${sku} ${where}`).not.toBe(HARDWARE_SOURCE);",
+   "start_line": 60,
+   "end_line": 60,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/govee/src/profiles.test.ts",
+   "content": "Ceiling-bucket boundaries are under-tested. The table is `{ 20: 40, 60: 25, 120: 20 }`, but only 8/20/40/100/200 zones are probed. With the current `zones >= key` lookup, an off-by-one at the 60 or 120 key (e.g. `zones > key`) stays green here: zones=20 still yields 40, and 100/200 slide to lower buckets. Pin the exact keys and the just-above/just-below neighbors so bucket selection cannot regress unnoticed.",
+   "suggestion_code": "    expect(defaultRateHz(profile, 59, 60)).toBe(40);\n    expect(defaultRateHz(profile, 60, 60)).toBe(25);\n    expect(defaultRateHz(profile, 119, 60)).toBe(25);\n    expect(defaultRateHz(profile, 120, 60)).toBe(20);\n    expect(defaultRateHz(profile, 100, 60)).toBe(25);",
+   "existing_code": "    expect(defaultRateHz(profile, 100, 60)).toBe(25);",
+   "start_line": 89,
+   "end_line": 89,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/govee/src/profiles.test.ts",
+   "content": "`everyMeasurement` hard-codes the top-level measured fields, so the 'a receipt for every number' guarantee is only as good as this list. A new `Measured<>` field added to `DeviceProfile` (or a renamed one) is silently unchecked and the coverage assertion still passes. Prefer deriving the fields from the type/object (e.g. iterate `Object.entries(profile)` and `profile.capabilities`/`profile.measurements` for objects shaped like `Measured`, i.e. keys `value`/`source`/`receipt`) so new measurements are covered automatically.",
+   "existing_code": "function everyMeasurement(profile: DeviceProfile): { where: string; measured: Measured<unknown> }[] {",
+   "start_line": 22,
+   "end_line": 22,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/matter/src/simulator.test.ts": [
+  {
+   "path": "packages/matter/src/simulator.test.ts",
+   "content": "This test only compares `TEST_PAIRING_CODE` against the exact literal it is defined with, so it duplicates the constant and adds no behavioral coverage \u2014 it can only fail if someone edits the constant itself. A more meaningful assertion verifies that the value is a valid pairing input actually accepted by the controller, e.g. `expect(classifyPairingCode(TEST_PAIRING_CODE)).toBe(\"manual-code\")` (imported from `./controller.js`).",
+   "existing_code": "  it(\"uses the fixed test pairing code\", () => {\n    expect(TEST_PAIRING_CODE).toBe(\"1234-567-8901\");\n  });",
+   "start_line": 7,
+   "end_line": 9,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/matter/src/simulator.test.ts",
+   "content": "Cleanup only happens on the happy path: `close()` runs *after* all assertions, and the `commission`/`command` calls above can throw. If any step fails (assertion, rejection, or a `commission` error), the adapter is never closed. Since `MatterAdapter` models a real controller with a storage directory/credentials in production, teardown should be guaranteed via `afterEach` (or a `try/finally`) so a failing run cannot leak the adapter or leave state behind for other tests. The same applies to the other two tests in this file, which also call `close()` only at the end.",
+   "existing_code": "    await light.adapter.close();\n    expect(light.adapter.state).toBe(\"stopped\");",
+   "start_line": 17,
+   "end_line": 18,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/matter/src/simulator.test.ts",
+   "content": "The bind assertions are incomplete: only `fixtureId` and `vendorId` are checked. `record.multiAdmin` (propagated from `req.multiAdmin`, itself taken from `node.multiAdmin`) and `productId` are never verified, and the test does not confirm the record was persisted to `store`. A regression where `bindNode` drops or mismatches `multiAdmin`/`nodeId`, or fails to write the store, would pass silently. Consider asserting `record.multiAdmin === node.multiAdmin`, `record.matterNodeId === node.nodeId`, and that `store.get(\"virtual-strip\")` matches.",
+   "existing_code": "    expect(record.fixtureId).toBe(\"virtual-strip\");\n    expect(record.vendorId).toBe(0xfff1);",
+   "start_line": 31,
+   "end_line": 32,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/matter/vitest.config.ts": [
+  {
+   "path": "packages/matter/vitest.config.ts",
+   "content": "String aliases in Vite/Rollup match `key` **and** `key + '/'`. Because the key here is derived via `readdirSync` and mapped to a *single file* (`src/index.ts`), any subpath import such as `@autolight/rekordbox-live/follow` (which does exist in this repo, e.g. `apps/desktop/src/app/resolve-live.ts` and `apps/desktop/src/features/setup/rkbx-setup-panel.test.ts`) gets rewritten by simple string replacement to `<pkg>/src/index.ts/follow` \u2014 an invalid path. Subpath entry points (e.g. `consts`, `follow`, `setup-assistant`) therefore cannot resolve through this alias. Use regex aliases that preserve the subpath (or emit an exact/find-array).",
+   "suggestion_code": "const workspaceAlias = [\n  // Exact package name -> src/index.ts\n  { find: /^@autolight\\/([^/]+)$/, replacement: join(workspaceSrc, \"$1\", \"src\", \"index.ts\") },\n  // Subpath imports -> src/<subpath>\n  { find: /^@autolight\\/([^/]+)\\/(.+)$/, replacement: join(workspaceSrc, \"$1\", \"src\", \"$2\") },\n];",
+   "existing_code": "const workspaceAlias = Object.fromEntries(\n  readdirSync(workspaceSrc).map((p) => [`@autolight/${p}`, join(workspaceSrc, p, \"src\", \"index.ts\")]),\n);",
+   "start_line": 8,
+   "end_line": 10,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/matter/vitest.config.ts",
+   "content": "`readdirSync(workspaceSrc)` is used unfiltered, so every entry under `packages/` (files, dotfiles such as `.DS_Store`/`.gitkeep`, and directories that have no `src/index.ts`) is turned into an alias pointing at a non-existent file. Such bogus aliases can shadow real module resolution and produce confusing \"failed to resolve\" errors. Filter to real directories that actually contain the entry file (or at minimum use `withFileTypes`).",
+   "suggestion_code": "const workspaceAlias = Object.fromEntries(\n  readdirSync(workspaceSrc, { withFileTypes: true })\n    .filter((e) => e.isDirectory() && existsSync(join(workspaceSrc, e.name, \"src\", \"index.ts\")))\n    .map((e) => [`@autolight/${e.name}`, join(workspaceSrc, e.name, \"src\", \"index.ts\")]),\n);",
+   "existing_code": "const workspaceAlias = Object.fromEntries(\n  readdirSync(workspaceSrc).map((p) => [`@autolight/${p}`, join(workspaceSrc, p, \"src\", \"index.ts\")]),\n);",
+   "start_line": 8,
+   "end_line": 10,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "packages/matter/vitest.config.ts",
+   "content": "`readdirSync` runs at config-load time with no error handling. If `packages/` is moved/renamed, or the file is executed from a different layout, the module throws a raw `ENOENT` during config evaluation instead of surfacing an actionable configuration error. Consider wrapping in try/catch (or validating `existsSync(workspaceSrc)`) and emitting a clear diagnostic.",
+   "existing_code": "const workspaceSrc = join(root, \"..\");",
+   "start_line": 7,
+   "end_line": 7,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/reactive-audio/src/timing.test.ts": [
+  {
+   "path": "packages/reactive-audio/src/timing.test.ts",
+   "content": "This assertion sits exactly on its tolerance boundary and never routes the DSP onset through the production alignment API.\n\n- `onsetHop = offset / hop` is the hop whose *window end* first contains the impulse. With `captureSample = 53760` (1120 ms) and `hop = 512`, the first window whose `total = offset + hop` contains the impulse is `54272` (1130.667 ms), so the onset is attributed to a point exactly one hop (`hopMs`) after the true impulse. The test then computes `alignedMs = captureWindowEndMs - latencyMs` inline, so `Math.abs(alignedMs - 1000)` equals `hopMs` to within ~1e-13 while the tolerance is `hopMs + 1e-9`. The check passes only because of the 1e-9 slack.\n- Because the tolerance equals the systematic offset, a one-hop misalignment (e.g. attributing the onset to the wrong window, or an off-by-one-hop error) would still pass, i.e. the test cannot distinguish correct alignment from a full-hop error.\n- The expected value is recomputed by hand (`captureWindowEndMs - latencyMs`) instead of calling `alignFeature`/`alignedShowTimeNs`, so this test would still pass if the production alignment functions were broken/removed; it never wires a real DSP onset through `timing.ts`.\n\nSuggest aligning the actual onset sample (not the window end) and asserting a tolerance strictly below one hop, while driving the value through `alignedShowTimeNs`/`alignFeature`.",
+   "existing_code": "    const captureWindowEndMs = (((onsetHop! + 1) * hop) / sampleRate) * 1000;\n    const alignedMs = captureWindowEndMs - latencyMs;\n    const hopMs = (hop / sampleRate) * 1000;\n    expect(Math.abs(alignedMs - 1000)).toBeLessThanOrEqual(hopMs + 1e-9);",
+   "start_line": 58,
+   "end_line": 61,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/reactive-audio/src/timing.test.ts",
+   "content": "No case exercises `latencyMs` larger than the capture timestamp, where `alignedShowTimeNs` performs `captureTimeNs - BigInt(round(latencyMs * 1e6))` with no guard and can return a negative show time (e.g. `alignedShowTimeNs(0n, 120)` yields `-120000000n`; `LatencyCalibration.align(0n)` after recording 120 ms behaves the same). Since underflow is unhandled in `timing.ts`, add a test pinning the intended contract (clamp to 0 vs. allow negative) so the behavior is explicit rather than assumed.",
+   "existing_code": "    expect(alignedShowTimeNs(captureNs, latencyMs)).toBe(1_000_000_000n);",
+   "start_line": 23,
+   "end_line": 23,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/reactive-audio/src/timing.test.ts",
+   "content": "Only one `spreadMs`/latency pair is checked, so this assertion can pass even if `confidence` were hardcoded or the mapping were otherwise not monotonic. Add boundary cases to genuinely pin the formula: `spreadMs` equal to `latencyMs` (confidence clamps to 0) and `spreadMs` greater than the latency (still clamped to 0, not negative).",
+   "existing_code": "    expect(smeared.confidence).toBeCloseTo(0.75, 9);",
+   "start_line": 15,
+   "end_line": 15,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/rekordbox-library/src/index.test.ts": [
+  {
+   "path": "packages/rekordbox-library/src/index.test.ts",
+   "content": "This composite-row case only asserts `canonicalPath`. Because `rowToIdentity` is a single non-branching function, a regression that silently dropped `rekordboxId`/`title`/`artist` for the composite shape (e.g. when the field names diverge) would still pass here. The test's stated intent is to prove the composite provider row maps to full identity, so assert the whole result object instead of one field.",
+   "suggestion_code": "    const compositeRow = { rekordboxId: \"100307086\", canonicalPath: \"/music/aurora.aiff\", title: \"Aurora\", artist: \"Nova\" };\n    expect(rowToIdentity(compositeRow)).toEqual({\n      rekordboxId: \"100307086\",\n      canonicalPath: \"/music/aurora.aiff\",\n      title: \"Aurora\",\n      artist: \"Nova\",\n    });",
+   "existing_code": "    const compositeRow = { rekordboxId: \"100307086\", canonicalPath: \"/music/aurora.aiff\", title: \"Aurora\", artist: \"Nova\" };\n    const identity = rowToIdentity(compositeRow);\n    expect(identity.canonicalPath).toBe(\"/music/aurora.aiff\");",
+   "start_line": 32,
+   "end_line": 34,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-library/src/index.test.ts",
+   "content": "`typeof X.open === \"function\"` only proves that *some* `open` static exists on whatever `index.js` re-exports. If the barrel accidentally re-exported a different class/module that also exposes an `open` method (or a plain fake object), this test would still pass, giving false confidence in the public surface. Consider asserting the binding identity, e.g. `expect(RekordboxReader).toBe(RekordboxReaderImpl)` by importing the class from its defining module (`./db.js`, `./service.js`), or at least check a distinguishing member such as a unique static property or `RekordboxReader.name`.",
+   "existing_code": "    expect(typeof RekordboxReader.open).toBe(\"function\");\n    expect(typeof LibraryService.open).toBe(\"function\");\n    expect(typeof resolveAnlzSet).toBe(\"function\");\n    expect(typeof beatToSourceSeconds).toBe(\"function\");",
+   "start_line": 42,
+   "end_line": 45,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/rekordbox-library/src/index.test.ts",
+   "content": "`deobfuscateKey()` is called with no arguments and only a 5-character prefix is checked, so a truncated/garbled derived key would still satisfy this. `options.test.ts` already asserts the exact Python-derived value, making this assertion redundant while giving weaker coverage. Either assert the full expected key here or drop it in favor of the stronger check; if the intent is to exercise the parameterized blob contract, pass an explicit blob rather than relying on the default parameter.",
+   "existing_code": "    expect(deobfuscateKey()).toMatch(/^402fd/);",
+   "start_line": 47,
+   "end_line": 47,
+   "category": "test",
+   "severity": "low"
+  }
+ ]
+}

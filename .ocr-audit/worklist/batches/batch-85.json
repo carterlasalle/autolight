@@ -1,0 +1,59 @@
+{
+ "packages/track-model/tsconfig.json": [
+  {
+   "path": "packages/track-model/tsconfig.json",
+   "content": "The build config includes the whole `src` directory, so `src/index.test.ts` is compiled and emitted to `dist` as `index.test.js` / `index.test.d.ts` (with source maps). Since `package.json` has no `files` field, those test artifacts get published, and the library build now depends on the `vitest` devDependency being present. Recommend excluding test files from the emitted build (note that a local `exclude` replaces the inherited one, so `node_modules`/`dist` must be repeated).",
+   "suggestion_code": "  \"include\": [\n    \"src\"\n  ],\n  \"exclude\": [\n    \"node_modules\",\n    \"dist\",\n    \"src/**/*.test.ts\"\n  ]",
+   "existing_code": "  \"include\": [\n    \"src\"\n  ]",
+   "start_line": 7,
+   "end_line": 9,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "protocol-fixtures/govee/razer/b0-1-g0.json": [
+  {
+   "path": "protocol-fixtures/govee/razer/b0-1-g0.json",
+   "content": "The `description` fields in this fixture and the sibling `b0-60-g1.json` contradict the encoded payload. In `b0-1-g0.json` the bytes decode to a pure green slice (RGB(0,255,0)), not a 'red ramp'; in `b0-60-g1.json` the first zone is green and the last is red, with blue stepping by 53 per zone. Readers or future test authors will be misled by 'red ramp'. Align the descriptions with the actual encoded colors (or correct the generator if the channel order is unintended).",
+   "suggestion_code": "  \"description\": \"B0 paint, 1 zone, gradient 0, ramp first stop (RGB 0,255,0).\",",
+   "existing_code": "  \"description\": \"B0 paint, 1 zones, gradient 0, red ramp.\",",
+   "start_line": 4,
+   "end_line": 4,
+   "category": "documentation",
+   "severity": "low"
+  }
+ ],
+ "protocol-fixtures/rekordbox/ax/macos-tree.json": [
+  {
+   "path": "protocol-fixtures/rekordbox/ax/macos-tree.json",
+   "content": "Both decks expose byte-identical child labels (`track title`, `artist`, `elapsed time`, `remaining time`), so deck identity rests entirely on the parent `Deck N` label - the only per-deck discriminator in the fixture. There is no unique identifier (e.g. `AXIdentifier`) and no deck-number field on the group. A consumer that flattens the tree, or a real tree whose group labels differ (Rekordbox exposes decks as AXGroup, and `readAxDecks` falls back to *every* AXGroup/pane when no `Deck N` label is present - ax.ts:101-102), can silently cross-bind Deck 2 values into Deck 1. Consider giving each deck an explicit, machine-readable identity so the fixture pins down the contract instead of relying on label text.",
+   "existing_code": "        { \"role\": \"AXStaticText\", \"position\": 0, \"label\": \"track title\", \"value\": \"Nice For What\" },",
+   "start_line": 10,
+   "end_line": 10,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "protocol-fixtures/serato/3.3.5/macos/load-deck-2/capture.json": [
+  {
+   "path": "protocol-fixtures/serato/3.3.5/macos/load-deck-2/capture.json",
+   "content": "This fixture pins the Serato track id to the bare Remote filePath, but the other Serato Remote decoder entry point in the repo normalizes the same filePath to a prefixed id: `remoteToDeckState` emits `path:${filepath}` (packages/serato/src/index.ts:73), and that convention is asserted in packages/serato/src/mapping.test.ts:93. Because the replay path only drives `SeratoRemoteProvider` (packages/serato/src/remote-provider.ts `trackHint`, bare id), this fixture can never detect the divergence, and Serato identity normalization is now asserted two incompatible ways. Please confirm which id form is canonical for \u00a79.5 / T-ID-01 and reconcile the other one (or make the fixture assert the `path:` form) so downstream keying on `track.id` cannot silently miss a deck.",
+   "existing_code": "        \"id\": \"/music/fixture-b.mp3\",",
+   "start_line": 18,
+   "end_line": 18,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "test-fixtures/analysis/live-homecoming.trackmodel.json": [
+  {
+   "path": "test-fixtures/analysis/live-homecoming.trackmodel.json",
+   "content": "Every section/phrase carries the identical `confidence` of 0.9, `beatFeatures` and `musicalEvents` are empty, and 16 of the 19 `analysisCoverage2.inputs` are `absent` (only `fusion.structure`, `native.rekordbox.grid`, `native.rekordbox.pssi` are `present`). A fixture with uniform confidence and empty event/feature arrays cannot detect broken confidence propagation, empty-input handling, or fusion fallback behaviour, so tests built on it can pass even when those code paths are broken. Consider adding at least one differing confidence value and a non-empty event/feature entry to make the fixture able to fail.",
+   "existing_code": "\"beatFeatures\": [],",
+   "start_line": 0,
+   "end_line": 0,
+   "category": "test",
+   "severity": "low"
+  }
+ ]
+}

@@ -1,0 +1,385 @@
+{
+ "packages/storage/src/perf.ts": [
+  {
+   "path": "packages/storage/src/perf.ts",
+   "content": "`measureTickJitter` never validates `options.hz`/`options.durationMs`. With a negative or `NaN` `hz`, `period = 1000 / hz` becomes negative or `NaN`, so `deadline = started + tick * period` shrinks (or stays `NaN`) and the loop's only exit condition `deadline >= started + options.durationMs` is never satisfied \u2014 the harness spins in a tight busy loop forever and the process hangs. With `hz === 0`, `tick === 0` yields `0 * Infinity === NaN`, so a `NaN` sample is pushed. Validate the inputs (finite, strictly positive) before the loop and fail fast.",
+   "suggestion_code": "  if (!Number.isFinite(options.hz) || options.hz <= 0 || !Number.isFinite(options.durationMs) || options.durationMs <= 0) {\n    throw new RangeError(\n      `measureTickJitter: hz and durationMs must be finite and positive (hz=${options.hz}, durationMs=${options.durationMs})`,\n    );\n  }\n  const period = 1000 / options.hz;",
+   "existing_code": "  const period = 1000 / options.hz;",
+   "start_line": 174,
+   "end_line": 174,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/storage/src/perf.ts",
+   "content": "`stallDetected` derives its detection floor as `stallMs * 0.5`. When `stallMs` is `0` (or negative/tiny), the floor is `0` and `sample > 0` is true for any positive jitter sample, so the function reports a detected stall even though no stall was injected \u2014 a stall-detection assertion can pass on pure scheduler jitter while `busyWait(now, 0)` does nothing. Guard the non-positive case.",
+   "suggestion_code": "  if (!(stallMs > 0)) return false;\n  const floor = stallMs * 0.5;",
+   "existing_code": "  const floor = stallMs * 0.5;",
+   "start_line": 191,
+   "end_line": 191,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/storage/src/perf.ts",
+   "content": "`writeMeasurement` is an unchecked, non-idempotent I/O call: it neither creates the parent directory nor catches errors. If the evidence directory is missing, `writeFileSync` throws `ENOENT` at the very end of a long measurement run, discarding every collected measurement instead of persisting results. Create the directory first (e.g. `mkdirSync(dirname(path), { recursive: true })`) and/or surface a clear error.",
+   "suggestion_code": "  mkdirSync(dirname(path), { recursive: true });\n  writeFileSync(path, `${JSON.stringify(file, null, 2)}\\n`, \"utf8\");",
+   "existing_code": "  writeFileSync(path, `${JSON.stringify(file, null, 2)}\\n`, \"utf8\");",
+   "start_line": 252,
+   "end_line": 252,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/storage/src/perf.ts",
+   "content": "`Math.max(...samples)` spreads the whole sample array as arguments. For large sample counts (the harness is designed for high-rate tick/render sampling) this can exceed the engine's argument limit and throw `RangeError: Maximum call stack size exceeded`, aborting the run instead of reporting a measurement. Use a `reduce`/loop to compute the maximum.",
+   "suggestion_code": "    max: samples.reduce((acc, v) => (v > acc ? v : acc), 0),",
+   "existing_code": "    max: samples.length > 0 ? Math.max(...samples) : 0,",
+   "start_line": 110,
+   "end_line": 110,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "packages/storage/src/perf.ts",
+   "content": "`failedMeasurements` filters on `m.measured && !m.pass`, so metrics that were never measured (`measured === false`) are silently excluded. A CI gate that only inspects `failedMeasurements()` therefore reports zero failures even when every metric is unmeasured \u2014 the gate passes with no evidence collected, undermining the fail-closed design. Consider treating unmeasured entries as failures (or exposing a single `hasFailures`/combined gate) so a run with no evidence cannot pass.",
+   "existing_code": "  return file.measurements.filter((m) => m.measured && !m.pass);",
+   "start_line": 256,
+   "end_line": 256,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/venue/src/fields.test.ts": [
+  {
+   "path": "packages/venue/src/fields.test.ts",
+   "content": "Tautological assertion: the expected value is computed by calling `projectToOutline` with the exact same point ({x:-2.5,y:2.5}) that `computeFields` feeds into the same function in its `runId === null` branch. Any regression inside `projectToOutline` cancels out, so this test can pass even if corner projection is completely broken. Assert against an independently known literal (this corner maps to s = 0.25 on the 5x5 room) instead.",
+   "suggestion_code": "    expect(f.s[0]).toBeCloseTo(0.25, 6);",
+   "existing_code": "    const corner = projectToOutline({ x: -2.5, y: 2.5 }, room.outline);\n    expect(f.s[0]).toBeCloseTo(((corner.s % 1) + 1) % 1, 6);",
+   "start_line": 65,
+   "end_line": 66,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "packages/venue/src/fields.test.ts",
+   "content": "The test name promises the sign \"changes exactly at the split line\", but the assertion only checks that both signs occur somewhere. An implementation returning arbitrarily interleaved signs (or the wrong transition location) still passes. Verify the number/position of sign transitions around the loop instead.",
+   "suggestion_code": "    const signs = [...f.signedSplit].map((v) => (v >= 0 ? 1 : -1));\n    const transitions = signs.filter((v, i) => i > 0 && v !== signs[i - 1]).length;\n    expect(transitions).toBe(2);",
+   "existing_code": "    const signs = [...f.signedSplit].map((v) => (v >= 0 ? 1 : -1));\n    expect(new Set(signs).size).toBe(2);",
+   "start_line": 93,
+   "end_line": 94,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/venue/src/fields.test.ts",
+   "content": "The test name claims logic rotation, but `computeFields` does not derive `logical[]` from `zeroS` at all (`f.logical[i] = c.logicalIndex`). The only real assertion, `[...a.s] !== [...b.s]`, holds for ANY differing `zeroS` output, so a broken rotation that shifts by the wrong amount still passes. Assert the exact rotation (0.25 with 8 cells) of the `s` values.",
+   "suggestion_code": "    expect([...a.pos]).toEqual([...b.pos]);\n    for (let i = 0; i < 8; i++) {\n      expect(b.s[i]!).toBeCloseTo((((a.s[i]! - 0.25) % 1) + 1) % 1, 5);\n    }",
+   "existing_code": "    expect([...a.pos]).toEqual([...b.pos]);\n    expect([...a.s]).not.toEqual([...b.s]);",
+   "start_line": 103,
+   "end_line": 104,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/venue/src/fields.test.ts",
+   "content": "Wall-clock budget assertion is flaky on loaded CI and is correctness-blind: the 2000-cell output is never validated, so a fast-but-incorrect implementation passes. Compare against a baseline/relative budget or assert output values; keep any absolute threshold generous.",
+   "existing_code": "    const start = performance.now();\n    computeFields(room, cells, outlineRuns(room, 2.5), { zeroS: 0 });\n    expect(performance.now() - start).toBeLessThan(500);",
+   "start_line": 110,
+   "end_line": 112,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/venue/src/fields.test.ts",
+   "content": "`midS` is accumulated on every iteration and returned, but no test ever reads it (all callers destructure only `{ cells }`). This is dead code \u2014 remove the array and its return value.",
+   "existing_code": "  return { cells, midS };",
+   "start_line": 28,
+   "end_line": 28,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/venue/src/reference.ts": [
+  {
+   "path": "packages/venue/src/reference.ts",
+   "content": "`runLengthOf` duplicates `runLength` from `./placement.js` but ignores `run.geom`. `runPointAt` (fields.ts) computes arc length via `runLength` which samples splines, so for `curvedRoom()` (run.geom = { kind: \"catmull-rom\" }) the `total` used to derive `arcM` is the chord length, which is shorter than the spline arc length. Cells are therefore placed over only part of the curve and `arcFraction`/`runPointAt` use inconsistent parameterizations. Reuse the geom-aware helper instead of re-implementing it.",
+   "suggestion_code": "import { runLength } from \"./placement.js\";\n\nfunction runLengthOf(run: Run): number {\n  return Math.max(1e-9, runLength(run));\n}",
+   "existing_code": "function runLengthOf(run: Run): number {\n  const pts = run.closed ? [...run.polyline, run.polyline[0]!] : run.polyline;",
+   "start_line": 204,
+   "end_line": 205,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/venue/src/reference.ts",
+   "content": "`fieldCellsForReference` only ever reads `ref.runs[0]`, so for `squareMirrored()` (mirrored: true, two runs) no cells are produced for `run-b`. Any consumer that iterates reference rooms (room-preview, renderer goldens) silently renders only half of the mirrored strip. Either generate cells per run or explicitly assert/handle single-run references.",
+   "existing_code": "  const run = ref.runs[0]!;",
+   "start_line": 165,
+   "end_line": 165,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/venue/src/reference.ts",
+   "content": "`a` and `b` are shallow spreads of the same `runs[0]` object, so they alias the identical `polyline` array (and any other nested fields) even though `b` is declared `mirroredOf: \"run-a\"`. A later in-place mutation of one run's geometry will silently corrupt the other, and both are stored in the module-level `REFERENCE_ROOMS` singleton returned directly by `referenceById`. Deep-copy the geometry for each run (or document the aliasing) to avoid cross-run corruption.",
+   "suggestion_code": "  const a = { ...runs[0]!, id: \"run-a\", mirroredOf: null, polyline: runs[0]!.polyline.map((p) => ({ ...p })) };\n  const b = { ...runs[0]!, id: \"run-b\", mirroredOf: \"run-a\", polyline: runs[0]!.polyline.map((p) => ({ ...p })) };",
+   "existing_code": "  const a = { ...runs[0]!, id: \"run-a\", mirroredOf: null };\n  const b = { ...runs[0]!, id: \"run-b\", mirroredOf: \"run-a\" };",
+   "start_line": 51,
+   "end_line": 52,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/venue/src/reference.ts",
+   "content": "`fieldCellsForReference` distributes `stripCells` uniformly over the whole run length and never consults `run.gaps`, so for `squareChunks()`/`clubRectangle()` cells are emitted inside the darkened gap segments. This contradicts the fixtures' descriptions (\"three cut pieces with two dark gaps\") and means the generated cells do not represent the physical strip. Skip the gap intervals when stepping `arcM`, or document that cells intentionally span gaps.",
+   "existing_code": "  for (let i = 0; i < ref.stripCells; i++) {\n    const arcM = ((i + 0.5) / ref.stripCells) * total;",
+   "start_line": 169,
+   "end_line": 170,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/venue/src/reference.ts",
+   "content": "`total` is hardcoded to 20 while the gap offsets are expressed in meters. This only matches the perimeter of the assumed 5x5 closed rectangle; if the room dimensions or the run length ever change, the gap positions silently drift out of alignment with the actual run. Derive the length from the run (e.g. `runLengthOf(run)` / `runLength(run)`) instead of a magic constant.",
+   "suggestion_code": "  const total = runLengthOf(run);",
+   "existing_code": "  const total = 20;",
+   "start_line": 66,
+   "end_line": 66,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/electron/services/simulator-show.ts": [
+  {
+   "path": "apps/desktop/electron/services/simulator-show.ts",
+   "content": "`DeckState.playheadSeconds` is a *seconds* field in `@autolight/contracts`, but `this.beat` holds a *beat* counter (starts at 1.6 and advances by `BEATS_PER_TICK` per tick). Any consumer deriving elapsed time or beat position from this DeckState (e.g. `seconds = playheadSeconds`, or `beats = playheadSeconds * bpm/60`) gets wrong values, and the error grows every tick. Convert to seconds before assigning (and derive the shared BPM so it cannot drift from `BEATS_PER_TICK`).",
+   "suggestion_code": "      playing: this.timer !== null,\n      playheadSeconds: this.beat * (60 / SIM_BPM),\n      playRate: 1,\n      effectiveBpm: SIM_BPM,",
+   "existing_code": "      playing: this.timer !== null,\n      playheadSeconds: this.beat,\n      playRate: 1,\n      effectiveBpm: 128,",
+   "start_line": 185,
+   "end_line": 188,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/services/simulator-show.ts",
+   "content": "`shutdown()` unconditionally reports `endingLookSent`/`streamsDisarmed`/`dbFlushed` as `true`. When `this.recording` is null (shutdown called before `start()`), the ending-look paint and disarm frame are never produced, yet the caller still sees `streamsDisarmed: true` \u2014 the teardown assertions can pass without any wire behavior. There is also no DB in this harness, so `dbFlushed: true` is fabricated. Return flags that reflect what actually happened.",
+   "suggestion_code": "    const endingLookSent = this.recording !== null;\n    return { endingLookSent, streamsDisarmed: endingLookSent, dbFlushed: false };",
+   "existing_code": "    return { endingLookSent: true, streamsDisarmed: true, dbFlushed: true };",
+   "start_line": 356,
+   "end_line": 356,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/services/simulator-show.ts",
+   "content": "The interval tick swallows all errors with `.catch(() => undefined)` while the timer keeps firing. Since `tick()` has no `await` before its rendering/send logic, a `renderFrame`/`paint`/encode failure rejects the promise and is silently dropped \u2014 the loop just stops emitting frames and a green journey can hide a broken pipeline. At minimum surface the failure (log it, or record it so `frames()`/snapshot can detect the stall).",
+   "existing_code": "    this.timer = setInterval(() => {\n      void this.tick().catch(() => undefined);\n    }, TICK_MS);",
+   "start_line": 212,
+   "end_line": 214,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/services/simulator-show.ts",
+   "content": "Same silent swallow as the interval: a failure in the keypress-triggered `tick()` is discarded. The step-9 assertion (\"zero frame within 100 ms of keypress\") can therefore pass or fail with no diagnostic even when the tick actually threw, e.g. because the sim/sender was already torn down. Handle or record the rejection instead of discarding it.",
+   "existing_code": "      this.blackout = true;\n      this.resumedAt = null;\n      // Tick immediately: the zero frame must land within 100 ms of the\n      // keypress even if the interval just fired.\n      void this.tick().catch(() => undefined);",
+   "start_line": 310,
+   "end_line": 314,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/services/simulator-show.ts",
+   "content": "When no frames advanced during the sleep this forces one extra `tick()` instead of failing, so the P-56 assertion (\"the show loop keeps producing frames while the renderer is frozen\") passes even if the background interval was dead/stalled. The forced tick fabricates the very frames the test is meant to observe. Prefer asserting that frames grew via the interval alone (fail otherwise) rather than masking a stalled loop.",
+   "existing_code": "    if (after <= before) await this.tick();",
+   "start_line": 334,
+   "end_line": 334,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/services/simulator-show.ts",
+   "content": "No re-entrancy/partial-failure protection: `this.sim` is published before the awaited `start(0)`, and the only guard (`if (this.timer) return`) is set at the very end. If `start()` is called concurrently (before the timer exists) or a second `start()` runs after a first one threw between `createSocket` and `setInterval`, the previous `GoveeLanSim` and the UDP `sender` are overwritten and leak (no `close()`/`stop()`), while the orphaned interval keeps sending. Track an `starting`/`started` flag up front and wrap the post-`createSocket` setup so the sim/socket are cleaned up on failure.",
+   "existing_code": "    this.sim = new GoveeLanSim(SIM_PROFILE, { armSettle: false, rateCeiling: false });\n    this.simPort = await this.sim.start(0);\n    this.sender = createSocket(\"udp4\");",
+   "start_line": 201,
+   "end_line": 203,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/services/simulator-show.ts",
+   "content": "`frameSeq` is write-only: it is incremented here (and declared at line 99) but never read anywhere, so it is dead state that suggests frame accounting that does not exist. Either expose it (e.g. via a getter used by the journey) or remove the field and the increment.",
+   "existing_code": "    this.frameSeq += 1;",
+   "start_line": 245,
+   "end_line": 245,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/electron/show-service.ts": [
+  {
+   "path": "apps/desktop/electron/show-service.ts",
+   "content": "The shutdown `analysis` step only records `shutdown/analysis-stopped` but never actually stops the AnalysisSupervisor, so its Python worker thread (`worker.stop()`) is left running through quit. `getAnalysisSupervisor().stop()` exists (analysis-supervisor.ts:53) \u2014 call it here instead of only recording.",
+   "suggestion_code": "    { name: \"analysis\", run: () => { getAnalysisSupervisor().stop(); svc.recorder.record(\"shutdown/analysis-stopped\", {}); } },",
+   "existing_code": "    { name: \"analysis\", run: () => svc.recorder.record(\"shutdown/analysis-stopped\", {}) },",
+   "start_line": 299,
+   "end_line": 299,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/show-service.ts",
+   "content": "The `workers` step just calls `stopProlink()` again, duplicating the `dj-adapters` step above, and does not stop any worker. This looks like a copy/paste placeholder that leaves the step performing no distinct real work.",
+   "existing_code": "    { name: \"workers\", run: () => { stopProlink(); } },",
+   "start_line": 301,
+   "end_line": 301,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "apps/desktop/electron/show-service.ts",
+   "content": "Fire-and-forget `pushFrame` has no rejection handler. `manager.pushFrame()` is async and throws for an unknown/stale mac (`require()`), a zero-zone frame (`RangeError`), or transport failures; the rejected promise becomes an unhandled rejection and no failure is recorded in the session recorder/audit trail. Attach a catch that records the failure.",
+   "suggestion_code": "      await manager.pushFrame(id, scaleFrame(frame, intensity));\n    }\n  })().catch((err) => {\n    getShowService().recorder.record(\"frame/push-failed\", {\n      id,\n      message: err instanceof Error ? err.message : String(err),\n    });\n  });",
+   "existing_code": "      await manager.pushFrame(id, scaleFrame(frame, intensity));\n    }\n  })();",
+   "start_line": 220,
+   "end_line": 222,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/show-service.ts",
+   "content": "This fire-and-forget IIFE (and the equivalent `setTimeout` branch below, plus the `else` branch's `getGoveeManager().blackoutAll()`) has no `catch`, so any `setBrightness`/`blackoutAll` rejection is an unhandled rejection with no recorder/audit entry. Wrap with a catch that records the failure.",
+   "suggestion_code": "  void (async () => {\n    for (const mac of [...svc.deviceIps.keys()]) {\n      await manager.setBrightness(mac, 100);\n    }\n  })().catch((err) => {\n    svc.recorder.record(\"crash/hold-failed\", {\n      message: err instanceof Error ? err.message : String(err),\n    });\n  });",
+   "existing_code": "  void (async () => {\n    for (const mac of [...svc.deviceIps.keys()]) {\n      await manager.setBrightness(mac, 100);\n    }\n  })();",
+   "start_line": 246,
+   "end_line": 250,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/show-service.ts",
+   "content": "Each step schedules a `setTimeout` that is never cleared. When a step resolves quickly the loser of `Promise.race` keeps a timer armed for the full `timeoutMs` (8 leaked timers per shutdown), and a timed-out step's `run()` is never cancelled, so it continues mutating state after shutdown has already proceeded. Clear the timer once the race settles.",
+   "suggestion_code": "        let timer: NodeJS.Timeout | undefined;\n        await Promise.race([\n          Promise.resolve().then(() => step.run()),\n          new Promise<never>((_, reject) => {\n            timer = setTimeout(() => reject(new Error(`shutdown step timeout: ${step.name}`)), opts.timeoutMs);\n          }),\n        ]).finally(() => { if (timer) clearTimeout(timer); });",
+   "existing_code": "        await Promise.race([\n          Promise.resolve().then(() => step.run()),\n          new Promise<never>((_, reject) => {\n            setTimeout(() => reject(new Error(`shutdown step timeout: ${step.name}`)), opts.timeoutMs);\n          }),\n        ]);",
+   "start_line": 308,
+   "end_line": 313,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/show-service.ts",
+   "content": "Race in the composite FLX4 start/stop flag: `compositeStarted` is set true before the dynamic import resolves, and this failure handler resets it to false unconditionally. A failed/slow boot for an earlier start can therefore clobber a newer successful start (e.g. a start\u2192stop\u2192start or repeated `restartShowHost`), leaving the flag false while a boot is actually running (or vice versa). Guard with a generation/epoch counter so only the start that owns the current epoch may clear the flag.",
+   "existing_code": "        .catch(() => {\n          compositeStarted = false;\n        }),",
+   "start_line": 121,
+   "end_line": 123,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/show-service.ts",
+   "content": "Bare `getGoveeManager()` (also in `applyCrashPolicy`, `disarmStreams`, `flushConfig`) creates the singleton lazily; `getGoveeManager` only merges options on the first call and `applyLiveTunables` never applies `registryPath`. If one of these bare calls runs before any `govee()` call (e.g. quitting without an earlier scan), the manager is constructed with `registryPath: undefined` and `saveRegistryNow()` silently no-ops, so registry persistence is disabled for the whole process. Route these through `govee()` (or construct with the registry path) so the singleton always gets the intended options.",
+   "existing_code": "  const manager = getGoveeManager();",
+   "start_line": 278,
+   "end_line": 278,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "apps/desktop/src/app/shell.tsx": [
+  {
+   "path": "apps/desktop/src/app/shell.tsx",
+   "content": "The global keydown handler only guards against text inputs (INPUT/TEXTAREA). It does not verify that no modifier is held before matching a single-letter shortcut. As a result combinations like Ctrl/Cmd+B (`blackout`), Ctrl/Cmd+F (`freeze`) or Ctrl/Cmd+A (`resume`) all fire the master intents in addition to the browser/OS default. This is easy to hit accidentally (select-all, find). Consider ignoring events when metaKey/ctrlKey/altKey are set (except the Cmd/Ctrl+K case already handled).",
+   "existing_code": "      const ch = shortcutFor(event.key);",
+   "start_line": 44,
+   "end_line": 44,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/src/app/shell.tsx",
+   "content": "The handler only bails out for INPUT/TEXTAREA, but shortcuts will still fire while focus is inside a `contenteditable` region or a `<select>`, where typing a plain letter ('f', 'a', 'b', 'w') would unintentionally trigger emergency intents. Broaden the guard to cover `el.isContentEditable`, `SELECT` and `BUTTON` (or use `el.closest('input, textarea, select, [contenteditable=\"true\"]')`).",
+   "existing_code": "      if (el && (el.tagName === \"INPUT\" || el.tagName === \"TEXTAREA\")) return;",
+   "start_line": 38,
+   "end_line": 38,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/app/shell.tsx",
+   "content": "Race condition: the `cancelled` flag only protects against the route changing/unmounting, not against the user changing the follow mode while this `config/get` round-trip is in flight. A setup-view selection (setup-view.tsx sets `followMode` then invokes `follow/mode`) can be issued before this response resolves; when the stale saved value arrives it will overwrite the user's newer choice, silently reverting the mode and desyncing the UI from the stored config. Capture the mode at effect start and only apply the saved value if the store still equals the value you read (or move persistence to a subscriber that only reads once).",
+   "existing_code": "        if (useShell.getState().followMode !== saved) useShell.getState().set({ followMode: saved });",
+   "start_line": 30,
+   "end_line": 30,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/app/shell.tsx",
+   "content": "The allowed follow-mode values are inlined here as a literal union, duplicating the canonical `FollowMode` type defined in store.ts. Adding or renaming a mode will not produce a compile error and persistence will silently stop working for the new value. Reference the type instead, e.g. validate against a shared `FOLLOW_MODES` constant/`FollowMode[]` export.",
+   "existing_code": "      if (saved === \"preview\" || saved === \"ax-beat\" || saved === \"prolink\" || saved === \"soundswitch\") {",
+   "start_line": 29,
+   "end_line": 29,
+   "category": "maintainability",
+   "severity": "medium"
+  }
+ ],
+ "apps/desktop/src/components/ui/context-menu.tsx": [
+  {
+   "path": "apps/desktop/src/components/ui/context-menu.tsx",
+   "content": "Both `ContextMenuCheckboxItem` and `DropdownMenuCheckboxItem` pass `checked={checked ?? false}`, forcing Radix's `CheckboxItem` into fully controlled mode on every render (`checked` is destructured out of `props`, so `undefined ?? false` always supplies a boolean). An uncontrolled consumer that omits `checked` and relies on `defaultChecked` therefore gets a permanently-unchecked item (clicking fires `onCheckedChange` but the visual state never updates), and the `\"indeterminate\"` state is unreachable. Pass the value through untouched so `undefined` still selects Radix's uncontrolled mode.",
+   "suggestion_code": "      checked={checked}",
+   "existing_code": "      checked={checked ?? false}",
+   "start_line": 154,
+   "end_line": 154,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/src/components/ui/context-menu.tsx",
+   "content": "`ContextMenuContent` already wraps itself in `ContextMenuPrimitive.Portal`, yet a standalone `ContextMenuPortal` is exported below. The exported `Portal` is therefore effectively dead API surface: any consumer that (as is natural) writes `<ContextMenuPortal><ContextMenuContent/></ContextMenuPortal>` produces a nested/double portal, and there is no case where the separate `Portal` export is required. Either drop the export or stop hard-wrapping the Portal inside `Content`.",
+   "existing_code": "    <ContextMenuPrimitive.Portal>\n      <ContextMenuPrimitive.Content",
+   "start_line": 67,
+   "end_line": 68,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/components/ui/context-menu.tsx",
+   "content": "The `side` property re-declared here is already part of `ContextMenuPrimitive.Content`'s props (`React.ComponentProps<...>`), so this intersection adds no new API and is redundant/confusing. Remove it.",
+   "suggestion_code": "}: React.ComponentProps<typeof ContextMenuPrimitive.Content>) {",
+   "existing_code": "}: React.ComponentProps<typeof ContextMenuPrimitive.Content> & {\n  side?: \"top\" | \"right\" | \"bottom\" | \"left\"\n}) {",
+   "start_line": 63,
+   "end_line": 65,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "apps/desktop/src/components/ui/context-menu.tsx",
+   "content": "`ContextMenuSubTrigger` unconditionally appends `<ChevronRightIcon className=\"ml-auto\" />` after `children`, with no way for a caller to opt out. Callers that supply their own trailing indicator (or reuse the trigger for a non-submenu purpose) will end up with a duplicated/incorrect icon. Consider making the indicator overridable or only rendering it when no indicator is provided.",
+   "existing_code": "      <ChevronRightIcon className=\"ml-auto\" />",
+   "start_line": 119,
+   "end_line": 119,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "apps/desktop/src/components/ui/context-menu.tsx",
+   "content": "`ContextMenuCheckboxItem` and `ContextMenuRadioItem` are byte-for-byte identical except for the primitive used and the `data-slot` value. This duplication means any future fix (e.g. the `checked` handling, indicator styling) must be applied twice and can silently drift. Extract a shared internal renderer that takes the primitive/`data-slot` as parameters.",
+   "existing_code": "function ContextMenuRadioItem({\n  className,\n  children,\n  inset,\n  ...props\n}: React.ComponentProps<typeof ContextMenuPrimitive.RadioItem> & {\n  inset?: boolean\n}) {",
+   "start_line": 168,
+   "end_line": 175,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/components/ui/context-menu.tsx",
+   "content": "The `group-focus/context-menu-item:` variant only matches when the shortcut is nested inside `ContextMenuItem` (the only component that declares `group/context-menu-item`). When a `ContextMenuShortcut` is placed in `ContextMenuSubTrigger`, `ContextMenuCheckboxItem`, or `ContextMenuRadioItem`, the muted-to-accent color swap silently does not happen. Consider exposing the group name on the other item types too, or documenting the constraint.",
+   "existing_code": "        \"ml-auto text-xs tracking-widest text-muted-foreground group-focus/context-menu-item:text-accent-foreground\",",
+   "start_line": 238,
+   "end_line": 238,
+   "category": "bug",
+   "severity": "low"
+  }
+ ]
+}

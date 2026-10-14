@@ -1,0 +1,348 @@
+{
+ "apps/desktop/journeys/soak.journey.ts": [
+  {
+   "path": "apps/desktop/journeys/soak.journey.ts",
+   "content": "Dead branch + unhandled gate result. `gateFrame` only returns `\"offline\"` when `disconnectAt` is set (see packages/simulator/src/index.ts:35-40), but here the spec is `{ dropEvery: 997 }`, so `gate` can only ever be `\"send\"` or `\"drop\"`. Consequently the `offline` branch is unreachable dead code, and the `\"drop\"` result is never acted on either \u2014 dropped frames are still rendered. Either pass `disconnectAt`/`reconnectAt` so `offline` can actually occur, or handle `drop` explicitly, otherwise the gate call is meaningless.",
+   "existing_code": "    const gate = gateFrame(n, { dropEvery: 997 });\n    if (gate === \"offline\") continue;",
+   "start_line": 17,
+   "end_line": 18,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/journeys/soak.journey.ts",
+   "content": "This assertion does not validate the stated \"both decks heard\" behavior. `decks` is populated only from `d.deckId` emitted by `performanceScenario` (which swaps the lead deck every minute), while the `deckB` fed to `liveViewModel` is a fixed silent deck (`playing: false` \u2192 `audibleWeight` returns 0, so it contributes no light and `weights.b` is always 0). The test therefore passes purely because the generator alternates `deckId`, never because deck B was actually rendered. Assert on the view-model output instead (e.g. `vm.weights.b > 0` for frames where the scenario's lead deck is 2) and feed the scenario deck state into `deckB`.",
+   "existing_code": "  expect(decks).toEqual(new Set([1, 2]));",
+   "start_line": 30,
+   "end_line": 30,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/journeys/soak.journey.ts",
+   "content": "Lit-frame check is too weak to prove full rendering. A frame counts as `lit` if *any* cell is non-black, so a frame where 7 of 8 fixtures render black still passes; cell count (`vm.cells.length`) is only asserted every 50,000 frames. Because no frame is actually skipped (the gate never returns `offline`), `lit` ends up \u2248 `n`, making the `> n * 0.9` threshold trivially true and unable to catch partial/degraded rendering. Consider asserting all cells are lit (or a per-cell minimum) for a sampled subset, and checking cell count on every frame.",
+   "existing_code": "    if (vm.cells.some((c) => c.color !== \"rgb(0,0,0)\")) lit++;",
+   "start_line": 26,
+   "end_line": 26,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/journeys/soak.journey.ts",
+   "content": "This assertion is vacuous and the simulation diverges from the tested loop. `soak` (packages/simulator/src/index.ts:45-60) sets `pending = 0` on every iteration regardless of the gate action, so `maxPending` can never exceed 1 and `toBeLessThanOrEqual(1)` is guaranteed to pass \u2014 it never observes the real `liveViewModel` iteration. Also, `soak` calls the callback with a 0-based `i` while the main loop uses the 1-based `n`, so the gate cadence (which frames are dropped) differs from the loop under test. Drive the queue metric from the actual render loop, or at minimum make the index bases consistent.",
+   "existing_code": "  const q = soak(864000, (i) => gateFrame(i, { dropEvery: 997 }));\n  expect(q.maxPending).toBeLessThanOrEqual(1);",
+   "start_line": 32,
+   "end_line": 33,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/journeys/soak.journey.ts",
+   "content": "`makeDeck({ deckId: 2, playing: false, track: null })` is constructed twice per iteration, producing two distinct objects that represent the same deck (`deckB` and `mixB.state`). Any identity-based state sharing between the deck state and its mix is broken by this, and it allocates two throwaway objects on every one of the 864,000 frames. Hoist a single constant silent `deckB` object outside the loop and reuse it for both `deckB` and `mixB.state`.",
+   "suggestion_code": "      deckA: d, deckB: silentDeck,",
+   "existing_code": "      deckA: d, deckB: makeDeck({ deckId: 2, playing: false, track: null }),",
+   "start_line": 20,
+   "end_line": 20,
+   "category": "performance",
+   "severity": "low"
+  },
+  {
+   "path": "apps/desktop/journeys/soak.journey.ts",
+   "content": "`@autolight/simulator` is imported twice in the same file (the other import at the top already imports from this module). Consolidate into a single import statement to avoid duplicate imports.",
+   "existing_code": "import { makeDeck } from \"@autolight/simulator\";",
+   "start_line": 4,
+   "end_line": 4,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/src/app/screens.test.ts": [
+  {
+   "path": "apps/desktop/src/app/screens.test.ts",
+   "content": "The fixture is force-cast through `as unknown as TrackModel`, which silently disables all type checking. Because the enum literals are not `as const`, they widen to `string` (`analysisCoverage: \"structured\"`, `sections[].kind: \"chorus\"`) and aren't actually assignable to `TrackModel` \u2014 that is exactly why the double cast is needed. The consequence is that any contract drift (renamed/removed fields such as the `analysisCoverage2.inputs` keys) will NOT fail these tests, so the suite keeps passing against a shape the app never produces. Build the fixture so the schema validates it, e.g. `const model: TrackModel = trackModelSchema.parse({ ... })` (the pattern already used in `packages/show-mixer/src/pipeline.test.ts`) or at minimum add `as const` + `satisfies TrackModel`.",
+   "existing_code": "} as unknown as TrackModel;",
+   "start_line": 42,
+   "end_line": 42,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/app/screens.test.ts",
+   "content": "Only the lane names/order are asserted; the `beats` payloads \u2014 the actual contract of `inspectorLanes` \u2014 are never checked. A regression that maps the wrong field (e.g. `beats.map(() => null)`, or using `index` instead of `beatInBar`) would still pass. Assert the content too, e.g. `expect(lanes.map((l) => l.beats)).toEqual([[\"chorus\"], [\"drop@32\"], [1]])`.",
+   "existing_code": "    expect(lanes.map((l) => l.name)).toEqual([\"sections\", \"events\", \"grid\"]);",
+   "start_line": 53,
+   "end_line": 53,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/app/screens.test.ts",
+   "content": "The fixture passes `calibration: null`, but the only behavior that depends on it \u2014 the `firmware: f.calibration?.firmwareVersion ?? \"unknown\"` fallback in `tileForFixture` \u2014 is never asserted, and neither are `ip`/`fps`/`sentFrames`/`supersededFrames`/`latencyMs`. The test can therefore pass even if those fields are dropped or swapped. Add cases covering null calibration \u2192 `firmware === \"unknown\"` and a non-null `firmwareVersion`.",
+   "existing_code": "    expect(tile.segments).toBe(1);\n    expect(tile.health).toBe(\"online\");",
+   "start_line": 60,
+   "end_line": 61,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/app/screens.test.ts",
+   "content": "This asserts GRID WARNING for a model whose `gridWarnings` is `[]`; the warning/missing statuses here are driven purely by the test-supplied booleans, so the test does not validate the real-world requirement that a model carrying warnings (or a missing source) yields that status. Also, each flag is only exercised in isolation: no case has both flags true, so the precedence order inside `rowForTrack` (sourceMissing checked before gridWarned) can silently regress. Add a both-true precedence case and, if warnings in the model are meant to drive the status, a model with a non-empty `gridWarnings`.",
+   "existing_code": "    expect(rowForTrack(model, true, false).status).toBe(\"GRID WARNING\");",
+   "start_line": 48,
+   "end_line": 48,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/app/screens.test.ts",
+   "content": "The 19-entry `analysisCoverage2.inputs` block and `readinessLevel` are never read by any function under test (`rowForTrack` only reads `analysisCoverage`; `inspectorLanes` reads `sections`/`musicalEvents`/`beatGrid`). This hand-maintained copy of the schema adds drift risk and brittleness with zero coverage benefit \u2014 replace it with the schema-validated fixture, or keep only the fields the code under test actually touches.",
+   "existing_code": "            \"plan.generated\": { status: \"absent\" },",
+   "start_line": 36,
+   "end_line": 36,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "apps/desktop/src/app/screens.test.ts",
+   "content": "The full step list is hardcoded here, duplicating the exported `SETUP_STEPS` constant in `venue.ts`; import and spread it (`nextSetupStep([...SETUP_STEPS])`) so the test cannot drift from the single source of truth. Coverage is also limited to the empty and complete cases \u2014 a partial list (e.g. `nextSetupStep([\"dj\", \"library\"])` \u2192 `\"controller\"`) and duplicate-step handling are untested.",
+   "existing_code": "    expect(nextSetupStep([\"dj\", \"controller\", \"library\", \"lights\", \"identify\", \"placement\", \"orientation\", \"qualification\", \"analysis\", \"preview\"])).toBe(\"ready\");",
+   "start_line": 65,
+   "end_line": 65,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/src/components/chrome.tsx": [
+  {
+   "path": "apps/desktop/src/components/chrome.tsx",
+   "content": "Optimistic SIM toggle is never reconciled with the IPC result. `invoke()` from `../app/store.js` never rejects: on a missing preload it records `ipc:simulator/mode = \"unavailable: preload missing\"` and on handler failure it records the error, but in both cases it resolves to `null`. That return value is discarded here, and the `simulator/mode` response actually carries the authoritative `{ enabled }` flag, which is also discarded. Failure scenario: main-process `setSimulatorMode` throws (or preload is absent) \u2014 the UI badge flips to SIMULATOR and stays there while the backend never entered simulator mode, with no rollback and no retry. Commit the state only after a successful result, or roll back when `invoke` resolves to `null`.",
+   "suggestion_code": "          const next = !useShell.getState().simulatorMode;\n          set({ simulatorMode: next });\n          void invoke(\"simulator/mode\", { version: 1, enabled: next }).then((res) => {\n            // invoke() resolves to null when the preload is missing or the handler failed.\n            if (res === null) set({ simulatorMode: !next }); // roll back the optimistic toggle\n          });",
+   "existing_code": "          const next = !useShell.getState().simulatorMode;\n          set({ simulatorMode: next });\n          void invoke(\"simulator/mode\", { version: 1, enabled: next });",
+   "start_line": 41,
+   "end_line": 43,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/src/components/chrome.tsx",
+   "content": "Blackout is dispatched fire-and-forget with no user-visible feedback. Because `invoke()` converts every failure into a `null` return (recording it only under `diagnostics['ipc:master/blackout']`), a failed or missing-preload blackout leaves the operator believing the lights are blacked out when they are not \u2014 a safety-relevant mismatch on a live show. Consider awaiting the call and surfacing a failure state (e.g., a disabled/error indicator or toast) rather than relying solely on the diagnostics tab.",
+   "existing_code": "        onClick={() => { void invoke(\"master/blackout\", { version: 1 }); }}",
+   "start_line": 52,
+   "end_line": 52,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/components/chrome.tsx",
+   "content": "The same BPM MetricBadge JSX is duplicated verbatim in `Titlebar` and `Statusbar`. Extracting a small `BpmMetric` helper would keep the formatting/value source in one place and avoid the two copies drifting apart.",
+   "existing_code": "      <MetricBadge metric={{ label: \"BPM\", value: deckBpm(bpm), unit: \"\" }} />",
+   "start_line": 33,
+   "end_line": 33,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/src/features/inspector/inspector-view.tsx": [
+  {
+   "path": "apps/desktop/src/features/inspector/inspector-view.tsx",
+   "content": "Depending on the whole `live` object re-runs this fetch far too often: `resolve-live.ts` calls `set({ live, ... })` on a 250ms `setInterval` and `buildLive` returns a brand-new `LiveState` object every tick, so `live` identity changes ~4\u00d7/s. Each re-run fires a fresh `invoke(\"show/live\")` IPC call and a `setState` (a new `TrackModel` from IPC), even when the resolved deck never changed \u2014 wasted IPC and render churn. Depend on a narrow, stable selector (or gate the fetch on `selected` only).",
+   "suggestion_code": "  }, [selected, live?.deckA.title, live?.deckB.title]);",
+   "existing_code": "  }, [selected, live]);",
+   "start_line": 39,
+   "end_line": 39,
+   "category": "performance",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/features/inspector/inspector-view.tsx",
+   "content": "False success signal. `invoke` from the store never rejects \u2014 it catches errors internally, records them in `diagnostics`, and returns `null` (store.ts). This code ignores the return value and unconditionally sets `\"correction queued\"`, so a rejected/unsupported/failed `show/correction` op (or an unreachable show host) still tells the user it was queued. Check the resolved value before reporting success.",
+   "suggestion_code": "    void invoke(\"show/correction\", { version: 1, op, sendToLights: false }).then((res) => {\n      setAudition(res ? `correction queued: ${op.op}` : `correction failed: ${op.op}`);\n    });",
+   "existing_code": "    void invoke(\"show/correction\", { version: 1, op, sendToLights: false });\n    setAudition(`correction queued: ${op.op}`);",
+   "start_line": 46,
+   "end_line": 47,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/features/inspector/inspector-view.tsx",
+   "content": "Passing an empty cues array defeats `auditionAtBeat`: the loop over `cues` never runs, so `best` stays null and `cueType` is always the `\"section-look\"` fallback. The audition never reflects the plan cue actually active at that beat. Pass the real cue list (e.g. the selected deck's `cues` from `live`) so the reported cue is meaningful.",
+   "existing_code": "    const pick = auditionAtBeat(track, [], beat, sendToLights);",
+   "start_line": 42,
+   "end_line": 42,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/features/inspector/inspector-view.tsx",
+   "content": "Key-mismatch: `selected` is `selectedTrackId`, which `LibraryView` sets to the deck-slot id (`\"deck-a\"`/`\"deck-b\"` produced by `liveDeckRows`) \u2014 never a track title. Comparing it against `identity.title ?? identity.id` therefore never matches, so the selection filter is effectively dead and a library selection is not honoured here (the result only ever matches via the `live.deckA/deckB.title` fallback). Use a consistent key for selection.",
+   "existing_code": "          const title = d.track.identity.title ?? d.track.identity.id;",
+   "start_line": 30,
+   "end_line": 30,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/features/inspector/inspector-view.tsx",
+   "content": "Duplicated terminal state set: on the no-match success path the first `setLoaded(true); setTrack(null)` runs and then falls through to the identical trailing call, so it is redundant \u2014 only the trailing one is needed for both the no-match and catch paths. Additionally, the catch comment claims it handles an unreachable show host, but `invoke` never throws (it returns `null`), so that branch is unreachable for IPC failures; an unreachable host is presented identically to the genuine \"no track analyzed\" empty state, which is misleading.",
+   "existing_code": "        if (!cancelled) { setLoaded(true); setTrack(null); }\n      } catch { /* show host unreachable: empty lanes below */ }\n      if (!cancelled) { setLoaded(true); setTrack(null); }",
+   "start_line": 34,
+   "end_line": 36,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "apps/desktop/src/features/inspector/inspector-view.tsx",
+   "content": "`live.deckA.title` / `live.deckB.title` are dereferenced after only checking `live` is truthy. The IPC payload was raw-cast (lines above) rather than validated, and this is the only statement in the `try` that can throw; if a deck (or its `title`) is ever missing the throw is silently swallowed by the catch and the inspector degrades to the empty state with no error. Add explicit guards / optional chaining.",
+   "suggestion_code": "          if (selected && title !== selected && live && title !== live.deckA?.title && title !== live.deckB?.title) continue;",
+   "existing_code": "          if (selected && title !== selected && live && title !== live.deckA.title && title !== live.deckB.title) continue;",
+   "start_line": 31,
+   "end_line": 31,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/src/routes/setup/setup-model.ts": [
+  {
+   "path": "apps/desktop/src/routes/setup/setup-model.ts",
+   "content": "`controller` is hardcoded `false`, but it is ordered 2nd (right after `dj`). Since `setupProgress` returns `next` as the first step whose evidence `!== true`, once `dj` completes `next` is permanently pinned to `controller` and can never advance to `library`/`lights`/\u2026; likewise `next === \"ready\"` is unreachable in the real UI, so \"All steps ready\" never shows. `controller`'s route is `\"setup\"`, so no \"Open\" button is rendered either \u2014 the user is left with a non-actionable \"Next: controller\" forever even when later steps are satisfied. Either drop `controller` from the ordered readiness steps until an IPC source exists, or make `setupProgress` skip steps that have no evidence source.",
+   "existing_code": "    controller: false,",
+   "start_line": 40,
+   "end_line": 40,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/src/routes/setup/setup-model.ts",
+   "content": "`placement` and `orientation` are both derived from the single `roomSaved` boolean, so they can never disagree or be measured independently. Per `STEP_LABELS`, `orientation` is \"DJ anchor facing\" \u2014 a saved-room record does not necessarily prove the anchor/orientation was set, so a saved room falsely marks `orientation` ready and defeats the per-step gating the file header claims. Give `orientation` its own evidence source, or keep it pending until distinct evidence exists.",
+   "existing_code": "    placement: roomSaved,\n    orientation: roomSaved,",
+   "start_line": 44,
+   "end_line": 45,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/routes/setup/setup-model.ts",
+   "content": "`library` readiness is inferred from a presentation sentinel: any deck whose title is not the literal em-dash `\"\u2014\"` counts as a resolved track. This couples the evidence model to a UI placeholder string (also used in `resolve-live.ts`/`library-rows.ts`). If the placeholder ever changes, or a deck legitimately carries an empty-string title, `library` is reported incorrectly. Prefer a data-level signal (e.g. non-null track identity) rather than filtering by the magic `\"\u2014\"` string.",
+   "existing_code": "  const titles = live === null ? [] : [live.deckA.title, live.deckB.title].filter((t) => t !== \"\u2014\");",
+   "start_line": 35,
+   "end_line": 35,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/src/routes/venue/room-canvas.tsx": [
+  {
+   "path": "apps/desktop/src/routes/venue/room-canvas.tsx",
+   "content": "The dimension readout uses `maxX - minX` / `maxY - minY`, but those bounds are widened by the `\u00b13` clamp used only for framing (`Math.min(...xs, -3)` / `Math.max(...xs, 3)`). For the default `rectangleRoom(5, 5)` the real span is 5 m, yet `minX/maxX` become -3/3 and the canvas renders \"6.00 m by 6.00 m\" while the width input in `routes/venue/index.tsx` shows 5 \u2014 a contradiction visible to the user, and any room whose extent is under 6 m per axis is over-reported. Compute the readout from the raw outline extents.",
+   "suggestion_code": "        {fmt(Math.max(...xs) - Math.min(...xs))} m by {fmt(Math.max(...ys) - Math.min(...ys))} m, ceiling {fmt(room.ceilingHeight)} m",
+   "existing_code": "        {fmt(maxX - minX)} m by {fmt(maxY - minY)} m, ceiling {fmt(room.ceilingHeight)} m",
+   "start_line": 45,
+   "end_line": 45,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/routes/venue/room-canvas.tsx",
+   "content": "This `<rect>` is the only call site of `onPatch`, but it can never fire: it sits at x=-100,y=-100 outside the `0 0 320 320` viewBox, it has `fill=\"none\"` (so it is not hit-testable and has no pointer events), and it is not focusable/keyboard reachable. The patch path is therefore dead code, and even if it were reachable `onPatch(room)` would push an unchanged room back to the caller (an identity state update, not an edit). Either remove the group or wire the callback to a real interactive element (e.g. a click/keyboard handler on the SVG that maps pointer position to room coordinates).",
+   "existing_code": "        <rect x={-100} y={-100} width={1} height={1} fill=\"none\" onClick={() => onPatch(room)} />",
+   "start_line": 48,
+   "end_line": 48,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/routes/venue/room-canvas.tsx",
+   "content": "The DJ facing arrow is mirrored in X relative to the engine's facing convention. `computeFields` (packages/venue/src/fields.ts:176-181) rotates into the DJ frame with `rx = dx\u00b7cos f + dy\u00b7sin f`, `ry = -dx\u00b7sin f + dy\u00b7cos f` and defines the front side as `frontBack = ly >= 0` (fields.ts:268), i.e. the engine's forward vector is `(-sin f, cos f)`. This arrow tip uses `(+sin f, +cos f)`, so the rendered arrow agrees with the engine only for f = 0 or \u00b1\u03c0; for the \u00b190\u00b0 values the \"DJ facing (deg)\" input produces, the arrow points at the region the engine marks as back. Align the arrow with the engine (or fix the convention consistently) so the picture matches the computed front/back field.",
+   "suggestion_code": "          x2={sx(room.anchors.dj.position.x - Math.sin(room.anchors.dj.facingRad) * 0.8)}\n          y2={sy(room.anchors.dj.position.y + Math.cos(room.anchors.dj.facingRad) * 0.8)}",
+   "existing_code": "          x2={sx(room.anchors.dj.position.x + Math.sin(room.anchors.dj.facingRad) * 0.8)}\n          y2={sy(room.anchors.dj.position.y + Math.cos(room.anchors.dj.facingRad) * 0.8)}",
+   "start_line": 37,
+   "end_line": 38,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/routes/venue/room-canvas.tsx",
+   "content": "The `<text>` elements (wall labels here, and the dimension readout below) set no `fill`, so they default to black while the app runs with `<html class=\"dark\">` and a near-black background (`styles/globals.css:52`). The outline/circles/lines use `currentColor` and stay visible, but the wall names and the \"\u2026 m by \u2026 m, ceiling \u2026 m\" readout are effectively unreadable in the default dark theme. Set `fill=\"currentColor\"` on both text nodes (or a themed token).",
+   "suggestion_code": "          <text x={sx(p.x) + 7} y={sy(p.y) - 7} fontSize={10} fill=\"currentColor\">",
+   "existing_code": "          <text x={sx(p.x) + 7} y={sy(p.y) - 7} fontSize={10}>",
+   "start_line": 27,
+   "end_line": 27,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/routes/venue/room-canvas.tsx",
+   "content": "`room.anchors.dj` (and `.position`/`.facingRad`) are dereferenced unguarded in three places (lines 33-38). `validateRoom` (packages/venue/src/room.ts:127-156) never validates `anchors`, and `RoomVenueRoute` accepts an arbitrary `room` supplied by callers/persistence, so a room that passes validation but lacks a DJ anchor (partial/older serialized record) throws during render and blanks the whole Room editor tab instead of degrading. Consider an early guard (`const dj = room.anchors?.dj; if (!dj) return null;` or draw only the outline) before rendering the DJ group.",
+   "existing_code": "        <circle cx={sx(room.anchors.dj.position.x)} cy={sy(room.anchors.dj.position.y)} r={7} fill=\"none\" strokeWidth={2} stroke=\"currentColor\" />",
+   "start_line": 33,
+   "end_line": 33,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "apps/desktop/src/routes/venue/room-canvas.tsx",
+   "content": "Wall names are drawn at vertex `i` (start corner of wall `i`), not at the edge midpoint, so a label visually sits in the corner shared with the previous wall \u2014 the wall\u2194name attribution is ambiguous to users, especially in non-convex outlines. Also the `W${i}` fallback disagrees with the engine's naming (`wall${i}` in packages/venue/src/groups.ts:93). Consider placing `wallNames[i]` at the midpoint of `outline[i] \u2192 outline[(i+1) % outline.length]`.",
+   "existing_code": "            {room.wallNames[i] ?? `W${i}`}",
+   "start_line": 28,
+   "end_line": 28,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/ble/src/commands.ts": [
+  {
+   "path": "packages/ble/src/commands.ts",
+   "content": "`BleFrame.payload` is documented as \"Raw payload bytes without padding or checksum\", but this slice always returns the full 17 payload bytes, including the zero padding that `encodeBleFrame` writes. Callers decoding variable-length responses (readback strings such as version/MAC, or provisioning chunks) get 17 bytes and will treat the trailing zeros as real data. Either document that `payload` is always `BLE_PAYLOAD_LEN` bytes (padded) or expose the significant length so callers do not have to guess. Note the slice also silently assumes `BLE_PAYLOAD_LEN === BLE_FRAME_LEN - 3`; if those constants ever drift the payload would be mis-sliced with no error.",
+   "existing_code": "  const cmd = frame[1] ?? 0;\n  return { proType, cmd, payload: frame.slice(2, 2 + BLE_PAYLOAD_LEN) };",
+   "start_line": 72,
+   "end_line": 73,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/ble/src/commands.ts",
+   "content": "Encode/decode proType sets are asymmetric: `encodeBleFrame` accepts any proType except `HOST_COLOR` (e.g. `HANDSHAKE` 0xe7 or any other marker), yet `decodeBleFrame` whitelists only these four markers, so a frame produced by the encoder can round-trip to `null`. That asymmetry is easy to hit for new callers and produces a silent decode failure. Consider sharing one allow-list (or rejecting non-encodable markers in `encodeBleFrame`) so the encoder and decoder stay in sync.",
+   "existing_code": "  if (\n    proType !== BLE_PROTYPE.WRITE &&\n    proType !== BLE_PROTYPE.READ &&\n    proType !== BLE_PROTYPE.PROVISION &&\n    proType !== BLE_PROTYPE.CHUNKED\n  ) {\n    return null;\n  }",
+   "start_line": 63,
+   "end_line": 70,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "packages/ble/src/commands.ts",
+   "content": "`bleColorSingle` writes kelvin as 16-bit big-endian (`(kelvin >> 8) & 0xff, kelvin & 0xff`), but `bleColorMasked` passes it through `byte()`, which clamps to 0..255. A realistic value such as 4000K is silently truncated to 255 here while the single-colour path encodes it correctly; `encodeBleStreamFrame` feeds the same `opts.kelvin` to both paths, so the rendered colour temperature differs depending on whether the frame happens to be single-colour or masked. At minimum validate/reject kelvin outside the masked protocol's supported range instead of clamping, and confirm against WP04 whether the masked payload carries a 16-bit value like `bleColorSingle`.",
+   "existing_code": "  payload[5] = byte(kelvin);",
+   "start_line": 190,
+   "end_line": 190,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/ble/src/commands.ts",
+   "content": "The clamp-to-[0,1]-then-scale-to-100/255 logic is duplicated verbatim in `bleBrightness`, `bleMaskedBrightness` and (inlined) `blePerZoneBrightness`. Any change to rounding or range handling must be replicated in all three or the encoders will produce different levels for the same logical brightness. Extract a single `scaleLevel(level01, scale)` helper and call it from all three builders.",
+   "existing_code": "  const level = scale === 100\n    ? Math.min(100, Math.max(0, Math.round(clamped01 * 100)))\n    : Math.min(255, Math.max(0, Math.round(clamped01 * 255)));",
+   "start_line": 129,
+   "end_line": 131,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/ble/src/commands.ts",
+   "content": "The total payload length is derived from `mask.length`, and `maskForZones` grows the mask by `ceil(zoneCount / 8)`. For `zoneCount > 64` the masked-colour payload exceeds `BLE_PAYLOAD_LEN` (17) and the failure surfaces later as a confusing `RangeError` from `encodeBleFrame` about \"BLE payload needs at most 17 bytes\" rather than telling the caller the zone count is unsupported. Validate the zone count / payload size here up front (same concern applies to `bleMaskedBrightness` and `blePerZoneBrightness`).",
+   "existing_code": "  const payload = new Uint8Array(2 + 3 + 1 + 3 + mask.length);",
+   "start_line": 184,
+   "end_line": 184,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/ble/src/commands.ts",
+   "content": "These command codes duplicate `BLE_READ_CMD` in constants.ts, and the builders hardcode literals (0x01/0x04/0x05/0xa3, 0x0d, 0x15, 0x02, 0x02/0x90/0x83) even though `BLE_WRITE_CMD`, `BLE_COLOR_MODE` and `BLE_HOST_COLOR` exist for exactly this purpose. Two independent tables will drift; prefer a single source of truth so a code change cannot update one and miss the other.",
+   "existing_code": "export const BLE_READS = {\n  POWER: 0x01,",
+   "start_line": 239,
+   "end_line": 240,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ]
+}

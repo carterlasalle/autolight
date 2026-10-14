@@ -1,0 +1,270 @@
+{
+ "packages/serato/src/library.test.ts": [
+  {
+   "path": "packages/serato/src/library.test.ts",
+   "content": "The `changes` accumulator is fed by the `watcher.on(...)` listener but is never asserted anywhere in the test. Only the return value of `sweep()` is checked, so a regression where `LibraryWatcher.emit()` stops notifying subscribers (or notifies them with a wrong `invalidated` scope) would still let this test pass. Assert the collected pushes, e.g. `expect(changes).toEqual([[ 'audio-derived', 'model', 'native-analysis', 'plan', 'row' ], ['row']])`, or drop the unused accumulator if the callback contract is covered elsewhere.",
+   "existing_code": "    const changes: string[][] = [];\n    watcher.on((change) => changes.push(change.invalidated));",
+   "start_line": 172,
+   "end_line": 173,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/serato/src/library.test.ts",
+   "content": "The read-only invariant is only sampled on 3 of the 5 files the fixture writes: `Subcrates/Morning.crate` and `SmartCrates/Unknown Layout.scrate` are never hashed, so a reader that rewrites (or appends to) one of those crates would still leave this test green. Hash every file the fixture creates (walk the root, or at least include both crates and both scrates). Also `readSeratoSmartCrates(root)[0]` selects the crate by position rather than by name, coupling the assertion to sort order; select `Smart House.scrate` explicitly.",
+   "existing_code": "    const before = [sha256(dbPath), sha256(cratePath), sha256(scratePath)];",
+   "start_line": 195,
+   "end_line": 195,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/serato/src/library.test.ts",
+   "content": "`mergeSeratoRows` dedup is asserted only via length (1) using two identical inputs, so the precedence contract (\"keep the first row for a duplicate path\") is never exercised. A last-wins or field-dropping implementation would pass. Feed two roots that share a path but carry different field values and assert which row/fields survive.",
+   "existing_code": "    expect(deduped).toHaveLength(1);",
+   "start_line": 144,
+   "end_line": 144,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/serato/src/library.test.ts",
+   "content": "This byte-swap helper duplicates the `utf16be` encoder already defined in `./test-fixtures.ts` (with a slightly different loop bound). Two independent copies of the same endianness logic risk drifting apart \u2014 if the fixture encoder is fixed/changed, this expected-value helper would silently disagree. Export the fixture helper and reuse it here instead of re-implementing.",
+   "existing_code": "function utf16be(text: string): Buffer {",
+   "start_line": 53,
+   "end_line": 53,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/show-mixer/src/blackout.test.ts": [
+  {
+   "path": "packages/show-mixer/src/blackout.test.ts",
+   "content": "plannerBlackout() executes at module load: it reads `real-track-1.trackmodel.json` from disk and throws if the planner no longer emits a fake-drop blackout. A renamed/moved fixture or any planner change aborts the entire file during collection, so every spec in this file fails with an opaque collection error and there is no per-test isolation or diagnostics. Make the fixture load lazy (or move it into `beforeAll`) so a failure is attributed to a single test and the other tests can still run.",
+   "suggestion_code": "let blackoutCue: ShowCue;\nbeforeAll(() => {\n  blackoutCue = plannerBlackout();\n});",
+   "existing_code": "const blackoutCue = plannerBlackout();",
+   "start_line": 32,
+   "end_line": 32,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-mixer/src/blackout.test.ts",
+   "content": "blackoutOut() accepts either a `blackout` or a `dip` and returns the first match, while every assertion uses `toMatchObject` (subset match). As a result a broken translation that emits the wrong cue type, or that leaks an extra fallback dip/blackout alongside the real one, can still satisfy the assertions and hide the regression. Assert the exact expected type at each call site and assert the result contains exactly one exclusive cue rather than accepting any blackout/dip.",
+   "existing_code": "  const kept = result.cues.find((c) => c.type === \"blackout\" || c.type === \"dip\");",
+   "start_line": 52,
+   "end_line": 52,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-mixer/src/blackout.test.ts",
+   "content": "Asserting on `decision.reason` wording and number formatting (`toContain(\"0.80\")`, `toMatch(/otherDeckThreshold/)`) couples the test to the implementation's strings and to `Number.toFixed(2)` rather than to behavior. A purely cosmetic message change turns the test red, while a wrong translation that happens to reuse the same words/format would still pass. Prefer asserting on `translated`, `policy` and the resulting cue (partially done already) and drop the string coupling.",
+   "existing_code": "    expect(decision.reason).toContain(\"0.80\");",
+   "start_line": 110,
+   "end_line": 110,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-mixer/src/blackout.test.ts",
+   "content": "This loop only asserts `target !== \"SIDE\"`. Since the DS-18 translation no longer produces a \"SIDE\" target for any mode, the assertion is always true and provides no coverage (a tautological/dead assertion). Replace it with an explicit expectation of the target/type each mode should produce, or remove the loop.",
+   "existing_code": "    for (const mode of [\"full\", \"deck-spatial-dip\", \"deck-side-blackout\", \"global-partial-dip\"] as BlackoutPolicy[]) {\n      expect(blackoutOut(mixWith(0.8, mode)).target).not.toBe(\"SIDE\");\n    }",
+   "start_line": 78,
+   "end_line": 80,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-mixer/src/blackout.test.ts",
+   "content": "The `structural` flag only toggles a synthetic build-ramp on BOTH decks, so `self` and `other` always resolve to the same value (\"pre-drop\" or null). The test therefore cannot distinguish the documented `self === other` rule from a broken `self !== null && other !== null` rule: e.g. a case with `self = \"section-end\"` and `other = \"pre-drop\"` would still return \"full\" and pass. Add a case where the two decks differ structurally (one has a build-ramp/section-end, the other is null) and assert it does NOT collapse to a full blackout.",
+   "existing_code": "    expect(blackoutOut(mixWith(0.8, \"auto\", true))).toMatchObject({ type: \"blackout\", target: \"ALL\" });",
+   "start_line": 84,
+   "end_line": 84,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-mixer/src/blackout.test.ts",
+   "content": "The exact `mixer.blackout.otherDeckThreshold` boundary (default 0.3) is never exercised: values 0.1 (below) and 0.4/0.6/0.8 (above) leave the `<` comparison in `blackoutDecision` unpinned. Changing `otherWeight < threshold` to `<=` (or the auto thresholds to strict comparison) keeps the whole suite green. Add a decision/mix case at exactly `otherWeight === threshold` (and threshold \u00b1 epsilon) so the boundary is pinned.",
+   "existing_code": "    const result = mixWith(0.1, \"auto\");",
+   "start_line": 95,
+   "end_line": 95,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/show-planner/src/cache.test.ts": [
+  {
+   "path": "packages/show-planner/src/cache.test.ts",
+   "content": "The cache-key test only perturbs `styleHash`; it never asserts that `fingerprint`, `plannerVersion`, `venueHash`, or `configHash` influence the key. A `cacheKeyFor` that silently dropped, say, `plannerVersion`/`configHash` (a real determinism/correctness regression) would still pass this test because the base call and the perturbed call remain different. Assert pairwise that changing each of the five inputs changes the key (and that equal keys are stable).",
+   "suggestion_code": "    for (const field of [\"fingerprint\", \"plannerVersion\", \"styleHash\", \"venueHash\", \"configHash\"] as const) {\n      expect(cacheKeyFor({ ...key, [field]: \"other\" })).not.toBe(cacheKeyFor(key));\n    }\n    expect(cacheKeyFor({ ...key })).toBe(cacheKeyFor(key));",
+   "existing_code": "    expect(cacheKeyFor({ ...key, styleHash: \"other\" })).not.toBe(cacheKeyFor(key));",
+   "start_line": 60,
+   "end_line": 60,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/cache.test.ts",
+   "content": "This smoke test only asserts wall-clock time; it never inspects the returned result. It can therefore pass even when `compileShow` returns an empty/broken plan, and it can fail spuriously on a slow or contended CI machine because it measures absolute elapsed time against `compileBudgetMs`. Assert on the returned plan (e.g. `plan.cues.length > 0` and deterministic output across two runs) and, if timing must be checked, allow a generous margin rather than the production budget.",
+   "suggestion_code": "    const result = compileShow({ track: model(\"perf\"), venue: DEFAULT_VENUE_CLASS, style: BUILT_IN_STYLES[\"club\"]!, config: DEFAULT_CONFIG });\n    const ms = performance.now() - t0;\n    expect(result.plan.cues.length).toBeGreaterThan(0);\n    expect(ms).toBeLessThan(DEFAULT_CONFIG.compileBudgetMs * 10);",
+   "existing_code": "    const ms = performance.now() - t0;\n    expect(ms).toBeLessThan(DEFAULT_CONFIG.compileBudgetMs);",
+   "start_line": 70,
+   "end_line": 71,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/cache.test.ts",
+   "content": "The splice test uses range [32, 64) whose start (32) and interior (40) exactly coincide with existing cue starts, and it inserts a single fresh cue at 33. This leaves the key semantics unverified: whether a cue exactly at `start` is dropped (inclusive) vs kept, whether a cue exactly at `end` is kept, and whether zero/multiple fresh cues are handled. Since `spliceSection` is used for incremental recompile, a boundary bug here can silently drop or retain cues. Add cases for a cue sitting exactly on `start`/`end`, multiple fresh cues, and an empty `fresh` array.",
+   "suggestion_code": "    const out = spliceSection(cues, 32, 64, [{ startBeat: 33 }]);\n    expect(out.map((c) => c.startBeat).sort((a, b) => a - b)).toEqual([0, 8, 33]);\n    // cue exactly on the range boundary is replaced, cue exactly on end is kept\n    expect(spliceSection([{ startBeat: 32 }, { startBeat: 64 }], 32, 64, []).map((c) => c.startBeat)).toEqual([64]);\n    // multiple fresh cues are inserted and sorted\n    expect(spliceSection(cues, 32, 64, [{ startBeat: 50 }, { startBeat: 33 }]).map((c) => c.startBeat)).toEqual([0, 8, 33, 50]);",
+   "existing_code": "    const out = spliceSection(cues, 32, 64, [{ startBeat: 33 }]);\n    expect(out.map((c) => c.startBeat).sort((a, b) => a - b)).toEqual([0, 8, 33]);",
+   "start_line": 64,
+   "end_line": 65,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-planner/src/cache.test.ts",
+   "content": "The fixture is force-cast with `as TrackModel`, which suppresses contract/schema checking. If the model shape drifts (e.g. a renamed or removed field such as `analysisCoverage2`, or a `beatGrid`/`sections` schema change), the test keeps compiling and passing against an invalid model, so it no longer reflects what `compileShow` actually receives at runtime. Prefer a typed literal (`const m: TrackModel = {...}`) so the compiler validates the fixture, or validate it against the runtime schema before use.",
+   "existing_code": "  } as TrackModel;",
+   "start_line": 49,
+   "end_line": 49,
+   "category": "test",
+   "severity": "medium"
+  }
+ ],
+ "packages/show-planner/src/hierarchy.test.ts": [
+  {
+   "path": "packages/show-planner/src/hierarchy.test.ts",
+   "content": "The test title claims it \"covers all six levels\", but the asserted list only contains five of the six levels defined by `CUE_LEVELS` in `types.ts` (`track`, `section`, `phrase`, `bar`, `beat`, `sub-beat`) \u2014 `track` is missing. As written the test passes even if a whole level regressed, so the assertion does not match its stated intent. Either add `\"track\"` to the list (and ensure the fixture actually emits a `track`-level cue) or correct the test name.",
+   "suggestion_code": "    for (const l of [\"track\", \"section\", \"phrase\", \"bar\", \"beat\", \"sub-beat\"] as const) {",
+   "existing_code": "    for (const l of [\"section\", \"phrase\", \"bar\", \"beat\", \"sub-beat\"] as const) {",
+   "start_line": 138,
+   "end_line": 138,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/hierarchy.test.ts",
+   "content": "These fixtures/values are forced through `as TrackModel` / `as typeof plan` / `as unknown as TrackModel` casts, which disable structural checking. If `TrackModel`/`Plan`/the contracts schema gains, renames, or re-types a required field, these files keep compiling while exercising a shape the real pipeline no longer produces, so schema drift is silently absorbed. Build typed fixtures (or validate them with `trackModelSchema`/the contracts schema) instead of asserting the type away.",
+   "existing_code": "    } as typeof plan;",
+   "start_line": 167,
+   "end_line": 167,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/hierarchy.test.ts",
+   "content": "`wideTrack()` / this fixture duplicates almost the entire `futureTrack()`/earlier fixture body (beatGrid, `analysisCoverage2.inputs`, warnings, features, phrases); only a few fields differ. Extract a shared factory such as `makeTrackModel({ beatGridLength, sections, musicalEvents })` and override only the differing fields so schema changes are applied once and tests stay in sync.",
+   "existing_code": "function wideTrack(): TrackModel {",
+   "start_line": 56,
+   "end_line": 56,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/hierarchy.test.ts",
+   "content": "The monotonicity assertion allows a 0.05 downward step (`intensity - 0.05`), so a build ramp that decreases by up to 0.05 per step still passes despite the title claiming \"increasing density\". Combined with the exact `toBe(257)` magic beat, the assertion is both permissive (lets a non-increasing ramp pass) and brittle (hardcoded beat constants couple the test to production values). Consider asserting strict non-decreasing intensity (`ramps[i]!.intensity >= ramps[i - 1]!.intensity`) and deriving the boundary beats from the fixture's section bounds instead of literals.",
+   "existing_code": "      expect(ramps[i]!.intensity).toBeGreaterThanOrEqual(ramps[i - 1]!.intensity - 0.05);",
+   "start_line": 120,
+   "end_line": 120,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/storage/package.json": [
+  {
+   "path": "packages/storage/package.json",
+   "content": "`@autolight/contracts` is a genuine RUNTIME dependency, not a build-time one. Non-test sources import its Zod schemas as values and call them at runtime: `packages/storage/src/validation.ts` (`beatGridSchema.safeParse`, `fixtureSchema.safeParse`, `trackModelSchema.safeParse`, `showPlanSchema.safeParse`) and `packages/storage/src/fastpath.ts` (`trackModelSchema.parse`, `showPlanSchema.parse`), and both modules are re-exported from `index.ts`. Declaring it only under `devDependencies` means a consumer that installs the built `@autolight/storage` will not receive `@autolight/contracts`, so these imports fail at runtime (MODULE_NOT_FOUND). Move it into a `dependencies` block (the sibling package `@autolight/contracts/package.json` already follows this pattern for its runtime deps such as `zod`). The remaining `@autolight/*` entries (dj-core, govee, ipc, renderer, simulator) are only referenced by *.test.ts files, so keeping those in devDependencies is correct.",
+   "suggestion_code": "  \"dependencies\": {\n    \"@autolight/contracts\": \"^0.1.0\"\n  },\n  \"devDependencies\": {\n    \"@autolight/dj-core\": \"^0.1.0\",",
+   "existing_code": "    \"@autolight/contracts\": \"^0.1.0\",",
+   "start_line": 14,
+   "end_line": 14,
+   "category": "bug",
+   "severity": "high"
+  }
+ ],
+ "packages/storage/src/driver.ts": [
+  {
+   "path": "packages/storage/src/driver.ts",
+   "content": "In `auto` mode, when better-sqlite3 loads but fails to open, this fallback open is not wrapped in try/catch. If `node:sqlite` also fails to open (e.g. the same bad path or permission error \u2014 see the `/` case in driver.test.ts), the error that escapes is the raw node:sqlite error and the `fallbackReason` just computed is silently dropped, so the caller never learns why better-sqlite3 was abandoned. Chain the original cause into the fallback failure.",
+   "suggestion_code": "      fallbackReason = `better-sqlite3 open failed: ${(error as Error).message}`;\n      try {\n        driver = openNodeSqlite(path);\n      } catch (fallbackError) {\n        throw new Error(`${fallbackReason}; node-sqlite open also failed: ${(fallbackError as Error).message}`);\n      }",
+   "existing_code": "      fallbackReason = `better-sqlite3 open failed: ${(error as Error).message}`;\n      driver = openNodeSqlite(path);",
+   "start_line": 204,
+   "end_line": 205,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/storage/src/driver.ts",
+   "content": "The `||` fallbacks (here and on the `busy_timeout` read-back below) silently substitute the *requested* value whenever the pragma read-back is empty. That means a failed/empty read-back is reported as if the setting was applied, directly contradicting this module's stated contract that \"every pragma read-back are reported as visible status ... instead of being assumed\" \u2014 a mis-applied pragma becomes undetectable. Note also that `syncName(\"\")` returns \"OFF\" because `Number(\"\") === 0`. Distinguish an empty/missing read-back from a real value and surface it (throw or report \"unknown\") rather than defaulting to the request.",
+   "existing_code": "    const synchronous = syncName(pragmaValue(driver, \"synchronous\") || syncRaw);",
+   "start_line": 233,
+   "end_line": 233,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/storage/src/driver.ts",
+   "content": "Two problems with the probe: (1) `probeCache` memoizes the load result for the whole process lifetime with no way to invalidate, so a transient load failure (native module rebuilt/installed or a path that becomes loadable after the first probe) permanently pins the process to the node:sqlite fallback; (2) truncating to `message.split(\"\\n\")[0]` discards the require-stack line that normally carries the root cause (ABI mismatch, missing .node, wrong architecture), so the `fallbackReason` surfaced as P-80 evidence can hide the actual reason. Keep the full/last cause line and allow a forced re-probe.",
+   "existing_code": "    const detail = ((error as Error).message.split(\"\\n\")[0] ?? \"\").trim() || \"module did not load\";",
+   "start_line": 82,
+   "end_line": 82,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/storage/src/driver.ts",
+   "content": "Both adapters call `db.prepare(sql)` on every `get`/`all`/`run`, so each invocation re-parses/compiles the SQL. Hot paths such as `Store.saveArtifact` (two `run` calls per row) and per-row lookups pay this cost repeatedly. Consider caching prepared statements per SQL string for each driver. Relatedly, `run` discards the affected-row count / `lastInsertRowid` that both drivers expose; that information is currently unavailable to callers that might later need it.",
+   "existing_code": "    get: <T,>(sql: string, params: readonly SqlParam[] = []) => db.prepare(sql).get(...params) as T | undefined,",
+   "start_line": 118,
+   "end_line": 118,
+   "category": "performance",
+   "severity": "low"
+  }
+ ],
+ "packages/storage/src/keys.test.ts": [
+  {
+   "path": "packages/storage/src/keys.test.ts",
+   "content": "Both rejection cases use a bare `toThrow()`, which passes on *any* thrown error (e.g. an unrelated TypeError from a bad refactor). It also fails to distinguish the empty path from the whitespace-only path, so a regression that trimmed differently for `\"   \"` would go undetected. Assert the concrete error contract instead.",
+   "suggestion_code": "    expect(() => normalizeTrackId(\"\")).toThrow(/empty TrackId/);\n    expect(() => normalizeTrackId(\"   \")).toThrow(/empty TrackId/);",
+   "existing_code": "    expect(() => normalizeTrackId(\"\")).toThrow();\n    expect(() => normalizeTrackId(\"   \")).toThrow();",
+   "start_line": 7,
+   "end_line": 8,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/storage/src/keys.test.ts",
+   "content": "The distinctness check only asserts both labels contain the title and differ from each other. `uniqueTrackLabels` is documented to disambiguate \"with artist, then an id suffix\", but the test never verifies the artist is present. A degenerate implementation that returned `title + <random unique suffix>` (dropping the artist entirely) would still pass. Assert the disambiguating content.",
+   "suggestion_code": "    expect(a).toContain(\"Same Title\");\n    expect(b).toContain(\"Same Title\");\n    expect(a).toContain(\"A\");\n    expect(b).toContain(\"B\");\n    expect(a).not.toBe(b);",
+   "existing_code": "    expect(a).toContain(\"Same Title\");\n    expect(b).toContain(\"Same Title\");\n    expect(a).not.toBe(b);",
+   "start_line": 30,
+   "end_line": 32,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/storage/src/keys.test.ts",
+   "content": "These assertions are a weak oracle: the stored plan JSON already embeds the track id, so `toContain(trackId)` mainly re-checks the round-tripped string rather than the cache key. Additionally `seed` and `sourceFingerprint` are passed to `saveShowPlan` but never verified, so a bug that dropped/misordered those columns would pass unnoticed. Assert the exact returned value and verify the stored key dimensions (e.g. via `store.planRow`).",
+   "suggestion_code": "    const planA = store.loadShowPlan(\"track-aaa-1\", \"club\", \"p1\");\n    const planB = store.loadShowPlan(\"track-bbb-2\", \"club\", \"p1\");\n    expect(planA).toBe('{\"trackId\":\"track-aaa-1\"}');\n    expect(planB).toBe('{\"trackId\":\"track-bbb-2\"}');\n    expect(planA).not.toBe(planB);\n    expect(store.planRow({ trackId: \"track-aaa-1\", styleId: \"club\", plannerVersion: \"p1\", styleHash: \"\", venueClass: \"\", configHash: \"\" })?.source_fingerprint).toBe(\"fp-a\");",
+   "existing_code": "    expect(store.loadShowPlan(\"track-aaa-1\", \"club\", \"p1\")).toContain(\"track-aaa-1\");\n    expect(store.loadShowPlan(\"track-bbb-2\", \"club\", \"p1\")).toContain(\"track-bbb-2\");",
+   "start_line": 50,
+   "end_line": 51,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/storage/src/keys.test.ts",
+   "content": "The `Store` opens a native SQLite handle but is never closed. Even for `:memory:` this leaks the connection/handle for the lifetime of the test worker and, if the store is ever switched to a file path, can leave locks or contaminate later tests. Close it in a `finally`/`afterEach`.",
+   "suggestion_code": "    const store = new Store();\n    try {",
+   "existing_code": "    const store = new Store();",
+   "start_line": 41,
+   "end_line": 41,
+   "category": "test",
+   "severity": "low"
+  }
+ ]
+}

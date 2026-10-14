@@ -1,0 +1,443 @@
+{
+ "packages/show-planner/src/corrections.ts": [
+  {
+   "path": "packages/show-planner/src/corrections.ts",
+   "content": "Both branches of the pinned-cue reconciliation increment `applied`, so a pinned cue whose ID is no longer present in the plan is still counted as applied and is never added to `noLongerApply`. This silently hides lost pin edits after a planner upgrade (the exact thing this function is meant to surface) and inflates `applied`. The two branches are effectively dead code because they do the same thing.",
+   "suggestion_code": "  for (const p of edits.pinnedCues) {\n    if (ids.has(p.id)) applied++;\n    else noLongerApply.push(`pinned ${p.id} no longer in plan`);\n  }",
+   "existing_code": "    if (ids.has(p.id)) applied++;\n    else applied++;",
+   "start_line": 82,
+   "end_line": 83,
+   "category": "bug",
+   "severity": "critical"
+  },
+  {
+   "path": "packages/show-planner/src/corrections.ts",
+   "content": "The pinned filter only excludes IDs already in `keptIds`, never IDs produced by the newly generated `fresh` cues. Because cue IDs are deterministic (`seed:section:level:ordinal`), a pinned cue can carry the same ID as a fresh cue that survives the filter above, so the returned `cues` array contains two cues with an identical ID. Downstream consumers keying by ID would then lose or corrupt one of them. Exclude fresh IDs (or fold the pinned cues into the same dedupe set) before appending.",
+   "suggestion_code": "  const freshIds = new Set(fresh.map((c) => c.id));\n  const pinned = input.edits.pinnedCues.filter(\n    (c) => !deleted.has(c.id) && !keptIds.has(c.id) && !freshIds.has(c.id),\n  );",
+   "existing_code": "  const pinned = input.edits.pinnedCues.filter((c) => !deleted.has(c.id) && !keptIds.has(c.id));",
+   "start_line": 56,
+   "end_line": 56,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/show-planner/src/corrections.ts",
+   "content": "This coverage predicate is inconsistent with `inLockedRegion`, which is the predicate actually used by `regenerateWithLocks`. Coverage here only checks the cue's `startBeat` against the half-open range `[startBeat, endBeat)`, whereas `inLockedRegion` requires the cue's full span (`startBeat + durationBeats <= r.endBeat`). As a result a lock can be reported as `applied` by `applyEdits` even though regeneration would not preserve any cue in it. Additionally, `cues` still contains cues listed in `edits.deletedCueIds`, so a region that only covers deleted cues is also (mis)reported as applying. Align the containment test with `inLockedRegion` and ignore deleted cue IDs.",
+   "suggestion_code": "    const covered = cues.some(\n      (c) =>\n        !deleted.has(c.id) &&\n        c.startBeat >= r.startBeat &&\n        c.startBeat + c.durationBeats <= r.endBeat,\n    );",
+   "existing_code": "    const covered = cues.some((c) => c.startBeat >= r.startBeat && c.startBeat < r.endBeat);",
+   "start_line": 86,
+   "end_line": 86,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/show-planner/src/hierarchy.ts": [
+  {
+   "path": "packages/show-planner/src/hierarchy.ts",
+   "content": "`Array.prototype.find` returns the FIRST matching build event in array iteration order, not the nearest preceding one, so `buildStart` may resolve to an unrelated/earlier stage. Additionally, the separate `predrop` lookup below is dead: any predrop that satisfies the fallback predicate (`type === \"predrop\" && beat <= ev.beat && beat >= ev.beat - 4`) also satisfies the build predicate above (a predrop matches the type check, and `b.beat + 8 >= ev.beat - 4`), so `build` can never be null in that case and `predrop?.beat` is unreachable. Select the latest qualifying event instead of the first, and drop the redundant predrop lookup.",
+   "suggestion_code": "    const build = track.musicalEvents\n      .filter(\n        (b) =>\n          (b.type === \"build-start\" || b.type === \"predrop\" || b.type === \"build-intensification\") &&\n          b.beat <= ev.beat &&\n          (b.endBeat ?? b.beat + 8) >= ev.beat - 4,\n      )\n      .reduce<(typeof track.musicalEvents)[number] | undefined>(\n        (latest, b) => (latest === undefined || b.beat > latest.beat ? b : latest),\n        undefined,\n      );",
+   "existing_code": "    const build = track.musicalEvents.find(\n      (b) =>\n        (b.type === \"build-start\" || b.type === \"predrop\" || b.type === \"build-intensification\") &&\n        b.beat <= ev.beat &&\n        (b.endBeat ?? b.beat + 8) >= ev.beat - 4,\n    );",
+   "start_line": 94,
+   "end_line": 99,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/hierarchy.ts",
+   "content": "With `periodBeats <= 0` this loop never terminates: `b` starts at `sectionStart + periodBeats` and is never advanced past `sectionEnd` (adding 0 keeps `b` constant; adding a negative value moves `b` backwards). The result is an infinite loop / unbounded cue array. Add a guard for non-positive periods.",
+   "suggestion_code": "  if (periodBeats <= 0) return [];\n  const cues: HierarchyCue[] = [];\n  for (let b = sectionStart + periodBeats; b < sectionEnd; b += periodBeats) {",
+   "existing_code": "  const cues: HierarchyCue[] = [];\n  for (let b = sectionStart + periodBeats; b < sectionEnd; b += periodBeats) {",
+   "start_line": 179,
+   "end_line": 180,
+   "category": "bug",
+   "severity": "critical"
+  },
+  {
+   "path": "packages/show-planner/src/hierarchy.ts",
+   "content": "The duty-cycle gate is bypassed when `strobeFrequency > 2`: the emit probability is `strobeFrequency * 0.5`, and `rand()` is in [0, 1), so `rand() >= strobeFrequency * 0.5` is always false and every call emits a strobe-burst, silently ignoring the caller-provided duty allowance the comment claims to honor. Clamp/validate the duty so it cannot exceed 1, or document that frequency must be <= 2.",
+   "suggestion_code": "  const duty = Math.min(1, strobeFrequency * 0.5);\n  if (strobeFrequency <= 0 || rand() >= duty) return [];",
+   "existing_code": "  if (strobeFrequency <= 0 || rand() >= strobeFrequency * 0.5) return [];",
+   "start_line": 227,
+   "end_line": 227,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/hierarchy.ts",
+   "content": "`stageLen = span / stages` is generally fractional, so every build-ramp `startBeat`/`durationBeats` lands off the beat grid. This can break downstream timing/validator assumptions that cues are beat-aligned (and stages may not match the declared 4-beat cadence). Round the stage length/boundaries to integer beats.",
+   "suggestion_code": "  const stageLen = Math.max(1, Math.round(span / stages));",
+   "existing_code": "  const stageLen = span / stages;",
+   "start_line": 120,
+   "end_line": 120,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/hierarchy.ts",
+   "content": "The doc comment says pulses fire on \"every beat\", but the loop advances by 2 (`b += 2`), emitting a pulse only every other beat. Either the comment or the step is wrong; align the code with the stated intent (use `b += 1`) or correct the comment.",
+   "suggestion_code": "  for (let b = sectionStart; b < sectionEnd; b += 1) {",
+   "existing_code": "  for (let b = sectionStart; b < sectionEnd; b += 2) {",
+   "start_line": 205,
+   "end_line": 205,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-planner/src/hierarchy.ts",
+   "content": "`CUE_LEVEL_ATTRIBUTES` restates attribute subsets that must remain consistent with `LEVEL_ATTRIBUTES`, but this invariant is only documented in comments. A typo or future edit (cue attr not in its level's attributes, or a level/type mismatch) will silently make the validator accept/reject the wrong changes. Add a runtime or test-time assertion that each cue's attrs are a subset of `LEVEL_ATTRIBUTES[level]`.",
+   "existing_code": "export const LEVEL_ATTRIBUTES: Record<HierarchyLevel, readonly string[]> = {",
+   "start_line": 14,
+   "end_line": 14,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "analysis/src/autolight_analysis/config_schema.json": [
+  {
+   "path": "analysis/src/autolight_analysis/config_schema.json",
+   "content": "Root schema only declares `type: object` + a `properties` map and never sets `additionalProperties: false`, while every real contract (enums and numeric ranges) exists only in prose `description`. Consequences: (a) misspelled/unknown config keys are silently accepted instead of being rejected (the very spelling risk this file's review targets); (b) clearly invalid values such as `runtime.clock.tickHz: 10000` or `runtime.host: \"banana\"` pass validation. Add `additionalProperties: false` (or `patternProperties`) and promote the documented enums/ranges to `enum`/`minimum`/`maximum`.",
+   "existing_code": "  \"title\": \"autolight-config\",",
+   "start_line": 3,
+   "end_line": 3,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/config_schema.json",
+   "content": "The default `\"\\\"\\\" (none)\"` is a human-readable sentinel (it literally contains quote characters and a parenthetical), not a usable device id. Any layer that applies schema defaults verbatim will set the capture device id to the literal string `\"\" (none)`. Use the empty string or `null` as the default.",
+   "suggestion_code": "    \"audio.capture.deviceId\": {\n      \"type\": \"string\",\n      \"default\": \"\",",
+   "existing_code": "    \"audio.capture.deviceId\": {\n      \"type\": \"string\",\n      \"default\": \"\\\"\\\" (none)\",",
+   "start_line": 417,
+   "end_line": 419,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/config_schema.json",
+   "content": "Intended value is a boolean (description says `bool [spec 110]`, and the sibling `analysis.ml.enabled` is `boolean`), but `type` is `string` and the default is prose `\"true during Live\"`. Validation accepts any string and consumers expecting a boolean receive a string. Declare `type: boolean` with default `true`.",
+   "suggestion_code": "    \"analysis.ml.offlineOnly\": {\n      \"type\": \"boolean\",\n      \"default\": true,",
+   "existing_code": "    \"analysis.ml.offlineOnly\": {\n      \"type\": \"string\",\n      \"default\": \"true during Live\",",
+   "start_line": 506,
+   "end_line": 508,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/config_schema.json",
+   "content": "Keepalive is a millisecond duration (0 = disabled) but the property is typed `string` with default `\"0 (off)\"`. A consumer expecting a number of milliseconds gets a non-numeric string. Use `type: number` with default `0`.",
+   "suggestion_code": "    \"govee.lan.stream.keepaliveMs\": {\n      \"type\": \"number\",\n      \"default\": 0,",
+   "existing_code": "    \"govee.lan.stream.keepaliveMs\": {\n      \"type\": \"string\",\n      \"default\": \"0 (off)\",",
+   "start_line": 723,
+   "end_line": 725,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/config_schema.json",
+   "content": "`colorQuantizeLevels` is a per-channel count (0 = off) but is typed `string` with default `\"0 (off)\"`. Use `type: number` with default `0` so numeric consumers are not handed a string.",
+   "suggestion_code": "    \"govee.ble.colorQuantizeLevels\": {\n      \"type\": \"number\",\n      \"default\": 0,",
+   "existing_code": "    \"govee.ble.colorQuantizeLevels\": {\n      \"type\": \"string\",\n      \"default\": \"0 (off)\",",
+   "start_line": 793,
+   "end_line": 795,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/config_schema.json",
+   "content": "`flx4.hints.enabled` is described as a `list` of hint types but is typed `string` with the prose default `\"all hint types\"`. Any consumer that iterates the enabled hints as a list will receive a string and silently iterate characters / fail. Type it as `array` (with `items`) or `boolean`, with a concrete default.",
+   "existing_code": "    \"flx4.hints.enabled\": {\n      \"type\": \"string\",\n      \"default\": \"all hint types\",",
+   "start_line": 1055,
+   "end_line": 1057,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/config_schema.json",
+   "content": "`neverDuringLive` describes a boolean invariant (`read-only invariant`) but is typed `string`. A consumer checking a boolean guard will never match this string and the invariant will not be enforced. Declare `type: boolean` with default `true`.",
+   "suggestion_code": "    \"update.neverDuringLive\": {\n      \"type\": \"boolean\",\n      \"default\": true,",
+   "existing_code": "    \"update.neverDuringLive\": {\n      \"type\": \"string\",\n      \"default\": \"read-only invariant\",",
+   "start_line": 1260,
+   "end_line": 1262,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/config_schema.json",
+   "content": "The default `\"[] (all eligible)\"` is a string sentinel, not the empty-array value the description implies. A consumer reading `interfaces` as an array will get a string. Use `default: []` with `type: array` and `items: { type: string }`.",
+   "existing_code": "    \"govee.lan.interfaces\": {",
+   "start_line": 646,
+   "end_line": 646,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/config_schema.json",
+   "content": "Same defect as `govee.lan.interfaces`: default `\"[] (all eligible)\"` is a string, not an array; consumers expecting a list of interface names will receive a string. Use `default: []` with `type: array` / `items: { type: string }`.",
+   "existing_code": "    \"live.prolink.interfaces\": {",
+   "start_line": 989,
+   "end_line": 989,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/config_schema.json",
+   "content": "The default is a stringified map (`\"{ weight: 1, ... }\"`), not a JSON object; consumers expecting a map will receive an unparseable string. The same stringified-map-as-default anti-pattern appears for `planner.sectionEnergy`, `planner.evaluation.bounds`, `analysis.bands`, `planner.events.minConfidence`, `qa.events.minRecall` and `qa.events.minPrecision`. Replace these with real object/array defaults (and pin the type accordingly).",
+   "existing_code": "    \"mixer.owner.factorWeights\": {",
+   "start_line": 217,
+   "end_line": 217,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/config_schema.json",
+   "content": "`<fixtureId>` is literal text inside the JSON object key, so no real per-device key (e.g. `govee.device.H61A0.transportMode`) will ever match this property; per-device overrides are therefore never validated (same for `govee.device.<fixtureId>.transportOrder`). Model this with `patternProperties` (e.g. `^govee\\.device\\..+\\.transportMode$`) or a nested `govee.device` object schema.",
+   "existing_code": "    \"govee.device.<fixtureId>.transportMode\": {",
+   "start_line": 843,
+   "end_line": 843,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/config_schema.json",
+   "content": "`*` is literal in the key, so per-shortcut entries like `ui.shortcuts.blackout` can never match this property and go unvalidated. The same applies to `qa.faults.*`. Use `patternProperties` (e.g. `^ui\\.shortcuts\\.`) so the real dynamic keys are covered.",
+   "existing_code": "    \"ui.shortcuts.*\": {",
+   "start_line": 1265,
+   "end_line": 1265,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/serato/src/index.ts": [
+  {
+   "path": "packages/serato/src/index.ts",
+   "content": "Silent truncation contradicts the documented contract (\"Throws on bad magic so corrupt crates fail loudly\"). A crate whose final `otrk`/`otrk`-sub-row length extends past the buffer is silently dropped, so trailing crate entries are lost without any error \u2014 a caller cannot distinguish a valid short crate from a truncated/corrupt one. Throw on overrun instead of `break`.",
+   "suggestion_code": "    if (o + len > buf.length) throw new Error(`crate entry truncated at ${o}: len=${len} exceeds buffer ${buf.length}`);",
+   "existing_code": "    if (o + len > buf.length) break;",
+   "start_line": 28,
+   "end_line": 28,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/serato/src/index.ts",
+   "content": "Same silent data loss for `ptrk` sub-rows: a truncated path row is dropped and the remaining rows are skipped, so a partially corrupt `otrk` yields an incomplete path list with no error. Fail loudly here too.",
+   "suggestion_code": "        if (j + il > o + len) throw new Error(`ptrk truncated at ${j}: len=${il} exceeds otrk bounds`);",
+   "existing_code": "        if (j + il > o + len) break;",
+   "start_line": 35,
+   "end_line": 35,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/serato/src/index.ts",
+   "content": "The marker count is read from a single byte. The reference layout is version `01 00` (2 bytes) followed by a **u32 BE** marker count, so the count occupies offsets 2..5; taking only `payload[5]` reads the low byte and silently misreads any grid with more than 255 markers, making the `6 + count * 8` bound check and the parse loop operate on the wrong count. Read the full u32 and also validate the second version byte.",
+   "suggestion_code": "  if (payload[1] !== 0x00) throw new Error(`beatgrid version low byte=${payload[1]}, expected 0`);\n  const count = v.getUint32(2, false);",
+   "existing_code": "  const count = payload[5]!;",
+   "start_line": 97,
+   "end_line": 97,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/serato/src/index.ts",
+   "content": "Every marker is decoded as `(f32 position, f32 BPM)`, but the BeatGrid format encodes non-terminal markers as `(f32 position, u32 beats-to-next)`; only the terminal marker is `(f32 position, f32 BPM)`. Interpreting the beats-to-next field as a float BPM yields garbage tempo values for every non-terminal marker, so multi-marker/variable-tempo grids are misdecoded.",
+   "existing_code": "    out.push({\n      startSeconds: v.getFloat32(6 + i * 8, false),\n      bpm: v.getFloat32(10 + i * 8, false),",
+   "start_line": 101,
+   "end_line": 103,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/serato/src/index.ts",
+   "content": "`60 / r.bpm` produces `Infinity`/`NaN` when `bpm` is 0 (or non-finite). For `i > 0`, `i * Infinity` is `Infinity`, and `0 * Infinity` is `NaN`, so `sourceTimeMs` becomes `Infinity`/`NaN` and `count` collapses to 1 regardless of region length. Since `parseBeatGrid` accepts any float (including 0/NaN/Infinity) as BPM, validate `bpm > 0 && Number.isFinite(bpm)` before computing beats and skip/reject invalid regions.",
+   "suggestion_code": "    const beatPeriod = 60 / r.bpm;\n    if (!Number.isFinite(r.bpm) || r.bpm <= 0 || !Number.isFinite(beatPeriod)) return;\n    const count = Math.max(1, Math.round(regionLen / beatPeriod));",
+   "existing_code": "    const count = Math.max(1, Math.round(regionLen / (60 / r.bpm)));",
+   "start_line": 115,
+   "end_line": 115,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/serato/src/index.ts",
+   "content": "For the final region (`nextStart === undefined`) the length is hardcoded to 4 beats (`60 / bpm * 4`), so the beat list always stops 4 beats after the last tempo marker instead of running to the end of the track. Downstream anchoring for anything past that point is missing. The total track duration/length needs to be passed in (or the last region extended to it) rather than assuming a 4-beat tail.",
+   "existing_code": "    const regionLen = nextStart !== undefined ? nextStart - r.startSeconds : 60 / r.bpm * 4;",
+   "start_line": 114,
+   "end_line": 114,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/serato/src/index.ts",
+   "content": "The coalescing comment states stale loop/fader values reset on track change unless re-asserted, but only `loop` is reset. `channelFader`/`crossfader` are passed through unconditionally, so a track change that does not re-assert faders carries the previous track's fader positions into the new `DeckState`. Reset both faders on `msg.trackChanged` as well (or include them in the same coalescing guard).",
+   "suggestion_code": "      channelFader: msg.trackChanged ? null : msg.channelFader,\n      crossfader: msg.trackChanged ? null : msg.crossfader,",
+   "existing_code": "      channelFader: msg.channelFader,\n      crossfader: msg.crossfader,",
+   "start_line": 79,
+   "end_line": 80,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "apps/desktop/electron/govee-lan.ts": [
+  {
+   "path": "apps/desktop/electron/govee-lan.ts",
+   "content": "Discovery broadcast rungs are sent from `this.replySock` (see `round()`), but SO_BROADCAST is only enabled on the separate send sockets in `openSenders`. Without `setBroadcast(true)` on the reply socket, sending to the directed/global broadcast addresses fails with EACCES, and the failure is swallowed by the `() => undefined` send callbacks, so the `broadcast` and `global` rungs silently never work. Enable broadcast on the reply socket (or route broadcast rungs through a send socket).",
+   "suggestion_code": "      // Broadcast rungs (directed + global) are emitted from this socket, so\n      // SO_BROADCAST must be enabled here as well; otherwise they fail with EACCES.\n      try {\n        sock.setBroadcast(true);\n      } catch { /* broadcast unavailable; multicast and unicast remain */ }\n      this.replySock = sock;",
+   "existing_code": "      this.replySock = sock;",
+   "start_line": 485,
+   "end_line": 485,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/electron/govee-lan.ts",
+   "content": "The registry trusts the device-claimed IP (`ip = claimedIp ?? senderIp`) even when it differs from the reply's sender address, directly contradicting the warning text (\"trusting the sender\") and the issue-437 behavior. Commands then get routed to a stale/conflicting address, and `requestDevStatus`'s waiter (keyed on `entry.ip`/`ipHistory`) never matches the actual sender, so read-back times out. Use the sender address as authoritative when it disagrees with the claim.",
+   "suggestion_code": "    // govee2mqtt issue 437: the reply sender is authoritative; a mismatching\n    // claimed ip is only a conflict signal (counted in disagreeCount).\n    const ip = senderIp;\n    const inferred = claimedIp === null || claimedIp !== senderIp;",
+   "existing_code": "    const ip = claimedIp ?? senderIp;\n    const inferred = claimedIp === null;",
+   "start_line": 1847,
+   "end_line": 1848,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/electron/govee-lan.ts",
+   "content": "On a zone change `pushFrame` reopens the stream and returns without applying the frame that triggered the resize, so that frame is silently dropped. Apply the passed frame after the stream is (re)opened.",
+   "suggestion_code": "    if (entry.zones !== null && entry.zones !== zones) {\n      await this.openStream(mac, { zones });\n      entry.lastFrame = frame.slice();\n      this.require(mac).stream?.setAll(frame);\n\n      return;\n    }",
+   "existing_code": "    if (entry.zones !== null && entry.zones !== zones) {\n      await this.openStream(mac, { zones });\n\n      return;\n    }",
+   "start_line": 938,
+   "end_line": 942,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/govee-lan.ts",
+   "content": "`openStream` (stream creation/teardown) runs outside the per-device `enqueue` chain that serializes commands (`ensureArmed`, `sendBrightnessNow`, `spaced` all use it). Concurrent `openStream`/`pushFrame`/`backoff`/`onReappear` calls for the same MAC can therefore interleave, create two `PacingStream` instances and orphan one (its pacing timer keeps firing with `entry.stream` pointing elsewhere), leaking a stream/timer. Serialize the stream-replacement critical section through the same per-device chain.",
+   "existing_code": "  async openStream(mac: string, opts: { zones: number; fps?: number; gradient?: number }): Promise<DeviceStream> {\n    await this.ensureArmed(mac);",
+   "start_line": 884,
+   "end_line": 885,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/electron/govee-lan.ts",
+   "content": "`stop()` tears down sockets/streams but neither clears the throttled `saveTimer` nor calls `saveRegistryNow()`. Any device/observed update queued in the last `SAVE_THROTTLE_MS` window (and the timer is `unref`d, so it may never fire) is lost on shutdown. Flush and clear the pending save in `stop()`.",
+   "suggestion_code": "  stop(): void {\n    this.stopDiscovery();\n\n    if (this.saveTimer !== null) {\n      clearTimeout(this.saveTimer);\n      this.saveTimer = null;\n    }\n\n    this.saveRegistryNow();",
+   "existing_code": "  stop(): void {\n    this.stopDiscovery();",
+   "start_line": 536,
+   "end_line": 537,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/govee-lan.ts",
+   "content": "The re-arm work is fired as a detached async IIFE with no `try/catch`. If `ensureArmed`/`openStream` throws (e.g. unknown device after registry churn, or a rejected send), the promise rejection is unhandled and the device is left half-transitioned. Wrap the body in try/catch and log via `this.warn`.",
+   "existing_code": "    void (async () => {\n      const stream = entry.stream;",
+   "start_line": 1953,
+   "end_line": 1954,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/govee-lan.ts",
+   "content": "`backoff` also triggers the reopen as a fire-and-forget `void this.openStream(...)` with no error handling and without going through the per-device chain. A rejected `openStream` becomes an unhandled rejection, and overlapping reopens can double-create streams. Await/catch the reopen (or enqueue it) and surface failures.",
+   "existing_code": "      entry.armed = false;\n      void this.openStream(mac, { zones, fps: next });",
+   "start_line": 1117,
+   "end_line": 1118,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/govee-lan.ts",
+   "content": "The `resume` listener is registered on every `start()` (start can run again after `stop()` since `started` is reset), but never removed. Repeated start/stop cycles accumulate listeners, so one resume triggers `notifyResume` multiple times. Keep a reference and remove it in `stop()`.",
+   "existing_code": "        (electron as { powerMonitor?: { on: (event: string, fn: () => void) => void } }).powerMonitor?.on(\"resume\", () => {\n          this.notifyResume();\n        });",
+   "start_line": 503,
+   "end_line": 505,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "apps/desktop/electron/govee-lan.ts",
+   "content": "`optionsFromConfig` maps most `govee.lan.*` keys but omits `govee.lan.stream.keepaliveMs` (declared in packages/config/src/registry.ts and GOVEE_DEFAULTS.keepaliveMs), so a user-set value is silently ignored and the injected-config path diverges from the documented key set. Map it (parsing the string default \"0 (off)\") or document the omission.",
+   "existing_code": "    identifyFlashMs: num(\"govee.identify.flashMs\", GOVEE_DEFAULTS.identifyFlashMs),\n    testChaseStepMs: num(\"govee.testChase.stepMs\", GOVEE_DEFAULTS.testChaseStepMs),",
+   "start_line": 174,
+   "end_line": 175,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "apps/desktop/electron/govee-lan.ts",
+   "content": "`notifyNetworkChange` only resets the retry cadence and starts a new round; it does not refresh multicast group memberships or recreate send sockets for the changed interface set. A newly appeared interface therefore has no `addMembership` (so multicast replies are never received) and no send socket (commands fall back to the first socket, possibly on the wrong interface). Rebuild network resources here (re-join groups, re-open senders) rather than only rescanning.",
+   "existing_code": "  notifyNetworkChange(): void {\n    this.retryDelayMs = this.o.retryInitialMs;\n    void this.round();\n  }",
+   "start_line": 734,
+   "end_line": 737,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "apps/desktop/src/features/venue/venue-view.tsx": [
+  {
+   "path": "apps/desktop/src/features/venue/venue-view.tsx",
+   "content": "Async mount race: the `config/get` promise resolves after a round-trip and unconditionally calls `setScanTargets`, silently clobbering any scan targets the user typed while the request was in flight (and may re-seed config via `config/set`). Guard against overwriting user edits, e.g. skip seeding if the field was already modified.",
+   "existing_code": "      const seeded = saved.length > 0 ? saved : [...KNOWN_SCAN_TARGETS];\n      setScanTargets(seeded.join(\", \"));",
+   "start_line": 45,
+   "end_line": 46,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/src/features/venue/venue-view.tsx",
+   "content": "`scan()` uses a dangling `.then()` with no `.catch`/`.finally`: if `venue/scan` rejects, `scanning` stays `true` forever (the Scan button is permanently disabled) and the rejection is unhandled. Additionally, when `envelope.ok === false` the code falls through with `list = []` and still calls `s.set({ devices: [], tiles: [] })`, wiping the existing rig on a failed scan. Wrap in try/catch/finally and only mutate store state on confirmed success.",
+   "existing_code": "    setScanning(true);\n    void invoke(\"venue/scan\", { version: 1 }).then((result: unknown) => {",
+   "start_line": 58,
+   "end_line": 59,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/src/features/venue/venue-view.tsx",
+   "content": "`setScanSaved(true)` runs unconditionally when the promise resolves, so the \"Saved.\" confirmation is shown even when `config/set` fails. Inspect the response's `ok` flag (and surface failures to the user) before reporting success.",
+   "existing_code": "    void invoke(\"config/set\", { version: 1, scope: \"app\", key: \"govee.lan.discovery.scanList\", value: list }).then(() => setScanSaved(true));",
+   "start_line": 55,
+   "end_line": 55,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/features/venue/venue-view.tsx",
+   "content": "Both the Identify and the test-chase handlers compute success as `(result as { ok?: boolean } | null)?.ok !== false`, which evaluates to `true` when `result` is null/undefined or lacks an `ok` field \u2014 so a failed or malformed IPC response is treated as success and the fixture is marked Identified / Chase passed. Require an explicit positive acknowledgement (`result?.ok === true`).",
+   "suggestion_code": "                        const ok = (result as { ok?: boolean } | null)?.ok === true;\n                        if (ok && !useShell.getState().identifiedIds.includes(t.id)) {",
+   "existing_code": "                        const ok = (result as { ok?: boolean } | null)?.ok !== false;\n                        if (ok && !useShell.getState().identifiedIds.includes(t.id)) {",
+   "start_line": 145,
+   "end_line": 146,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/src/features/venue/venue-view.tsx",
+   "content": "The config key is the literal string `\"govee.device.<fixtureId>.transportMode\"` \u2014 the `<fixtureId>` placeholder is never interpolated, so every fixture writes/reads the same key and their transport modes collide (last write wins). Also, the persisted per-device mode is never hydrated into `modes` (initialized to `{}`), so `modes[t.id] ?? \"hybrid\"` always falls back to the default and selections do not survive reload. Use the actual fixture id and load saved modes on mount.",
+   "existing_code": "                      void invoke(\"config/set\", { version: 1, scope: \"device\", key: \"govee.device.<fixtureId>.transportMode\", value: mode });",
+   "start_line": 177,
+   "end_line": 177,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/src/features/venue/venue-view.tsx",
+   "content": "Owner-specific hostnames (`goveelamp`/`carterlights.resnet.nd.edu`) are hardcoded as business data, and the magic config key `\"govee.lan.discovery.scanList\"` is duplicated across the load effect and `saveScanTargets`. Extract these to a shared constant/config module to avoid drift between seeding and saving and to keep environment-specific hostnames out of source.",
+   "existing_code": "const KNOWN_SCAN_TARGETS: readonly string[] = [\n  \"goveelamp.resnet.nd.edu\",\n  \"carterlights.resnet.nd.edu\",\n];",
+   "start_line": 19,
+   "end_line": 22,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/features/venue/venue-view.tsx",
+   "content": "`d.name.split(\" \u2014 \")[0]` always returns a string (even for an empty name it returns `\"\"`), so `?? \"Govee\"` is unreachable dead code. If a fallback is intended for an empty/missing name, use `||` or an explicit empty-string check.",
+   "suggestion_code": "          sku: d.name.split(\" \u2014 \")[0] || \"Govee\",",
+   "existing_code": "          sku: d.name.split(\" \u2014 \")[0] ?? \"Govee\",",
+   "start_line": 66,
+   "end_line": 66,
+   "category": "bug",
+   "severity": "low"
+  }
+ ]
+}

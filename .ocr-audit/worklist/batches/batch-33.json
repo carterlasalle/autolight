@@ -1,0 +1,261 @@
+{
+ "packages/reactive-audio/src/capture.test.ts": [
+  {
+   "path": "packages/reactive-audio/src/capture.test.ts",
+   "content": "The idempotency claim (\"one context, no leaked loops\") is only verified with two *sequential* `await`s. `AudioCaptureHost.start()` is a check-then-act (`if (this.session !== null) return; ... this.session = await this.platform.start(...)`) with an `await` in between, so two overlapping calls both pass the guard and both call `platform.start`, leaking a context that is never stopped. This sequential test would stay green even with that race present. Add a concurrency case, e.g. `const [a, b] = await Promise.all([host.start(), host.start()]); expect(platform.starts).toHaveLength(1);` to actually cover the no-leak guarantee.",
+   "existing_code": "    const first = await host.start();\n    const second = await host.start();",
+   "start_line": 80,
+   "end_line": 81,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "packages/reactive-audio/src/capture.test.ts",
+   "content": "This assertion pair only holds for a *destructive* (consume-once) `latest()`, which conflicts with the \"latest-wins\" semantics implied by the method/test name; a reader would expect `latest()` to be a non-destructive peek. Additionally, `received`/`superseded` merely re-assert the implementation's own bookkeeping counters, so the test does not actually prove the stream is bounded \u2014 an implementation that retained every frame but still incremented these counters would pass. Assert the contract explicitly instead: after `host.latest()`, a further `host.latest()` returning the same newest frame (non-destructive) or document the consume-once behavior in the test name.",
+   "existing_code": "    expect(host.latest()?.level).toBe(0.3);\n    expect(host.latest()).toBeNull();",
+   "start_line": 155,
+   "end_line": 156,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/reactive-audio/src/capture.test.ts",
+   "content": "The \"real permission states\" claim only exercises `denied` and `granted`; the initial `\"not-requested\"` state is never asserted despite being a distinct member of `CapturePermission`. Also, the recovery path never asserts `platform.permissionRequests`, so a stale cached permission (no re-request) or a redundant re-request on every `start()` would go undetected. Pin the contract, e.g. assert `host.status.permission` is `\"not-requested\"` before the first start and check `platform.permissionRequests` before/after recovery.",
+   "existing_code": "    platform.permission = \"granted\";\n    expect((await host.start()).ok).toBe(true);\n    expect(host.status.permission).toBe(\"granted\");",
+   "start_line": 112,
+   "end_line": 114,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/reactive-audio/src/capture.test.ts",
+   "content": "Renderer reload death is validated only via `running`, `platform.stops`, and a `reason` substring, not the full state transition. The test never asserts `rendererHost.status.sessionId` is `null`, so a host that clears `running` without releasing/resetting the session id (inconsistent state) would still pass. Add `expect(rendererHost.status.sessionId).toBeNull();` and assert the exact reason rather than a loose `toContain(\"ui-reload\")` where feasible.",
+   "existing_code": "    expect(rendererHost.status.running).toBe(false);\n    expect(rendererPlatform.stops).toBe(1);",
+   "start_line": 141,
+   "end_line": 142,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/rekordbox-library/src/test-fixtures.ts": [
+  {
+   "path": "packages/rekordbox-library/src/test-fixtures.ts",
+   "content": "Every djmdSongPlaylist row is written with TrackNo = 1, so the fixture no longer mirrors real Rekordbox sequential track numbers. Consumers order only by TrackNo (`songPlaylistRows` issues `... WHERE PlaylistID = :id ORDER BY TrackNo`), leaving tie order undefined within a playlist; e.g. db.test.ts:48 expects p1 == [\"101\",\"102\"] but that result only holds by accidental rowid order. This makes order-sensitive playlist tests flaky and able to pass despite broken ordering. Assign a sequential TrackNo per playlist (e.g. carry the track number in the membership tuple).",
+   "suggestion_code": "      write(\"INSERT INTO djmdSongPlaylist VALUES (:ID, :PlaylistID, :ContentID, :TrackNo)\", {\n        ID: id,\n        PlaylistID: playlistId,\n        ContentID: String(contentId),\n        TrackNo: trackNo,\n      });",
+   "existing_code": "      write(\"INSERT INTO djmdSongPlaylist VALUES (:ID, :PlaylistID, :ContentID, :TrackNo)\", {\n        ID: id,\n        PlaylistID: playlistId,\n        ContentID: String(contentId),\n        TrackNo: 1,\n      });",
+   "start_line": 138,
+   "end_line": 143,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-library/src/test-fixtures.ts",
+   "content": "This repoints track 104's DB path to gone.mp3 to model 'missing audio', but the loop above already wrote `${audioDir}/104.mp3` and recorded it in `audioFiles[\"104\"]`. The fixture is therefore internally inconsistent: an orphan 104.mp3 remains on disk (discoverable by any directory/watcher scan) and `summary.audioFiles[\"104\"]` points at a file that exists even though the scenario is supposed to be missing-audio, so a test asserting on it can pass while the scenario is broken. Skip writing the audio file for the missing track, or remove the orphan and the audioFiles entry here.",
+   "existing_code": "    write(\"UPDATE djmdContent SET FolderPath = :path WHERE ID = '104'\", { path: join(options.audioDir, \"gone.mp3\") });",
+   "start_line": 126,
+   "end_line": 126,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-library/src/test-fixtures.ts",
+   "content": "The returned anlzFiles values keep the leading slash (e.g. \"/PIONEER/USBANLZ/101/101/ANLZ0000.DAT\") while the files are actually written under sharePath with the slash stripped (`relative.replace(/^\\//, \"\")`). Consumers that resolve these entries with path.resolve()/read them directly will address the filesystem root instead of sharePath, so the map silently disagrees with where the files live. Strip the leading slash here (matching the written path) or clearly document the value as share-relative.",
+   "existing_code": "          anlzFiles[track.ID] = suffixes.map((suffix) => `${relative}.${suffix.slice(1)}`);",
+   "start_line": 98,
+   "end_line": 98,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "packages/rekordbox-library/src/test-fixtures.ts",
+   "content": "SCHEMA uses plain `CREATE TABLE` and the function opens dbPath directly with no prior cleanup, so re-running against an existing database throws 'table already exists'; leftover ANLZ/audio files from a prior run also persist and can contaminate later tests. Make creation idempotent (e.g. `CREATE TABLE IF NOT EXISTS` in SCHEMA) or delete the target files/directory before writing.",
+   "existing_code": "    db.exec(SCHEMA);",
+   "start_line": 68,
+   "end_line": 68,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/rekordbox-live/src/index.test.ts": [
+  {
+   "path": "packages/rekordbox-live/src/index.test.ts",
+   "content": "Vacuous assertion: `at1x`/`at10x` are built from a single-event fixture, and index 0 always receives `baseNs` (i = 0 \u2192 `baseNs + BigInt(round(0))`) regardless of `rate`. This line therefore passes even if the `rate` argument were completely ignored, so the test does not actually cover \"virtual clock\" rate handling. Either use a multi-event fixture and assert the inter-event delta, or rely entirely on the dedicated \u00a7128 test below.",
+   "suggestion_code": "    const f2 = parseFixture({ ...base, expectedEvents: [...(base.expectedEvents as unknown[]), { ...(base.expectedEvents as Record<string, unknown>[])[0]!, deckId: 2 }] });\n    const scaled = replayFixture(f2, 10);\n    expect(scaled[1]!.receivedAtNs - scaled[0]!.receivedAtNs).toBe(10_000_000n);",
+   "existing_code": "    expect(at10x[0]!.receivedAtNs).toBe(at1x[0]!.receivedAtNs);",
+   "start_line": 27,
+   "end_line": 27,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-live/src/index.test.ts",
+   "content": "The step/full consistency check compares only `receivedAtNs`, so any divergence in the remaining DeckState fields (track, playing, playhead, source, etc.) between `replayFixtureStep` and `replayFixture` would go undetected. Compare the full state instead.",
+   "suggestion_code": "    const stepped = [...replayFixtureStep(both, 250)];\n    expect(stepped).toEqual(replayFixture(both, 1, 250));",
+   "existing_code": "    const stepped = [...replayFixtureStep(both, 250)];\n    expect(stepped.map((s) => s.receivedAtNs)).toEqual(replayFixture(both, 1, 250).map((s) => s.receivedAtNs));",
+   "start_line": 67,
+   "end_line": 68,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/index.test.ts",
+   "content": "This fixture path is hardcoded and duplicated verbatim in the next test (line ~59), so a version/platform bump requires editing two places and they can silently drift. Additionally, the `readdirSync` loop assumes every entry is a directory containing `capture.json`; a stray file (e.g. a README or `.DS_Store`, both present elsewhere under this tree) makes `readFileSync` throw ENOENT and fails the whole suite with an opaque error. Hoist the path into a shared const and filter entries to those that actually contain a `capture.json`.",
+   "suggestion_code": "    for (const action of readdirSync(dir).filter((e) => existsSync(join(dir, e, \"capture.json\")))) {",
+   "existing_code": "    const dir = join(dirname(fileURLToPath(import.meta.url)), \"..\", \"..\", \"..\", \"protocol-fixtures\", \"rekordbox\", \"7.2.10\", \"macos\");",
+   "start_line": 47,
+   "end_line": 47,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/rekordbox-live/src/index.test.ts",
+   "content": "`toMatchObject` only asserts `provider` and tolerates any additional keys in `raw`, so it cannot detect unexpected output fields or a regression in raw retention. The test also never verifies that `row` is retained, nor that `title`/`artist`/`sourceIds` were mapped into `state.track`. Assert the exact object to make the \"unknown-field retention\" contract meaningful.",
+   "suggestion_code": "    expect(raw).toEqual({\n      provider: \"composite-flx4\",\n      row: { rekordboxId: \"231828222\", title: \"Homecoming (feat. Chris Martin)\", artist: \"Kanye West\" },\n    });",
+   "existing_code": "    expect(raw).toMatchObject({ provider: \"composite-flx4\" });",
+   "start_line": 80,
+   "end_line": 80,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/storage/vitest.config.ts": [
+  {
+   "path": "packages/storage/vitest.config.ts",
+   "content": "Each alias maps a package specifier to a *file* (`src/index.ts`). Vite/rollup string aliases match as prefixes (`importee === find || importee.startsWith(find + '/')`), so a deep import such as `@autolight/contracts/schema` is rewritten to `.../contracts/src/index.ts/schema` \u2014 an invalid path that only fails at resolution time with a confusing error. `apps/desktop/vitest.config.ts` guards against exactly this by adding a `subpathAlias` regex entry *before* the string aliases; this config omits it, so any sibling package subpath import used by storage tests breaks. Add the same subpath alias and spread it ahead of the string aliases.",
+   "suggestion_code": "const workspaceAlias = Object.fromEntries(\n  readdirSync(workspaceSrc).map((p) => [`@autolight/${p}`, join(workspaceSrc, p, \"src\", \"index.ts\")]),\n);\n// Deep imports (@autolight/<pkg>/<sub>) must be matched before the string aliases\n// below; otherwise the prefix match rewrites them to \".../src/index.ts/<sub>\".\nconst subpathAlias = [\n  {\n    find: /^@autolight\\/([^/]+)\\/([^/]+)$/,\n    replacement: join(workspaceSrc, \"$1\", \"src\", \"$2.ts\"),\n  },\n];",
+   "existing_code": "const workspaceAlias = Object.fromEntries(\n  readdirSync(workspaceSrc).map((p) => [`@autolight/${p}`, join(workspaceSrc, p, \"src\", \"index.ts\")]),\n);",
+   "start_line": 11,
+   "end_line": 13,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/storage/vitest.config.ts",
+   "content": "`readdirSync` returns every entry under `packages/`, including regular files (e.g. `.DS_Store`, a stray `README`) and directories that have no `src/index.ts`. Those produce aliases (`@autolight/<entry>`) pointing at paths that do not exist, and the alias also shadows a real dependency name if a same-named file exists. Filter to directories that actually contain `src/index.ts`.",
+   "suggestion_code": "  readdirSync(workspaceSrc, { withFileTypes: true })\n    .filter((entry) => entry.isDirectory() && existsSync(join(workspaceSrc, entry.name, \"src\", \"index.ts\")))\n    .map((entry) => [`@autolight/${entry.name}`, join(workspaceSrc, entry.name, \"src\", \"index.ts\")]),",
+   "existing_code": "  readdirSync(workspaceSrc).map((p) => [`@autolight/${p}`, join(workspaceSrc, p, \"src\", \"index.ts\")]),",
+   "start_line": 12,
+   "end_line": 12,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/storage/vitest.config.ts",
+   "content": "The config performs filesystem access at load time with no error handling: if the parent `packages/` directory is missing/unreadable (e.g. the config is copied or the repo layout changes), `readdirSync` throws an opaque ENOENT and aborts the entire test run. Fail fast with an explicit check/message so the cause is obvious.",
+   "existing_code": "const workspaceSrc = join(root, \"..\");",
+   "start_line": 10,
+   "end_line": 10,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/storage/vitest.config.ts",
+   "content": "Because `@autolight/storage` is aliased to this package's own `src/index.ts`, tests never resolve the package through `package.json#exports`/`dist`. A broken build entry or a missing/incorrect `exports` map therefore stays green in this package's tests while consumers of the published package fail. Consider adding at least one test that imports the package via its public specifier without the source alias, or an explicit assertion that `exports` resolves.",
+   "existing_code": "  resolve: { alias: workspaceAlias },",
+   "start_line": 16,
+   "end_line": 16,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "test-fixtures/analysis/live-deck2.trackmodel.json": [
+  {
+   "path": "test-fixtures/analysis/live-deck2.trackmodel.json",
+   "content": "Every beat in these fixtures carries `beatInBar: 1`, so no bar/downbeat structure is recoverable. Consumers treat `beatInBar === 1` as a genuine downbeat (downbeat-dependent structure/drop detection, phrase/quantize alignment, mix points), so with these grids every beat is reported as a downbeat and bar-aligned behavior is wrong; any regression that depends on real downbeats cannot be exercised. Please regenerate with a proper 1,2,3,4 cycle (or derive the downbeat explicitly) unless an all-ones grid is deliberately under test \u2014 in which case a comment/docs note should state that intent.",
+   "existing_code": "{\"beatInBar\": 1, \"bpm\": 126.0, \"index\": 0, \"sourceTimeMs\": 419.0}",
+   "start_line": 0,
+   "end_line": 0,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "test-fixtures/analysis/live-deck2.trackmodel.json",
+   "content": "`phrases` is a byte-identical duplicate of `sections` (same entries, same `kind`/`rawLabel`/`startBeat`/`endBeat`/`confidence`). These are conceptually distinct views: `phrases` is the native PSSI-derived phrase list (which per `phraseSchema` must also carry `mood`, `bank`, `fill`, `fillBeat`, `raw`) while `sections` is fused structure. Keeping two identical copies is a maintenance hazard (silent divergence, double-counting by consumers iterating both), is ambiguous as to which is authoritative, and means phrase-specific paths are never exercised and any `sections`/`phrases` field-swap or PSSI-field bug passes unnoticed. Regenerate `phrases` from the actual PSSI source (with mood/bank/fill/raw), populate only the field the scenario intends to exercise, or remove the duplicated data rather than copying `sections`.",
+   "existing_code": "\"sections\": [{\"confidence\": 0.9, \"endBeat\": 36, \"kind\": \"intro\", \"rawLabel\": \"Intro 2\", \"startBeat\": 1}",
+   "start_line": 0,
+   "end_line": 0,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "test-fixtures/analysis/live-deck2.trackmodel.json",
+   "content": "`sourceTimeMs` values carry floating-point artifacts from beat-time accumulation (e.g. 32323.999999999996, 16120.000000000002, 8079.000000000001) alongside exactly-integral neighbours. Because these fixtures are consumed by exact-comparison/golden tests, any assertion using strict equality or a serialized round-trip on grid times is brittle and can mask or spuriously trigger timing regressions. Generate/round times to a consistent precision (e.g. nearest millisecond) when producing the grid, or ensure all consumers/tests compare with a tolerance.",
+   "existing_code": "\"sourceTimeMs\": 32323.999999999996",
+   "start_line": 0,
+   "end_line": 0,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "test-fixtures/analysis/live-deck2.trackmodel.json",
+   "content": "Segment boundaries are offset relative to the beat grid: `beatGrid.beats[].index` is 0-based (0..319) while every phrase/section uses 1-based `startBeat` values (first segment `startBeat: 1`, skipping index 0), and the last segment ends at `endBeat: 308`, leaving beats 308..319 unlabeled. Consumers that index the grid by `startBeat`/`endBeat` (e.g. cue/section-transition derivation) will shift every boundary by one beat and drop the final ~12 beats. Confirm whether these are 1-based musical beats (and convert consistently) or fix them to match the 0-based grid indices and cover the whole grid.",
+   "existing_code": "\"phrases\": [{\"confidence\": 0.9, \"endBeat\": 36, \"kind\": \"intro\", \"rawLabel\": \"Intro 2\", \"startBeat\": 1}",
+   "start_line": 0,
+   "end_line": 0,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "analysis/src/autolight_analysis/stems.py": [
+  {
+   "path": "analysis/src/autolight_analysis/stems.py",
+   "content": "Empty band mask silently produces NaN. If `mask` is all-False (e.g. `low_hz >= high_hz`, or a band entirely above Nyquist for a custom `rate`), `spec[:, mask]` has shape `(n_frames, 0)` and `.mean(axis=1)` returns a NaN array (with a RuntimeWarning) that propagates into the stem features without raising. Guard the empty mask explicitly.",
+   "suggestion_code": "    if not mask.any():\n        return np.zeros(spec.shape[0], dtype=np.float64)\n    return spec[:, mask].mean(axis=1).astype(np.float64)",
+   "existing_code": "    return spec[:, mask].mean(axis=1).astype(np.float64)",
+   "start_line": 72,
+   "end_line": 72,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/stems.py",
+   "content": "The frame-count guard is hop-dependent and can crash. `mono.size < frame * 2` only guarantees >= 2 frames when `hop <= frame`. For `hop > frame` (a valid caller-supplied value) `_windowed_frames` yields a single frame, `np.diff(spec, axis=0)` is empty, and `diff.max()` raises `ValueError: zero-size array to reduction operation maximum`. Require at least `frame + hop` samples so at least two frames always exist.",
+   "suggestion_code": "    if mono.size < frame + hop:\n        return np.zeros(1, dtype=np.float64)",
+   "existing_code": "    if mono.size < frame * 2:\n        return np.zeros(1, dtype=np.float64)",
+   "start_line": 98,
+   "end_line": 99,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/stems.py",
+   "content": "Dead branch: both call sites (`band_envelope` and `spectral_novelty`) already return early when `mono.size < frame`, so the padding path in this private helper can never execute and gives a false sense of safety. Either remove the dead branch or drop the callers' early returns and rely on this guard.",
+   "existing_code": "        mono = np.pad(mono, (0, frame - mono.size))",
+   "start_line": 49,
+   "end_line": 49,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/electron/services/analysis-supervisor.ts": [
+  {
+   "path": "apps/desktop/electron/services/analysis-supervisor.ts",
+   "content": "The catch block treats EVERY `analyze()` rejection as a worker crash: it unconditionally sets `spawned = false` and increments `restarts`. Failures that are not crashes (validation/arg errors, per-job timeouts, malformed-frame/protocol errors) leave the worker process perfectly healthy, so this desyncs the supervisor from the real `AnalysisClient`, which already owns its own restart/backoff in the exit handler and whose `start()` is a no-op when processes exist. Consequences: the `spawns`/`restarts` counters are inflated (miscounted metrics), and for an injected `AnalysisWorkerPort` whose `start()` is not idempotent the next `submit()` will actually spawn a second worker/process (resource leak). Only clear `spawned` when the worker truly died; otherwise leave the port running and surface the error.",
+   "suggestion_code": "      // A non-crash failure (validation, timeout, protocol) must not force a\n      // respawn: the worker is still up and the real client owns restart/backoff.\n      // Only a confirmed worker death should clear `spawned` for a later respawn.",
+   "existing_code": "      // A worker that died mid-job is restarted on the next submit (spec 109).\n      this.spawned = false;\n      this.tracker.count(\"restarts\");",
+   "start_line": 97,
+   "end_line": 99,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/electron/services/analysis-supervisor.ts",
+   "content": "`stop()` calls `worker.stop()` and resets `spawned`, but keeps `this.worker`. The next `submit()` therefore reuses the already-stopped port and calls `start()` on it, silently depending on the injected port being restartable after teardown (the port contract documents no such guarantee). If it isn't restartable, the worker never revives and every subsequent job fails. Null out the reference so a fresh port is created lazily on the next submit.",
+   "suggestion_code": "    try {\n      this.worker?.stop();\n    } catch { /* teardown never throws */ }\n    this.worker = null;\n    this.spawned = false;",
+   "existing_code": "    try {\n      this.worker?.stop();\n    } catch { /* teardown never throws */ }\n    this.spawned = false;",
+   "start_line": 54,
+   "end_line": 57,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/services/analysis-supervisor.ts",
+   "content": "The singleton silently discards `opts` on every call after the first (`instance ??=`). A later caller passing a different `command`/`projectDir`/`createWorker` \u2014 or a test trying to inject a fake worker \u2014 gets the original configuration with no warning, which can misroute analysis jobs or make tests non-deterministic. Document that opts are first-call-only, or throw/log when conflicting options are supplied after the instance exists.",
+   "existing_code": "  instance ??= new AnalysisSupervisor(opts);\n  return instance;",
+   "start_line": 109,
+   "end_line": 110,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ]
+}

@@ -1,0 +1,300 @@
+{
+ "packages/ble/src/sim.ts": [
+  {
+   "path": "packages/ble/src/sim.ts",
+   "content": "`encodeHostColor` is imported but never referenced anywhere in this file (the sim re-exports only `encodeBleFrame`/`parseBleAck`). This is dead code; remove it from the import list.",
+   "existing_code": "  encodeHostColor,",
+   "start_line": 19,
+   "end_line": 19,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/ble/src/sim.ts",
+   "content": "`bleV2Decrypt` is imported but never used. The v2 handshake path (`pushV2Reply`) only fabricates a plaintext `sku=... mac=...` string and never actually decrypts anything, so the imported decryptor is dead and the `v2Key` option has no effect on the reply bytes. Either drop the unused import or wire the decrypt routine in so the sim truly models the encrypted reply.",
+   "existing_code": "import { bleV2Decrypt, type BleV2Key } from \"./encrypted.js\";",
+   "start_line": 24,
+   "end_line": 24,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/ble/src/sim.ts",
+   "content": "This assertion is a tautology and can never fail. `handleConnect` sets `connected = true` and increments `connects` together, so whenever `p.connected` is true, `connects >= 1` holds by construction; when it is false the first operand short-circuits true. A regression where `connect` stops counting, or where two peripherals share state, would still pass. Assert the real invariant instead, e.g. that `connects` never exceeds 1 for a single-connection peripheral, or that a second `handleConnect` while connected throws.",
+   "existing_code": "      name: \"one-connection-rule\",\n      ok: peripherals.every((p) => !p.connected || p.metrics.connects >= 1),",
+   "start_line": 479,
+   "end_line": 480,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/ble/src/sim.ts",
+   "content": "`hostColorHeld` always returns a `boolean` (it is a `&&`-chained comparison), so `typeof ... === \"boolean\"` can never be false. This check passes even if the hold logic is completely broken. Exercise the actual behaviour instead: set a host colour, then assert `hostColorHeld(nowBeforeExpiry) === true` and `hostColorHeld(nowAfterHold) === false`.",
+   "existing_code": "      name: \"host-color-hold\",\n      ok: peripherals.every((p) => typeof p.hostColorHeld(now) === \"boolean\"),",
+   "start_line": 489,
+   "end_line": 490,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/ble/src/sim.ts",
+   "content": "`handleDisconnect` only clears `connected`/`notify`, leaving `handshakeDone`, `handshakeSeedSeen`, `provisionStarted`, `provisionStopped` and `hostColorAt` from the previous session. After a disconnect+reconnect (allowed because `connected` is false) the peripheral silently reports a completed handshake, accepts provisioning chunks without a fresh start, and keeps a stale host-colour hold \u2014 which contradicts the invalid-state/one-connection semantics these tests are meant to prove. Reset the per-session state on disconnect.",
+   "suggestion_code": "  handleDisconnect(): void {\n    this.connected = false;\n    this.notify = null;\n    this.handshakeDone = false;\n    this.handshakeSeedSeen = false;\n    this.provisionStarted = false;\n    this.provisionStopped = false;\n    this.hostColorAt = 0;\n  }",
+   "existing_code": "  handleDisconnect(): void {\n    this.connected = false;\n    this.notify = null;\n  }",
+   "start_line": 128,
+   "end_line": 131,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/ble/src/sim.ts",
+   "content": "Stalled and over-budget writes are recorded in `metrics.writes`/`written` before the stall check, then the method returns without calling `ack`. Two consequences: (1) `metrics.writes`/`written` no longer mean \"applied\" writes, so a test asserting write count equals applied count is misleading; (2) any caller that awaits the write ack via the notify handler will hang forever for stalled writes. If dropped writes are intentional, keep them out of the applied-write counters (or emit an explicit failure ack) and document it.",
+   "existing_code": "    if (this.stalled(now)) {\n      this.metrics.stalled += 1;\n      return;\n    }",
+   "start_line": 141,
+   "end_line": 144,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/controller-flx4/src/integration.ts": [
+  {
+   "path": "packages/controller-flx4/src/integration.ts",
+   "content": "Unbounded growth of the `unknown` store (memory leak). Every unmapped, incomplete or `type: \"unknown\"` event is appended here and the array is never trimmed, never cleared by `drain()`, and `unknownEvents()` hands back the live internal array. During a long live session this grows without bound. Worse, routine events the composite simply doesn't consume are classified as \"unknown\": a `sync`/`loop-in`/`hotcue`/`beat-loop` button *release* returns `null` from `feedEventFromDecoded`, and every 14-bit MSB half is incomplete, so the store fills with normal traffic (see the session test where 3 of 8 messages land here). Suggest a bounded ring (or clear on `drain()`) and/or a separate counter, and return a copy from `unknownEvents()` so callers cannot mutate internal state.",
+   "suggestion_code": "      this.unknown.push(event);\n      if (this.unknown.length > this.unknownCapacity) this.unknown.shift();\n      return null;",
+   "existing_code": "      this.unknown.push(event);\n      return null;",
+   "start_line": 198,
+   "end_line": 199,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/controller-flx4/src/integration.ts",
+   "content": "`seen` accumulates every derived signal for the lifetime of the subscription and is never cleared or bounded (`signals()` just returns the internal array). In production `subscribeServiceToComposite` is wired once per session and receives a signal per MIDI event, so this is an unbounded memory leak. Consider capping it (ring buffer) or exposing a clear/reset, and returning a defensive copy.",
+   "existing_code": "    for (const signal of derive(event)) seen.push(signal);",
+   "start_line": 288,
+   "end_line": 288,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/controller-flx4/src/integration.ts",
+   "content": "Eviction tracks *first-insertion* order, not recency, so it can defeat the documented latest-wins contract. `order` only gets a new slot when a bucket key is first seen; updating an existing deck+control leaves the stale slot in place. When capacity is exceeded, `shift()` deletes the key that was *created* earliest \u2014 even if it currently holds the freshest data. E.g. with `capacity: 2`, a continuously updated `crossfader` retains its original slot and is evicted before a rarely-touched bucket that was created later. Either re-append the key on every push (true LRU/latest-wins) or document that eviction is by first-seen key, not by recency.",
+   "suggestion_code": "    if (this.buckets.has(key)) {\n      const at = this.order.indexOf(key);\n      if (at >= 0) this.order.splice(at, 1);\n    }\n    this.order.push(key);\n    this.buckets.set(key, event);",
+   "existing_code": "    if (!this.buckets.has(key)) this.order.push(key);\n    this.buckets.set(key, event);",
+   "start_line": 207,
+   "end_line": 208,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/controller-flx4/src/integration.ts",
+   "content": "Filter-sweep direction assumes `history` is strictly ascending in `atNs`: `trail[0]` is treated as the oldest sample of the window. If a caller passes history newest-first (or unsorted), the direction sign (and therefore the sign of `strength`/`detail` open vs close) is inverted. The window filter also has no upper bound, so history entries with `atNs` after the current event leak into the trail and can fabricate a sweep. Either sort/filter the trail by `atNs` here, or document and enforce the ordering contract on the parameter.",
+   "existing_code": "        const direction = event.value >= (trail[0] ?? event.value) ? 1 : -1;",
+   "start_line": 360,
+   "end_line": 360,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/controller-flx4/src/integration.ts",
+   "content": "Fader-rise treats the last matching entry of `history` as the \"previous\" value via `reverse().find()`. This only yields the immediately preceding fader event if `history` is sorted oldest-to-newest; an unsorted or newest-first history picks the wrong baseline and reports a phantom (or suppressed) rise. Consider selecting the max-`atNs` entry with `atNs < event.atNs` explicitly.",
+   "existing_code": "      const previous = [...history]\n        .reverse()\n        .find((h) => h.control === \"channel-fader\" && h.deck === event.deck);",
+   "start_line": 394,
+   "end_line": 396,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "packages/controller-flx4/src/integration.ts",
+   "content": "EQ re-entry is detected against *any* prior kill found in `history`, with no time bound and the same reverse-order assumption. A bass kill from minutes earlier (or an unrelated stale entry) will be treated as the predecessor of the current raise, emitting a spurious `re-entry` hint. Constrain the lookup to a bounded window ending at `event.atNs` (and pick the newest entry by `atNs` rather than relying on history order).",
+   "existing_code": "        const killed = [...history]\n          .reverse()\n          .find((h) => h.control === \"eq-low\" && h.deck === event.deck && h.value <= 0.05);",
+   "start_line": 467,
+   "end_line": 469,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "packages/failover/src/machine.ts": [
+  {
+   "path": "packages/failover/src/machine.ts",
+   "content": "The \"no fallback left\" reclaim can strand the machine in an inconsistent `failed-over` state whose `current` is the *preferred* transport, and the very next tick turns a healthy fixture dark.\n\nWalking it through: the reclaim calls `moveTo(open.transport, ...)` but never promotes the state to `on-preferred` (`moveTo` only sets `failed-over`, and the only state fix-up here is `probing-preferred -> failed-over`). So after reclaiming `lan-razer`, `state === \"failed-over\"` while `current === \"lan-razer\"`.\n\nOn the next tick the fallback section unconditionally executes `if (preferred !== null) down.add(preferred);`, so `held` excludes the preferred even though it is reachable -> `held.transport === null`. Then `open.transport === this.current`, so the `!== this.current` guard skips the reclaim, and control falls through to `if (held.transport !== this.current) this.moveTo(held.transport=null, ...)`, emitting \"All frame transports down; fixture dark.\" and clearing `current` while the preferred LAN path is verified+reachable.\n\nRepro: (1) `machine.select()` (current=lan-razer); (2) mark lan-razer/lan-json/ble-segmented/ble-single unreachable and tick -> current becomes ble-segmented; (3) mark only lan-razer reachable, tick -> reclaim sets current=lan-razer with state still failed-over; (4) tick again with `signal=\"ok\"`, `atBarBoundary=false` -> fixture goes dark. This branch is not covered by machine.test.ts, so it is unverified.\n\nFix: promote to `on-preferred` when the reclaimed transport is the preferred one, and hold (don't `moveTo(null)`) when `open.transport === this.current`.",
+   "suggestion_code": "      if (open.transport !== null && open.transport !== this.current) {\n        this.lastSelection = open;\n        this.moveTo(open.transport, \"No fallback left; reclaimed the reachable path\", atMs, false);\n        this.state = open.transport === preferred ? \"on-preferred\" : \"failed-over\";\n        return open;\n      }\n      if (open.transport !== null && open.transport === this.current) {\n        // The reachable path is already the held transport; keep it instead of going dark.\n        this.lastSelection = open;\n        return open;\n      }",
+   "existing_code": "      if (open.transport !== null && open.transport !== this.current) {\n        this.lastSelection = open;\n        this.moveTo(open.transport, \"No fallback left; reclaimed the reachable path\", atMs, false);\n        if (this.state === \"probing-preferred\") this.state = \"failed-over\";\n        return open;\n      }",
+   "start_line": 174,
+   "end_line": 179,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/failover/src/machine.ts",
+   "content": "`probing-preferred` is never cleared when the preferred transport drops again. When `preferredUp` becomes false the code simply falls through to the fallback section, which only resets the state inside the narrow reclaim branch. Consequences: (a) `machineState` (exposed to the tile/status bar) keeps reporting `probing-preferred` even though the preferred path is down; (b) the `probeIntervalMs` gate is only evaluated for `failed-over`, so once the preferred path recovers the machine can switch back at the next bar boundary without re-arming the probe interval. Reset to `failed-over` whenever the preferred transport is no longer up while probing.",
+   "suggestion_code": "    const preferredUp =\n      preferred !== null &&\n      cfg.status[preferred]?.verified === true &&\n      cfg.status[preferred]?.reachable === true &&\n      !lanDown &&\n      !streamDown;\n    if (!preferredUp && this.state === \"probing-preferred\") {\n      this.state = \"failed-over\";\n    }",
+   "existing_code": "    const preferredUp =\n      preferred !== null &&\n      cfg.status[preferred]?.verified === true &&\n      cfg.status[preferred]?.reachable === true &&\n      !lanDown &&\n      !streamDown;",
+   "start_line": 144,
+   "end_line": 149,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/failover/src/machine.ts",
+   "content": "The LAN transport ids are hardcoded and duplicated three times: `down.add(\"lan-razer\"); down.add(\"lan-json\")` appears in both the on-preferred and fallback branches, plus `new Set<TransportId>([\"lan-razer\", \"lan-json\"])` in the reclaim selection. If the transport union is ever renamed/extended these sites will silently drift from `TRANSPORTS`/`FRAME_CLASS`. Extract a module-level `const LAN_TRANSPORTS: readonly TransportId[] = [\"lan-razer\", \"lan-json\"];` and reuse it.",
+   "suggestion_code": "      const down = new Set<TransportId>();\n      if (lanDown) {\n        for (const t of LAN_TRANSPORTS) down.add(t);\n      }\n      if (streamDown && this.current !== null) down.add(this.current);\n      const sel = selectFrameTransport(withUnreachable(cfg, down));",
+   "existing_code": "      const down = new Set<TransportId>();\n      if (lanDown) {\n        down.add(\"lan-razer\");\n        down.add(\"lan-json\");\n      }\n      if (streamDown && this.current !== null) down.add(this.current);\n      const sel = selectFrameTransport(withUnreachable(cfg, down));",
+   "start_line": 122,
+   "end_line": 128,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/govee/src/qualification.ts": [
+  {
+   "path": "packages/govee/src/qualification.ts",
+   "content": "The stored-record validation only checks `parsed.steps.length`, but the comment claims it validates the \"step table\". If `QUALIFICATION_STEPS` ever changes ids/order while keeping the same count (e.g. a rename such as `arm-settle` \u2192 `armSettle`), the old blob is accepted; then `runStep` resolves `stepAt(currentStep).id` from the *new* table and `this.record(def.id)` returns `undefined`, so `runStep` throws `qualification step X is not in the record` and the wizard is unusable (it never takes the graceful \"restart at step 1\" path). Verify each stored step id (and order) against `QUALIFICATION_STEPS`, not just the length.",
+   "suggestion_code": "        const shapeOk = Array.isArray(parsed.steps)\n          && parsed.steps.length === QUALIFICATION_STEP_COUNT\n          && parsed.steps.every((s, i) => s.id === QUALIFICATION_STEPS[i]?.id && s.step === i + 1);\n        if (parsed.hardwareId !== hardwareId || !shapeOk) {",
+   "existing_code": "        if (parsed.hardwareId !== hardwareId || !Array.isArray(parsed.steps) || parsed.steps.length !== QUALIFICATION_STEP_COUNT) {",
+   "start_line": 261,
+   "end_line": 261,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/govee/src/qualification.ts",
+   "content": "The `PacingStream` is created and started here but `stream.close()` (and the final `arm(false)`) are only reached on the normal path. If `user.markStutter(...)` rejects, or any awaited call in the `for (tick...)` loop throws, `close()` is skipped: the stream's interval keeps sending paints after the step returns, the unit is left armed, and every later step's paint is overwritten by the still-running stream. Wrap the stream lifetime in `try { ... } finally { stream.close(); }` (and disarm) so an exception cannot leak the timer or leave the device streaming. The same holds for the `arm(false)` cleanup in `stepArmSettle`, `stepSegmentCount` and `stepSegmentOrder`.",
+   "existing_code": "      const stream = new PacingStream(\n        this.stateValue.hardwareId,\n        { resolution: zones, rateHz: rate, gradient: 0, armSettleMs: 0 },\n        this.options.exchange,\n        scheduler,\n      );",
+   "start_line": 761,
+   "end_line": 766,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/govee/src/qualification.ts",
+   "content": "This loop's termination depends entirely on the injected clock (`this.now()`), but `readDevStatus` measures its own windows with the real `Date.now()` and does not accept a clock. When a fake clock is injected (an explicitly supported option \u2014 it is forwarded to `CommandSequencer` and `PacingStream`), `this.now() - startedAt` stays `0 <= deadlineMs` forever while each `readDevStatus` returns quickly with `answered === false`, so this becomes an infinite loop that spins the event loop with no progress and no cap. Bound the loop with an attempt counter / real elapsed time, or thread the injected clock into the read-back.",
+   "existing_code": "    while (this.now() - startedAt <= deadlineMs) {\n      attempts += 1;\n      const read = await readDevStatus(this.link, { retryMs, deadlineMs: retryMs, wait: this.wait });",
+   "start_line": 824,
+   "end_line": 826,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/govee/src/qualification.ts",
+   "content": "`runStep` always overwrites the step's `evidence` on re-execution without first appending the previous value to `priorEvidence`. `priorEvidence` is documented as \"evidence of earlier attempts at this step, newest last\", and it is only maintained by `enterAt`/`resetStep`. So re-running a failed step (the natural UI retry flow: `runAll()` stops on a failure, the user retries the same step via `runStep()`) silently discards the failed attempt's evidence, contradicting the field's contract and losing diagnostic data. Preserve the previous evidence before overwriting.",
+   "suggestion_code": "    if (Object.keys(attempt.evidence).length > 0) {\n      attempt.priorEvidence = [...attempt.priorEvidence, JSON.stringify(attempt.evidence)].slice(-4);\n    }\n    attempt.attempts += 1;\n    attempt.status = outcome.status;\n    attempt.evidence = outcome.evidence;",
+   "existing_code": "    attempt.attempts += 1;\n    attempt.status = outcome.status;\n    attempt.evidence = outcome.evidence;",
+   "start_line": 367,
+   "end_line": 369,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "packages/govee/src/qualification.ts",
+   "content": "This is the same literal zone count that the file header claims does not exist (\"no literal count appears in this package (spec 42)\"). `?? 8` here and `zones: this.options.zones ?? 8` in `stepVerifyStream` silently assume an 8-zone unit whenever step 9 did not record a count (e.g. the user entered at step 10, or a record where `segment-count` never passed). Steps 10, 12, 13 and 15 will then paint 8 zones regardless of the real segment count, so the measurements are taken against a fabricated layout \u2014 exactly the SKU assumption spec 42 forbids. Fail the step (or require the measured count) instead of defaulting to a literal count.",
+   "existing_code": "  private zones(): number {\n    const counted = this.numberFrom(\"segment-count\", \"logicalSegmentCount\");\n    return Math.max(1, Math.floor(counted ?? this.options.zones ?? 8));\n  }",
+   "start_line": 458,
+   "end_line": 461,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/govee/src/qualification.ts",
+   "content": "This reset block duplicates the body of `resetStep` verbatim (same `priorEvidence` push, `slice(-4)`, and status/evidence/atMs reset). Two copies of the same history-keeping logic will drift apart; extract a shared private helper (e.g. `resetAttempt(attempt)`) and call it from both `enterAt` and `resetStep`.",
+   "existing_code": "    for (const attempt of this.stateValue.steps) {\n      if (attempt.step < target) continue;\n      if (Object.keys(attempt.evidence).length > 0) {\n        attempt.priorEvidence = [...attempt.priorEvidence, JSON.stringify(attempt.evidence)].slice(-4);\n      }",
+   "start_line": 310,
+   "end_line": 314,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/reactive-audio/src/index.test.ts": [
+  {
+   "path": "packages/reactive-audio/src/index.test.ts",
+   "content": "Both overlay assertions are one-sided upper bounds, so this test can pass with completely broken behavior. `applyOverlay` is implemented as `Math.min(1, planned + clamp(energy)*clamp(reactiveAmount)*0.2)`. If the implementation regressed to `return 0;` (or any value \u2264 planned), both `toBeLessThanOrEqual(1)` and `(x-0.5) <= 0.2` would still pass \u2014 no lower bound or exact-value check exists, and the actual cap (0.2) itself is never verified. Assert the exact nudge and the clamp boundary instead.",
+   "suggestion_code": "    expect(applyOverlay(0.5, 1, 1)).toBeCloseTo(0.7); // exact 0.2 nudge (MAX_OVERLAY_GAIN)\n    expect(applyOverlay(0.9, 1, 1)).toBe(1); // clamps at gain cap of 1\n    expect(applyOverlay(0.5, 0.5, 1)).toBeCloseTo(0.6); // energy scales the nudge\n    expect(applyOverlay(0.5, 1, 0)).toBeCloseTo(0.5); // zero reactiveAmount => no overlay\n    expect(applyOverlay(0.5, -1, 1)).toBeCloseTo(0.5); // negative energy clamped to 0",
+   "existing_code": "    expect(applyOverlay(0.9, 1, 1)).toBeLessThanOrEqual(1);\n    expect(applyOverlay(0.5, 1, 1) - 0.5).toBeLessThanOrEqual(0.2);",
+   "start_line": 6,
+   "end_line": 7,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "packages/reactive-audio/src/index.test.ts",
+   "content": "This asymmetry assertion is trivially satisfied once the two preceding `toBeCloseTo` checks hold (attack \u2248 0.3, release \u2248 0.95, so `0.3 > 1 - 0.95` is always true). It adds no independent coverage: any swap of `rise`/`decay` semantics would already fail the hardcoded 0.3/0.95 checks, and the redundant `- 0` expression obscures the intent. Compare the actual step deltas explicitly, or drop it.",
+   "suggestion_code": "    expect(Math.abs(attack.smoothed - 0)).toBeGreaterThan(Math.abs(release.smoothed - 1));",
+   "existing_code": "    expect(attack.smoothed - 0).toBeGreaterThan(1 - release.smoothed);",
+   "start_line": 14,
+   "end_line": 14,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/reactive-audio/src/index.test.ts",
+   "content": "The test name claims cooldown coverage but only verifies two fields (`look` rotation and `phraseCount`). `recentLooks`, `cooldowns`, and `palette` are never asserted, so a regression that drops recent-look history, fails to set/expire cooldowns, or mutates `palette` goes unnoticed. Cooldown expiry in particular is untested: both calls use the same `seed` and rely on the single decrement making `swell` unavailable, but nothing checks that a look returns after its cooldown reaches 0. Add assertions on the returned state (e.g. `r1.state.cooldowns.swell === 2`, `r2.state.cooldowns.swell === 1`, `r2.state.recentLooks` contains the looks) and drive enough calls to observe cooldown expiry.",
+   "suggestion_code": "    const r2 = nextLook(r1.state, true, 0);\n    expect(r1.look).not.toBe(r2.look);\n    expect(r1.state.cooldowns[r1.look]).toBe(2); // freshly chosen look enters cooldown\n    expect(r2.state.cooldowns[r1.look]).toBe(1); // cooldown decremented next call\n    expect(r2.state.recentLooks).toEqual([r1.look, r2.look]);\n    expect(r2.state.phraseCount).toBe(2);\n    expect(r2.state.palette).toBe(s0.palette); // palette must be preserved",
+   "existing_code": "    const r2 = nextLook(r1.state, true, 0);\n    expect(r1.look).not.toBe(r2.look);\n    expect(r2.state.phraseCount).toBe(2);",
+   "start_line": 19,
+   "end_line": 21,
+   "category": "test",
+   "severity": "medium"
+  }
+ ],
+ "packages/reactive-audio/src/overlay.ts": [
+  {
+   "path": "packages/reactive-audio/src/overlay.ts",
+   "content": "Hue-preservation invariant is broken by independent per-channel clamping. The header (and the test at overlay.test.ts:28) promises \"all channels scale by the same factor in linear light, so ratios never change\", but each channel is individually clamped with `Math.min(1, c * gain)`. As soon as any channel saturates, that channel is pinned to 1 while the others keep growing, so the ratios \u2014 and therefore the hue \u2014 change. Example: `applyOverlayLinear([1, 0.5, 0], 1, 1)` yields `[1, 0.6, 0]`; the input ratio R:G = 2:1 becomes 1.67:1, a visible hue shift toward the saturated channel. The existing test only uses [0.6, 0.3, 0.15] (peak 0.66 after gain 1.1), so it never exercises saturation and passes despite the broken behavior. To preserve hue, clip uniformly: scale all channels by the same factor and, if the peak exceeds 1, apply one shared clip so ratios are retained.",
+   "suggestion_code": "  const scaled = [\n    clamp01(planned[0]!) * gain,\n    clamp01(planned[1]!) * gain,\n    clamp01(planned[2]!) * gain,\n  ];\n\n  const peak = Math.max(scaled[0]!, scaled[1]!, scaled[2]!);\n\n  const clip = peak > 1 ? 1 / peak : 1;\n\n  return [scaled[0]! * clip, scaled[1]! * clip, scaled[2]! * clip];",
+   "existing_code": "    return Math.min(1, c * gain);",
+   "start_line": 70,
+   "end_line": 70,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/reactive-audio/src/overlay.ts",
+   "content": "`clamp01` folds +Infinity to 0 instead of clamping it to 1. `Number.isFinite(+Infinity)` is false, so an infinite `planned` value returns 0 (a fully lit source renders black) and an infinite `energy` yields `overlayGain` = 1 (overlay silently disabled). For a numeric clamp, only NaN is undefined; \u00b1Infinity should clamp to the 1/0 bounds. This is a silent failure rather than an explicit error, and the magnitude of the mistake (bright -> black) is in the wrong direction.",
+   "suggestion_code": "  if (Number.isNaN(v)) return 0;",
+   "existing_code": "  if (!Number.isFinite(v)) return 0;",
+   "start_line": 25,
+   "end_line": 25,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/reactive-audio/src/overlay.ts",
+   "content": "The clamp -> zero-check -> `Math.min(1, ...)` sequence is duplicated between `applyOverlayScalar` here and the `scale` helper inside `applyOverlayLinear` (lines 65-70). Any change to the clipping behavior (e.g. the uniform-hue clip suggested above) must be kept in sync in both places, otherwise the scalar and RGB callers silently diverge. Consider extracting a single shared scaling helper used by both paths.",
+   "existing_code": "  return Math.min(1, p * overlayGain(energy, reactiveAmount, cap));",
+   "start_line": 52,
+   "end_line": 52,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/renderer/src/index.ts": [
+  {
+   "path": "packages/renderer/src/index.ts",
+   "content": "`renderWithLatency` re-renders each fixture in isolation by calling `renderFrame(plan, beat + offset, [f])`. Inside `renderFrame`, both `globalCellOrder` and `resolveTarget` are computed from the `[f]` argument only, so the global cell ordering is lost:\n\n- Group targets that are order-relative (`resolveTarget` for `LEFT`/`RIGHT`/`CENTER` filters the passed `order`) now resolve against a single fixture. A LEFT cue will light the first third of *every* fixture \u2014 including fixtures physically on the right \u2014 instead of only the globally left-most cells.\n- `orderIndex`/`orderLen` (used for chase phase `idx / orderLen`, hue alternation `idx % 2`, and `shape`) become per-fixture instead of global, so chase phase, palette alternation and brightness shaping diverge from a normal `renderFrame` call over the full fixture set, producing inconsistent visuals between latency-compensated and non-compensated renders.\n\nThe latency compensation should only shift the sampled beat; the target/order computation must still use the full fixture list. Consider computing global order/targets once and applying the per-fixture offset to the beat only (e.g. build the layers from the full fixture set, sampling each fixture at its own offset).",
+   "existing_code": "    for (const [id, buf] of renderFrame(plan, beat + offset, [f])) out.set(id, buf);",
+   "start_line": 170,
+   "end_line": 170,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/renderer/src/index.ts",
+   "content": "`active` is sorted descending by priority (`sort((a, b) => b.priority - a.priority)`), so `active[active.length - 1]` is the *lowest*-priority cue and `active[active.length - 2]` the second-lowest. Naming them `topHue`/`subHue` (and using them as the primary palette theme) suggests the highest-priority active cue should drive the primary hue. As written, the palette theme is derived from the cues that should be overridden, which likely produces the wrong colour theme whenever more than one cue is active. If the intent is priority order, use `active[0]`/`active[1]` (or document that the last element is intentional).",
+   "existing_code": "  const topHue = active.length ? lookHue(active[active.length - 1]!.startBeat) : 210;\n  const subHue = active.length > 1 ? lookHue(active[active.length - 2]!.startBeat) : (topHue + 40) % 360;",
+   "start_line": 116,
+   "end_line": 117,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/renderer/src/index.ts",
+   "content": "`frameHash` feeds fixture ids and payload bytes into the same FNV-1a stream with no boundary between them, so distinct frames can hash identically. Example: id `\"a\"` with bytes `[98, 0]` and id `\"ab\"` with bytes `[0]` both mix the sequence `[97, 98, 0]` and yield the same hash, so two different frames are treated as equal. Mixing a length (or delimiter) for both the id and the byte payload makes each entry unambiguous.",
+   "suggestion_code": "    mix(id.length);\n    for (let i = 0; i < id.length; i++) mix(id.charCodeAt(i)!);\n    mix(buf.length);\n    for (const byte of buf) mix(byte);",
+   "existing_code": "    for (let i = 0; i < id.length; i++) mix(id.charCodeAt(i)!);\n    for (const byte of buf) mix(byte);",
+   "start_line": 153,
+   "end_line": 154,
+   "category": "bug",
+   "severity": "low"
+  }
+ ]
+}

@@ -1,0 +1,425 @@
+{
+ "apps/desktop/electron/services/config-service.ts": [
+  {
+   "path": "apps/desktop/electron/services/config-service.ts",
+   "content": "The unsubscribe handle returned by `store.subscribe()` is discarded. After `stop()` sets `this.store = null`, the store (which may be the shared instance owned by show-service) still holds the closure referencing this service, so `history` keeps growing and `listeners` keep firing for a service that is already stopped \u2014 a listener/lifecycle leak. Keep the handle and release it in `stop()`.",
+   "suggestion_code": "  private storeUnsubscribe: (() => void) | null = null;\n  private subscribeStore(): void {\n    this.storeUnsubscribe = this.store?.subscribe((change) => {\n      this.history.push(change);\n      this.tracker.count(\"changes\");\n      for (const listener of this.listeners) listener(change);\n    }) ?? null;\n  }",
+   "existing_code": "  private subscribeStore(): void {\n    this.store?.subscribe((change) => {\n      this.history.push(change);\n      this.tracker.count(\"changes\");\n      for (const listener of this.listeners) listener(change);\n    });\n  }",
+   "start_line": 81,
+   "end_line": 87,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/electron/services/config-service.ts",
+   "content": "`get()` acquires the store twice: the first `requireStore().get(key)` is inside the try/catch, but the second `this.requireStore().layerOf(key)` is outside it. If the service is not started (or `stop()` nulls the store concurrently between the two calls), `requireStore()` throws `\"config-service not started\"` instead of returning the `E_CONFIG_GET`/`E_UNKNOWN_KEY` error shape that the IPC callers expect, turning a recoverable error into an unhandled rejection. Capture the store once and reuse it.",
+   "suggestion_code": "    const store = this.requireStore();\n    return { ok: true, key, value, layer: store.layerOf(key), liveSafe: def.liveSafe };",
+   "existing_code": "    return { ok: true, key, value, layer: this.requireStore().layerOf(key), liveSafe: def.liveSafe };",
+   "start_line": 177,
+   "end_line": 177,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/electron/services/config-service.ts",
+   "content": "`reset()` diverges from `get()`/`set()`: it does not validate the key via `defineKey()` and does not wrap `store.reset()` in try/catch. `PersistentConfigStore.reset()` calls `save()`, and `ConfigStore.reset()` indexes `this.layers[scope]` \u2014 an invalid `scope` from IPC will throw `TypeError`, and a disk write failure will throw from `save()`. Both escape as exceptions instead of the `{ ok: false, error }` reply the channel contract expects. Mirror `set()`'s validation and error wrapping.",
+   "suggestion_code": "  reset(scope: Scope, key: string): { ok: true; key: string; scope: string } | ConfigErrorReply {\n    try {\n      defineKey(key);\n    } catch {\n      return { ok: false, error: { code: \"E_UNKNOWN_KEY\", message: `${key}: unknown key (fix: remove it or pick a registry key)` } };\n    }\n    const store = this.requireStore();\n    try {\n      store.reset(scope, key);\n    } catch (err) {\n      return { ok: false, error: { code: \"E_CONFIG_RESET\", message: `${key}: ${messageOf(err)}` } };\n    }\n    this.tracker.count(\"resets\");\n    return { ok: true, key, scope };\n  }",
+   "existing_code": "  reset(scope: Scope, key: string): { ok: true; key: string; scope: string } {\n    const store = this.requireStore();\n    store.reset(scope, key);\n    this.tracker.count(\"resets\");\n    return { ok: true, key, scope };\n  }",
+   "start_line": 196,
+   "end_line": 201,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/services/config-service.ts",
+   "content": "The singleton captures the options of whichever caller happens to construct it first (`instance ??= new ConfigService(opts)`) and silently ignores `filePath`/`userDataDir`/`store` from later callers. A later call that passes a different file path or store will be routed to the wrong store with no error \u2014 a real failover/data-routing hazard when this is used outside of tests.",
+   "existing_code": "export async function getConfigService(opts: ConfigServiceOptions = {}): Promise<ConfigService> {\n  instance ??= new ConfigService(opts);",
+   "start_line": 247,
+   "end_line": 248,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/services/config-service.ts",
+   "content": "`resetConfigServiceForTest()` only nulls the reference without calling `stop()`, so the previous service's store subscription, accumulated history, and any unsaved state (the store's `save()` is only invoked from `stop()`/mutating calls) are left behind, and the old store keeps notifying the orphaned listeners. This is a likely source of test cross-contamination and lost writes. Call `stop()` (or at least `flush()` and unsubscribe) before clearing.",
+   "existing_code": "export function resetConfigServiceForTest(): void {\n  instance = null;\n}",
+   "start_line": 254,
+   "end_line": 256,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/services/config-service.ts",
+   "content": "`history` is appended on every store change and never trimmed, while `changes()` copies the entire array. For a long-running desktop session (and because the shared store can also be mutated by show-service) this grows without bound. Consider a bounded ring buffer or a cap with eviction.",
+   "existing_code": "  private history: ConfigChange[] = [];",
+   "start_line": 61,
+   "end_line": 61,
+   "category": "performance",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/src/features/settings/settings-view.tsx": [
+  {
+   "path": "apps/desktop/src/features/settings/settings-view.tsx",
+   "content": "Clicking `Set` on a row that was never edited sends an empty string to `config/set`, because `edits[key]` is only populated on change and this falls back to `\"\"`. That writes/overwrites the setting with an empty value (clobbering the existing effective value) instead of doing nothing. Guard against an absent edit before committing.",
+   "suggestion_code": "    const value = edits[key];\n    if (value === undefined) return;",
+   "existing_code": "    const value = edits[key] ?? \"\";",
+   "start_line": 40,
+   "end_line": 40,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/src/features/settings/settings-view.tsx",
+   "content": "The write is fire-and-forget and `edits[key]` is cleared unconditionally, regardless of the outcome. `invoke` resolves `null` on failure (or returns the `error` union from `config/set`), so a failed write silently drops the user's typed value while leaving the config unchanged, with no feedback in this view. Await the result and only drop the edit (and/or show an error) when the write actually succeeded.",
+   "existing_code": "    void invoke(\"config/set\", { version: 1, scope, key, value });\n    setEdits((prev) => {\n      const next = { ...prev };\n      delete next[key];\n      return next;\n    });",
+   "start_line": 46,
+   "end_line": 51,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/src/features/settings/settings-view.tsx",
+   "content": "`applyPending` re-issues the queued writes but never clears the corresponding entries from `edits`, so the inputs keep showing the stale pending text and the ConfigField still reports it as the current value even after the pending queue is drained. It also clears `pending` unconditionally even if every `config/set` failed, silently losing the queued changes. Clear `edits` for the applied keys and only drain successfully-applied entries.",
+   "existing_code": "    for (const p of pending) void invoke(\"config/set\", { version: 1, scope: p.scope, key: p.key, value: p.value });\n    setPending([]);",
+   "start_line": 54,
+   "end_line": 55,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/features/settings/settings-view.tsx",
+   "content": "The pending queue lives only in local component state. Unmounting the Settings view (navigating to another route) destroys it, so any edits queued while Live was active are lost silently with no persistence or store-backed source of truth.",
+   "existing_code": "  const [pending, setPending] = useState<PendingChange[]>([]);",
+   "start_line": 19,
+   "end_line": 19,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/features/settings/settings-view.tsx",
+   "content": "Rendering is capped at `keys.slice(0, 200)`, but the group heading count, the group nav counts, and the search/filter all operate on the full registry. In a group with more than 200 keys, keys past the cap are unreachable in the UI while the UI still advertises the larger count, so some configurable keys cannot be edited at all.",
+   "existing_code": "            {keys.slice(0, 200).map((k) => (",
+   "start_line": 92,
+   "end_line": 92,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "apps/desktop/src/features/settings/settings-view.tsx",
+   "content": "`Reset` resets the persisted config but leaves `edits[k.key]` untouched, so the input and ConfigField continue to display the previously typed value even though the setting was reset. Clear the local edit for `k.key` on reset (and surface the `config/reset` outcome) so the UI reflects the reset state.",
+   "existing_code": "                <Button size=\"sm\" variant=\"ghost\" onClick={() => { void invoke(\"config/reset\", { version: 1, scope: k.scope, key: k.key }); }}>Reset</Button>",
+   "start_line": 99,
+   "end_line": 99,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/config/scripts/export.mjs": [
+  {
+   "path": "packages/config/scripts/export.mjs",
+   "content": "Rows whose cell count is neither 5 nor 6 are silently dropped, and the parser is also sensitive to trailing whitespace: the catalog file may be checked out with CRLF or with a trailing space after the final `|`, in which case `line.slice(1, -1)` strips the wrong character and the split yields an extra empty cell (e.g. 7 cells for a 6-column row). Either way the row silently disappears from registry.ts, config-reference.md, config_schema.json and config_defaults.json with no error, so a key can be lost without the CI staleness check ever noticing. Validate the cell count and throw on anything unexpected, and normalize the line (trim / strip CR) before slicing.",
+   "existing_code": "    const cells = line.slice(1, -1).split(\"|\").map((c) => c.trim());\n    if (cells.length === 6) {",
+   "start_line": 16,
+   "end_line": 17,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/config/scripts/export.mjs",
+   "content": "The 5-column fallback hard-codes the assumption that the omitted column is `range` and unconditionally destructures the last two cells as receipt/liveSafe. If a future row omits any other column (e.g. receipt or live-safe), every remaining cell shifts and receipt/liveSafe are silently mis-assigned \u2014 notably `liveSafe` would be read from the wrong cell, changing generated behavior (registry `liveSafe` and the reference table) with no error. Parse the header row and map each cell by header name (or reject rows that don't match the expected shape) instead of relying on positional fallback.",
+   "existing_code": "    } else if (cells.length === 5) {\n      const [key, def, unit, receipt, ls] = cells;",
+   "start_line": 20,
+   "end_line": 21,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/config/scripts/export.mjs",
+   "content": "The regex `/^-?[\\d.]+$/` matches non-numeric strings such as `1.2.3`, `1..2`, `.` or `..` and classifies them as `number`. The generated `defaultFor` then returns `Number(defaultRaw)`, i.e. NaN, and `JSON.stringify(NaN)` emits `null` into config_defaults.json / config_schema.json \u2014 producing a `null` default for a key declared as type `number`. Use a stricter check (e.g. reject when `Number.isNaN(Number(def))` after the boolean branch) and fail on invalid defaults rather than emitting NaN/null.",
+   "existing_code": "  if (/^-?[\\d.]+$/.test(def)) return \"number\";",
+   "start_line": 32,
+   "end_line": 32,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/config/scripts/export.mjs",
+   "content": "`JSON.parse` failures fall back to the raw string, so a key inferred as `type: \"json\"` can ship a string default, and the permissive schema type (`[\"array\",\"object\",\"string\",\u2026]`) masks the mismatch. This is reproducible against the current catalog: the map/list defaults are JS object literals, not valid JSON (e.g. `planner.sectionEnergy` = `{intro:.3, verse:.45, \u2026}`, `mixer.owner.factorWeights` = `{ weight: 1, \u2026 }`, `analysis.bands` = `{bass:[20,150], \u2026}`), so all of these silently become raw strings in config_schema.json and config_defaults.json even though Python consumers expect a dict/list. Make the catalog emit valid JSON, or fail loudly on parse errors instead of falling back to the raw string.",
+   "existing_code": "    default: (() => { try { return JSON.parse(r.def); } catch { return r.def; } })(),",
+   "start_line": 60,
+   "end_line": 60,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/config/scripts/export.mjs",
+   "content": "Duplicate catalog keys are never detected. The generated `KEYS` array keeps every occurrence (duplicates included), while the generated `new Map(KEYS.map(...))` and this `Object.fromEntries(...)` keep only the last occurrence \u2014 so the KEYS array length, the Map index, and the emitted defaults/schema silently diverge, and `rows.length` reported to the user overcounts. Reject (or at least warn about) duplicate keys before generating artifacts.",
+   "existing_code": "const defaults = Object.fromEntries(rows.map((r) => [r.key, (() => { try { return JSON.parse(r.def); } catch { return r.def; } })()]));",
+   "start_line": 65,
+   "end_line": 65,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/config/scripts/export.mjs",
+   "content": "The header comment lists only docs/config-reference.md and config_schema.json as regenerated output, but the script also writes packages/config/src/registry.ts and analysis/src/autolight_analysis/config_defaults.json. Since the stated contract is \"CI fails if stale\", an inaccurate output list is misleading \u2014 update it to enumerate all four generated artifacts.",
+   "existing_code": "// Regenerates docs/config-reference.md and\n// analysis/src/autolight_analysis/config_schema.json from the catalog in",
+   "start_line": 3,
+   "end_line": 4,
+   "category": "documentation",
+   "severity": "low"
+  }
+ ],
+ "packages/rekordbox-live/src/composite.ts": [
+  {
+   "path": "packages/rekordbox-live/src/composite.ts",
+   "content": "Root prefix matching has no path-separator boundary: `file.startsWith(root)` will accept `/music-other/track.mp3` for a configured root `/music`, admitting files outside the library and corrupting track resolution. The extension check lowercases `file` but this check uses the original case, so case-insensitive macOS paths can also silently fail. Compare against `root` with a trailing separator (or verify the next char is a separator) and normalize case consistently.",
+   "existing_code": "    if (!roots.some((root) => file.startsWith(root))) continue;",
+   "start_line": 153,
+   "end_line": 153,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-live/src/composite.ts",
+   "content": "Nested ternary (three levels deep) to derive `track` violates the project rule forbidding nested ternaries and is hard to reason about. Extract a helper (e.g. `trackFromDeck(fallback)`) or use an if/else chain.",
+   "existing_code": "      forceTrack !== undefined\n        ? toTrackLike(forceTrack)\n        : fallback.resolution",
+   "start_line": 806,
+   "end_line": 808,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/composite.ts",
+   "content": "The `effectiveBpm` quality label is derived from the mere existence of a link tempo (`this.linkTempo()`), but `effectiveBpmFor` only uses the link value when it is fresh (< 2000 ms). If `linkTempo()` returns a stale sample (or a fresh one while the grid is absent so `effectiveBpm` ends up null), the value is actually grid-derived/estimated or null yet is labelled `derived`. The freshness decision must be shared with `effectiveBpmFor`. Additionally, `linkTempo()` is invoked twice per `stateFor` (once here, once inside `effectiveBpmFor`); if the callback returns a changing value the label and the value can disagree \u2014 read it once and pass it through.",
+   "existing_code": "      effectiveBpm: this.linkTempo() ? \"derived\" : \"estimated\",",
+   "start_line": 824,
+   "end_line": 824,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/composite.ts",
+   "content": "Deck-to-file attribution is purely positional: the first unassigned candidate is handed to whichever pending deck is iterated first, with no check that the open file corresponds to the pressed deck. With simultaneous LOAD presses on both decks (or when only one new file appears), a file can be attributed to the wrong deck, mislabelling track/resolution. Consider correlating by press order/timing or exposing the deck association to the resolver.",
+   "existing_code": "      const pick = candidates.find((path) => !assigned.has(path)) ?? null;",
+   "start_line": 612,
+   "end_line": 612,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/composite.ts",
+   "content": "When no open file can be resolved, this emits a synthetic track id `unresolved:<deck>:<at>`, but the deck keeps `hasTrack = true` with `resolution = null`, so the very next `stateFor` (from `tick`/other events) yields `{ id: \"unknown\" }`. The emitted track id therefore changes from the synthetic value to `unknown` for the same logical track, causing spurious track-change churn downstream. Use a stable id for the unresolved state.",
+   "existing_code": "        this.emit(this.stateFor(deck, at, { id: `unresolved:${deck}:${String(at)}` }));",
+   "start_line": 622,
+   "end_line": 622,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/composite.ts",
+   "content": "`compositeFuseAxPlayhead`/`ingestAxPlayhead` only guard null/NaN and unconditionally rebase the anchor (and clear `locked`). Freshness is delegated to the caller, so a stale or out-of-order AX playhead can move the estimate backwards or forwards without the rate-limited slew used in `correctByAudio`, defeating the \"never steps backwards while playing\" guarantee. Add an age-based freshness/monotonicity guard here (or require the caller to pass freshness) rather than relying on call-site discipline.",
+   "existing_code": "  if (input.axPlayheadSeconds === null || !Number.isFinite(input.axPlayheadSeconds)) {",
+   "start_line": 342,
+   "end_line": 342,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/composite.ts",
+   "content": "The link-tempo freshness test does not reject future timestamps: if `link.atNs > atNs` (clock skew between the Link peer and the local clock) the difference is negative and always passes `< 2000`, so a future sample is trusted. Also `2000` is a magic number that should be a configurable/constant value. Use an explicit `age >= 0 && age < timeout` check.",
+   "existing_code": "    if (link && Number(atNs - link.atNs) / 1e6 < 2000) return link.bpm;",
+   "start_line": 791,
+   "end_line": 791,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/composite.ts",
+   "content": "`updateHz` is effectively hardcoded to 60 whenever `envelopeRateHz > 0` (the default), so the reported live update rate never reflects the actual emission/correlation rate. If a placeholder, wire it to the real tick/broadcast frequency or a named constant so it doesn't mislead hosts.",
+   "existing_code": "    const updateHz = this.envelopeRateHz > 0 ? 60 : 0;",
+   "start_line": 884,
+   "end_line": 884,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/rekordbox-live/src/composite.ts",
+   "content": "The lock decision compares sub-sample offsets against `lockThresholdMs` (default 15 ms), but at `envelopeRateHz` (default 50 Hz) the correlation offset is quantized to 20 ms/sample. `Math.abs(offsetMs) <= lockThresholdMs` can therefore only be true at zero lag, making the configured tolerance unreachable and causing `locked` to flip while the playhead is still up to one sample (20 ms) off. Either make the threshold at least one sample period or compare in sample units.",
+   "existing_code": "      state.locked = scaled >= this.minLockConfidence && Math.abs(offsetMs) <= this.lockThresholdMs;",
+   "start_line": 721,
+   "end_line": 721,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "packages/simulator/src/index.test.ts": [
+  {
+   "path": "packages/simulator/src/index.test.ts",
+   "content": "`pending` is unconditionally reset to 0 on every gate outcome, so `maxPending` is structurally always exactly 1 whenever frames >= 1. The advertised no-queue-growth invariant and the callers' `expect(q.maxPending).toBeLessThanOrEqual(1)` assertions are therefore vacuous and pass even with a leaking pipeline. Model pending depth realistically (only increment when a frame is produced, clear only on send) so `maxPending` is meaningful.",
+   "existing_code": "    expect(r.maxPending).toBeLessThanOrEqual(1);",
+   "start_line": 17,
+   "end_line": 17,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "packages/simulator/src/index.test.ts",
+   "content": "`r.dropped` is never asserted, and the total check (`sent + dropped + offline`) is true by construction because `soak()` classifies every frame into exactly one of the three buckets. A regression where `dropEvery` is ignored and every frame is either sent or offline (`dropped === 0`) still satisfies this test. Pin the exact expected counts instead, e.g. `expect(r.dropped).toBe(8898)` (frames `i % 97 === 0` minus the 10 such frames inside `[1000, 2000)`), or at minimum `expect(r.dropped).toBeGreaterThan(0)` plus the exact `sent`/`offline` values.",
+   "existing_code": "    expect(r.sent + r.dropped + r.offline).toBe(864_000);",
+   "start_line": 18,
+   "end_line": 18,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "packages/simulator/src/index.test.ts",
+   "content": "The disconnect window boundaries are not pinned: with `disconnectAt: 5, reconnectAt: 10` the test only probes frames `6` and `11`. An off-by-one in the source (`frameIndex > disconnectAt` or `frameIndex <= reconnectAt`) would still return `offline` for 6 and `send` for 11, so this test passes with a broken window. Assert the exact boundary frames as well, e.g. `expect(gateFrame(5, { disconnectAt: 5, reconnectAt: 10 })).toBe(\"offline\")` and `expect(gateFrame(10, { disconnectAt: 5, reconnectAt: 10 })).toBe(\"send\")`.",
+   "existing_code": "    expect(gateFrame(6, { disconnectAt: 5, reconnectAt: 10 })).toBe(\"offline\");",
+   "start_line": 11,
+   "end_line": 11,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/simulator/src/index.test.ts",
+   "content": "For the given options (`fps: 60, hours: 0.05`) `performanceScenario` always yields exactly `Math.floor(60 * 3600 * 0.05) === 10800` frames, so `n > 100_000` can never be reached. The guard is dead in practice and, more importantly, the test never asserts the expected frame count, so the \"never stalls\"/terminates-normally claim is unverified. Assert the exact count (`expect(n).toBe(10800)`) and remove or document the guard.",
+   "existing_code": "      if (n > 100_000) break;",
+   "start_line": 29,
+   "end_line": 29,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/simulator/src/index.test.ts",
+   "content": "`loops` counts *active frames*, not loop events, so a single loop spanning many frames trivially satisfies `loops > 0`. The test also never verifies deck handover ordering (deck 1 -> deck 2 -> deck 1) or that the loop actually starts and ends. Track loop state transitions (e.g. increment on `loop.active === true` following a non-active frame) and assert the observed deck handover sequence.",
+   "existing_code": "      if (d.loop.active) loops++;",
+   "start_line": 28,
+   "end_line": 28,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/simulator/src/index.test.ts",
+   "content": "Only the `x` positions are validated. A defect in cell count, `index`/`order`, or the `y` coordinate (and the rest of the `Fixture` shape such as `hardwareId`/`calibration.segmentCount`) would go undetected. Consider asserting the cell length and the full cell objects (e.g. `expect(cells).toHaveLength(3)` and checking `c.position.y === 0`, `c.index`/`c.order`).",
+   "existing_code": "    expect(makeFixture(\"f\", 3).cells.map((c) => c.position.x)).toEqual([0, 0.5, 1]);",
+   "start_line": 6,
+   "end_line": 6,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/venue/src/groups.ts": [
+  {
+   "path": "packages/venue/src/groups.ts",
+   "content": "`PERIMETER` is only pushed inside the `z >= ceilZ` branch, so it ends up identical to `CEILING`. The `else if (span > 0.5)` / `else` branches handling non-ceiling fixtures never add to `PERIMETER`, meaning wall/ground-level perimeter fixtures are silently omitted. Any consumer that derives roles (`defaultRoles(g.PERIMETER, \u2026)`) or drives perimeter effects from `PERIMETER` will get the wrong set. Consider computing `PERIMETER` independently of the ceiling test (e.g., based on proximity to the outline / wall membership).",
+   "existing_code": "    if (z >= ceilZ) {\n      HORIZONTALS.push(k);\n      PERIMETER.push(k);\n    } else if (span > 0.5) VERTICALS.push(k);\n    else HORIZONTALS.push(k);",
+   "start_line": 85,
+   "end_line": 89,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/venue/src/groups.ts",
+   "content": "`SplitDef.angleRad` is declared but never read anywhere in `splitWeights` (nor anywhere in the repo). Quadrant/sector partitioning only applies `offset`, so any caller that sets `angleRad` to rotate the split axis silently receives an unrotated partition. Either wire `angleRad` into the `theta` computation (`t = theta[i] - off - angleRad`) or remove the field to avoid a misleading API.",
+   "existing_code": "  angleRad?: number;",
+   "start_line": 31,
+   "end_line": 31,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/venue/src/groups.ts",
+   "content": "The `anchor` selector ignores `sel.anchorId` and `sel.maxDist`: it only uses `anchorPos`/`radiusM`. A caller relying on the anchor being resolved by id, or on `maxDist` clamping the result radius, gets an incorrect (and potentially unbounded) selection. Either use both fields or drop them from the `Selector` variant so the contract matches the behaviour.",
+   "existing_code": "        const d = Math.hypot(fields.pos[i * 3]! - sel.anchorPos.x, fields.pos[i * 3 + 1]! - sel.anchorPos.y);\n        if (d <= sel.radiusM) out.push(keyOf(fields, i));",
+   "start_line": 272,
+   "end_line": 273,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/venue/src/groups.ts",
+   "content": "`partOf` has no `default` case and can return `undefined` for an unknown `split.kind` (e.g. a `SplitDef` loaded from persisted show data). Additionally, for `quadrants`/`sectors`, `parts` is computed as raw `split.sectors ?? 4`, so `sectors: 0` yields a zero-length `weights` array while `partOf` returns `-1`. In both cases `weights[p]` is `undefined`, and assigning `weights[p]![i] = 1` throws a `TypeError` at runtime. Clamp the part index / part count and reject unknown kinds (throw a descriptive error or fall back safely).",
+   "existing_code": "      const p = partOf(i);\n      weights[p]![i] = 1;",
+   "start_line": 168,
+   "end_line": 169,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/venue/src/groups.ts",
+   "content": "This `split.line` branch inside `partOf` is unreachable: the weight loop only calls `partOf` when `!(split.kind === \"drawn\" && split.line)`, so for `kind === \"drawn\"` with a line defined, the loop handles it via `signedLineDist` and `partOf` is never invoked (and when `line` is undefined this block is skipped). Besides being dead code, it duplicates the exact signed-distance math already implemented in `signedLineDist`. Remove it and rely on the single `signedLineDist` helper.",
+   "existing_code": "        if (split.line) {\n          const { a, b } = split.line;\n          const dx = b.x - a.x;\n          const dy = b.y - a.y;\n          const len = Math.hypot(dx, dy) || 1;\n          const d = ((fields.pos[i * 3]! - a.x) * -dy + (fields.pos[i * 3 + 1]! - a.y) * dx) / len;\n          return d >= 0 ? 0 : 1;\n        }",
+   "start_line": 141,
+   "end_line": 148,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/venue/src/groups.ts",
+   "content": "This deeply chained/nested ternary is hard to read and violates the project rule against nested ternaries. Extract it into a small helper or a `switch` on `split.kind` returning the part count so it stays consistent with `partOf`.",
+   "existing_code": "  const parts = split.kind === \"alternate\" ? Math.max(2, split.k ?? 2)",
+   "start_line": 153,
+   "end_line": 153,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/venue/src/probes.test.ts": [
+  {
+   "path": "packages/venue/src/probes.test.ts",
+   "content": "These test probes re-implement the lighting model locally and assert on those helpers instead of the production field output, so they can pass even when the real pipeline is broken.\n\nP-ROOM-04 computes `bestBeat`/`bestFar` solely from `rippleLevel(...)` and never reads the `fields` it derives via `squareSetup` (`void fields;` only silences the unused variable). The production ripple field is therefore never exercised \u2014 the test is a self-consistency check of the local helper. Additionally the test title says the pulse \"meets at the antipode on beat 5\", but `rippleLevel(1, 4, 0.125, 0.2)` is exactly 1 at beat 4, so the assertion centers on beat 4, not 5. Assert against actual production field values at the expected beat and derive the beat of maximum production level, rather than the helper's closed-form.",
+   "existing_code": "      const far = rippleLevel(1, beat, 0.125, 0.2);\n      if (far > bestFar) { bestFar = far; bestBeat = beat; }",
+   "start_line": 105,
+   "end_line": 106,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "packages/venue/src/probes.test.ts",
+   "content": "These assertions are tautological with respect to production behavior. `splitLevel` returns 1/0 purely from `Math.floor(beat / rateBeats) % 2` and the sign of `signedSplit`, so given that a cell is in `leftIdx` (signedSplit >= 0) the first expectation is always 1 and the second always 0 \u2014 regardless of the real field's side assignment or feathering. A hard-switch (non-feathered) implementation would still pass, yet the test name claims \"DS-33 feather\". Only two discrete beats (0 and 0.5) are sampled, so any transition/feather behavior between them is never asserted.",
+   "existing_code": "      expect(splitLevel(fields.signedSplit[i]!, 0, 0.5)).toBe(1);\n      expect(splitLevel(fields.signedSplit[i]!, 0.5, 0.5)).toBe(0);",
+   "start_line": 90,
+   "end_line": 91,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "packages/venue/src/probes.test.ts",
+   "content": "`seamS` and `zeroMode` are accepted parameters but are explicitly discarded (`void seamS; void zeroMode;`), and neither ever influences `room`/`zeroS`/ordering. Call sites pass meaningful values like `0.375` / `\"dj-nearest\"` and the P-ROOM-01/02 names imply seam and zero-mode behavior is exercised, but the setup ignores both \u2014 the tests do not actually vary seam or zero-mode as claimed. Either wire the parameters into the computed `zeroS`/ordering, or drop them (and the `void` statements) and update call sites to avoid the misleading contract.",
+   "existing_code": "  void seamS;\n  void zeroMode;",
+   "start_line": 18,
+   "end_line": 19,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/venue/src/probes.test.ts",
+   "content": "The P-ROOM-01 assertion is too loose to verify \"nearest the DJ\". `expect(fields.physical[best]).not.toBe(0)` only rejects one physical index, and the disjunction `gDj[best] < 0.6 || dDj[best] < 0.5` passes when only one of the two distance metrics is small, so an unrelated cell that happens to satisfy a single threshold makes the test green. This \"can pass despite broken behavior\" pattern means the probe does not actually confirm the orbit head aligns with the DJ projection. Assert both metrics (e.g. both below threshold) or compare against the DJ's own cell directly.",
+   "existing_code": "    expect(fields.physical[best]).not.toBe(0);\n    expect(fields.gDj[best]! < 0.6 || fields.dDj[best]! < 0.5).toBe(true);",
+   "start_line": 51,
+   "end_line": 52,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/venue/src/probes.test.ts",
+   "content": "`total` is the sum of the Gaussian `orbitLevel` values across all cells, so it is essentially always far greater than 0.5 whenever any cell contributes \u2014 the assertion cannot detect an orbit that fails to light up. A broken/empty field would still sum above the threshold because the head cell alone contributes ~1. Prefer asserting on the peak value / a per-cell expectation rather than an aggregate that is trivially satisfied.",
+   "existing_code": "      expect(total).toBeGreaterThan(0.5);",
+   "start_line": 69,
+   "end_line": 69,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/venue/src/probes.test.ts",
+   "content": "Redundant/duplicated imports: `./placement.js` is imported three separate times, and `computeFields` is imported from both `./fields.js` and `./index.js` (as `compute`). Since `index.ts` merely re-exports the same `computeFields` from `./fields.js`, the two aliases point at the same function and the duplication invites divergence (e.g. if one path is later re-exported differently) and makes it unclear which module is under test. Consolidate into single import statements from the canonical modules.",
+   "existing_code": "import { applyLogicalOrder } from \"./placement.js\";\nimport { fitRunMapping } from \"./placement.js\";\nimport { computeFields, fieldCellsFromMap, zeroSFor } from \"./fields.js\";\nimport { computeFields as compute, fieldCellsForReference, referenceById, squareMirrored } from \"./index.js\";",
+   "start_line": 2,
+   "end_line": 5,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ]
+}

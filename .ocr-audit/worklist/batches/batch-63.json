@@ -1,0 +1,213 @@
+{
+ "packages/show-director/package.json": [
+  {
+   "path": "packages/show-director/package.json",
+   "content": "With `\"type\": \"module\"` the package is ESM-first, but it only exposes legacy `main`/`types` fields and no `exports` map. Every other package in this workspace (e.g. `@autolight/config`) declares an `exports` entry. Under `moduleResolution: \"NodeNext\"` / Node's ESM resolver, an explicit `exports` map is required for reliable subpath/type resolution and encapsulation; without it, resolution relies on legacy `main` fallbacks and any future subpath entry (like `config`'s `./registry`) will silently fail to resolve. Add an `exports` map.",
+   "suggestion_code": "  \"types\": \"./dist/index.d.ts\",\n  \"exports\": {\n    \".\": {\n      \"types\": \"./dist/index.d.ts\",\n      \"default\": \"./dist/index.js\"\n    }\n  },",
+   "existing_code": "  \"types\": \"./dist/index.d.ts\",",
+   "start_line": 6,
+   "end_line": 6,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-director/package.json",
+   "content": "The `lint` script only runs `tsc --noEmit`, which is identical to the `typecheck` script below. It performs no linting (no eslint/biome/prettier is invoked and none is declared in `devDependencies`), so it gives false assurance that code-style/lint issues are being checked in CI. Either wire up a real linter and add it to `devDependencies`, or remove the misleading `lint` script.",
+   "suggestion_code": "    \"lint\": \"eslint \\\"src/**/*.ts\\\"\",",
+   "existing_code": "    \"lint\": \"tsc --noEmit -p tsconfig.json\",",
+   "start_line": 10,
+   "end_line": 10,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-director/package.json",
+   "content": "`--passWithNoTests` makes the test stage succeed even when the suite is empty or test discovery breaks (e.g. the `vitest.config.ts` `include` glob stops matching), masking a regressed/misconfigured test setup in CI. Consider dropping this flag so an empty run fails loudly.",
+   "suggestion_code": "    \"test\": \"vitest run\",",
+   "existing_code": "    \"test\": \"vitest run --passWithNoTests\",",
+   "start_line": 9,
+   "end_line": 9,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/show-host/package.json": [
+  {
+   "path": "packages/show-host/package.json",
+   "content": "The test script uses `--passWithNoTests`, so `vitest run` exits 0 even when zero test files are executed (e.g. a test file is deleted/renamed, a glob stops matching, or a compile error excludes the suite). This silently disables the test gate in CI and lets broken behavior ship. Remove the flag so a missing/empty suite fails, or enforce a minimum test count.",
+   "suggestion_code": "    \"test\": \"vitest run\",",
+   "existing_code": "    \"test\": \"vitest run --passWithNoTests\",",
+   "start_line": 9,
+   "end_line": 9,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-host/package.json",
+   "content": "`lint` is an exact duplicate of `typecheck` (`tsc --noEmit -p tsconfig.json`). No actual linter (eslint/prettier/etc.) is installed or invoked, so the `lint` gate cannot catch any lint/rule violations and gives a false sense of coverage. Either install and wire a real linter, or drop the redundant script to avoid a misleading no-op gate.",
+   "existing_code": "    \"lint\": \"tsc --noEmit -p tsconfig.json\",\n    \"typecheck\": \"tsc --noEmit -p tsconfig.json\"",
+   "start_line": 10,
+   "end_line": 11,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-host/package.json",
+   "content": "This ESM package (`\"type\": \"module\"`) declares only the legacy `main`, with no `exports` map and no `files` whitelist. Without `exports`, subpath/deep imports are unrestricted and consumers can reach internal modules; without `files`, `npm publish` ships the entire source tree (src, tests, tsconfig) instead of just `dist`. Add an `exports` map (with `types`/`import` conditions) and a `files: [\"dist\"]` whitelist to make resolution explicit and publishing predictable.",
+   "suggestion_code": "  \"main\": \"./dist/index.js\",\n  \"types\": \"./dist/index.d.ts\",\n  \"exports\": {\n    \".\": {\n      \"types\": \"./dist/index.d.ts\",\n      \"import\": \"./dist/index.js\"\n    }\n  },\n  \"files\": [\n    \"dist\"\n  ],",
+   "existing_code": "  \"main\": \"./dist/index.js\",\n  \"types\": \"./dist/index.d.ts\",",
+   "start_line": 5,
+   "end_line": 6,
+   "category": "maintainability",
+   "severity": "medium"
+  }
+ ],
+ "packages/show-planner/src/identity.test.ts": [
+  {
+   "path": "packages/show-planner/src/identity.test.ts",
+   "content": "The palette-distance assertion is weakened by `- 0.06`, and this is not just a tolerance: `ensureMinDistance` (color.ts:129) uses this exact same `oklchDistance` to enforce `config.paletteMinDistance`, so asserting against `DEFAULT_CONFIG.paletteMinDistance` directly would pass deterministically. With `0.12 - 0.06 = 0.06`, the test now accepts core colours only half as far apart as the configured contract, so a genuine regression in `ensureMinDistance`/`generateCorePalette` (e.g. distance collapsing to 0.06) would still pass. Assert the real contract, or document precisely why a mismatch is tolerated.",
+   "existing_code": "        expect(oklchDistance(core[i]!, core[j]!)).toBeGreaterThanOrEqual(\n          DEFAULT_CONFIG.paletteMinDistance - 0.06,\n        );",
+   "start_line": 79,
+   "end_line": 81,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/identity.test.ts",
+   "content": "The change key is `Math.round(c.color.h)` only, whereas the production detector `countPaletteChanges` (validate.ts:164) keys on `h` **and** `c.toFixed(2)`. Two consequences: (1) any hue change smaller than 0.5\u00b0 rounds to the same key and is never counted, so an unjustified mid-section repaint with a small hue delta escapes the invariant; (2) a change in chroma/lightness at a non-boundary beat is invisible. Key on the full colour (hue + chroma) and compare exact values so real palette changes cannot be rounded away.",
+   "existing_code": "      const key = `${Math.round(c.color!.h)}`;",
+   "start_line": 112,
+   "end_line": 112,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/identity.test.ts",
+   "content": "`changes` is only incremented for transitions between consecutive coloured cues (`last !== null`), so a colour introduced by the very first coloured cue is never validated. If the earliest coloured cue sits at a non-section/non-return beat yet carries a non-identity hue (e.g. an early `static-look`), it is skipped entirely and the `justified / changes === 1` check still passes. Seed the loop with the identity colour (or assert the first coloured cue's beat is a boundary) so the invariant covers the whole song, not just transitions.",
+   "existing_code": "    expect(changes).toBeGreaterThan(0);\n    expect(justified / changes).toBe(1);",
+   "start_line": 119,
+   "end_line": 120,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/show-planner/src/layers-fallback.ts": [
+  {
+   "path": "packages/show-planner/src/layers-fallback.ts",
+   "content": "The \"One spelling, two readers\" claim is not actually enforced, and the two readers have already diverged. The renderer's legacy fallback (`packages/renderer/src/layers.ts` `CUE_LAYER`) is a *separate, partial* map containing only 9 cue types (`section-look`, `breakdown-look`, `chase-flip`, `build-ramp`, `white-hit`, `impact`, `strobe`, `blackout`, `dip`). Every cue type that is mapped here but absent there is resolved differently depending on whether the cue carries a tag: this file maps `reveal`/`strobe-burst` to `exclusive` and `orbit`/`texture-hold` to `spatial`, while the renderer's fallback lands all of them on `accents`. So the same cue type renders on a different layer for tagged vs legacy untagged cues. The existing renderer test only asserts `white-hit`/`chase-flip`, which happen to agree, so the drift stays undetected. Recommend sharing a single source of truth (e.g. have the renderer import this map, or promote it to `@autolight/contracts`) instead of maintaining two literal copies.",
+   "existing_code": "// untagged cues. One spelling, two readers.",
+   "start_line": 3,
+   "end_line": 3,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/layers-fallback.ts",
+   "content": "The function returns a bare `string`, so the \"one canonical spelling\" goal is not enforced at compile time: a typo or unauthorized layer name (e.g. `\"base \"`, `\"accentss\"`) would compile, and the caller in `compile.ts:67` has to re-validate the result with `isPlanLayer`. Return the `PlanLayer` union instead so invalid layer names are rejected by the compiler.",
+   "suggestion_code": "export function layerForCueName(type: string): PlanLayer {",
+   "existing_code": "export function layerForCueName(type: string): string {",
+   "start_line": 4,
+   "end_line": 4,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/layers-fallback.ts",
+   "content": "Unknown cue types silently fall through to `accents` with no diagnostic, error, or log. Because matching is exact/case-sensitive, a protocol mismatch or near-miss (e.g. `\"Orbit\"`, `\"gradient_look\"`, or a null/undefined type) renders the cue on the wrong layer with no signal that the type was unrecognized. Consider emitting a compile diagnostic for unrecognized types so schema drift is surfaced rather than silently mislayered.",
+   "existing_code": "    default:\n      return \"accents\";",
+   "start_line": 62,
+   "end_line": 63,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "packages/show-planner/src/restraint.test.ts": [
+  {
+   "path": "packages/show-planner/src/restraint.test.ts",
+   "content": "This duty assertion does not validate the engine's budget and can pass despite a broken budget:\n\n1. The threshold `0.5 + 0.02` is not the bound the engine enforces. `restrain()` compares against `config.strobeMaxDuty * (0.5 + style.impactAggression) + 0.02` (restraint.ts:136); with festival (`impactAggression: 0.9`) and `strobeMaxDuty: 0.5` the real budget is `0.5 * 1.4 + 0.02 = 0.72`. So the test asserts a value the code never promises \u2014 it can fail while the engine faithfully honours its configured budget.\n2. `subBeatCues` returns at most one strobe per section and is only invoked once per section (compile.ts:421), so this fixture emits a single 0.5-beat strobe and `duty \u2248 0.002`. The assertion passes trivially regardless of budget enforcement.\n3. The literal `256` denominator is the fixture's chorus `endBeat`; any change to the synthetic track silently skews the ratio instead of failing.\n\nEither tighten the engine's budget to match the intended assertion, or compute the expected bound from the same config/style inputs and derive the denominator from the section length so the test actually constrains the engine.",
+   "existing_code": "    const duty = strobes.reduce((n, c) => n + c.durationBeats, 0) / 256;\n    expect(duty).toBeLessThanOrEqual(0.5 + 0.02);",
+   "start_line": 118,
+   "end_line": 119,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/restraint.test.ts",
+   "content": "The test is named \"records every substitution and rejection in the compile result\" but only asserts `substituted.length > 0` and never inspects rejections at all. Rejections are surfaced in `compileShow`'s `rejected` array (not in `plan.cues`), so a regression that stops recording rejections (or mislabels substitution reasons) would still pass this test. The `reason.includes(...)` substring matching also couples the test to human-readable message text in restraint.ts, so any wording change breaks the test while behaviour is unchanged.\n\nAssert on the returned `rejected` entries and on concrete counts/locations (e.g. the substituted beats) rather than a single `> 0` and free-text substrings.",
+   "existing_code": "    const substituted = plan.cues.filter((c) => c.reason.includes(\"after the last one\") || c.reason.includes(\"budget\"));\n    expect(substituted.length).toBeGreaterThan(0);",
+   "start_line": 105,
+   "end_line": 106,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/restraint.test.ts",
+   "content": "These gap literals are implicitly coupled to `DEFAULT_CONFIG.whiteHitMinBeats` (16): the loop only holds while the configured minimum stays greater than the largest literal. If the config were lowered to \u2264 15 the loop would spuriously fail; if it is raised the loop still never exercises the boundary. More importantly, the test name claims \"...without a recorded justification\", yet no path is exercised where a close pair is allowed because a justification was recorded \u2014 the assertion only covers the substitution branch. Derive the gaps from `DEFAULT_CONFIG.whiteHitMinBeats` (e.g. test `min - 1` substitutes and `min` is accepted) and add coverage for the justified-accept path.",
+   "existing_code": "    for (const gap of [1, 2, 4, 8, 15]) {",
+   "start_line": 77,
+   "end_line": 77,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/simulator/src/index.ts": [
+  {
+   "path": "packages/simulator/src/index.ts",
+   "content": "With `dropEvery` set, `frameIndex === 0` always satisfies `0 % dropEvery === 0` and is reported as `\"drop\"`, i.e. the very first frame is dropped. This is also inconsistent with the real fault injector in the same package: `FaultInjectingTransport.send` (recording.ts:57-59) increments `n` *before* the modulo, so it drops the 2nd, 4th, \u2026 frame, never the 1st. Callers that pass a 0-based index to `gateFrame` (journeys/soak.journey.ts:17 passes `n` starting at 1) get a different drop pattern than the transport they are meant to simulate. Exclude index 0, e.g. `frameIndex > 0 && frameIndex % spec.dropEvery === 0`.",
+   "suggestion_code": "  if (spec.dropEvery !== undefined && spec.dropEvery > 0 && frameIndex > 0 && frameIndex % spec.dropEvery === 0) return \"drop\";",
+   "existing_code": "  if (spec.dropEvery !== undefined && spec.dropEvery > 0 && frameIndex % spec.dropEvery === 0) return \"drop\";",
+   "start_line": 38,
+   "end_line": 38,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/simulator/src/index.ts",
+   "content": "The loop window is derived from the absolute time `t` while `playheadSeconds` is `t % 1800`. Once `t >= 1800` the emitted `loop.startSeconds`/`endSeconds` lie outside the track length and no longer contain the reported playhead (e.g. at t=1800: playhead=0 but loop=[1796,1800]), so the generator emits physically impossible DeckStates (an active loop that can never be entered). Compute the bounds from `playheadSeconds` instead (e.g. a 4 s window ending at the playhead, clamped to [0, 1800]).",
+   "existing_code": "      loop: inLoop\n        ? { active: true, startSeconds: t - 4, endSeconds: t, beatLength: 8 }\n        : { active: false, startSeconds: null, endSeconds: null, beatLength: null },",
+   "start_line": 78,
+   "end_line": 80,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/simulator/src/index.ts",
+   "content": "`opts.fps` is typed as a plain `number` and is used in the frame-count math (`Math.floor(fps * 3600 * hours)`) without validation, but `BigInt(fps)` throws a `RangeError` for any non-integer value (e.g. the very common `fps: 59.94`), aborting the generator mid-iteration rather than producing a partial run. Either round/validate `fps` once (`const fps = Math.round(opts.fps ?? 60)`) or convert via a safely-rounded integer before calling `BigInt`.",
+   "existing_code": "      receivedAtNs: BigInt(i) * 1_000_000_000n / BigInt(fps),",
+   "start_line": 83,
+   "end_line": 83,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "packages/track-model/vitest.config.ts": [
+  {
+   "path": "packages/track-model/vitest.config.ts",
+   "content": "`readdirSync(workspaceSrc)` returns *all* entries, not just directories. Any non-directory entry in `packages/` (e.g. an editor/OS temp file, `.DS_Store`, a stray `README.md`, or a future root-level config file) produces a bogus alias like `@autolight/<file>` pointing at `<file>/src/index.ts`, which does not exist. The repository root `vitest.config.ts` already guards against this with `{ withFileTypes: true }` + `.filter((e) => e.isDirectory())`; this config should do the same for consistency and robustness.",
+   "suggestion_code": "  readdirSync(workspaceSrc, { withFileTypes: true })\n    .filter((e) => e.isDirectory())\n    .map((e) => [`@autolight/${e.name}`, join(workspaceSrc, e.name, \"src\", \"index.ts\")]),",
+   "existing_code": "  readdirSync(workspaceSrc).map((p) => [`@autolight/${p}`, join(workspaceSrc, p, \"src\", \"index.ts\")]),",
+   "start_line": 12,
+   "end_line": 12,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/track-model/vitest.config.ts",
+   "content": "This comment claims the resolution is identical to `apps/desktop/vitest.config.ts`, but it is not: both `apps/desktop/vitest.config.ts` and the root `vitest.config.ts` additionally register a subpath alias (`/^@autolight\\/([^/]+)\\/([^/]+)$/ -> <pkg>/src/$2.ts`) *before* the package barrels. Because the string aliases here are prefix-matched (`@autolight/contracts` matches `@autolight/contracts/schema`), any subpath import in this package's tests (e.g. `@autolight/contracts/...`) would be rewritten to `.../src/index.ts/...` and fail to resolve. Either add the same subpath alias or correct the comment so it does not assert false parity.",
+   "existing_code": "// Same resolution as apps/desktop/vitest.config.ts: workspace packages resolve",
+   "start_line": 7,
+   "end_line": 7,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/track-model/vitest.config.ts",
+   "content": "`workspaceSrc` is derived as `join(root, \"..\")` and consumed directly by `readdirSync` with no validation. If the package is ever moved out of `packages/` or the layout changes, this throws a raw `ENOENT` at config-load time with no hint about the expected directory. Consider asserting existence (e.g. `existsSync(workspaceSrc)`) and throwing a descriptive error, so a layout change fails with an actionable message instead of a confusing stack trace.",
+   "existing_code": "const workspaceSrc = join(root, \"..\");",
+   "start_line": 10,
+   "end_line": 10,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ]
+}

@@ -1,0 +1,381 @@
+{
+ "packages/venue/src/wizard.ts": [
+  {
+   "path": "packages/venue/src/wizard.ts",
+   "content": "For a single-cell strip (`strip.cellCount === 1`) both generated endpoint anchors target cell 0 with the same `atMeters`, producing duplicate anchors. `fitRunMapping` rejects non-monotonic anchors (`mine[i+1].atMeters <= mine[i].atMeters`), so `runWizardOnSim` throws \"non-monotonic fit\" for a 1-cell run. With `cellCount === 0`, `strip.cellToArcM[-1]` is `undefined`, so the anchors carry `NaN` positions. Guard both cases.",
+   "suggestion_code": "    { cell: 0, run: run.id, atMeters: strip.cellToArcM[0]! },\n    ...(strip.cellCount > 1\n      ? [{ cell: strip.cellCount - 1, run: run.id, atMeters: strip.cellToArcM[strip.cellCount - 1]! }]\n      : []),",
+   "existing_code": "    { cell: 0, run: run.id, atMeters: strip.cellToArcM[0]! },\n    { cell: strip.cellCount - 1, run: run.id, atMeters: strip.cellToArcM[strip.cellCount - 1]! },",
+   "start_line": 67,
+   "end_line": 68,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/venue/src/wizard.ts",
+   "content": "The corner anchor declares that cell `best` sits at the raw corner arc `c`, but the anchor's cell centre is actually at `strip.cellToArcM[best]`. This bakes in up to half a cell of systematic bias (the value is then used directly as the fit constraint by `fitRunMapping`), and is inconsistent with the endpoint anchors above which use the true cell arcs. Use the resolved cell position.",
+   "suggestion_code": "    if (!anchors.some((a) => a.cell === best)) anchors.push({ cell: best, run: run.id, atMeters: strip.cellToArcM[best]! });",
+   "existing_code": "    if (!anchors.some((a) => a.cell === best)) anchors.push({ cell: best, run: run.id, atMeters: c });",
+   "start_line": 77,
+   "end_line": 77,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/venue/src/wizard.ts",
+   "content": "`truthM[c.physicalIndex]!` is a non-null assertion over a caller-supplied array. If `physicalIndex` is out of range (e.g. `truthM.length !== cellCount`), the value is `undefined`, `mid - undefined` is `NaN`, and `Math.max(worst, NaN)` makes the whole result `NaN` \u2014 silently defeating the tolerance assertion instead of surfacing a bad mapping. Validate the index/length instead of asserting.",
+   "suggestion_code": "    const truth = truthM[c.physicalIndex];\n    if (truth === undefined) throw new Error(`fit error: no truth arc for cell ${c.physicalIndex}`);\n    worst = Math.max(worst, Math.abs(mid - truth) / pitch);",
+   "existing_code": "    worst = Math.max(worst, Math.abs(mid - truthM[c.physicalIndex]!) / pitch);",
+   "start_line": 88,
+   "end_line": 88,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/venue/src/wizard.ts",
+   "content": "`runLen` is derived from `runLength(run)`, which returns 0 for an empty/degenerate polyline (or a single point). Dividing by it yields `NaN`/`Infinity` for every entry of `midS`, which then feeds `orderLogical`'s sort comparator and produces a non-deterministic logical order. Guard against `runLen <= 0` before normalising.",
+   "suggestion_code": "  if (runLen <= 0) throw new Error(`run ${run.id} has zero length; cannot normalise mid positions`);\n  const midS = strip.cellToArcM.map((m) => m / runLen);",
+   "existing_code": "  const midS = strip.cellToArcM.map((m) => m / runLen);",
+   "start_line": 103,
+   "end_line": 103,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/venue/src/wizard.ts",
+   "content": "`verifyOffset` indexes `headS[i]`/`expectedS[i]` without validating that the two arrays have equal length. If `expectedS` is shorter, the missing entries are `undefined`, every `d` becomes `NaN`, `mean` becomes `NaN`, so `mean <= toleranceCells` is false and the function reports a spurious `ok: false` even when the offset is within tolerance. Also note the shift search divides by `headS.length` while the mean uses `Math.max(1, headS.length)`, which is inconsistent for an empty array. Validate lengths (and non-empty) up front.",
+   "suggestion_code": "  if (headS.length === 0 || headS.length !== expectedS.length) {\n    return { ok: false, suggestShift: 0 };\n  }\n  for (let i = 0; i < headS.length; i++) {\n    let d = Math.abs(headS[i]! - expectedS[i]!);\n    d = Math.min(d, 1 - d);\n    err += d;\n  }",
+   "existing_code": "  for (let i = 0; i < headS.length; i++) {\n    let d = Math.abs(headS[i]! - expectedS[i]!);\n    d = Math.min(d, 1 - d);\n    err += d;\n  }",
+   "start_line": 115,
+   "end_line": 119,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/venue/src/wizard.ts",
+   "content": "`WizardDirection` only admits \"clockwise\" | \"counterclockwise\" | \"both\", all three of which are handled above, so the final `return \"unknown\"` is unreachable dead code. Drop it (and narrow the return type to `RunTopology`) or widen the parameter type if untrusted runtime strings are genuinely expected. Corrected suggested edit: keep the `clockwise`/`counterclockwise` check and only delete the dead fallback, so the body becomes `if (answer === \"both\") return \"split-independent\";` followed by `return \"single\";`.",
+   "suggestion_code": "  return \"single\";",
+   "existing_code": "  if (answer === \"clockwise\" || answer === \"counterclockwise\") return \"single\";\n  return \"unknown\";",
+   "start_line": 16,
+   "end_line": 17,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "analysis/pyproject.toml": [
+  {
+   "path": "analysis/pyproject.toml",
+   "content": "The glob `tests/*.py` only matches test modules directly under `tests/`. Nested test files exist (e.g. `tests/owner/test_owner_library.py`, `tests/validation/test_validation_set.py`) and they use bare `assert` (S101), module-level imports after code (E402), unused args (ARG), etc. Under the strict selected rule set (`S`, `ARG`, `E`, ...) `ruff check` will FAIL on those nested files because the relaxations never apply. Add a recursive pattern.",
+   "suggestion_code": "\"tests/*.py\" = [\"SIM115\", \"S101\", \"PLR2004\", \"ARG\", \"E402\"]\n\"tests/**/*.py\" = [\"SIM115\", \"S101\", \"PLR2004\", \"ARG\", \"E402\"]",
+   "existing_code": "\"tests/*.py\" = [\"SIM115\", \"S101\", \"PLR2004\", \"ARG\", \"E402\"]",
+   "start_line": 38,
+   "end_line": 38,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "analysis/pyproject.toml",
+   "content": "`PLR2004` is silenced for tests below, but the `PLR` family is not part of `select`, so this ignore is dead code (silently ineffective). Either add `PLR` to the selected rules or drop `PLR2004` from the per-file-ignores to avoid misleading configuration.",
+   "suggestion_code": "select = [\"BLE\", \"S\", \"E\", \"F\", \"ARG\", \"I\", \"SIM\", \"RUF\", \"PLR\"]",
+   "existing_code": "select = [\"BLE\", \"S\", \"E\", \"F\", \"ARG\", \"I\", \"SIM\", \"RUF\"]",
+   "start_line": 34,
+   "end_line": 34,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/pyproject.toml",
+   "content": "`extraPaths` omits `src`, yet this is a src-layout project (`analysis/src/autolight_analysis/`). Unless the package happens to be installed in the analyzed environment, Pyright cannot resolve `import autolight_analysis...` (used by tests and by the package's own modules), so those imports degrade to untyped `Any` and real type errors in production code paths are masked. Add `src` to `extraPaths` (or configure `venvPath`/`venv`).",
+   "suggestion_code": "extraPaths = [\"src\", \"tests\", \"tests/fixtures\"]",
+   "existing_code": "extraPaths = [\"tests\", \"tests/fixtures\"]",
+   "start_line": 40,
+   "end_line": 40,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/pyproject.toml",
+   "content": "For a src-layout package, tests can only do `import autolight_analysis...` if the project is installed first; `conftest.py` only adds `tests/` and `tests/fixtures` to `sys.path`, not `src/`. A plain `pytest` run in a fresh checkout (no editable install) will fail with `ModuleNotFoundError`. Add `pythonpath = [\"src\"]` so collection works without a prior install.",
+   "suggestion_code": "testpaths = [\"tests\"]\npythonpath = [\"src\"]",
+   "existing_code": "testpaths = [\"tests\"]",
+   "start_line": 28,
+   "end_line": 28,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/pyproject.toml",
+   "content": "`pydantic>=2.13.5` pins a very specific patch-level minimum. If that exact version does not exist on the index, `pip install` of the project fails outright (hard install error, not a resolution fallback). Please confirm the version exists and prefer a released, verified floor (e.g. `>=2.13` or the actual latest published patch).",
+   "suggestion_code": "    \"pydantic>=2.13\",",
+   "existing_code": "    \"pydantic>=2.13.5\",",
+   "start_line": 7,
+   "end_line": 7,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "apps/desktop/electron/services/simulator-show.test.ts": [
+  {
+   "path": "apps/desktop/electron/services/simulator-show.test.ts",
+   "content": "`await show.start()` is invoked *before* the `try` block in every streaming test (this one, the snapshot test, and the B/A test). If `start()` throws or only partially completes, the `finally { await show.shutdown(); }` is never reached, so the UDP socket / timer / reader loop started by `start()` is leaked into the next test and the suite can hang or cross-contaminate. Move `start()` inside the guarded region so cleanup always runs.",
+   "suggestion_code": "    const show = new SimulatorShow();\n    try {\n      await show.start();",
+   "existing_code": "    const show = new SimulatorShow();\n    await show.start();\n    try {",
+   "start_line": 27,
+   "end_line": 29,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/electron/services/simulator-show.test.ts",
+   "content": "The stream is synchronized with a bare `setTimeout` fixed delay. This is inherently flaky: under CI load 300ms may not be enough for a razer frame to be produced, making `frames.length > 0` and the `varied` assertion fail nondeterministically (and, conversely, pass by luck). Prefer polling/waiting for an observable produced frame (e.g. a helper that retries until `show.frames().length > 0` with a bounded timeout) rather than a fixed sleep.",
+   "existing_code": "      await new Promise((r) => setTimeout(r, 300));\n      const frames = show.frames();",
+   "start_line": 30,
+   "end_line": 31,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/services/simulator-show.test.ts",
+   "content": "`last?.cells.every(...)` short-circuits to `undefined` when `frames` is empty (`last === undefined`), so `expect(undefined).toBe(true)` fails with a misleading message and no signal that no blackout frame was ever captured. There is also no assertion that a frame actually exists. Assert the frame presence explicitly before checking its contents.",
+   "suggestion_code": "      const last = frames[frames.length - 1];\n      expect(last).toBeDefined();\n      expect(last?.cells.every(([r, g, b]) => r === 0 && g === 0 && b === 0)).toBe(true);",
+   "existing_code": "      const last = frames[frames.length - 1];\n      expect(last?.cells.every(([r, g, b]) => r === 0 && g === 0 && b === 0)).toBe(true);",
+   "start_line": 78,
+   "end_line": 79,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/services/simulator-show.test.ts",
+   "content": "The test reaches into private state via `show as unknown as { recording: { records: { kind: string }[] } }`, which defeats the type checker and is coupled to an internal shape. If `recording`/`records`/`kind` is renamed, the cast still compiles and the test can silently assert nothing meaningful (or throw a TypeError on `undefined.records.map`). Expose a supported accessor (e.g. a public `records()`/`recordKinds()`) instead of casting through `unknown`.",
+   "existing_code": "      const kinds = new Set((show as unknown as { recording: { records: { kind: string }[] } }).recording.records.map((r) => r.kind));",
+   "start_line": 37,
+   "end_line": 37,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/services/simulator-show.test.ts",
+   "content": "The test title claims the snapshot equals a *transported* frame, but it only compares `snapshot()` against whatever historical frames the fixed 300ms sleep happened to capture. It never confirms the snapshot corresponds to bytes actually sent over the socket, so the test can pass without validating the stated contract, and it races with an in-progress render (snapshot may be taken between frames). Assert the snapshot against a frame obtained from an observable produced/sent event rather than a fixed delay and the whole accumulated frame list.",
+   "existing_code": "      const snapshot = show.snapshot();\n      const frames = show.frames();",
+   "start_line": 52,
+   "end_line": 53,
+   "category": "test",
+   "severity": "medium"
+  }
+ ],
+ "apps/desktop/scripts/run-rkbx-link.mjs": [
+  {
+   "path": "apps/desktop/scripts/run-rkbx-link.mjs",
+   "content": "The header contract states step 3 \"Prints the sudo command the owner pastes into a terminal\", but `sudoCmd` is referenced only inside the `if (dryRun)` branch. On a normal run the owner never sees the command they are supposed to run, so the script never fulfils its primary purpose \u2014 and the 10s listener (step 4) starts before the command is even known. Print the command on the normal path as well.",
+   "suggestion_code": "const sudoCmd = `sudo \"${BINARY}\" > \"${LOG}\" 2>&1`;\nconsole.log(`log: ${LOG}`);\nconsole.log(`owner runs in a terminal: cd \"${SIDECAR_DIR}\" && ${sudoCmd} &`);\nif (dryRun) {",
+   "existing_code": "const sudoCmd = `sudo \"${BINARY}\" > \"${LOG}\" 2>&1`;\nconsole.log(`log: ${LOG}`);\nif (dryRun) {",
+   "start_line": 58,
+   "end_line": 60,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/scripts/run-rkbx-link.mjs",
+   "content": "`startsWith` treats each known offsets version as a prefix of the in-use version, so a known `7.2.1` wrongly matches query `7.2.19` and suppresses the honest \"no offsets\" warning (false negative). Compare exact versions instead.",
+   "suggestion_code": "if (!known.includes(rekordboxVersion)) {",
+   "existing_code": "if (!known.some((v) => rekordboxVersion.startsWith(v))) {",
+   "start_line": 52,
+   "end_line": 52,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/scripts/run-rkbx-link.mjs",
+   "content": "`done()` is wired to both the socket `error` handler and the 10s timer. On a bind failure (e.g. EADDRINUSE) `error` can fire before the socket is running, and `socket.close()` on a socket with no handle throws ERR_SOCKET_DGRAM_NOT_RUNNING, masking the real error before the FAILURE line prints. Guard the close, clear the pending timer, and report a bind failure distinctly from a genuinely quiet sidecar (which is when the \"check sudo prompt...\" text is actually appropriate).",
+   "suggestion_code": "const done = (ok, detail) => {\n  clearTimeout(timer);\n  try { socket.close(); } catch {}\n  console.log(ok ? `SUCCESS: ${detail}` : `FAILURE: ${detail}`);\n  process.exit(ok ? 0 : 1);\n};",
+   "existing_code": "const done = (ok, detail) => {\n  socket.close();\n  console.log(ok ? `SUCCESS: ${detail}` : `FAILURE: ${detail}`);\n  process.exit(ok ? 0 : 1);\n};",
+   "start_line": 69,
+   "end_line": 73,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/scripts/run-rkbx-link.mjs",
+   "content": "`readFileSync` runs unguarded immediately after `existsSync` (TOCTOU), so a permission error or a file that disappears between the two calls throws an uncaught stack instead of the script's own `fail()` message. It also executes before the `--dry-run` exit, contradicting the header's \"--dry-run ... without touching ... disk\" contract.",
+   "suggestion_code": "let offsetsText;\ntry {\n  offsetsText = readFileSync(OFFSETS, \"utf8\");\n} catch (err) {\n  fail(`cannot read offsets file at ${OFFSETS}: ${err.message}`);\n}",
+   "existing_code": "const offsetsText = readFileSync(OFFSETS, \"utf8\");",
+   "start_line": 49,
+   "end_line": 49,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/scripts/run-rkbx-link.mjs",
+   "content": "Hardcoded default Rekordbox version `7.2.19` is a business value that will silently rot as Rekordbox updates; when the env var is unset the script reports on a version nobody is actually running. Require an explicit version (fail clearly) or otherwise derive it.",
+   "existing_code": "const rekordboxVersion = process.env.RKBX_REKORDBOX_VERSION ?? \"7.2.19\";",
+   "start_line": 35,
+   "end_line": 35,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "apps/desktop/scripts/run-rkbx-link.mjs",
+   "content": "The \"as of 2026-10-12\" claim is hardcoded and will become misleading over time. Derive the date (e.g. from the offsets file mtime) or drop it from the message.",
+   "existing_code": "  console.log(`no ${rekordboxVersion} offsets upstream as of 2026-10-12: sidecar will start but likely sends no packets.`);",
+   "start_line": 53,
+   "end_line": 53,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "apps/desktop/scripts/run-rkbx-link.mjs",
+   "content": "Paths are interpolated into a shell command inside double quotes without escaping. A homedir containing `\"`, a backtick, `$(...)` or other shell metacharacters produces a broken \u2014 or injected \u2014 command for the owner to paste. Shell-quote/escape the paths before building the command.",
+   "existing_code": "  console.log(`[dry-run] owner runs in a terminal: cd \"${SIDECAR_DIR}\" && ${sudoCmd} &`);",
+   "start_line": 62,
+   "end_line": 62,
+   "category": "security",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/src/components/kit.test.ts": [
+  {
+   "path": "apps/desktop/src/components/kit.test.ts",
+   "content": "Tautological/ineffective assertion. The expected value is derived from the same `tokenForTone()` being exercised (`StatusDot` renders `backgroundColor: tokenForTone(tone)`), so a broken mapping (e.g. `ok` silently returning the `bad`/idle token, or even an empty string \u2014 `toContain(\"\")` is always true) still passes. The test name claims it verifies the label, but `\"online\"` is never asserted either.",
+   "suggestion_code": "    const html = render(createElement(StatusDot, { tone: \"ok\", label: \"online\" }));\n    expect(html).toContain(\"online\");\n    expect(html).toContain(tokens.statusOk); // assert a concrete, independent token value",
+   "existing_code": "    expect(html).toContain(tokenForTone(\"ok\"));",
+   "start_line": 30,
+   "end_line": 30,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/components/kit.test.ts",
+   "content": "The test \"wires the three device actions through one handler\" never invokes `onAction`. `renderToStaticMarkup` strips event handlers, so it only confirms the button labels render. A regression where the buttons call `onAction(undefined)`/a wrong action id, or where `onClick` is dropped entirely (matching the F-APP-17 class of bug), would still pass. Use an interactive renderer (e.g. @testing-library/react) and click each button, asserting `onAction` is called with the exact action id.",
+   "suggestion_code": "    const calls: string[] = [];\n    const { getByText } = render(createElement(DeviceTile, { tile, onAction: (a) => calls.push(a) }));\n    ([\"IDENTIFY\", \"TEST CHASE\", \"RECALIBRATE\"] as const).forEach((a) => fireEvent.click(getByText(a)));\n    expect(calls).toEqual([\"IDENTIFY\", \"TEST CHASE\", \"RECALIBRATE\"]);",
+   "existing_code": "    const html = render(createElement(DeviceTile, { tile, onAction: () => undefined }));\n    expect(html).toContain(\"IDENTIFY\");",
+   "start_line": 148,
+   "end_line": 149,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/components/kit.test.ts",
+   "content": "`as unknown as TrackModel` / `as unknown as ShowCue` disable structural type-checking of the mocks. If a contract field is renamed or removed (e.g. `beatGrid.beats`, `musicalEvents`, `sections`), the test still compiles and passes while real IPC payloads would crash `InspectorPanel`/`CueList` at render time. Prefer building mocks that actually satisfy the contract types (or a factory typed against the schema) so contract drift fails the build.",
+   "suggestion_code": "const track: TrackModel = {\n  identity: { id: \"t1\", title: \"Track\" },\n  sections: [{ kind: \"chorus\", startBeat: 0, endBeat: 32 }],\n  musicalEvents: [{ type: \"drop\", beat: 32 }],\n  beatGrid: { beats: [{ index: 0, beatInBar: 1 }] },\n}; // no `as unknown` cast: contract mismatches must fail to compile",
+   "existing_code": "} as unknown as TrackModel;",
+   "start_line": 20,
+   "end_line": 20,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/components/kit.test.ts",
+   "content": "The test claims to prove \"bars distinct from beats\", but the only structural assertion is `left:0%` appearing >=1 time plus the aria-label. `BeatRuler` distinguishes bars via a longer tick (`h-3 bg-foreground` vs `h-1.5 bg-muted-foreground`), and none of that is checked. A regression that renders every tick with the beat styling (or drops the bar modulo logic) would still pass. Assert the distinct bar/beat styling presence and/or tick positions.",
+   "suggestion_code": "    expect(html).toContain(\"h-3\"); // bar tick styling\n    expect(html).toContain(\"h-1.5\"); // beat tick styling\n    expect((html.match(/left:0%/g) ?? []).length).toBe(1); // only the beat-0 tick sits at 0%",
+   "existing_code": "    expect(html.match(/left:0%/g)?.length ?? 0).toBeGreaterThan(0);",
+   "start_line": 94,
+   "end_line": 94,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/components/kit.test.ts",
+   "content": "Misleading regression guard. The comment states \"Both surfaces share this map, so the palette's fire() targets (command-palette.tsx) must stay in it\", but `command-palette.tsx` does not import `SHORTCUTS` \u2014 its `fire()` is called with literal \"master/blackout\"/\"master/full\"/\"master/freeze\"/\"master/resume\" strings. So this test never exercises the palette's `fire()` wiring and cannot detect the F-APP-17 regression it claims to guard (palette items closing without firing). Either add a palette-level test that selects the Emergency items and asserts `invoke` is called, or correct the comment to state what is actually covered.",
+   "existing_code": "    // Regression for F-APP-17: the palette's Emergency items used to close\n    // the palette without firing anything. Both surfaces share this map, so\n    // the palette's fire() targets (command-palette.tsx) must stay in it.",
+   "start_line": 282,
+   "end_line": 284,
+   "category": "test",
+   "severity": "high"
+  }
+ ],
+ "apps/desktop/src/routes/live/manual-intents.test.ts": [
+  {
+   "path": "apps/desktop/src/routes/live/manual-intents.test.ts",
+   "content": "`intent.channel in channels` walks the prototype chain and only tests key existence, so a bogus/non-implemented name that happens to be inherited (e.g. `\"toString\"`, `\"constructor\"`, `\"valueOf\"`) would still make this assertion pass. The test name claims to verify \"only implemented typed channels\" but does not. Use an own-property check and, ideally, validate the payload against the channel's request schema so a channel/payload mismatch is also caught. E.g.:\n```ts\nexpect(Object.prototype.hasOwnProperty.call(channels, intent.channel)).toBe(true);\n```",
+   "existing_code": "      expect(intent.channel in channels).toBe(true);",
+   "start_line": 9,
+   "end_line": 9,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/routes/live/manual-intents.test.ts",
+   "content": "These `toMatchObject` assertions only inspect a subset of keys, so they cannot detect a wrong/missing intent channel or extra payload fields. Notably `blinderIntent(64)` is asserted solely on `payload.at` while its channel is actually `\"show/trigger-build\"` (and that channel's request schema is `z.object({ version: v1 })`, which has no `at`); a mis-wired channel or a stripped/unexpected payload field would go unnoticed. `palettePickIntent` is only checked for `custom` and `flashIntent` only for `channel`. Assert the full intent (`channel` + `payload`) for each helper, and for helpers bound to a channel validate the payload with that channel's request schema.",
+   "existing_code": "    expect(blinderIntent(64).payload).toMatchObject({ at: 64 });\n    expect(palettePickIntent([1, 2, 3], true).payload).toMatchObject({ custom: true });\n    expect(flashIntent(true).channel).toBe(\"master/resume\");",
+   "start_line": 13,
+   "end_line": 15,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/routes/live/manual-intents.test.ts",
+   "content": "This assertion pins the clamp result at `2` for input `9`, but the `master/intensity` request schema in `@autolight/ipc` is `z.object({ version: v1, value: z.number().min(0).max(1) })` \u2014 a value of `2` is outside the contract and would be rejected at runtime. `manual-intents.ts` clamps with `Math.min(2, Math.max(0.5, value))`, so the test locks in a contract-violating bound instead of catching it. Assert a value within `[0, 1]` (and add negative/NaN/lower-bound cases) so the mismatch surfaces.",
+   "existing_code": "    expect(sensitivityIntent(9).payload).toMatchObject({ value: 2 });",
+   "start_line": 18,
+   "end_line": 18,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/src/routes/live/manual-intents.test.ts",
+   "content": "The fabricated `as unknown as TrackModel` fixture is never validated against the real model, and `toHaveLength(2)` only counts entries \u2014 it does not verify the returned colours, so an incorrect `SWATCH_BY_KIND` mapping (or falling back to the white default) would still pass. Also, because the two kinds are distinct this never exercises the de-duplication logic the description implies. Assert the actual swatch values and include a repeated `kind` to cover dedup.",
+   "existing_code": "    const track = { sections: [{ kind: \"chorus\" }, { kind: \"verse\" }] } as unknown as TrackModel;\n    expect(trackPalette(track)).toHaveLength(2);",
+   "start_line": 19,
+   "end_line": 20,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/routes/live/manual-intents.test.ts",
+   "content": "`flashIntent(true)` only exercises the resume branch; the `false` branch (`master/freeze` with `payload.frozen: true`) and the payload shape of the true branch (`{ version: 1, at: \"bar\" }`) are never asserted, so a swapped branch or wrong freeze payload would not be caught. Add an assertion for `flashIntent(false)`.",
+   "existing_code": "    expect(flashIntent(true).channel).toBe(\"master/resume\");",
+   "start_line": 15,
+   "end_line": 15,
+   "category": "test",
+   "severity": "medium"
+  }
+ ],
+ "packages/config/src/base.ts": [
+  {
+   "path": "packages/config/src/base.ts",
+   "content": "`JSON.parse` can legally return `null` (input `\"null\"`), so `parsed.values` throws `TypeError: Cannot read properties of null` \u2014 this access sits outside the try/catch that only wraps `JSON.parse`, so a malformed import crashes instead of returning `{ ok: false, ... }`. Additionally, when the document is a non-object (e.g. `42`, `true`, `\"x\"`) or carries an unexpected `version`, `Object.entries` yields nothing and the method silently returns `ok: true` while importing no values. Validate the document shape and the version before reading `values`, mirroring `readLayersFile` in store.ts (which rejects `version !== 1`).",
+   "suggestion_code": "    const doc = parsed !== null && typeof parsed === \"object\" ? (parsed as { version?: unknown; values?: unknown }) : null;\n    if (doc === null || doc.version !== 1) {\n      return { ok: false, badKeys: [\"<unsupported config document>\"] };\n    }\n    const values = (doc.values !== null && typeof doc.values === \"object\" ? doc.values : {}) as Record<string, unknown>;",
+   "existing_code": "    const values = (parsed as { values?: Record<string, unknown> }).values ?? {};",
+   "start_line": 61,
+   "end_line": 61,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/config/src/base.ts",
+   "content": "The number check only verifies `typeof v === \"number\"`, so out-of-range values (e.g. `runtime.clock.tickHz: -5` or `99999`) are accepted into the app layer even though the error message promises \"use a number within the allowed range\". `NaN` also passes (`typeof NaN === \"number\"`). This diverges from `validateImportValues` in store.ts, which parses `def.range` and rejects out-of-bounds / NaN values \u2014 a round trip through this method bypasses that enforcement. Either extract/reuse `validateImportValues` or add the range and `Number.isNaN` checks here.",
+   "suggestion_code": "      if (def.type === \"number\") {\n        if (typeof v !== \"number\" || Number.isNaN(v)) {\n          bad.push(`${k}: expected number in ${def.unit}, got ${typeof v} (fix: use a number within ${def.range || \"the allowed range\"})`);\n          continue;\n        }\n        const m = /^\\s*(-?\\d+(?:\\.\\d+)?)\\s+to\\s+(-?\\d+(?:\\.\\d+)?)\\s*$/.exec(def.range);\n        if (m && (v < Number(m[1]!) || v > Number(m[2]!))) {\n          bad.push(`${k}: got ${v}, allowed range ${def.range} ${def.unit} (fix: use a value within ${def.range})`);\n        }\n        continue;\n      }",
+   "existing_code": "      if (def.type === \"number\" && typeof v !== \"number\") {\n        bad.push(`${k}: expected number in ${def.unit}, got ${typeof v} (fix: use a number within ${def.range || \"the allowed range\"})`);\n        continue;\n      }",
+   "start_line": 73,
+   "end_line": 76,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/config/src/base.ts",
+   "content": "`layerOf` keys off `Map.has()`, but `get()` treats an explicit `undefined` as \"absent\" (`v !== undefined`) and falls through to the default. After `set(scope, key, undefined)` the two disagree: `layerOf(key)` returns the scope while `get(key)` returns the built-in default. `changedOnly()` then emits an inconsistent `{ value: <default>, layer: <scope> }`, i.e. it reports a \"changed\" entry whose value equals the default. Use the same presence semantics in both methods (`has()` in `get`, or document that `undefined` is not a storable value and reject it in `set`).",
+   "existing_code": "      const v = this.layers[ORDER[i]!]?.get(key);\n      if (v !== undefined) return v;",
+   "start_line": 33,
+   "end_line": 34,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/config/src/base.ts",
+   "content": "Only `number`/`boolean`/`string` key types are validated; keys registered with `type: \"json\"` (e.g. `runtime.roll.degradeOrder`, `analysis.bands`, `live.fusion.authority`, per the registry) accept any shape unvalidated, so malformed arrays/objects from an imported file are written straight into the app layer. Consider validating JSON-typed keys too (e.g. ensure the value is a plain object/array and `JSON.stringify` succeeds).",
+   "existing_code": "      if (def.type === \"string\" && typeof v !== \"string\") {\n        bad.push(`${k}: expected string, got ${typeof v}`);\n        continue;\n      }",
+   "start_line": 81,
+   "end_line": 84,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/config/src/base.ts",
+   "content": "`exportJson` flattens every key to its effective value, including built-in defaults, and drops which layer produced it. `importJson` then re-inserts all of them into the `app` layer, so an export/import round trip silently promotes built-in defaults into explicit app-layer overrides and loses the original origin layer (session/device/style). Combined with `importJson` never clearing the other layers, importing an exported document does not reproduce the exported state. Persist per-layer values (as `readLayersFile` does via `layers`) or document/handle the flattening explicitly.",
+   "existing_code": "    for (const k of KEYS) effective[k.key] = this.get(k.key);",
+   "start_line": 50,
+   "end_line": 50,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ]
+}

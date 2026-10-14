@@ -1,0 +1,315 @@
+{
+ "apps/desktop/src/features/live/live.test.ts": [
+  {
+   "path": "apps/desktop/src/features/live/live.test.ts",
+   "content": "`Array.prototype.every` returns `true` for an empty array, so this assertion passes vacuously whenever `vm.cells` ends up empty. That is reachable: in `liveViewModel` each fixture is skipped with `continue` when `fa.get(f.id)`/`fb.get(f.id)` is undefined, so a renderer regression could yield zero cells and this test would still pass. Assert the expected cell count (fixture has 2 segments) before checking colors.",
+   "suggestion_code": "    expect(vm.cells).toHaveLength(2);\n    expect(vm.cells.every((c) => c.color === \"rgb(0,0,0)\")).toBe(true);",
+   "existing_code": "    expect(vm.cells.every((c) => c.color === \"rgb(0,0,0)\")).toBe(true);",
+   "start_line": 45,
+   "end_line": 45,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/src/features/live/live.test.ts",
+   "content": "Both decks are constructed with crossfader `1`, which is also the `makeDeck` default. Because `audibleWeight` multiplies `channelFader * crossfader * masterFactor`, the crossfader term is identical for the two decks, so `weights.a > weights.b` is driven solely by the channel fader (1 vs 0.2). The crossfader blending path is never exercised, and the `xf` helper parameter is effectively constant \u2014 a regression in crossfader handling would still pass. Use distinct, non-default crossfader values to actually test the blend.",
+   "existing_code": "      deckA: deck(1, 1, 1, \"a\"), deckB: deck(2, 0.2, 1, \"b\"),",
+   "start_line": 23,
+   "end_line": 23,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/features/live/live.test.ts",
+   "content": "These assertions only check non-emptiness/length. `upcoming.length > 0` and `cells.toHaveLength(4)` would still pass if the wrong cues were surfaced (e.g. cues belonging to the non-owner deck, or cues already past the beat), if `target`/`type` were mis-mapped, or if the blended color were wrong. Assert concrete values instead \u2014 e.g. that the surviving cue is the `white-hit` at `startBeat: 32` with target `\"ALL\"`, and that cells carry the expected `x` positions.",
+   "existing_code": "    expect(vm.upcoming.length).toBeGreaterThan(0);\n    expect(vm.cells).toHaveLength(4);",
+   "start_line": 31,
+   "end_line": 32,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/features/live/live.test.ts",
+   "content": "`track` is `null` in both tests, so `rowForTrack(null, \u2026)` always returns `\"NEEDS ANALYSIS\"` \u2014 the assertion only covers the null branch of the status logic (READY / GRID WARNING / SOURCE MISSING paths are untested, and the expected string is hard-coded rather than derived). Likewise no test asserts a non-null `owner` (only the silent case checks `null`), and although test 1 passes non-zero `reactiveEnergy`/`reactiveAmount`, nothing verifies that they actually modify the rendered cell colors. Add a case with a real `TrackModel` and a non-null track/owner to exercise the active paths.",
+   "existing_code": "      track: null, reactiveEnergy: 0.1, reactiveAmount: 0.15,",
+   "start_line": 28,
+   "end_line": 28,
+   "category": "test",
+   "severity": "medium"
+  }
+ ],
+ "packages/show-mixer/src/owner.test.ts": [
+  {
+   "path": "packages/show-mixer/src/owner.test.ts",
+   "content": "This assertion accepts *either* deck, so it cannot detect a wrong winner even though the test title claims it \"hands the exclusive to the better deck\". With the supplied `factors` the winner is deterministic: deck a scores `1*1 + 0.5*1 + 1*1 = 2.5`, deck b scores `0.99 + 0.3 + 0.5 + 0.9 = 2.69`, so `first` is always \"b\". Pin the expected owner; otherwise an inverted tie-break or precedence bug in `impactOwner` still passes.",
+   "suggestion_code": "    expect(first).toBe(\"b\");",
+   "existing_code": "    expect([\"a\", \"b\"]).toContain(first);",
+   "start_line": 56,
+   "end_line": 56,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "packages/show-mixer/src/owner.test.ts",
+   "content": "This literal is byte-for-byte identical to `DEFAULT_OWNER_FACTORS` and is the only weights object ever passed, so the suite never exercises `opts.factors` at all. An implementation that ignores the `factors` argument entirely and always uses the defaults would pass every assertion here. Vary at least one weight (e.g. drop `master` to 0 or raise `strength`) or make `score` accept a `factors` override.",
+   "existing_code": "const factors = { weight: 1, master: 0.3, confidence: 0.5, strength: 1, significance: 0.5 };",
+   "start_line": 24,
+   "end_line": 24,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-mixer/src/owner.test.ts",
+   "content": "The mixDown test only asserts that *a* white-hit of the right type survives; it never verifies the surviving cue came from the winning deck (side \"b\") or that its `target`/`durationBeats`/`intensity`/`priority` are preserved. A regression that substitutes or mutates the owner's cue (e.g. wrong target or clamped intensity) would still pass. Assert the kept cue's provenance and properties, e.g. `expect(mixed.cues).toContainEqual(expect.objectContaining({ type: \"white-hit\", target: \"ALL\", durationBeats: 0.25 }))`.",
+   "existing_code": "    expect(mixed.cues.some((c) => c.type === \"white-hit\")).toBe(true);",
+   "start_line": 79,
+   "end_line": 79,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-mixer/src/owner.test.ts",
+   "content": "Deck a's `channelFader: 0.3` produces weight 0.3 \u2192 introduction stage `\"rhythm\"`, which does not admit the `exclusive` layer, so its `impact` cue is dropped by the intro-stage branch (index.ts:347-350) before the exclusive-ownership branch is ever reached. Consequently `expect(dropped.map(...)).toEqual([\"impact\"])` passes even if the non-owner exclusive dropping logic is completely broken, and the missing `reason` assertion hides this. To actually cover the ownership drop path, make the loser still audible enough for the layer to be admitted (e.g. `channelFader: 1`) and assert the drop reason mentions exclusive ownership.",
+   "suggestion_code": "      state: makeDeck({ deckId: 1, channelFader: 1, crossfader: 1, master: false, track: trackA }),",
+   "existing_code": "      state: makeDeck({ deckId: 1, channelFader: 0.3, crossfader: 1, master: false, track: trackA }),",
+   "start_line": 65,
+   "end_line": 65,
+   "category": "test",
+   "severity": "medium"
+  }
+ ],
+ "packages/storage/src/keys.ts": [
+  {
+   "path": "packages/storage/src/keys.ts",
+   "content": "The 8-character prefix of the normalized TrackId is not guaranteed unique, so two distinct TrackIds that happen to share the same first 8 characters (e.g. `abcdefgh1111...` and `abcdefgh2222...`) produce identical labels. This defeats the T-ID-03 \"keys stay the TrackIds, labels disambiguate\" guarantee the function is meant to provide. Consider using a longer/full id suffix, or detect suffix collisions and extend the prefix until the label is unique.",
+   "existing_code": "      labels.set(normalizeTrackId(row.trackId), `${base} (${normalizeTrackId(row.trackId).slice(0, 8)})`);",
+   "start_line": 84,
+   "end_line": 84,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/storage/src/keys.ts",
+   "content": "Labels are keyed by trackId via `Map.set`, so if the same trackId appears in more than one row (or across title groups), the later row silently overwrites the earlier label \u2014 the first row loses its display label with no detection. A unique-title label (bare title) can also string-collide with a disambiguated label emitted from another group. Since the function's contract is to produce a per-TrackId unambiguous label, it should detect duplicate trackIds (and duplicate produced labels) rather than silently overwrite.",
+   "existing_code": "  const labels = new Map<string, string>();",
+   "start_line": 75,
+   "end_line": 75,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/storage/src/keys.ts",
+   "content": "Testing `existing !== undefined` cannot distinguish \"key absent\" from \"key present with an `undefined` value\". For a legitimately stored `undefined` (valid whenever `V` admits `undefined`), `has()` returns true and `get()` returns `undefined`, yet `getOrCreate` will run `create()` and overwrite the entry on every call \u2014 an inconsistent state transition. Use `this.entries.has(key)` to test presence instead.",
+   "suggestion_code": "    if (this.entries.has(key)) return this.entries.get(key) as V;",
+   "existing_code": "    const existing = this.entries.get(key);\n    if (existing !== undefined) return existing;",
+   "start_line": 31,
+   "end_line": 32,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/storage/src/keys.ts",
+   "content": "`normalizeTrackId` throws on an empty/whitespace-only id, and this loop feeds it arbitrary library ids without error handling. A single malformed library id therefore aborts `retain` entirely, so no stale per-track state is ever pruned (and the exception propagates to the caller). Guard against invalid ids (skip/ignore them) so one bad id cannot prevent pruning.",
+   "existing_code": "    for (const id of trackIds) keep.add(normalizeTrackId(id));",
+   "start_line": 49,
+   "end_line": 49,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "analysis/src/autolight_analysis/metrical.py": [
+  {
+   "path": "analysis/src/autolight_analysis/metrical.py",
+   "content": "The anchor-count gate is a no-op: `min(0, min_anchors)` is always 0 for any non-negative `min_anchors`, so `(ms > tolerance_ms).sum() >= min(0, min_anchors)` is always true. A caller configuring `analysis.gridWarning.minAnchors` (e.g. 32) can therefore get a warning from as few as a handful of bad anchors as long as they make up 25% of the compared anchors, which defeats the intended minimum-anchor protection. (Note: at this point `n >= min_anchors` already holds, so `min(min_anchors, n) == min_anchors`.)",
+   "suggestion_code": "    warn = bool(\n        (median > tolerance_ms or p95 > tolerance_ms * 2)\n        and (ms > tolerance_ms).sum() >= min_anchors\n        and (ms > tolerance_ms).mean() >= 0.25\n    )",
+   "existing_code": "    warn = bool(\n        (median > tolerance_ms or p95 > tolerance_ms * 2)\n        and (ms > tolerance_ms).sum() >= min(0, min_anchors)\n        and (ms > tolerance_ms).mean() >= 0.25\n    )",
+   "start_line": 185,
+   "end_line": 189,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/metrical.py",
+   "content": "The lazily created process-wide session is bound to the `device` passed on the first call and is never recreated, so a later call requesting a different device (e.g. `cuda` after a `cpu` init, or vice versa) silently reuses the stale device-bound model. The check-then-act init is also not synchronized, so concurrent callers in one process can each construct a `File2Beats` and race on the global (and on a GPU session). Track the bound device and guard initialization with a lock.",
+   "suggestion_code": "    if _beat_this_session is None or _beat_this_session_device != device:\n        with _beat_this_session_lock:\n            if _beat_this_session is None or _beat_this_session_device != device:\n                _beat_this_session = inference.File2Beats(device=device)\n                _beat_this_session_device = device",
+   "existing_code": "    if _beat_this_session is None:\n        _beat_this_session = inference.File2Beats(device=device)",
+   "start_line": 65,
+   "end_line": 66,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/metrical.py",
+   "content": "Schema mismatch between the two invoke paths: unlike `beat_this_beats` (which returns real downbeats and a 1..4 beat-in-bar), the CLI path always returns `downbeats: []` and `beatInBar: [0] * len(beats)`. Setting `analysis.beatthis.invoke = \"cli\"` therefore silently degrades every downbeat/beat-in-bar consumer (e.g. bar-aligned features and downbeat agreement) with no signal, and downstream code that indexes beat-in-bar as 1..4 will see an invalid 0. Either derive downbeats/beat-in-bar from the CLI output when available, or make the absence explicit (e.g. `None`) so callers can detect it.",
+   "existing_code": "        return {\"beats\": beats, \"downbeats\": [], \"beatInBar\": [0] * len(beats)}",
+   "start_line": 105,
+   "end_line": 105,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/metrical.py",
+   "content": "`downbeatAgreement` is hard-coded to 1.0 in both return paths even though no downbeat data is passed in, so the field promised by the docstring (`{... downbeatAgreement ...}`) is meaningless/misleading \u2014 it reports perfect agreement regardless of the actual input. Consider removing the field, computing it from available downbeat information, or explicitly documenting it as not yet implemented.",
+   "existing_code": "        \"p95OffsetMs\": round(p95, 2),\n        \"driftMs\": round(drift, 2),\n        \"downbeatAgreement\": 1.0,\n        \"segments\": segments,",
+   "start_line": 193,
+   "end_line": 196,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/metrical.py",
+   "content": "The CLI is invoked with `--output`, but this module's own docstring states the correct flag is `-o`. If the installed `beat_this` CLI only accepts `-o`, this path fails hard (`check=True` raises `CalledProcessError`) and no beats are produced. Please confirm the actual supported flag and align the code/docstring (also note the output file is parsed as a bare beat list, ignoring any downbeat section the CLI may emit).",
+   "existing_code": "        cmd = [exe, \"--output\", out, audio_path]",
+   "start_line": 89,
+   "end_line": 89,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "analysis/src/autolight_analysis/worker.py": [
+  {
+   "path": "analysis/src/autolight_analysis/worker.py",
+   "content": "`coverage_hint` is dead: `coverage = coverage_hint or level` is immediately overwritten by `if coverage != level: coverage = level`, so the argument can never affect the result. Callers in `analyze_job` and `_audio_only` pass `coverage_hint=\"structured\"`/`\"adaptive\"` expecting those values to be honored (e.g. the STRUCTURED-from-native and the honest-ADAPTIVE-with-empty-grid branches), which masks the intent and misleads future readers. Either drop the parameter entirely or implement the intended precedence explicitly.",
+   "suggestion_code": "    level = compute_readiness(inputs)\n    coverage = level  # readiness is computed, never set by hand",
+   "existing_code": "    level = compute_readiness(inputs)\n    coverage = coverage_hint or level\n    if coverage != level:\n        coverage = level  # readiness is computed, never set by hand",
+   "start_line": 435,
+   "end_line": 438,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/worker.py",
+   "content": "`open(\"/dev/stdin\")` is POSIX-only. On Windows (a supported target in this repo \u2014 see `packages/rekordbox-library/src/options.ts` win32 paths and win32 handling in `controller-flx4`) this raises `FileNotFoundError` before the first frame is read, so the worker dies on startup and every analysis job fails with a spawn/exit error. The same path also silently redirects input if fd 0 is re-pointed. Use the interpreter's stdin stream instead.",
+   "suggestion_code": "        with sys.stdin as stdin:  # add `import sys` at module top",
+   "existing_code": "        with open(\"/dev/stdin\") as stdin:",
+   "start_line": 681,
+   "end_line": 681,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/worker.py",
+   "content": "Inconsistent with the main pipeline: the full path decodes to a canonical WAV before ML (`analyze_full(str(canonical_wav(audio_path, out)), ...)`), while `_audio_only` feeds the *raw, non-canonical* source path. Decoding differences (sample rate / channel layout / container demux) can make the ML grid diverge from what the rest of the pipeline assumes, and any `analyze_full` failure here is unguarded unlike the main path (which catches ImportError/OSError/ValueError/RuntimeError and degrades). Route this call through `canonical_wav(...)` as well and guard it the same way so an audio-only track degrades to ADAPTIVE instead of failing the whole job.",
+   "suggestion_code": "    device = select_device(str(cfg.get(\"analysis.device\", \"auto\")))\n    from autolight_analysis.decode import canonical_wav\n\n    try:\n        ml = analyze_full(str(canonical_wav(audio_path, out)), device=device)\n    except (ImportError, OSError, ValueError, RuntimeError):\n        ml = None",
+   "existing_code": "    device = select_device(str(cfg.get(\"analysis.device\", \"auto\")))\n    ml = analyze_full(audio_path, device=device)",
+   "start_line": 516,
+   "end_line": 517,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/worker.py",
+   "content": "`_failed` is annotated `-> dict` but unconditionally raises, and every declared parameter (`_track_id`, `_inputs`, `_analyzer_v`, `_out`, `_chash`) is unused. Callers write `return _failed(...)`, which is misleading dead flow (and the `reason` argument is the only thing that matters). Either change the return annotation to `NoReturn`/`None` and simplify the signature, or make it actually build and return the typed failed dict it advertises.",
+   "existing_code": ") -> dict:\n    raise ValueError(reason)",
+   "start_line": 495,
+   "end_line": 496,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/worker.py",
+   "content": "Inconsistent with the frame loop: `main()` uses `msg.get(\"trackId\", msg.get(\"id\", \"unknown\"))` and `msg.get(\"audioPath\", \"\")`, but `handle()` indexes `msg[\"trackId\"]`/`msg[\"audioPath\"]` directly. A caller that passes an `analyze` frame without `trackId` (or with only `id`) gets a `KeyError: 'trackId'`, which the outer guard converts into a generic failure instead of the intended typed result. Use `.get()` consistently.",
+   "existing_code": "                msg[\"trackId\"],\n                msg[\"audioPath\"],",
+   "start_line": 639,
+   "end_line": 640,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/electron/services/identity-service.ts": [
+  {
+   "path": "apps/desktop/electron/services/identity-service.ts",
+   "content": "The memoization key is built from only the FIRST present identifier, but `resolveIdentity` (packages/track-model) uses a different precedence (rekordboxId \u2192 fileHash \u2192 pcmFingerprint \u2192 path). This makes the cache return identities that a fresh resolution would never produce. Concrete reproducible failure:\n1) `resolve({ canonicalPath: \"/a/b\" })` \u2192 key `\"/a/b\"`, caches identity `id: \"path:/a/b\"` (no fileHash).\n2) Later `resolve({ canonicalPath: \"/a/b\", fileHash: \"H\" })` \u2192 same key `\"/a/b\"` \u2192 cache HIT, returns the old path-only identity, even though `resolveIdentity` would now yield `id: \"hash:H\"`.\nSame issue with `{ rekordboxId: \"r1\", fileHash: \"H1\" }` then `{ rekordboxId: \"r1\", fileHash: \"H2\" }`: the stale H1 identity is served. Also note the key precedence here (seratoPath/canonicalPath before fileHash) diverges from the id precedence in resolveIdentity, so a hit can even drop/replace source ids (`sourceIds.seratoPath` vs `canonicalPath`). Derive the key from all present identifiers (or from the resolved `identity.id`) so an upgraded input set re-resolves instead of returning a stale/weaker identity.",
+   "suggestion_code": "    // Key on every present identifier so a stronger input set re-resolves.\n    const key = [parts.rekordboxId, parts.seratoPath, parts.canonicalPath, parts.fileHash, parts.pcmFingerprint]\n      .filter((v): v is string => v !== undefined)\n      .join(\"|\");",
+   "existing_code": "    const key = parts.rekordboxId ?? parts.seratoPath ?? parts.canonicalPath ?? parts.fileHash ?? parts.pcmFingerprint;",
+   "start_line": 53,
+   "end_line": 53,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/electron/services/identity-service.ts",
+   "content": "Empty-string identifiers are treated as present because the `??` chain and this `=== undefined` guard do not filter falsy values. `parts = { rekordboxId: \"\", canonicalPath: \"/a/b\" }` yields `key = \"\"`, which short-circuits the fallback to the valid `canonicalPath`, and `resolveIdentity` then throws its `!key` guard. Result: a track with a blank native id but a perfectly valid path fails with `E_IDENTITY_RESOLVE` instead of resolving via the path (broken failover). Use a falsy check and reject empty/whitespace keys (mirroring `resolveIdentity`'s `if (!key) throw`, which itself must be fixed consistently).",
+   "existing_code": "    if (key === undefined) {",
+   "start_line": 54,
+   "end_line": 54,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/services/identity-service.ts",
+   "content": "The cache is an unbounded `Map` with no eviction or size cap. In a long-running session resolving many tracks, it grows without limit (and `cachedIdentities()` materializes an ever-growing array), leaking memory. Consider an LRU / max-size bound, or clear it in `stop()` so a session restart does not retain every resolved identity.",
+   "existing_code": "  private readonly cache = new Map<string, TrackIdentity>();",
+   "start_line": 35,
+   "end_line": 35,
+   "category": "performance",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/services/identity-service.ts",
+   "content": "This re-implements `messageOf` from `./base.js`, which exists precisely to avoid this duplication (used by analysis-supervisor, cloud-service, config-service, library-service, lifecycle, matter-bridge, midi-service, secrets-service, show-host-supervisor). Import and use `messageOf(err)` instead to keep error normalization consistent.",
+   "suggestion_code": "      const message = messageOf(err);",
+   "existing_code": "      const message = err instanceof Error ? err.message : String(err);",
+   "start_line": 72,
+   "end_line": 72,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "apps/desktop/electron/services/identity-service.ts",
+   "content": "The exact `TrackIdentity` object created by `resolveIdentity` is stored in the cache and also returned to the caller (both on the miss path here and via `cache.get` on the hit path), so the cached entry is aliased and mutable. Any caller that mutates the returned identity (e.g. `identity.sourceIds`) silently corrupts every subsequent cache hit. Store a defensive copy/read-only object, or return a clone.",
+   "existing_code": "    this.cache.set(key, identity);",
+   "start_line": 76,
+   "end_line": 76,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/src/routes/library/library-rows.ts": [
+  {
+   "path": "apps/desktop/src/routes/library/library-rows.ts",
+   "content": "Cross-deck BPM leak: `fallbackBpm` is a single tempo (in `resolve-live.ts` it is `live.bpm`, i.e. deck A's effective BPM) yet it is applied to deck B whenever deck B's own `bpm` is null. `resolve-live.buildLive` already computes each deck's own BPM (`deckSnapshot(b.track, deckB, \u2026)` \u2192 `deckB.effectiveBpm ?? track.beatGrid.beats[0]?.bpm`), which can legitimately be null when the track has no beat grid. In that case deck B renders deck A's tempo, directly violating the function's own contract that BPM is \"never copied across decks\". Repro: decks[0].bpm=128, decks[1].bpm=null, fallbackBpm=128 \u2192 deck-b shows 128. Only deck A should receive the fallback (or the fallback should be passed per deck).",
+   "existing_code": "      ? [{ id: \"deck-b\", title: decks[1].title, artist: decks[1].artist, readiness: decks[1].readiness, bpm: decks[1].bpm ?? fallbackBpm }]",
+   "start_line": 86,
+   "end_line": 86,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/src/routes/library/library-rows.ts",
+   "content": "`key` is declared as a spec column on `LibraryTrackRow` but is hardcoded to `null` here, and `libraryTrackRow`/`emptyRow` expose no option to supply it. `TrackModel` carries the data (`musicalKey?: { key: string; \u2026 }` in packages/contracts), so the key column is permanently empty regardless of track data. Either populate it from `track.musicalKey?.key` or drop the field if it is intentionally unsupported.",
+   "existing_code": "    key: null,",
+   "start_line": 58,
+   "end_line": 58,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/routes/library/library-rows.ts",
+   "content": "Behaviour contradicts the documented contract: the comment states priority \"moves entries ahead of same-state entries\", but this unshifts the target to the absolute front of the list, jumping ahead of every entry regardless of state (and reordering across states). Additionally `marked` is computed but only used to derive `rest`, which is exactly `entries.filter(e => e.trackId !== trackId)` \u2014 the map is dead work. Either fix the reorder to keep same-state grouping (preserving the order of other entries) or correct the comment to match the absolute-front semantics.",
+   "existing_code": "  const marked = entries.map((e) => (e.trackId === trackId ? { ...e, priority: true } : e));\n  const rest = marked.filter((e) => e.trackId !== trackId);\n  return [{ ...target, priority: true }, ...rest];",
+   "start_line": 114,
+   "end_line": 116,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/routes/library/library-rows.ts",
+   "content": "Deck B presence is detected by comparing the rendered placeholder string \"\u2014\", while deck A uses a `?? \"\u2014\"` fallback. Coupling empty-deck detection to a display sentinel is fragile: a real deck B whose resolved title equals \"\u2014\" is silently dropped from the list, whereas the check is inconsistent with deck A (which always emits a row even when the deck is empty). Prefer keying presence off an explicit signal (e.g. an absent `track`/deck id) rather than the \"\u2014\" string.",
+   "existing_code": "    ...(decks[1] && decks[1].title !== \"\u2014\"",
+   "start_line": 85,
+   "end_line": 85,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "apps/desktop/src/routes/library/library-rows.ts",
+   "content": "Status precedence masks an in-flight analysis: once `coverageOf(track)` is not \"adaptive\" the row always returns \"READY\", and `opts.analyzing` is only consulted when coverage is adaptive. A track whose stored model is ready but that is currently being re-analyzed will therefore report READY instead of ANALYZING. Confirm this precedence is intended (grid/source/FAILED are handled correctly before this check).",
+   "existing_code": "  const ready = coverageOf(track) !== \"adaptive\";",
+   "start_line": 43,
+   "end_line": 43,
+   "category": "bug",
+   "severity": "low"
+  }
+ ]
+}

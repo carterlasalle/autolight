@@ -1,0 +1,278 @@
+{
+ "packages/config/src/compare.ts": [
+  {
+   "path": "packages/config/src/compare.ts",
+   "content": "`JSON.stringify`-based equality is key-order sensitive and lossy, which breaks the Settings diff for `json`-type keys (e.g. `runtime.roll.degradeOrder` is a parsed array/object). Two semantically identical values with different key order (`{a:1,b:2}` vs `{b:2,a:1}`) stringify differently and are reported as a change, producing spurious diff rows. It also collapses distinctions JSON silently drops (`undefined`, functions, symbols, and `NaN`/`Infinity` \u2192 `null`), yielding false negatives, and throws on `BigInt`/cyclic values, aborting the entire diff. Use an order-insensitive structural deep-equality helper instead.",
+   "suggestion_code": "    if (!deepEqual(before, after)) out.push({ key, before, after }); // deepEqual must ignore object key order",
+   "existing_code": "    if (JSON.stringify(before) !== JSON.stringify(after)) out.push({ key, before, after });",
+   "start_line": 57,
+   "end_line": 57,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/config/src/compare.ts",
+   "content": "`drainLiveQueue` declares every queued key as applied and empties the queue unconditionally, with no per-key failure handling. These keys mutate running audio/lighting state; if applying any key throws or is rejected, the change is silently lost \u2014 it appears in `applied`, is gone from the returned queue, and cannot be retried, and no error is surfaced. Either add a partial-failure path (keep/report failed keys, e.g. return `{ applied, failed, queue }`) or document/enforce that application is atomic.",
+   "existing_code": "  return { applied: [...queue.keys], queue: { keys: [] } };",
+   "start_line": 47,
+   "end_line": 47,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/config/src/compare.ts",
+   "content": "`defineKey` throws on any key absent from the generated registry, so `planLiveChange` (and therefore `queueLiveChange`) throws unhandled for unknown/malformed keys instead of returning a classification. If the live queue is ever fed a key from config/UI input, a single bad key aborts queueing and can drop previously accepted (unsafe) changes. Validate the key and return a defined classification, or catch and surface a user-facing error.",
+   "existing_code": "  const def = defineKey(key);\n  if (def.liveSafe) {",
+   "start_line": 16,
+   "end_line": 17,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "packages/config/src/compare.ts",
+   "content": "The header comment promises live-safe keys apply \"immediately for emergency keys\", but no emergency handling exists: `planLiveChange` always returns `apply: \"next-bar\"` for live-safe keys and the `apply` union has no `\"immediate\"` variant. This dead/misleading comment describes behavior that is not implemented \u2014 either implement emergency handling or remove the unsupported claim.",
+   "existing_code": "// Live-safe keys apply at the next bar (or immediately for emergency keys).",
+   "start_line": 4,
+   "end_line": 4,
+   "category": "documentation",
+   "severity": "low"
+  }
+ ],
+ "packages/contracts/src/schema-validation.property.test.ts": [
+  {
+   "path": "packages/contracts/src/schema-validation.property.test.ts",
+   "content": "This round-trip assertion cannot detect an off-by-one beat error: the beat spacing for this grid is 60/128 = 0.46875 s, but the tolerance is 0.5 s, so a mapping shifted by a whole beat still passes. Additionally `Math.min(127, b)` clamps the final beat, silently masking any error once `s` extrapolates past the last beat (s > 59.53125). Tighten the tolerance well below the beat interval and drop/aslo explicitly assert the out-of-range behavior with a dedicated expectation.",
+   "suggestion_code": "      const inRange = s <= g.beats[g.beats.length - 1]!.sourceTimeMs / 1000;\n      if (inRange) expect(Math.abs(beatToSourceSeconds(g, b) - s)).toBeLessThan(1e-6);",
+   "existing_code": "      expect(Math.abs(beatToSourceSeconds(g, Math.min(127, b)) - s)).toBeLessThan(0.5);",
+   "start_line": 151,
+   "end_line": 151,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/contracts/src/schema-validation.property.test.ts",
+   "content": "Using `JSON.stringify` for parity compares serialization key order, not object structure. zod rebuilds objects in schema-definition order, so this assertion will false-fail the moment fixture key order diverges from the schema, and it silently ignores `undefined`-valued properties. Use a structural, order-insensitive comparison instead.",
+   "suggestion_code": "      expect(parsed.data).toEqual(JSON.parse(raw));",
+   "existing_code": "      expect(JSON.stringify(parsed.data)).toBe(JSON.stringify(JSON.parse(raw)));",
+   "start_line": 127,
+   "end_line": 127,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/contracts/src/schema-validation.property.test.ts",
+   "content": "The test title says 'dropout grid', but `grid(128)` is a perfectly uniform grid with no dropped beats \u2014 the dropout/gap handling the name implies is never exercised. Either rename the test to reflect what it asserts (uniform grid monotonic round-trip) or build a grid with missing/interpolated beats so the intended behavior is actually covered.",
+   "existing_code": "  it(\"maps a dropout grid without NaN or inversion\", () => {",
+   "start_line": 143,
+   "end_line": 143,
+   "category": "documentation",
+   "severity": "low"
+  },
+  {
+   "path": "packages/contracts/src/schema-validation.property.test.ts",
+   "content": "The file's stated contract is that invalid objects are rejected \"with a precise error path\", but the assertions only check `issues.length > 0` and never inspect `issue.path`/`issue.code`. A schema regression that rejects for the wrong reason or at the wrong path would still pass. Assert the exact path(s), e.g. `expect(r.error.issues[0]?.path).toEqual([\"channelFader\"])`.",
+   "existing_code": "      if (!r.success) expect(r.error.issues.length).toBeGreaterThan(0);",
+   "start_line": 51,
+   "end_line": 51,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/controller-flx4/src/signals.ts": [
+  {
+   "path": "packages/controller-flx4/src/signals.ts",
+   "content": "Dead configuration: `minReversalsPerSec` and `reversalWindowSeconds` are stored into `this.opts`, but they are never read anywhere in this class (scratch detection is actually computed in `Flx4StateModel.applyJog`). A caller that constructs `new Flx4SignalDeriver({ minReversalsPerSec: 4 })` will silently get the state model's default scratch thresholds while believing they overrode them, so the scratch signals/`scratchTrace` can disagree with the caller's expectation. Either feed these into the state model's construction or remove them from `SignalOptions` so the API does not promise behaviour it does not implement.",
+   "existing_code": "      minReversalsPerSec: opts.minReversalsPerSec ?? DEFAULT_MIN_REVERSALS_PER_SEC,\n      reversalWindowSeconds: opts.reversalWindowSeconds ?? DEFAULT_REVERSAL_WINDOW_SECONDS,",
+   "start_line": 99,
+   "end_line": 100,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/controller-flx4/src/signals.ts",
+   "content": "A neutral jog is collapsed to a positive direction. `JogState.direction` is `-1 | 0 | 1`, and on touch release / window expiry `applyJog` keeps the last `direction` (which can be `0` when the last jog message was `data2 === JOG_CENTER`). With `jog.direction < 0 ? -1 : 1`, a `scratch-end` (or `scratch-start` in a degenerate trace) will report `direction: 1` while the platter is stationary, corrupting the downstream scratch/reversal handling that consumes this field. Widen the signal type to `-1 | 0 | 1` and pass `jog.direction` through unchanged (or explicitly drop the edge when direction is 0).",
+   "existing_code": "        const direction: -1 | 1 = jog.direction < 0 ? -1 : 1;",
+   "start_line": 114,
+   "end_line": 114,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/controller-flx4/src/signals.ts",
+   "content": "The loop-exit SHIFT variant is silently dropped: the decoder maps `4 BEAT/EXIT +SHIFT` to id `deck<N>.loop-exit-shift`, and `Flx4StateModel.applyDeck` explicitly updates `loop.active = false`/`lastAction = \"exit\"` for it, but this deriver only matches the exact id `loop-exit`. As a result pressing the shift variant changes controller state yet emits no runtime signal, so the runtime never learns the loop was stopped. Handle `loop-exit-shift` (e.g. emit `loop-exit`) or document why the state-only change is acceptable.",
+   "existing_code": "    if (id === \"loop-exit\" && event.on) {",
+   "start_line": 172,
+   "end_line": 172,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "packages/controller-flx4/src/signals.ts",
+   "content": "The control id is stripped by a blind prefix slice. This works today because every `group === \"deck\"` id happens to be built as `deck<N>.\u2026`, but it is fragile: any future/aliased deck-group id that does not start with exactly `deck${deck}.` yields a truncated id and falls through every branch, silently dropping the signal instead of failing loudly. Consider guarding the prefix (`event.id.startsWith(prefix) ? event.id.slice(prefix.length) : event.id`) so unforeseen ids stay whole and are handled explicitly.",
+   "existing_code": "    const id = event.id.slice(`deck${deck}.`.length);",
+   "start_line": 158,
+   "end_line": 158,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/controller-flx4/src/state.test.ts": [
+  {
+   "path": "packages/controller-flx4/src/state.test.ts",
+   "content": "This recovery test only ever feeds noiseless samples produced by the exact linear model the fit inverts (`pitchForPosition` = `(position-0.5)*2*range`). The fit therefore returns exactly the injected range (10.0) with a residual of exactly 0, so `toBeLessThanOrEqual(0.5)` on both `rangePercent` and `residualPercent` is tautological and the 0.5% tolerance/residual path is never exercised. The test can stay green even if both `pitchForPosition` and the fit's internal model are wrong in the same way relative to real hardware. Add samples with realistic provider jitter (or hardcoded spec-derived pitches) so the tolerance/residual guard is actually tested.",
+   "existing_code": "    for (const sample of samplesFor(10, [0.2, 0.35, 0.5, 0.62, 0.8, 0.95])) fit.add(sample);\n    const result = fit.fit(1);",
+   "start_line": 165,
+   "end_line": 166,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/controller-flx4/src/state.test.ts",
+   "content": "The isolation test only mutates `play.on` and `jog.reversals`. `deepCopy` also clones `loop`, `sync`, `padsDown`, `tempo`, `channelFader`, `loads` and `mixer.headCue`, none of which are checked here. An aliasing regression in any of those (e.g. forgetting to clone `padsDown` or `headCue`) would go undetected. Mutate a representative field in each nested structure on the first snapshot before asserting the second.",
+   "existing_code": "    first.decks[1].play.on = false;\n    first.decks[1].jog.reversals.push(1n);",
+   "start_line": 151,
+   "end_line": 152,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/controller-flx4/src/state.test.ts",
+   "content": "`centre` is derived with the same `fourteenBit`/`FOURTEEN_BIT_STEPS` helpers/constants used for 14-bit decoding, so the midpoint expectations for `channelFader`/`eqHigh` are self-referential: a defect in the 14-bit normalization or midpoint convention would not be independently caught (only the 0 and 1 endpoints are hardcoded). Prefer literal expected values (e.g. `8256 / 16383`) so the test pins the contract rather than mirroring the helper.",
+   "existing_code": "    const centre = fourteenBit(0x40, 0x40) / FOURTEEN_BIT_STEPS;",
+   "start_line": 122,
+   "end_line": 122,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/controller-flx4/src/state.test.ts",
+   "content": "The `mixer.master-cue` row decodes to `id: \"mixer.master-cue\"`, but `applyMixer` has no branch for that id, so this line is a no-op and nothing is asserted about it. The comment implies master-cue coverage that does not exist; either assert the intended behavior or drop the row to avoid a misleading test.",
+   "existing_code": "      [0x96, 0x63, 0x7f], // master cue",
+   "start_line": 136,
+   "end_line": 136,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/controller-flx4/vitest.config.ts": [
+  {
+   "path": "packages/controller-flx4/vitest.config.ts",
+   "content": "`readdirSync(workspaceSrc)` returns every entry in the parent `packages/` directory, including any non-directory files (stray scripts, `.DS_Store`, README, etc.). Each of those becomes a bogus alias `@autolight/<entry>` pointing at `<entry>/src/index.ts`, which can accidentally shadow or break module resolution if such a specifier is ever imported. Filter to actual directories (and only real workspace packages).",
+   "suggestion_code": "  readdirSync(workspaceSrc, { withFileTypes: true })\n    .filter((entry) => entry.isDirectory())\n    .map((entry) => [",
+   "existing_code": "  readdirSync(workspaceSrc).map((name) => [",
+   "start_line": 9,
+   "end_line": 9,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/controller-flx4/vitest.config.ts",
+   "content": "The entry point is hardcoded to `src/index.ts`, ignoring the package's `package.json` `exports`/`main`. Any workspace folder without exactly `src/index.ts` produces a dangling alias that fails at test resolution time with a confusing error instead of a clear message. Validate the target exists (e.g. `existsSync`) before adding the alias.",
+   "suggestion_code": "    join(workspaceSrc, entry.name, \"src\", \"index.ts\"),",
+   "existing_code": "    join(workspaceSrc, name, \"src\", \"index.ts\"),",
+   "start_line": 11,
+   "end_line": 11,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/controller-flx4/vitest.config.ts",
+   "content": "The scan also aliases the containing package back to its own source (`@autolight/controller-flx4` -> `../controller-flx4/src/index.ts`). Resolving the package by name then bypasses `package.json`/`exports`, can create a second module instance distinct from relative imports, and masks package-boundary/build issues so tests pass even when the published entry is broken. Consider excluding the current package's name or confirming this is intentional.",
+   "existing_code": "    `@autolight/${name}`,",
+   "start_line": 10,
+   "end_line": 10,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "packages/controller-flx4/vitest.config.ts",
+   "content": "This entire config is duplicated verbatim across workspace packages (it is byte-identical to `packages/govee/vitest.config.ts`, etc.). Any fix to the alias logic must be replicated in every package and will drift. Extract the shared alias/test defaults into a single base config (e.g. `packages/config/vitest.base.ts`) and re-export it here.",
+   "existing_code": "const workspaceAlias = Object.fromEntries(",
+   "start_line": 8,
+   "end_line": 8,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/diagnostics/package.json": [
+  {
+   "path": "packages/diagnostics/package.json",
+   "content": "The test script uses `--passWithNoTests`, so CI reports success even if every test file is deleted, renamed, or accidentally excluded by the vitest `include` glob. Since real tests exist in `src/index.test.ts`, this flag only removes the safety net: a broken/renamed test suite silently turns the pipeline green. Prefer running without the flag and relying on the generated tests; if a no-test case is genuinely valid, guard it with an explicit assertion (e.g. `--reporter=json` check or a `--passWithNoTests` only in a dedicated script).",
+   "suggestion_code": "    \"test\": \"vitest run\",",
+   "existing_code": "    \"test\": \"vitest run --passWithNoTests\",",
+   "start_line": 9,
+   "end_line": 9,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/diagnostics/package.json",
+   "content": "`lint` and `typecheck` execute the exact same command (`tsc --noEmit -p tsconfig.json`), so the `lint` step performs no additional verification \u2014 type errors are already caught by `typecheck`. No linter (eslint/prettier) is declared in `devDependencies`, matching the missing tooling. Either wire up a real linter and declare it, or drop the redundant `lint` script to avoid the false impression of lint coverage.",
+   "existing_code": "    \"lint\": \"tsc --noEmit -p tsconfig.json\",",
+   "start_line": 10,
+   "end_line": 10,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/diagnostics/package.json",
+   "content": "This package is ESM-only (`\"type\": \"module\"`) but declares only `main`/`types` with no `exports` map. There is no `exports` entry to constrain the public surface, so deep imports into `dist/` internals are permitted, and resolution in strict ESM/tooling contexts relies purely on the legacy `main` fallback. Add an `exports` map with conditional `types`/`import` entries (the repo already does this in `packages/config`, `packages/controller-flx4`, `packages/rekordbox-live`) so consumers and bundlers resolve the entry point deterministically.",
+   "suggestion_code": "  \"main\": \"./dist/index.js\",\n  \"types\": \"./dist/index.d.ts\",\n  \"exports\": {\n    \".\": {\n      \"types\": \"./dist/index.d.ts\",\n      \"import\": \"./dist/index.js\"\n    }\n  },",
+   "existing_code": "  \"main\": \"./dist/index.js\",\n  \"types\": \"./dist/index.d.ts\",",
+   "start_line": 5,
+   "end_line": 6,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/diagnostics/package.json",
+   "content": "The package has no `files` (or `.npmignore`) field, so every non-ignored file \u2014 `src/**` including `src/index.test.ts`, `tsconfig.json`, `vitest.config.ts` \u2014 is published to the registry. In addition, `tsc -p tsconfig.json` inherits `include: [\"src\"]` (no test exclusion), so the build emits `dist/index.test.js` / `.d.ts` into the published `dist`, and that emitted file imports `vitest` (a devDependency) at runtime. Ship only build artifacts and exclude tests from the build (e.g. `\"files\": [\"dist\"]` plus a build tsconfig that excludes `**/*.test.ts`).",
+   "existing_code": "    \"build\": \"tsc -p tsconfig.json\",",
+   "start_line": 8,
+   "end_line": 8,
+   "category": "maintainability",
+   "severity": "medium"
+  }
+ ],
+ "packages/dj-core/package.json": [
+  {
+   "path": "packages/dj-core/package.json",
+   "content": "The `lint` script is byte-for-byte identical to `typecheck` (`tsc --noEmit -p tsconfig.json`). A CI lint gate invoking `yarn lint` therefore only re-runs type-checking and can never catch real lint findings (unused vars, no-floating-promises, etc.). The repo already ships a linter at the workspace root (`oxlint`/`eslint` in the root `package.json` `analyze` script). Point `lint` at a real linter and, if it is not resolvable via workspace hoisting, declare it in `devDependencies`.",
+   "suggestion_code": "    \"lint\": \"oxlint src\",",
+   "existing_code": "    \"lint\": \"tsc --noEmit -p tsconfig.json\",",
+   "start_line": 10,
+   "end_line": 10,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/dj-core/package.json",
+   "content": "`vitest run --passWithNoTests` exits 0 when no test files are discovered. Combined with the `include: [\"src/**/*.test.ts\"]` glob in `vitest.config.ts`, a refactor that moves/renames tests (or a glob/config regression) would silently make the test step green, allowing broken behavior to ship undetected. Drop the flag (or assert an expected test count) so an empty suite fails the build.",
+   "suggestion_code": "    \"test\": \"vitest run\",",
+   "existing_code": "    \"test\": \"vitest run --passWithNoTests\",",
+   "start_line": 9,
+   "end_line": 9,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/dj-core/package.json",
+   "content": "`zod` is declared as a runtime dependency but is never imported anywhere in `packages/dj-core/src` (only `@autolight/contracts` is used, and there only as `import type`). This pulls an unnecessary package into the install/runtime graph. If it is only needed to resolve zod-inferred types from `@autolight/contracts`, move it to `devDependencies` or remove it entirely.",
+   "existing_code": "    \"zod\": \"^3.23.8\"",
+   "start_line": 15,
+   "end_line": 15,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/dj-core/package.json",
+   "content": "The package is ESM (`\"type\": \"module\"`) and points consumers at `./dist` via `main`/`types`, but it declares neither `exports` nor `files`. Without `exports`, subpath/deep imports and conditional resolution can misbehave for modern bundlers and Node ESM consumers (other workspace packages such as `@autolight/config` do declare `exports`); without `files`, the published tarball will include `src`, tests, and tsconfig. Add an `exports` map and a `files` allowlist.",
+   "suggestion_code": "  \"main\": \"./dist/index.js\",\n  \"types\": \"./dist/index.d.ts\",\n  \"exports\": {\n    \".\": {\n      \"types\": \"./dist/index.d.ts\",\n      \"default\": \"./dist/index.js\"\n    }\n  },\n  \"files\": [\n    \"dist\"\n  ],",
+   "existing_code": "  \"main\": \"./dist/index.js\",\n  \"types\": \"./dist/index.d.ts\",",
+   "start_line": 5,
+   "end_line": 6,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ]
+}

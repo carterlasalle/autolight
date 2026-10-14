@@ -1,0 +1,340 @@
+{
+ "docs/finish/evidence/T-TRU-10/license-report.json": [
+  {
+   "path": "docs/finish/evidence/T-TRU-10/license-report.json",
+   "content": "`autolight-analysis` is this repository's own first-party package (see `FIRST_PARTY_PIP` in `tools/license-check.mjs`), yet the report records its license as `UNKNOWN` \u2014 the exact value that this artifact's own `policy.denylist` lists as forbidden. The evidence is therefore self-contradictory: any consumer enforcing the declared denylist (or doing a case-insensitive substring match on `unknown`) will flag the repo's own package, and the first-party exemption applied by the gate is never captured in the emitted report. The license should be sourced from the repo/`pyproject.toml` rather than the (missing) PyPI metadata, or the report must carry an explicit recorded exception. Reproducer: grep the report for a value matching the `unknown` denylist entry.",
+   "existing_code": "      \"name\": \"autolight-analysis\",\n      \"version\": \"0.1.0\",\n      \"license\": \"UNKNOWN\"",
+   "start_line": 51,
+   "end_line": 53,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "docs/finish/evidence/T-TRU-10/license-report.json",
+   "content": "`yarn` is empty even though the repo declares Node.js/Electron and a Yarn workspaces monorepo (root `package.json` has ~20 devDependencies plus `apps/*` and `packages/*` workspaces each with their own deps). An empty `yarn` array means the JavaScript/Electron dependency licenses are entirely missing from this compliance evidence, so the license gate passes vacuously for JS and downstream automation under-reports. Either the `yarnLicenses()` scan silently returned nothing (fail-open) or the artifacts were never installed; the report should be regenerated with the JS inventory populated, and an empty result should be treated as an error rather than a clean pass.",
+   "existing_code": "  \"yarn\": [],",
+   "start_line": 3,
+   "end_line": 3,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "docs/finish/evidence/T-TRU-10/license-report.json",
+   "content": "Non-SPDX / free-text license values (e.g. `Python Software Foundation License`, `MIT License`, `BSD License`, and the mixed `LGPL-2.1-or-later (unmodified binary; ...)` on the FFmpeg hand entry) cannot be reliably matched by SPDX-based allow/deny tooling. Because matching relies on ad-hoc tokenization/regex, a policy such as the denylist here is only as reliable as its heuristics, and any consumer using exact SPDX comparison will misclassify these entries. Normalize the license field to SPDX expressions and move provenance notes (e.g. the FFmpeg bundling remark) to a separate field.",
+   "existing_code": "      \"name\": \"matplotlib\",\n      \"version\": \"3.11.2\",\n      \"license\": \"Python Software Foundation License\"",
+   "start_line": 216,
+   "end_line": 218,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "docs/finish/evidence/T-TRU-10/license-report.json",
+   "content": "The `policy` object mixes naming conventions and uses unexplained abbreviations/camelCase (`rkbx_link`, `skipBartSeqLight`) alongside the vague top-level key `hand`. A consumer or auditor looking up a documented, self-descriptive key name can silently miss the data (no schema/version is declared either). While these are not typos, the inconsistent key naming is a maintainability hazard for a machine-consumed compliance artifact; prefer consistent snake_case, self-descriptive keys and add a schema version.",
+   "existing_code": "    \"rkbx_link\": \"never a dependency\",\n    \"skipBartSeqLight\": \"no files, weights, or datasets (research inspiration only)\"",
+   "start_line": 471,
+   "end_line": 472,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/show-planner/src/contrast.ts": [
+  {
+   "path": "packages/show-planner/src/contrast.ts",
+   "content": "The pre-drop blackout start is unbounded: `impactBeat - preDark` can be negative when `dropPreDarknessBeats` exceeds `impactBeat`, and is never clamped to `buildStart`. A negative `startBeat` is rejected downstream by `validate.ts` (`startBeat < 0 || startBeat > durationBeats` \u2192 'out-of-range'), and `preDark === 0` also produces a zero-duration blackout that does nothing. Clamp the start and guard the duration.",
+   "suggestion_code": "    startBeat: Math.max(0, impactBeat - preDark),\n    durationBeats: preDark,",
+   "existing_code": "    startBeat: impactBeat - preDark,\n    durationBeats: preDark,",
+   "start_line": 95,
+   "end_line": 96,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/show-planner/src/contrast.ts",
+   "content": "`Math.max(2, ...)` forces at least two build-ramp stages regardless of `config.dropStages`. When `config.dropStages.length` is 0 or 1 the loop emits more ramps than configured and the returned `staged` no longer reflects the config. Also note only `dropStages.length` is read \u2014 the numeric entries [8,8,8,4,4] are never consumed, so a config-schema mismatch exists if the values are meant to matter.",
+   "existing_code": "  const want = config.dropStages.length;\n  const stages = Math.max(2, Math.min(want, Math.floor(span / 4)));",
+   "start_line": 70,
+   "end_line": 71,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/contrast.ts",
+   "content": "`span` is floored at 4 beats, so when the real build is shorter than 4 beats (`impactBeat - buildStart < 4`) the ramps are laid out over 4 beats and the last ramp ends at `buildStart + 4`, i.e. after the drop impact. Build-ramp cues then extend past the drop. Bound the staging window by the actual build length (and skip staging when it is too short).",
+   "existing_code": "  const span = Math.max(4, impactBeat - buildStart);",
+   "start_line": 69,
+   "end_line": 69,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/contrast.ts",
+   "content": "`Math.max(4, 16 - config.dropBurstBeats)` relies on an unexplained magic constant 16 for the total body length, and the burst uses `config.dropBurstBeats` raw (line 121, no clamp). A `dropBurstBeats` of 0 yields a zero-duration burst, a negative value yields a negative duration that fails validation, and a value > 16 silently collapses the body to 4 beats. Derive the body length from config (or bound and document the constant) and clamp the burst duration.",
+   "existing_code": "    durationBeats: Math.max(4, 16 - config.dropBurstBeats),",
+   "start_line": 131,
+   "end_line": 131,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/contrast.ts",
+   "content": "`breakdownCues` ignores both `_style` and `_config` and hardcodes intensity 0.22/0.15, so `config.breakdownMaxMean` and `style.darknessPreference` have no effect. The spec requires the breakdown mean brightness to stay below `planner.contrast.breakdownMaxMean`; if that config is lowered below the hardcoded values this invariant is silently violated because the cue intensity never scales. Derive the breakdown intensities from `config.breakdownMaxMean`/`style.darknessPreference`.",
+   "existing_code": "      intensity: 0.22,",
+   "start_line": 34,
+   "end_line": 34,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/contrast.ts",
+   "content": "The build-ramp intensity `0.35 + t * (0.35 + strength * 0.15)` can exceed 1 for large `strength` (e.g. `strength >= 2`), unlike the other cues which stay within [0,1]. Although the caller clamps with `Math.min(secStyle.intensityRange[1], c.intensity)`, the cue contract is not normalized. Clamp to at most 1 to keep the producer consistent.",
+   "suggestion_code": "      intensity: Math.min(1, 0.35 + t * (0.35 + strength * 0.15)),",
+   "existing_code": "      intensity: 0.35 + t * (0.35 + strength * 0.15),",
+   "start_line": 85,
+   "end_line": 85,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-planner/src/contrast.ts",
+   "content": "`fakeDropHold` produces a blackout from `fakeBeat` to `actualBeat` independently of the real drop program's pre-drop blackout that ends near the same impact, and it uses priority 95 while the drop program's blackout uses 96. If restraint does not convert the hold (e.g. the real blackout itself was substituted away), the two blackouts can overlap, which `validate.ts` reports as an 'overlapping exclusive' (blackout/white-hit). Consider bounding the hold against the real drop's pre-dark blackout and aligning the priority with the drop blackout.",
+   "existing_code": "      startBeat: fakeBeat,\n      durationBeats: span,",
+   "start_line": 149,
+   "end_line": 150,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/electron/updater/index.ts": [
+  {
+   "path": "apps/desktop/electron/updater/index.ts",
+   "content": "Guard ordering defect: the live/show check runs before the checkOnLaunch check. When updates are disabled (`checkOnLaunch: false`) AND Live/show is active, this returns `{ action: \"defer-live\" }` instead of `{ action: \"skip-disabled\" }`, emitting a misleading \"update deferred\" notice for a check that would never have run. Check the `checkOnLaunch` flag first so a disabled update check short-circuits before the deferral logic.",
+   "suggestion_code": "  if (!options.checkOnLaunch) {\n    return { action: \"skip-disabled\", note: \"update check off (update.checkOnLaunch)\" };\n  }\n\n  if (options.liveActive || options.showLoaded) {\n    return {\n      action: \"defer-live\",",
+   "existing_code": "  if (options.liveActive || options.showLoaded) {\n    return {\n      action: \"defer-live\",",
+   "start_line": 18,
+   "end_line": 20,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/electron/updater/index.ts",
+   "content": "`noteUpdateAvailable` only receives `liveActive` and therefore omits the `showLoaded` state that `canInstallUpdate` gates on. An update arriving while a show is loaded (but not Live) is marked `deferred: false` with a plain \"update available\" notice, directly contradicting `canInstallUpdate(liveActive, showLoaded)` which returns `false` for the same state. This can surface a non-deferred/modal-style notice during a show. Accept and honor `showLoaded` here (or the shared gate) so the deferral decision matches the install gate.",
+   "suggestion_code": "export function noteUpdateAvailable(version: string, liveActive: boolean, showLoaded: boolean): UpdateState {\n  if (liveActive || showLoaded) {",
+   "existing_code": "export function noteUpdateAvailable(version: string, liveActive: boolean): UpdateState {\n  if (liveActive) {",
+   "start_line": 38,
+   "end_line": 39,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/electron/updater/index.ts",
+   "content": "The gating predicate `liveActive || showLoaded` (here), `liveActive` (noteUpdateAvailable) and `!liveActive && !showLoaded` (canInstallUpdate) is re-expressed independently in three places and has already diverged (noteUpdateAvailable omits showLoaded). Extract a single shared predicate (e.g. `isInstallBlocked(liveActive, showLoaded)`) and reuse it in all three functions to prevent silent desynchronization of the check/note/install decisions.",
+   "existing_code": "  return !liveActive && !showLoaded;",
+   "start_line": 51,
+   "end_line": 51,
+   "category": "maintainability",
+   "severity": "medium"
+  }
+ ],
+ "apps/desktop/src/app/services.test.ts": [
+  {
+   "path": "apps/desktop/src/app/services.test.ts",
+   "content": "The AL-FLOW-001 fixture copies from absolute developer-machine paths. `/Users/rocket/Library/.../ANLZ0000.DAT` and (further down) `/Users/rocket/.autolight/analysis-cache/39ec10359514c496a6164306.trackmodel.json` only exist on one machine, so the whole `services.test.ts` suite fails to even import on CI/any other developer box (cpSync throws ENOENT). It also violates the no-hardcoded-business-path rule. Commit small fixtures into the repo (e.g. under `src/app/__fixtures__`) and copy from `new URL(...)`, or guard with `existsSync`/`it.skipIf` when the source file is absent.",
+   "existing_code": "        \"/Users/rocket/Library/Pioneer/rekordbox/share/PIONEER/USBANLZ/135/fb47d-24bc-49c5-b5e7-ce275ed46465/ANLZ0000.DAT\",\n        join(trackDir, \"ANLZ0000.DAT\"),",
+   "start_line": 585,
+   "end_line": 586,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/src/app/services.test.ts",
+   "content": "Fake timers are installed *after* `svc.start()`. `ProviderManager.start()` creates its poll loop with `setInterval(...)` and an immediate `void tick()` (provider-manager.ts:224-225), so the interval is a **real** timer by the time `vi.useFakeTimers()` runs. `vi.advanceTimersByTimeAsync(20)` therefore does not drive the poll loop at all; `axTicks`/`axReadable` only become non-zero because of start()'s immediate tick plus the promise flush. The comment \"the poll loop is driven by setInterval\" is misleading and the step gives no determinism: if the immediate tick were removed the test would fail, and the real 5ms interval keeps firing on wall-clock time. Install fake timers before calling `start()` so the interval is actually captured.",
+   "suggestion_code": "    vi.useFakeTimers();\n    try {\n      expect(svc.start().state).toBe(\"running\");\n      // Deterministic clock: install fake timers BEFORE start() so the poll\n      // loop's setInterval is captured by the fake clock.\n      await vi.advanceTimersByTimeAsync(20);",
+   "existing_code": "    expect(svc.start().state).toBe(\"running\");\n    vi.useFakeTimers();\n    try {\n      // Deterministic clock: the poll loop is driven by setInterval.\n      await vi.advanceTimersByTimeAsync(20);",
+   "start_line": 260,
+   "end_line": 264,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/app/services.test.ts",
+   "content": "Resource-leak ordering: `lan.stop()` (which releases the probe manager's bound reply port) runs only after `showService.govee().stop()` / `resetGoveeManager()`. If `govee()` throws (e.g. `optionsFromConfig` rejects), control jumps to the `finally` that only does `await sim.stop()`, so the probe `GoveeLanManager`'s sockets are never closed. The subsequent `lan.stop()` below is redundant/dangerous too (double stop). Put `lan.stop()` in a dedicated `try/finally` that always runs regardless of `govee()` succeeding.",
+   "existing_code": "        showService.govee().stop();\n        resetGoveeManager();\n        lan.stop();",
+   "start_line": 647,
+   "end_line": 649,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/app/services.test.ts",
+   "content": "Process-global state leak: this test mutates the shared show-service intent forwarder and master override state (`setMasterBlackout()` sets `overrides.blackout = true`). `resetHostIntentForwarderForTest()` is only called on the happy path with no `try/finally`, and the blackout override is never restored. If any assertion in between throws, the forwarder and `blackout: true` leak into every later test in the file (including the T-TRU-03 mega-test that asserts override transitions). Wrap the section in `try { ... } finally { showService.resetHostIntentForwarderForTest(); showService.setMasterBlackout() /* or resume */ }`, or add a global `afterEach` that resets show-service state.",
+   "existing_code": "    showService.setMasterBlackout();\n    expect(posted).toEqual([{ type: \"intent\", channel: \"master/blackout\", request: { version: 1 } }]);\n    showService.resumeMaster(\"bar\");\n    expect(posted).toHaveLength(2);\n    showService.resetHostIntentForwarderForTest();",
+   "start_line": 224,
+   "end_line": 228,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/app/services.test.ts",
+   "content": "The `finally` block does not clear the show-service intent forwarder installed by `showService.setHostIntentForwarder(...)` earlier in the body (it is only reset mid-body). Any throw between installation and that mid-body reset leaves the forwarder installed on the process-global show service, corrupting later tests. Add `showService.resetHostIntentForwarderForTest()` to this `finally` (idempotent) so cleanup always runs.",
+   "existing_code": "    } finally {\n      resetConfigServiceForTest();\n      resetProviderManagerForTest();\n      router.stop();\n    }",
+   "start_line": 720,
+   "end_line": 724,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/app/services.test.ts",
+   "content": "This single `it()` drives ~30 channels sequentially with no per-phase isolation, so a failure in any early row aborts the rest and silently skips coverage (including the final `recorder.count()` regression guard). Combined with shared mutable globals (`showService`, `getConfigService`, `getProviderManager`, Govee/MIDI singletons) and order-dependent assertions (e.g. `svc.deviceIps.size === 0` before the scan, config mirrored into two separate stores), the test is brittle and hard to diagnose. Split into a `describe` with one `it()` per channel group and inject per-test setup/teardown rather than relying on execution order.",
+   "existing_code": "  it(\"covers every channel with an observable effect or authoritative read\", async () => {",
+   "start_line": 508,
+   "end_line": 508,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/src/features/diagnostics/diagnostics-view.tsx": [
+  {
+   "path": "apps/desktop/src/features/diagnostics/diagnostics-view.tsx",
+   "content": "The promise chain has no `.catch`/`.finally`. `invoke()` itself never rejects (it swallows errors and returns `null`), but any throw inside this `.then` callback \u2014 e.g. `JSON.stringify(d?.ax)` on a payload containing `BigInt` or a cyclic structure that structured-clone preserved (the IPC schema is `z.unknown()`, so nothing is stripped) \u2014 rejects an unobserved promise and silently aborts the whole update (no `setSeenAt`, no `setSessionEvents`, no user-visible error). Prefer an `async` IIFE with `try/catch`.",
+   "existing_code": "    void invoke(\"diagnostics/all\", { version: 1 }).then((raw: unknown) => {",
+   "start_line": 63,
+   "end_line": 63,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/features/diagnostics/diagnostics-view.tsx",
+   "content": "`seenAt` is stamped on every resolved fetch regardless of outcome. When `diagnostics/all` fails, `invoke` returns `null`, so `d` is `undefined` and this block still rebuilds the map with empty values (`AX: [] PROLINK: {}`, `Transport: \"no decks\"`, \u2026) and then marks the fetch fresh. The `stale` badge therefore can never indicate a failed/absent fetch \u2014 the panel silently reports success on stale/empty data. Only stamp `seenAt` (and rebuild) when `envelope?.ok !== false && d !== undefined`, otherwise leave the previous timestamp/state intact.",
+   "existing_code": "      setSeenAt(Date.now());",
+   "start_line": 81,
+   "end_line": 81,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/src/features/diagnostics/diagnostics-view.tsx",
+   "content": "`isFresh` is evaluated with a `Date.now()` captured only at render time and there is no timer in this component. After a successful fetch `seenAt \u2248 now`, so `stale` is `false`, and it will never flip to `true` as time passes unless some unrelated store change re-renders the view (>2s later, per the default `staleAfterMs`). The freshness indicator is effectively dead. Drive it from a ticking state (e.g. a 1s `setInterval` updating a `now` value) or a `useSyncExternalStore`-style clock.",
+   "existing_code": "  const stale = seenAt !== null && !isFresh(seenAt, Date.now());",
+   "start_line": 88,
+   "end_line": 88,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/features/diagnostics/diagnostics-view.tsx",
+   "content": "These deps (`live` in particular is replaced frequently by beat/status updates during a show) re-run the whole effect and fire a fresh `diagnostics/all` IPC request on every change. The `cancelled` guard keeps the results correct, but this is a request-per-beat storm. Additionally each re-run resets `seenAt`, which masks the staleness detection. Consider narrowing to primitives (e.g. `live?.source`, deck titles) or sourcing the refresh from a dedicated interval instead of store reactivity.",
+   "existing_code": "  }, [live, bpm, devices, set]);",
+   "start_line": 87,
+   "end_line": 87,
+   "category": "performance",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/features/diagnostics/diagnostics-view.tsx",
+   "content": "The `fallback` path is unreachable: `TabMetrics` only reaches it when `found.length === 0`, and every tab in `TAB_ROWS` (Transport, Beat Clock, Track Resolver, Analysis, Planner, Renderer, Fixtures, Latency) always has a matching label in the inline `rows` array (Logs returns early). So the per-tab strings written into the store by the effect (`Transport`, `Beat Clock`, `Planner`, \u2026) are never read, while the same values are recomputed inline in `rows` with different formatting (`\"deck1=\u2026\"` vs `\"\u00b7 deck 1 \u2026\"`). This duplicated source of truth will silently drift and one of the copies is dead code. Keep a single source \u2014 derive `rows` from the stored map, or drop the unused stored per-tab entries (and the dead `TAB_ROWS[\"Logs\"] = [\"Session\"]` entry).",
+   "existing_code": "              <TabMetrics tab={t} rows={rows} fallback={diagnostics[t]} sessionEvents={sessionEvents} />",
+   "start_line": 120,
+   "end_line": 120,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/features/diagnostics/diagnostics-view.tsx",
+   "content": "`set({ diagnostics: {\u2026} })` replaces the entire `diagnostics` map rather than merging. Zustand's `set` shallow-merges only at the top level, so this drops any keys written elsewhere in the app \u2014 notably the `ipc:<channel>` error entries that `store.invoke()` deliberately records for unavailable/failed IPC (store.ts lines 29/36). Reproduce by triggering an IPC failure, then letting this effect resolve: the recorded error entry disappears. Merge into the existing map (spread the current value) instead of replacing it.",
+   "existing_code": "        diagnostics: {",
+   "start_line": 68,
+   "end_line": 68,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "packages/analysis-client/src/protocol.ts": [
+  {
+   "path": "packages/analysis-client/src/protocol.ts",
+   "content": "`parseFrame` only checks that the parsed value is a non-null object, so it never validates the protocol contract: `v` is not compared against `PROTOCOL_VERSION`, `type` is not required to exist/be a string, and JSON arrays (`typeof [] === \"object\"`) also pass the guard and get cast to `ProtocolFrame`. A worker speaking an incompatible protocol version, or a non-frame payload, is silently accepted and cast, which can be misinterpreted downstream. Validate the version and frame shape (and reject arrays) before returning.",
+   "suggestion_code": "  if (typeof msg !== \"object\" || msg === null || Array.isArray(msg)) {\n    throw new Error(`non-object-frame: ${line.slice(0, 120)}`);\n  }\n  const frame = msg as ProtocolFrame;\n  if (frame.v !== PROTOCOL_VERSION) {\n    throw new Error(`protocol-mismatch: expected v${PROTOCOL_VERSION}, got ${String(frame.v)}`);\n  }\n  if (typeof frame.type !== \"string\") {\n    throw new Error(`missing-frame-type: ${line.slice(0, 120)}`);\n  }\n  return frame;",
+   "existing_code": "  if (typeof msg !== \"object\" || msg === null) {\n    throw new Error(`non-object-frame: ${line.slice(0, 120)}`);\n  }\n  return msg as ProtocolFrame;",
+   "start_line": 72,
+   "end_line": 75,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/analysis-client/src/protocol.ts",
+   "content": "`frameId` treats only null/undefined as absent (`??`), so an empty-string `id` is returned as `\"\"`, and a non-string id is coerced to `\"[object Object]\"`. It also falls back to `trackId`, so a track-scoped response is indistinguishable from a job-correlated id; combined with `findEntry` in the caller this can mis-route results/failures. Reject blank/empty ids and keep job-id vs track-id correlation explicit.",
+   "suggestion_code": "  const id = msg.id ?? msg.trackId;\n  if (typeof id !== \"string\" && typeof id !== \"number\") return undefined;\n  const str = String(id);\n  return str.length === 0 ? undefined : str;",
+   "existing_code": "  const id = msg.id ?? msg.trackId;\n  return id === undefined ? undefined : String(id);",
+   "start_line": 79,
+   "end_line": 80,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/analysis-client/src/protocol.ts",
+   "content": "`classifyError` can only ever return 4 of the 6 declared `AnalyzeErrorCode` values: `worker-timeout` and `spawn-failed` are unreachable here, and every unrecognized message falls through to `worker-exited`. Callers that branch on the returned code (e.g. retry/failover decisions) will therefore misattribute timeouts/spawn problems as worker exits. Map the known codes explicitly and use a distinct, honest fallback rather than silently defaulting to `worker-exited` (also note `startsWith` can over-match, e.g. `\"audio-missingX\"`).",
+   "existing_code": "  if (text.startsWith(\"dsp-fallback\")) return \"dsp-fallback\";\n  return \"worker-exited\";",
+   "start_line": 104,
+   "end_line": 105,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/analysis-client/src/protocol.ts",
+   "content": "Job ids are derived from a module-level, in-memory counter (`jobSeq`). It resets on every process restart and is not persisted, so ids can collide with records already stored in a persistent queue; given the spec 109/139 requeue/idempotency requirements this can break dedup and correlation of results back to jobs across restarts. Use a durable/unique id source (e.g. UUID or a persisted sequence).",
+   "suggestion_code": "    id: `job-${crypto.randomUUID()}`,",
+   "existing_code": "    id: `job-${++jobSeq}`,",
+   "start_line": 87,
+   "end_line": 87,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/analysis-client/src/protocol.ts",
+   "content": "`toJob` defaults `configHash` to `\"\"` when omitted. Since T-ANA-02 ties identical requeue/dedup to the config snapshot hash, an empty hash can make distinct configurations compare equal (and all hash-less requests compare equal to each other), leading to incorrect dedup/requeue decisions. Require a real `configHash` (or make the type non-optional and reject empty).",
+   "existing_code": "    configHash: req.configHash ?? \"\",",
+   "start_line": 91,
+   "end_line": 91,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/analysis-client/src/protocol.ts",
+   "content": "`stages` is assigned by reference from `req.stages`, so the returned job and the caller's request share the same array; later mutation of either aliases across objects and can corrupt the queued job's stage list (the default literal is fine as it is freshly allocated). Copy the array to keep the job's snapshot independent.",
+   "suggestion_code": "    stages: [...(req.stages ?? [\"decode\", \"ml\", \"dsp\", \"events\", \"fusion\"])],",
+   "existing_code": "    stages: req.stages ?? [\"decode\", \"ml\", \"dsp\", \"events\", \"fusion\"],",
+   "start_line": 90,
+   "end_line": 90,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "packages/reactive-audio/src/capture.ts": [
+  {
+   "path": "packages/reactive-audio/src/capture.ts",
+   "content": "`setDevice` tears down the currently working session via `this.stop()` **before** the replacement `start()` has been confirmed. If `start()` fails (e.g. the new device is unavailable), only `deviceIdValue` is rolled back \u2014 the previously live session is already stopped, so the host is left not running with no failover. This contradicts the method's own contract (\"one context stays live\") and loses capture. Either start the new session first and only stop the old one on success, or roll back by restarting the previous device on failure.",
+   "existing_code": "    this.stop();\n    const result = await this.start();\n    if (!result.ok) this.deviceIdValue = previous;",
+   "start_line": 158,
+   "end_line": 160,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/reactive-audio/src/capture.ts",
+   "content": "`start()` guards on `this.session !== null` but then `await`s (permission request and `platform.start`) before assigning `this.session`. A second concurrent `start()`, or a `setDevice()` racing with `start()`, passes the null check during that window and both allocate a session \u2014 leaking a `CaptureSessionHandle` and breaking the \"one context only\" invariant. Similarly, a `stop()` issued while `start()` is in flight is a no-op (session still null), after which the pending `start()` populates a live session that was supposed to be stopped. Track an in-flight start promise (e.g. `private starting: Promise<...> | null`) and reuse/reject concurrent calls, and have `stop()` account for an in-flight start.",
+   "existing_code": "    if (this.session !== null) return { ok: true, reason: null };\n    const permission = this.permissionState === \"granted\" ? \"granted\" : await this.platform.requestPermission();",
+   "start_line": 128,
+   "end_line": 129,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/reactive-audio/src/capture.ts",
+   "content": "`stop()` (and `onUiReload()`, which calls it) does not clear `this.pending`. A feature frame buffered before teardown remains readable, so a later `latest()` returns features produced by a session that is already gone \u2014 the show host receives stale data from a dead capture context. Clear `this.pending` when tearing down the session.",
+   "existing_code": "    this.session = null;\n    session.stop();",
+   "start_line": 149,
+   "end_line": 150,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ]
+}

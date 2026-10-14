@@ -1,0 +1,103 @@
+{
+ "packages/contracts/tsconfig.json": [
+  {
+   "path": "packages/contracts/tsconfig.json",
+   "content": "`include: [\"src\"]` also pulls in the co-located test files (`src/index.test.ts`, `src/schema-validation.property.test.ts`). Since `build` runs `tsc -p tsconfig.json` with `declaration: true` (inherited from `../../tsconfig.base.json`), the build emits test JS and `.d.ts` files into `dist` (e.g. `dist/index.test.js`, `dist/*.test.d.ts`), which then get published with the package since `package.json` has no `files` allowlist. Those artifacts also carry a compile-time dependency on the `vitest` devDependency. Consider excluding test files from the build (or splitting a `tsconfig.build.json`).",
+   "suggestion_code": "  \"include\": [\n    \"src\"\n  ],\n  \"exclude\": [\n    \"src/**/*.test.ts\"\n  ]",
+   "existing_code": "  \"include\": [\n    \"src\"\n  ]",
+   "start_line": 7,
+   "end_line": 9,
+   "category": "maintainability",
+   "severity": "medium"
+  }
+ ],
+ "packages/dj-core/tsconfig.json": [
+  {
+   "path": "packages/dj-core/tsconfig.json",
+   "content": "The `include` covers all of `src`, which contains test files (`src/index.test.ts`, `src/beat-mapping.property.test.ts`). The base config's `exclude` only removes `node_modules`/`dist`, so `tsc -p tsconfig.json` will compile and emit these tests into `dist` (e.g. `dist/index.test.js`, `dist/*.test.d.ts`). Because `main`/`types` point at `dist/index.js`/`dist/index.d.ts` and there is no `files` allowlist in package.json, the test artifacts (which import the devDependency `vitest`) get shipped and their emitted declarations reference a non-runtime dependency. Exclude test files from the build (a separate test tsconfig or an explicit exclude).",
+   "suggestion_code": "  \"include\": [\n    \"src\"\n  ],\n  \"exclude\": [\n    \"node_modules\",\n    \"dist\",\n    \"src/**/*.test.ts\"\n  ]",
+   "existing_code": "  \"include\": [\n    \"src\"\n  ]",
+   "start_line": 7,
+   "end_line": 9,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/failover/vitest.config.ts": [
+  {
+   "path": "packages/failover/vitest.config.ts",
+   "content": "`readdirSync(workspaceSrc)` returns every entry under `packages/` (files and directories), and each one is unconditionally turned into an `@autolight/<name>` alias pointing at `<entry>/src/index.ts` without verifying that the entry is a package or that the target file exists. A stray non-package entry (a file such as `README.md`/`.DS_Store`, a `.cache`/`node_modules` dir) silently produces a bogus alias, and any package whose entry is not `src/index.ts` resolves to a nonexistent module, causing confusing import-resolution failures instead of a clear error. Consider filtering to directories that actually contain `src/index.ts` (or read the package's `exports`/`main`), so the mapping stays in sync with the real package layout.",
+   "suggestion_code": "const workspaceAlias = Object.fromEntries(\n  readdirSync(workspaceSrc, { withFileTypes: true })\n    .filter(\n      (entry) =>\n        entry.isDirectory() &&\n        existsSync(join(workspaceSrc, entry.name, \"src\", \"index.ts\")),\n    )\n    .map((entry) => [\n      `@autolight/${entry.name}`,\n      join(workspaceSrc, entry.name, \"src\", \"index.ts\"),\n    ]),\n);",
+   "existing_code": "const workspaceAlias = Object.fromEntries(\n  readdirSync(workspaceSrc).map((name) => [\n    `@autolight/${name}`,\n    join(workspaceSrc, name, \"src\", \"index.ts\"),\n  ]),\n);",
+   "start_line": 8,
+   "end_line": 13,
+   "category": "maintainability",
+   "severity": "medium"
+  }
+ ],
+ "packages/matter/tsconfig.json": [
+  {
+   "path": "packages/matter/tsconfig.json",
+   "content": "`include` covers all of `src` and no `exclude` is declared, so the build script (`tsc -p tsconfig.json`, which emits into `dist` per package.json) also compiles and emits the test files (`src/binding.test.ts`, `controller.test.ts`, `mapping.test.ts`, `simulator.test.ts`) to `dist/*.test.js` / `*.test.d.ts`. Reproduce with `npm run build` in `packages/matter` and inspect `dist/`: you will get `binding.test.js` etc., each of which does `import { describe, expect, it } from \"vitest\"`. Since `vitest` is only a devDependency, every published/bundled `dist` now contains modules that resolve a non-runtime dependency and will throw at import time if ever loaded (e.g. by consumers globbing `dist`, or by test/bundle tooling). Since `main`/`types` point at `dist`, the shipped artifact is polluted with test code. Add an explicit exclusion for test sources (re-adding the base `node_modules`/`dist` exclusions, since specifying `exclude` overrides inherited values).",
+   "suggestion_code": "  \"include\": [\n    \"src\"\n  ],\n  \"exclude\": [\n    \"node_modules\",\n    \"dist\",\n    \"src/**/*.test.ts\"\n  ]",
+   "existing_code": "  \"include\": [\n    \"src\"\n  ]",
+   "start_line": 7,
+   "end_line": 9,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/rekordbox-live/vitest.config.ts": [
+  {
+   "path": "packages/rekordbox-live/vitest.config.ts",
+   "content": "The alias map is built from a raw `readdirSync(workspaceSrc)` without filtering entries to directories. Every entry in `packages/` (including any stray non-directory file such as `.DS_Store`, `README.md`, a lockfile, or a non-package folder) becomes an alias `@autolight/<entry>` pointing at a non-existent `<entry>/src/index.ts`. Because resolution warnings/errors from such bogus aliases can silently break or obscure imports during tests, this is fragile. The root `vitest.config.ts` already guards against this with `readdirSync(workspaceSrc, { withFileTypes: true }).filter((e) => e.isDirectory())`; this file should stay consistent with it. There is also no fallback if `workspaceSrc` is unreadable/missing \u2014 the config throws at load time and takes down the whole test run.",
+   "suggestion_code": "const workspaceAlias = Object.fromEntries(\n  readdirSync(workspaceSrc, { withFileTypes: true })\n    .filter((entry) => entry.isDirectory())\n    .map((entry) => [`@autolight/${entry.name}`, join(workspaceSrc, entry.name, \"src\", \"index.ts\")]),\n);",
+   "existing_code": "const workspaceAlias = Object.fromEntries(\n  readdirSync(workspaceSrc).map((p) => [`@autolight/${p}`, join(workspaceSrc, p, \"src\", \"index.ts\")]),\n);",
+   "start_line": 8,
+   "end_line": 10,
+   "category": "maintainability",
+   "severity": "medium"
+  }
+ ],
+ "packages/show-director/tsconfig.json": [
+  {
+   "path": "packages/show-director/tsconfig.json",
+   "content": "`include: [\"src\"]` also matches `src/index.test.ts`, so `npm run build` (`tsc -p tsconfig.json`) emits `dist/index.test.js` / `dist/index.test.d.ts` into the build output. Since `package.json` has no `files` allowlist, those test artifacts get published, and the emitted `dist/index.test.js` imports `vitest` (a devDependency that is not part of the published package), leaving dangling/broken output in the shipped bundle. Consider excluding test files from the build config. Note `exclude` overrides the inherited base exclude, so re-list `node_modules`/`dist`.",
+   "suggestion_code": "  \"include\": [\n    \"src\"\n  ],\n  \"exclude\": [\n    \"node_modules\",\n    \"dist\",\n    \"src/**/*.test.ts\"\n  ]",
+   "existing_code": "  \"include\": [\n    \"src\"\n  ]",
+   "start_line": 7,
+   "end_line": 9,
+   "category": "maintainability",
+   "severity": "medium"
+  }
+ ],
+ "packages/show-mixer/package.json": [
+  {
+   "path": "packages/show-mixer/package.json",
+   "content": "`@autolight/show-planner` and `@autolight/storage` are declared as runtime `dependencies`, but a scan of `packages/show-mixer/src` shows they are only imported from test files (`blackout.test.ts`, `pipeline.test.ts`). The shipped runtime entry `src/index.ts` only imports `@autolight/contracts`, `@autolight/dj-core`, `@autolight/renderer` and `./blend.js`. Keeping test-only packages in `dependencies` makes every consumer of this package install them unnecessarily and misrepresents the runtime surface. Move them to `devDependencies` (or remove if the test coupling is dropped).",
+   "existing_code": "    \"@autolight/show-planner\": \"^0.1.0\",\n    \"@autolight/storage\": \"^0.1.0\"",
+   "start_line": 17,
+   "end_line": 18,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-mixer/package.json",
+   "content": "`--passWithNoTests` lets `vitest run` exit 0 when no tests are collected. If test discovery ever breaks (e.g. the `vitest.config.ts` include/glob is changed, files are renamed, or the glob is narrowed), CI silently reports success for a package with zero executed tests, masking regressions. Prefer dropping the flag so a missing-test situation fails the run.",
+   "existing_code": "    \"test\": \"vitest run --passWithNoTests\",",
+   "start_line": 9,
+   "end_line": 9,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-mixer/package.json",
+   "content": "The `lint` script is byte-for-byte the same command as `typecheck` (`tsc --noEmit -p tsconfig.json`), so `yarn lint` performs no linting at all. Lint-only defects (unused vars, forbidden patterns, rule violations) cannot be caught by this package's `lint` target even though the repo ships oxlint/eslint tooling. Point `lint` at the actual linter, or drop the script and rely on the root lint gate.",
+   "existing_code": "    \"lint\": \"tsc --noEmit -p tsconfig.json\",\n    \"typecheck\": \"tsc --noEmit -p tsconfig.json\"",
+   "start_line": 10,
+   "end_line": 11,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ]
+}

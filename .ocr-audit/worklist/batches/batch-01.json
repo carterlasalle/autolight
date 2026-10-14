@@ -1,0 +1,428 @@
+{
+ "packages/analysis-client/src/index.ts": [
+  {
+   "path": "packages/analysis-client/src/index.ts",
+   "content": "`drain()` sizes `capacity` from `this.procs.length`, but every frame is written to `this.procs[0]` only. With `concurrency > 1` the extra worker processes never receive any work, while the jobs sent to `procs[0]` are still counted as in-flight (their timers are set), so the computed capacity is consumed and the queue stalls. Concurrency is effectively a no-op except for mis-sizing capacity. `send()` needs to target a specific worker (e.g. track a proc per job and round-robin / pick a proc with no assigned job).",
+   "existing_code": "  private send(msg: unknown): void {\n    const proc = this.procs[0];",
+   "start_line": 280,
+   "end_line": 281,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/analysis-client/src/index.ts",
+   "content": "On any single process exit this selects *every* pending entry with a timer, including jobs actively running on sibling processes. Those jobs are requeued and re-executed even though their worker is still alive, producing duplicate execution and duplicate completion/failure for the same job (and potentially double resolution of the same promise). Only jobs actually dispatched to the exiting process should be requeued; the client must track a job\u2192proc assignment to do this correctly.",
+   "existing_code": "      const interrupted = [...this.pending.values()].filter((e) => e.timer !== undefined);",
+   "start_line": 317,
+   "end_line": 317,
+   "category": "bug",
+   "severity": "critical"
+  },
+  {
+   "path": "packages/analysis-client/src/index.ts",
+   "content": "`failEntry()` frees capacity by removing the entry but never calls `drain()`, so queued jobs can stall until an unrelated event triggers a drain. This affects `cancel()` (which calls `failEntry` directly). Additionally cancellation is reported with the `worker-timeout` code rather than a cancel-specific code, mislabeling the failure for callers. Add `this.drain()` after the entry is cleared and use an appropriate error code.",
+   "existing_code": "    this.send({ v: PROTOCOL_VERSION, id, type: \"cancel\" });\n    this.failEntry(entry, \"worker-timeout\", \"cancelled by request id\");",
+   "start_line": 128,
+   "end_line": 129,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/analysis-client/src/index.ts",
+   "content": "`start()` spawns workers but never calls `drain()`. The crash/restart path (`exit` handler \u2192 `restartWithBackoff()` \u2192 `start()`) requeues interrupted jobs into `this.queue`, but nothing dispatches them until some later `analyze()` happens to call `drain()`. After a worker crash the requeued jobs sit idle indefinitely \u2014 a liveness bug that also defeats the spec-109 requeue guarantee. Call `this.drain()` at the end of `start()` (or after requeuing in the exit handler).",
+   "existing_code": "    for (let i = 0; i < this.opts.concurrency; i += 1) this.spawnOne();\n    this.heartbeatTimer = setInterval(() => this.checkHeartbeat(), 1000);",
+   "start_line": 110,
+   "end_line": 111,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/analysis-client/src/index.ts",
+   "content": "`stop()` kills the processes but leaves in-flight job timers armed and never rejects pending promises. Two consequences: (1) the per-job `setTimeout` callbacks still fire after stop, calling `failEntry` + `restartWithBackoff()` and resurrecting a supervisor that was explicitly stopped; (2) the `exit` handlers run asynchronously after `this.procs = []`, observe `procs.length === 0`, and also call `restartWithBackoff()`. Any later `setTimeout(() => this.start())` can then spawn workers after an explicit `stop()`. `stop()` should clear all pending job timers, reject/resolve pending entries, and set a `stopped` flag that the `exit` handler (and `start()`) honor.",
+   "existing_code": "    for (const proc of this.procs) {\n      try {\n        proc.kill();\n      } catch {\n        /* teardown never throws */\n      }\n    }\n    this.procs = [];",
+   "start_line": 195,
+   "end_line": 202,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/analysis-client/src/index.ts",
+   "content": "Any routed frame that is neither `progress` (with `stage`) nor `complete` (with `artifactPath`) falls through to the failure branch and rejects the job. A `progress` frame lacking `stage`, a `complete` frame lacking `artifactPath`, or any other frame type addressed to a known job id (e.g. an ack/started frame) will incorrectly fail a healthy job. Explicitly ignore/handle non-terminal frame types instead of treating them as failures.",
+   "existing_code": "    if (msg.type === \"progress\" && msg.stage) {",
+   "start_line": 216,
+   "end_line": 216,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/analysis-client/src/index.ts",
+   "content": "`restartWithBackoff()` is not idempotent and races with the asynchronous `exit` handlers: `stop()` clears `this.procs` synchronously, then each killed proc's `exit` handler sees `procs.length === 0` and calls `restartWithBackoff()` again, incrementing `this.restarts` and scheduling multiple stacked `start()` calls. Also `backoffMs` is only ever doubled and never reset to `restartBackoffMs[0]` after a healthy run, so backoff monotonically escalates to the max even for isolated, widely-spaced failures. Add a restart-in-progress guard and reset `backoffMs` once the worker has been healthy.",
+   "existing_code": "  private restartWithBackoff(): void {\n    this.stop();\n    this.restarts += 1;",
+   "start_line": 333,
+   "end_line": 335,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/analysis-client/src/index.ts",
+   "content": "`lastHeartbeat` is never reset when workers are (re)spawned or stopped. After a restart, the stale timestamp is still compared against `Date.now()`, so `checkHeartbeat()` can immediately declare a fresh worker unhealthy (before it emits its first heartbeat) and trigger a restart loop that never stabilizes. Reset `this.lastHeartbeat` in `spawnOne()`/`start()` and in `stop()`.",
+   "existing_code": "    if (Date.now() - this.lastHeartbeat > this.opts.heartbeatTimeoutMs) {",
+   "start_line": 343,
+   "end_line": 343,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/analysis-client/src/index.ts",
+   "content": "Fallback lookup by `trackId` returns the first matching entry. When the same track is analyzed again while a prior job for that track is still pending, multiple entries share the same `trackId` and messages addressed by track id can be routed to the wrong job, resolving/rejecting an unrelated promise. Prefer the unique job id for routing and treat the trackId fallback as ambiguous.",
+   "existing_code": "      [...this.pending.values()].find((e) => e.job.trackId === routed)",
+   "start_line": 208,
+   "end_line": 208,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/analysis-client/src/index.ts",
+   "content": "In-flight detection is derived solely from `entry.timer !== undefined`, which conflates a job that has actually been dispatched with one that was requeued after a crash (timer cleared). Combined with the concurrency/`send()` bug this makes `capacity` unreliable. Consider tracking an explicit `dispatchedTo`/`inFlight` flag on `PendingEntry` rather than inferring state from the presence of a timer.",
+   "existing_code": "    const inFlight = [...this.pending.values()].filter((e) => e.timer !== undefined).length;",
+   "start_line": 254,
+   "end_line": 254,
+   "category": "maintainability",
+   "severity": "medium"
+  }
+ ],
+ "packages/govee/src/engines/native-ts.ts": [
+  {
+   "path": "packages/govee/src/engines/native-ts.ts",
+   "content": "The previous PacingStream for this device is snapshotted but never closed before it is overwritten in `this.streams`. Since PacingStream only clears its interval and writes `arm(false)` inside `close()`, the replaced stream keeps its pacing interval alive and never disarms, leaking a timer and leaving the unit armed. Anyone still holding the old stream handle will also paint concurrently with the new stream (duplicate/interleaved arm(true)+frames on the same device). Close the existing stream before replacing it.",
+   "suggestion_code": "    const existing = this.streams.get(deviceId);\n    if (existing) {\n      this.snapshot(deviceId, existing);\n      existing.close();\n    }\n    // PacingStream arms (B1) itself, then waits the settle before the first\n    // paint, exactly as the toolkit binding's openStream does (parity).\n    const stream = new PacingStream(deviceId, opts, this.transport, this.clock);",
+   "existing_code": "    const existing = this.streams.get(deviceId);\n    if (existing) this.snapshot(deviceId, existing);\n    // PacingStream arms (B1) itself, then waits the settle before the first\n    // paint, exactly as the toolkit binding's openStream does (parity).\n    const stream = new PacingStream(deviceId, opts, this.transport, this.clock);",
+   "start_line": 175,
+   "end_line": 179,
+   "category": "bug",
+   "severity": "critical"
+  },
+  {
+   "path": "packages/govee/src/engines/native-ts.ts",
+   "content": "The one-shot stream created here is never stored in `this.streams` (nor any other collection), so: (1) `close()` cannot disarm it, and the unit can be left armed after the engine closes; (2) its `setTimeout` handle is unmanaged and cannot be cancelled; (3) repeated `segment()` calls for the same device create overlapping concurrent streams that both arm and paint, producing duplicate frames; (4) it is invisible to `metrics()`. Track transient streams (e.g. a dedicated field) so `close()` can cancel/disarm them and so a new `segment()` can supersede the previous one.",
+   "existing_code": "    const oneShot = new PacingStream(deviceId, opts, this.transport, this.clock);\n    oneShot.setAll(frame);\n    this.clock.setTimeout(() => { oneShot.close(); }, this.armSettleMs + this.segmentHoldMs);",
+   "start_line": 211,
+   "end_line": 213,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/govee/src/engines/native-ts.ts",
+   "content": "The restore timer is never stored or cancelled, and `restore` is captured from `stream.currentFrame`, which is updated by `setAll` (PacingStream sets `current = latest` on every set). A second `identify()` within `identifyFlashMs` therefore captures the white flash as `restore` (`stream.currentFrame` is already white), and its own timer restores white again \u2014 leaving the device permanently stuck on white and losing the real frame. Overlapping identifies also leave multiple uncancelled timers. Capture a stable pre-flash snapshot once per flash (and cancel/store the timer).",
+   "existing_code": "      const restore = stream.currentFrame;\n      const white = new Uint8Array(stream.zones * 3).fill(255);\n      stream.setAll(white);\n      this.clock.setTimeout(() => {\n        stream.setAll(restore ?? new Uint8Array(stream.zones * 3));\n      }, this.identifyFlashMs);",
+   "start_line": 189,
+   "end_line": 194,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/govee/src/engines/native-ts.ts",
+   "content": "`resolve(deviceId)` is invoked synchronously outside any try/catch. If the resolver throws (e.g. a MAC with no registered address), the exception propagates out of `sendRaw`/`sendJson` and up into `PacingStream`'s constructor/`emit` interval callback (or into `identify`), crashing the caller or the timer callback instead of surfacing as a recorded transport error. Guard the resolution/send so resolution failures are recorded in `this.errors` like socket errors.",
+   "existing_code": "    const sock = this.socketFor(deviceId);\n    const ip = this.resolve(deviceId);",
+   "start_line": 66,
+   "end_line": 67,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/govee/src/engines/native-ts.ts",
+   "content": "Send-side errors are only read from the self-owned SocketTransport (`this.owned?.errorFor`). When a transport is injected (the production `sendToDevice`/`sendRazer` wiring), `owned` is null, so `err` is always null and `health()` unconditionally reports `state: \"ok\", failures: 0` \u2014 send failures never surface and degraded/failover detection is defeated. The health source should not depend on whether the transport is internally owned.",
+   "existing_code": "    const err = this.owned?.errorFor(deviceId) ?? null;\n    if (err === null && !this.streams.has(deviceId) && !this.known.includes(deviceId)) return null;\n    return { state: err === null ? \"ok\" : \"degraded\", failures: err === null ? 0 : 1, available: true };",
+   "start_line": 218,
+   "end_line": 220,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/govee/src/engines/native-ts.ts",
+   "content": "`effectiveHz` is populated with `stream.rateHz`, which is the *requested* rate passed to PacingStream, not the measured effective rate (the stream never computes an achieved/effective Hz). Reporting the requested value under the `effectiveHz` field will hide missed-tick degradation and misreport the actual emission rate. Either measure the achieved rate or rename/source the field accordingly.",
+   "existing_code": "      missedTicks: stream.missedTicks,\n      effectiveHz: stream.rateHz,\n    };",
+   "start_line": 243,
+   "end_line": 245,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/contracts/src/index.ts": [
+  {
+   "path": "packages/contracts/src/index.ts",
+   "content": "The interpolation assumes the two bracketing anchors are exactly one beat apart: `a.index + (ms - a.sourceTimeMs) / span` drops the anchor index delta. For sparse/native grids where `c.index - a.index > 1` (e.g. anchors at index 0 @ 0ms and index 4 @ 2000ms), querying ms=500 (which is beat 1) returns 0 + 500/2000 = 0.25 instead of 1. This silently corrupts every downstream beat calculation that consumes this helper. Scale the fraction by the index delta.",
+   "suggestion_code": "  return a.index + ((c.index - a.index) * (ms - a.sourceTimeMs)) / span;",
+   "existing_code": "  return a.index + (ms - a.sourceTimeMs) / span;",
+   "start_line": 80,
+   "end_line": 80,
+   "category": "bug",
+   "severity": "critical"
+  },
+  {
+   "path": "packages/contracts/src/index.ts",
+   "content": "When a beat index is not present in the grid (non-contiguous or non-zero-based indexes, e.g. anchors at 0/2/4), `b.find(...) ?? b[0]!` silently substitutes the first anchor instead of failing, so callers receive a timestamp for the wrong beat with no indication of the failure. It is also an O(n) linear scan executed on hot timing paths. Look the anchor up in an index->anchor map and throw/return null on a missing index rather than falling back to `b[0]`.",
+   "suggestion_code": "  const a = b.find((x) => x.index === i);\n  if (!a) throw new Error(`beatToSourceSeconds: missing grid anchor for beat ${i}`);\n  const c = b.find((x) => x.index === i + 1) ?? a;",
+   "existing_code": "  const a = b.find((x) => x.index === i) ?? b[0]!;\n  const c = b.find((x) => x.index === i + 1) ?? a;",
+   "start_line": 89,
+   "end_line": 90,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/contracts/src/index.ts",
+   "content": "`z.bigint()` is not JSON-serializable: `JSON.stringify` throws `TypeError: Do not know how to serialize a BigInt`. Since DeckState is the payload of the DJLiveProvider interface and is almost certainly transported over JSON/IPC/WebSocket, any attempt to serialize it fails (or the timestamp is dropped), which breaks the time-sync logic that depends on `receivedAtNs`. Use a JSON-safe representation (string-encoded epoch ns, or a plain number in ms/s) and document the unit.",
+   "suggestion_code": "  // Unix epoch nanoseconds, encoded as a decimal string (bigint is not JSON-serializable).\n  receivedAtNs: z.string().regex(/^\\d+$/),",
+   "existing_code": "  receivedAtNs: z.bigint(),",
+   "start_line": 40,
+   "end_line": 40,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/contracts/src/index.ts",
+   "content": "`beatGridSchema` is non-strict while `adaptiveBeatGridSchema` is `.strict()`, yet both are alternatives of the same union field `beatGrid` in trackModelSchema. Extra/unknown properties on a grid are therefore silently accepted for one branch and rejected for the other, making the contract's strictness depend on which union arm happens to match (and, because `beatGridSchema` is first, unknown keys also survive parsing). Make strictness consistent across both branches.",
+   "existing_code": "export const beatGridSchema = z.object({\n  beats: z.array(nativeBeatSchema).min(1),\n  version: z.number().int().default(1),\n});",
+   "start_line": 52,
+   "end_line": 55,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/contracts/src/index.ts",
+   "content": "`.max(0)` forces an adaptive grid to always be an empty array, which conflicts with the superRefine rule below that reports `\"adaptive must carry an empty grid\"` when `n > 0`. In practice a non-empty grid with `analysisCoverage === \"adaptive\"` is accepted by the (non-strict) `beatGridSchema` arm of the union and only later flagged by superRefine, so the meaningful diagnostic never depends on this branch; and validating `adaptiveBeatGridSchema` directly rejects non-empty grids with a generic array-length error. Align the two so the empty-grid invariant is expressed in exactly one place.",
+   "existing_code": "  beats: z.array(nativeBeatSchema).max(0),",
+   "start_line": 59,
+   "end_line": 59,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/contracts/src/index.ts",
+   "content": "The superRefine only enforces grid emptiness vs `analysisCoverage`; it omits range/ordering invariants that malformed data can violate without any error: `startBeat <= endBeat` for sections/phrases, events falling within the grid, and consistency between `readinessLevel` and `analysisCoverage`. Invalid state transitions thus pass the contract boundary unchecked. Consider adding these cross-field checks (or a dedicated refine) here.",
+   "existing_code": "}).strict().superRefine((model, ctx) => {",
+   "start_line": 319,
+   "end_line": 319,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/contracts/src/index.ts",
+   "content": "`catchall(z.unknown())` makes the entire cue payload unvalidated: any properties beyond the declared optionals are accepted as `unknown` and reach consumers unchecked, so native-source schema drift (renamed/renumbered cue fields) cannot be detected at the contract boundary. Enumerate the expected cue fields (or at least narrow the catchall types) so malformed rekordbox cues fail fast.",
+   "existing_code": "}).catchall(z.unknown());",
+   "start_line": 232,
+   "end_line": 232,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/contracts/src/index.ts",
+   "content": "`markers` is typed as `z.array(z.unknown())`, so malformed or unexpected Serato markers pass validation and are handed to consumers with no type information. Define a concrete marker schema (mirroring `rekordboxCueSchema`) so Serato payload mismatches are caught at the contract boundary.",
+   "existing_code": "  markers: z.array(z.unknown()).optional(),",
+   "start_line": 257,
+   "end_line": 257,
+   "category": "maintainability",
+   "severity": "medium"
+  }
+ ],
+ "packages/show-host/src/index.ts": [
+  {
+   "path": "packages/show-host/src/index.ts",
+   "content": "Cursor prediction is frozen: `tick()` sets `this.lastTickNs = nowNs` *before* calling `advanceCursors(nowNs)`, so here `nowNs - this.lastTickNs` is always `0n`. The `predicted` beat therefore never advances between ticks, and playback tracking degenerates to whatever the estimator alone provides. Pass the previous tick timestamp (the `last` value already captured in `tick()`) into `advanceCursors` instead of reading the just-overwritten field.",
+   "suggestion_code": "      // advanceCursors must receive the previous tick time (e.g. `prevTickNs`)\n      // captured before tick() overwrote this.lastTickNs.\n      const elapsedNs = prevTickNs === null ? 0n : nowNs - prevTickNs;",
+   "existing_code": "      const elapsedNs = this.lastTickNs === null ? 0n : nowNs - this.lastTickNs;",
+   "start_line": 493,
+   "end_line": 493,
+   "category": "bug",
+   "severity": "critical"
+  },
+  {
+   "path": "packages/show-host/src/index.ts",
+   "content": "`estimated` (the desync/estimator output) is computed and then never referenced \u2014 `trackDeck` is called with `predicted` and `gridBeat` only. This means the estimator result is dead code and position tracking is never fed the estimate. Either pass `estimated` into `trackDeck` (as intended) or remove the calculation.",
+   "existing_code": "      const estimated = estimatePosition(state, nowNs) * beatPerSecond;",
+   "start_line": 497,
+   "end_line": 497,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/show-host/src/index.ts",
+   "content": "Throwing here runs inside the `setInterval` tick callback. A snapshot that exceeds `maxBytes` produces an unhandled exception (and, because `lastSnapshotNs` is never advanced, it rethrows on every subsequent tick) rather than a protocol-visible error; the `onCrash` crash-policy hook is bypassed too. Send an `{ type: \"error\" }` message and/or invoke the crash hook instead of throwing from the tick loop.",
+   "existing_code": "      throw new Error(`snapshot is ${bytes} bytes, over runtime.snapshot.maxBytes ${this.maxBytes}`);",
+   "start_line": 608,
+   "end_line": 608,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/show-host/src/index.ts",
+   "content": "This throw executes inside the `MessagePort` `onMessage` callback (via `handlePortMessage` -> `sendResponse`). A response-schema mismatch therefore becomes an uncaught exception in the port listener and can wedge/crash the host instead of being surfaced to the caller. Return an `{ type: \"error\", error: { code, message } }` outbound message rather than throwing.",
+   "existing_code": "      throw new Error(`show host response for ${channel} failed its schema: ${parsed.error.message}`);",
+   "start_line": 703,
+   "end_line": 703,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-host/src/index.ts",
+   "content": "`metricsWindowStartNs` is initialized to `0n` and never updated anywhere, so `elapsedNs` is measured from process time zero and grows without bound. The reported `missedTicksPerHour` is thus a lifetime average that decays as the process ages \u2014 not the intended rolling window. Either reset `metricsWindowStartNs` (and `missedTicks`) when emitting metrics, or drop the field if a lifetime rate is actually wanted.",
+   "existing_code": "    const elapsedNs = this.lastTickNs === null ? 0n : this.lastTickNs - this.metricsWindowStartNs;",
+   "start_line": 447,
+   "end_line": 447,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-host/src/index.ts",
+   "content": "`generation` is discarded (`void generation`), so `installFixtures` unconditionally replaces `this.fixtures`. An out-of-order (stale) fixtures payload can clobber a newer one, breaking the generation-based latest-wins contract that `installPlan` follows. Track the last installed fixture generation and ignore older payloads.",
+   "suggestion_code": "    if (generation < this.fixturesGeneration) return; // ignore stale/out-of-order payloads\n    this.fixturesGeneration = generation;\n    this.fixtures = fixtures;",
+   "existing_code": "    void generation;",
+   "start_line": 484,
+   "end_line": 484,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-host/src/index.ts",
+   "content": "`lastWeights` is only assigned in the two-audible-deck branch below. When the mix falls back to a single audible deck, the previously published `{a, b}` weights persist even though a deck stopped contributing, so `hostSnapshotSchema.weights` reports stale non-zero values. Reset weights in the single-deck path as well.",
+   "suggestion_code": "    this.lastOwner = result.owner;\n    if (audible.length === 1) this.lastWeights = { a: 1, b: 0 };",
+   "existing_code": "    this.lastOwner = result.owner;",
+   "start_line": 549,
+   "end_line": 549,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-host/src/index.ts",
+   "content": "`lastTrigger` is written in the trigger-build/trigger-drop intents but never read anywhere, so the state is dead. Either wire it into the composition/planning pipeline or remove the field to avoid misleading future readers.",
+   "existing_code": "  private lastTrigger: \"build\" | \"drop\" | null = null;",
+   "start_line": 353,
+   "end_line": 353,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-host/src/index.ts",
+   "content": "On a supervised port going away, `handlePortGone` fires the crash hook but never stops the tick pipeline. Because `PortBus.drop` sets `ended = true`, subsequent publishes silently no-op while `setInterval` keeps ticking forever \u2014 a CPU/timer leak whenever `onCrash` does not itself terminate the host. Consider calling `this.stop()` here.",
+   "suggestion_code": "    this.onCrash(reason);\n    this.stop();",
+   "existing_code": "    this.onCrash(reason);",
+   "start_line": 790,
+   "end_line": 790,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "packages/venue/src/placement.ts": [
+  {
+   "path": "packages/venue/src/placement.ts",
+   "content": "`usableToArc` throws when `usable` is empty. `subtractGaps` returns `[]` whenever the run's gaps cover the entire run (or the run has zero length), and `fitRunMapping` calls `usableToArc` for every cell, so `usable[usable.length - 1]` is `undefined` and `.end` raises a TypeError \u2014 a guaranteed crash for fully-gapped/zero-length runs. Guard the empty case (and ideally make `fitRunMapping` reject a run with no usable length up front).",
+   "suggestion_code": "  const last = usable[usable.length - 1];\n  return last ? last.end : 0;",
+   "existing_code": "  const last = usable[usable.length - 1]!;\n  return last.end;",
+   "start_line": 113,
+   "end_line": 114,
+   "category": "bug",
+   "severity": "critical"
+  },
+  {
+   "path": "packages/venue/src/placement.ts",
+   "content": "`arcToUsable` silently swallows anchors that fall inside a gap: when `arc` matches no usable segment the loop falls through and returns the accumulated usable length, so a bad anchor is snapped to a run boundary instead of being validated. Combined with `fitRunMapping`, this silently mislocates every cell derived from that anchor. Throw (or return `null` and let the caller reject) when the anchor arc is not inside any usable segment.",
+   "suggestion_code": "  throw new Error(`anchor at ${arc}m does not fall inside a usable segment`);\n}",
+   "existing_code": "  return acc;\n}",
+   "start_line": 104,
+   "end_line": 105,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/venue/src/placement.ts",
+   "content": "`posOf` falls back to a uniform position when a cell is outside the anchored span, ignoring how far the nearest anchor actually is. Example: anchors only at cells 5 (`atMeters:0`) and 15 (`atMeters:20`) on a 20 m run \u2014 cell 4 gets `4.5 m` while the anchored cell 5 gets `0 m`, so cells are ordered non-monotonically along the run and the mapping is corrupted. Extrapolate from the nearest anchor (clamped to `[0, usableLen]`) instead of starting from 0.",
+   "suggestion_code": "    const pitch = usableLen / Math.max(1, cellCount);\n    if (lo && !hi) return Math.min(usableLen, lo.u + (cell - lo.cell) * pitch);\n    if (!lo && hi) return Math.max(0, hi.u - (hi.cell - cell) * pitch);\n    return ((cell + 0.5) / Math.max(1, cellCount)) * usableLen;",
+   "existing_code": "    return ((cell + 0.5) / Math.max(1, cellCount)) * usableLen;",
+   "start_line": 147,
+   "end_line": 147,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/venue/src/placement.ts",
+   "content": "Zero-cell fixtures produce an inconsistent state: `topology` is set to `\"point\"` for `f.cells.length <= 1`, but the `placement` ternary only special-cases `=== 1`, so a 0-cell fixture builds a `path` run with an empty `polyline` while claiming to be a `point`. Any downstream consumer that switches on `topology` vs `placement.kind`, or that calls `runLength`/`closed` handling on that empty polyline, will disagree or crash. Handle the 0-cell case explicitly and keep `topology` and `placement.kind` consistent.",
+   "suggestion_code": "  const topology: Topology = f.cells.length <= 1 ? \"point\" : \"open-path\";\n  // placement must also treat length 0 as a point:",
+   "existing_code": "  const topology: Topology = f.cells.length <= 1 ? \"point\" : \"open-path\";",
+   "start_line": 213,
+   "end_line": 213,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/venue/src/placement.ts",
+   "content": "`logical[c.physicalIndex]!` asserts a non-null value, but `logical` is only dense for `midS.length` entries and is indexed by `physicalIndex`. If the cell map has sparse/non-contiguous physical indices or `cells.length !== midS.length`, this returns `undefined`, the `!` hides it, and `logicalIndex` becomes `NaN`, corrupting `logicalToPhysical` output downstream. Validate the lookup instead of asserting.",
+   "suggestion_code": "    logicalIndex: (() => {\n      const l = logical[c.physicalIndex];\n      if (l === undefined) throw new Error(`no logical index for physical cell ${c.physicalIndex}`);\n      return l;\n    })(),",
+   "existing_code": "    logicalIndex: logical[c.physicalIndex]!,",
+   "start_line": 0,
+   "end_line": 0,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/govee/src/engines/toolkit.ts": [
+  {
+   "path": "packages/govee/src/engines/toolkit.ts",
+   "content": "Violation of the mandatory ban on the `Function()` constructor. `new Function(\"s\", \"return import(s)\")` is functionally `eval` and builds an importer from an untrusted string; combined with `AUTOLIGHT_GOVEE_TOOLKIT_ENTRY` (which is read from the environment and used verbatim as the module specifier), any process that can set that env var forces the engine to load an arbitrary module. Use the native dynamic `import()` instead (and, if a bundler rewrite of a non-literal specifier is a concern, guard it with a documented external/bundler-ignore marker), rather than constructing a function at runtime.",
+   "suggestion_code": "  const mod = (await import(specifier)) as unknown;",
+   "existing_code": "  const dynamicImport = new Function(\"s\", \"return import(s)\") as (s: string) => Promise<unknown>;",
+   "start_line": 106,
+   "end_line": 106,
+   "category": "security",
+   "severity": "critical"
+  },
+  {
+   "path": "packages/govee/src/engines/toolkit.ts",
+   "content": "Shutdown is fire-and-forget and ordering is unsafe. `ToolkitStream.close()` swallows the binding close promise and returns `void`, so the loop here cannot await native streams finishing their last frame before `sdk.close()` tears the SDK down. This can drop the in-flight last frame (or disarm write) and close native resources out from under still-closing streams. Have `ToolkitStream.close()` return the underlying promise and await all stream closes before `sdk.close()`.",
+   "suggestion_code": "    await Promise.all([...this.streams.values()].map((stream) => stream.close()));\n    this.streams.clear();\n    if (this.sdkPromise !== null) {",
+   "existing_code": "    for (const stream of this.streams.values()) stream.close();\n    this.streams.clear();\n    if (this.sdkPromise !== null) {",
+   "start_line": 360,
+   "end_line": 362,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/govee/src/engines/toolkit.ts",
+   "content": "Re-opening a stream for a device overwrites the cached `ToolkitStream` without closing the previous one. The prior native `BindingStream` is leaked (its emitter keeps running, holding the channel/frame slot) and its `framesSent`/`framesSuperseded` counters are orphaned because `metrics()` only reads the Map entry. Close any existing stream for the device before overwriting.",
+   "suggestion_code": "    const stream = new ToolkitStream(bindingStream, opts.resolution ?? this.zones, opts.rateHz);\n    this.streams.get(deviceId)?.close();\n    this.streams.set(deviceId, stream);",
+   "existing_code": "    const stream = new ToolkitStream(bindingStream, opts.resolution ?? this.zones, opts.rateHz);\n    this.streams.set(deviceId, stream);",
+   "start_line": 318,
+   "end_line": 319,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/govee/src/engines/toolkit.ts",
+   "content": "`framesRequested` is incremented before the native `setAll` call, so if the binding throws (stopped/closed emitter) the accepted-frame count is inflated even though the frame was never handed off. Increment after a successful call so the counter reflects frames the wrapper actually accepted.",
+   "suggestion_code": "    // Newest wins inside the binding: the next writer replaces the previous.\n    this.stream.setAll(frame);\n    this.framesRequested += 1;",
+   "existing_code": "    this.framesRequested += 1;\n    // Newest wins inside the binding: the next writer replaces the previous.\n    this.stream.setAll(frame);",
+   "start_line": 182,
+   "end_line": 184,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/govee/src/engines/toolkit.ts",
+   "content": "The direct-`start` branch wraps the function unbound (`() => call()`), while the `Govee` branch below deliberately preserves the receiver (`call.call(govee)`). If the generated module's `start` depends on its module receiver, loading fails here and is then misreported as a typed `load` unavailable reason, silently demoting the engine. Bind to the module object for parity with the `Govee` branch.",
+   "suggestion_code": "      const call = startFn as () => Promise<BindingSdk>;\n      return withStatics({ start: () => call.call(candidate) }, version, core, target);",
+   "existing_code": "      const call = startFn as () => Promise<BindingSdk>;\n      return withStatics({ start: () => call() }, version, core, target);",
+   "start_line": 138,
+   "end_line": 139,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/govee/src/engines/toolkit.ts",
+   "content": "Emitter failures are hidden from callers: `missedTicks` is hardcoded to 0 and the binding's `error` string (available via `bindingStream.error`) is never read, so a stopped/errored emitter on an open stream yields metrics that look healthy and `health()` keeps reporting the last handle state. Surface the stream error (e.g. degrade `health()`/metrics when `bindingStream.error !== null`) so the fallback path in `index.ts` can actually observe an error class on the stream.",
+   "existing_code": "        // The binding emits on its own task; a skipped tick is not observable\n        // through this surface (its `error` getter covers a stopped emitter).\n        missedTicks: 0,",
+   "start_line": 351,
+   "end_line": 353,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ]
+}

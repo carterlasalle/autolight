@@ -1,0 +1,282 @@
+{
+ "packages/rekordbox-live/src/composite-boot.test.ts": [
+  {
+   "path": "packages/rekordbox-live/src/composite-boot.test.ts",
+   "content": "The test name/comments claim PLAY/CUE/jog/tempo/fader mapping, and the recorded session really does drive tempo (`[0xb0,0x00,0x48]`+`[0xb0,0x20,0x10]`) and jog (`[0xb0,0x22,0x45]` \u2192 `deck1.jog.platter`/`jog-move`), but nothing asserts those paths were mapped. Only `deck1.play`, `deck1.cue`, `mixer.crossfader` and a non-null `channelFader` are checked, so a regression that drops or mis-decodes the tempo/jog mapping would still pass this test. Add explicit assertions for the tempo effect (e.g. `deck.playRate`/`pitchPercent`) and the jog event.",
+   "suggestion_code": "      expect(events.some((event) => event.type === \"control\" && event.id === \"deck1.cue\")).toBe(true);\n      expect(events.some((event) => event.type === \"control\" && event.id === \"mixer.crossfader\")).toBe(true);\n      // The session also drives tempo and jog; assert those mappings so a\n      // regression in either fails here instead of passing silently.\n      expect(events.some((event) => event.type === \"control\" && event.id === \"deck1.tempo\")).toBe(true);\n      expect(events.some((event) => event.type === \"control\" && event.id === \"deck1.jog.platter\")).toBe(true);",
+   "existing_code": "      expect(events.some((event) => event.type === \"control\" && event.id === \"deck1.cue\")).toBe(true);\n      expect(events.some((event) => event.type === \"control\" && event.id === \"mixer.crossfader\")).toBe(true);",
+   "start_line": 96,
+   "end_line": 97,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/composite-boot.test.ts",
+   "content": "`fuseAx` is only verified by its boolean return, so a fusion that returns `true` without actually rebasing the deck anchor would still pass. `provider.ingestAxPlayhead` emits with the same `atNs`, and `positionAt` for a playing deck resolves to `anchorPosSeconds` at `anchorAtNs`, so the deck's `playheadSeconds` must become exactly 12.5 after the true case \u2014 assert it to prove the rebase happened.",
+   "suggestion_code": "      expect(boot.fuseAx(1, 12.5, 2_000_000_000_000n)).toBe(true);\n      // The true path must actually rebase the deck, not merely report success.\n      expect(boot.provider.getDecks().find((d) => d.deckId === 1)?.playheadSeconds).toBe(12.5);\n      expect(boot.fuseAx(1, null, 2_000_000_000_000n)).toBe(false);",
+   "existing_code": "      expect(boot.fuseAx(1, 12.5, 2_000_000_000_000n)).toBe(true);\n      expect(boot.fuseAx(1, null, 2_000_000_000_000n)).toBe(false);",
+   "start_line": 106,
+   "end_line": 107,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/composite-boot.test.ts",
+   "content": "The title promises 'fuses only fresh AX input', but the only case exercised is null vs. present at the identical timestamp. `compositeFuseAxPlayhead` explicitly does no freshness gating (per its own doc: 'The caller gates on readable plus a freshness window; this function only guards null/NaN'), so this test verifies null handling only and would pass even if stale/fresh gating were broken. Either add a stale-timestamp case that exercises the caller's gate (`ingestAxPlayhead`) or rename the test to match what it actually verifies.",
+   "existing_code": "  it(\"fuses only fresh AX input and never invents a playhead\", () => {",
+   "start_line": 133,
+   "end_line": 133,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/rekordbox-live/src/composite-boot.test.ts",
+   "content": "The module-global teardown is placed after the `finally`, so it is skipped whenever an assertion inside the `try` throws. `boot.stop()` normally nulls the module singleton, so isolation usually holds, but if `boot.stop()` rejects (e.g. `provider.stop()` throws) the singleton is never cleared and the fallback `stopCompositeFlx4Boot()` is skipped too. Move the global teardown into the `finally` (in both boot tests) so cleanup is unconditional; on the success path the trailing call is a no-op because `boot.stop()` already cleared the singleton.",
+   "suggestion_code": "    } finally {\n      await boot.stop();\n      await stopCompositeFlx4Boot();\n    }\n    expect(driver.closeCount()).toBe(1);",
+   "existing_code": "    } finally {\n      await boot.stop();\n    }\n    expect(driver.closeCount()).toBe(1);\n    await stopCompositeFlx4Boot();",
+   "start_line": 108,
+   "end_line": 112,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/rekordbox-live/src/setup-assistant.test.ts": [
+  {
+   "path": "packages/rekordbox-live/src/setup-assistant.test.ts",
+   "content": "The test name claims every setup state is mapped to the capability vocabulary, but it only exercises the `not-installed` \u2192 `MISSING` path. The `osc-disabled` and `wrong-destination` \u2192 `MISSING` mappings are asserted nowhere in the suite, and `receiving`/`unsupported-version` are only covered incidentally in other tests. A regression in `assistantCapability`'s default branch (or in a state's classification) would go undetected here. Drive this from a table of all six `RkbxSetupReport` states and assert the expected capability for each.",
+   "suggestion_code": "  it.each([\n    [\"receiving\", \"PASS\"],\n    [\"unsupported-version\", \"UNAVAILABLE_ON_THIS_DEVICE\"],\n    [\"not-installed\", \"MISSING\"],\n    [\"osc-disabled\", \"MISSING\"],\n    [\"wrong-destination\", \"MISSING\"],\n    [\"no-packets\", \"MISSING\"],\n  ] as const)(\"maps state %s to capability %s\", (state, capability) => {\n    expect(assistantCapability({ state, steps: [], remedy: \"\" })).toBe(capability);\n  });",
+   "existing_code": "  it(\"maps every setup state to the capability vocabulary\", () => {",
+   "start_line": 129,
+   "end_line": 129,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/setup-assistant.test.ts",
+   "content": "This is billed as a realistic 60 Hz / 500 ms stream, but the only assertions are `received > 0` and the last address; the packet count and `updateHz` are never checked, so a regression in `sampleFromProvider` (e.g. reading `updateHz` as 0 because `status.state`/`updateHz` is misread) or silently dropped datagrams would still pass. Note also that the fake clock advances 16 ms per datagram while the source period is 1000/60 \u2248 16.67 ms, so the sampled rate is ~62.5 Hz, not 60 \u2014 asserting `updateHz === 60` would fail. Assert the expected count and rate explicitly (and step `now` by the source period) so the stream is genuinely verified.",
+   "suggestion_code": "    expect(snapshot.packets.received).toBe(datagrams.length);\n    expect(snapshot.packets.lastAddress).toBe(\"/1/time\");\n    expect(snapshot.packets.updateHz).toBeCloseTo(60, 0);",
+   "existing_code": "    expect(snapshot.packets.received).toBeGreaterThan(0);\n    expect(snapshot.packets.lastAddress).toBe(\"/1/time\");",
+   "start_line": 58,
+   "end_line": 59,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/setup-assistant.test.ts",
+   "content": "The guardrail only reads two files and matches a fixed substring list, so it does not actually establish the 'no privileged action' claim: privileged execution imported indirectly (e.g. via `follow.ts`, which this module imports), Node's `exec(`/`fork(`, or `spawn (` with a space would all evade it. Prefer scanning every assistant module and matching word-boundary regexes (e.g. `/\\b(child_process|execFile|spawn|exec|fork|codesign|curl|wget)\\b/`) instead of exact substrings. It also depends on the sibling `.ts` sources existing at runtime \u2014 `readFileSync` throws if tests run from a build without them.",
+   "existing_code": "    for (const file of [\"setup-assistant.ts\", \"rkbx-osc.ts\"]) {",
+   "start_line": 145,
+   "end_line": 145,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/rekordbox-live/src/setup-assistant.test.ts",
+   "content": "This pins the test to a dated snapshot ('...as of 2026-10-12') and to literal version strings. When upstream offsets add 7.2.19 (or the copy wording changes) the test fails for the wrong reason and stops reflecting reality. Derive the expectation from the exported `RKBX_MACOS_VERSIONS` table and assert the behaviour (7.2.19 unsupported given the current table) rather than a frozen date string.",
+   "existing_code": "    const versionStep = snapshot.report.steps.find((s) => s.id === \"version\");\n    expect(versionStep?.detail).toContain(\"no 7.2.19 offsets upstream as of 2026-10-12\");",
+   "start_line": 118,
+   "end_line": 119,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/serato/src/capture.test.ts": [
+  {
+   "path": "packages/serato/src/capture.test.ts",
+   "content": "The busy-wait silently gives up when the deadline passes: the loop condition only stops looping, it never records that the wait timed out. On a slow/loaded machine the test then proceeds with a partial capture and fails later with an unrelated assertion (or a confusing `compareSequences` diff) instead of a clear timeout. The fixed 3000 ms budget is also arbitrary. Assert the invariant after the loop so a timeout is reported explicitly.",
+   "suggestion_code": "    const deadline = Date.now() + 3000;\n    while ((recordedBytes() !== sentBytes() || !settled()) && Date.now() < deadline) {\n      await new Promise<void>((resolve) => setImmediate(resolve));\n    }\n    expect(recordedBytes(), \"capture did not record every forwarded byte before the deadline\").toBe(sentBytes());\n    expect(settled(), \"provider did not publish settled deck states before the deadline\").toBe(true);",
+   "existing_code": "    const deadline = Date.now() + 3000;\n    while ((recordedBytes() !== sentBytes() || !settled()) && Date.now() < deadline) {\n      await new Promise<void>((resolve) => setImmediate(resolve));\n    }",
+   "start_line": 54,
+   "end_line": 57,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/serato/src/capture.test.ts",
+   "content": "Burst grouping here is driven by wall-clock arrival times, not script time. `inbound` frames are stamped by the proxy with `atMs: Date.now()` (capture.ts), while `playAction(\"two-decks\", 50)` compresses the script gaps (up to 80 ms between steps) to <=2 ms of wall time. `replaySeratoFrames(..., \"1x\")` regroups frames using a 50 ms gap on those wall-clock stamps (`seratoBursts`), so if CI stalls >=50 ms between two sends of the same track load, one load splits into two bursts, `replaySeratoFrames` emits two generations per deck, and the `captured.map(deckId)).toEqual(live.map(deckId))` assertion fails even though the decoder is correct. Note that `sendAt` deliberately stamps script time to prevent exactly this, but the capture path replaces it with wall time. Make the replay grouping deterministic (e.g. rebuild `atMs` from the emulator's script timeline, or replay the whole capture as a single burst) so the comparison exercises the decoder rather than CI jitter.",
+   "existing_code": "    const replayedStates = replaySeratoFrames(inbound, \"1x\");",
+   "start_line": 73,
+   "end_line": 73,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/serato/src/capture.test.ts",
+   "content": "`withoutStamp` duplicates the helper already exported by `./replay.js` (identical signature and body). Import it from `./replay.js` (next to `replaySeratoFrames`/`splitFrames`) instead of re-declaring it so the two implementations cannot drift.",
+   "existing_code": "function withoutStamp(state: DeckState): Omit<DeckState, \"receivedAtNs\"> {\n  const { receivedAtNs: _stamp, ...rest } = state;\n  return rest;\n}",
+   "start_line": 19,
+   "end_line": 22,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/serato/src/capture.test.ts",
+   "content": "If one cleanup rejects (e.g. a socket already errored), the exception aborts the loop right after that entry was popped, so the remaining cleanups never run and their servers/sockets leak into the rest of the process, potentially interfering with other test files. Run every cleanup even when one fails.",
+   "suggestion_code": "afterEach(async () => {\n  const pending = cleanups.splice(0);\n  const results = await Promise.allSettled(pending.map((cleanup) => cleanup()));\n  for (const result of results) if (result.status === \"rejected\") console.error(result.reason);\n});",
+   "existing_code": "afterEach(async () => {\n  while (cleanups.length > 0) await (cleanups.pop() as () => Promise<void>)();\n});",
+   "start_line": 15,
+   "end_line": 17,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "packages/serato/src/test-fixtures.ts": [
+  {
+   "path": "packages/serato/src/test-fixtures.ts",
+   "content": "`FixtureLibrary.root` is required by the interface but is never honored: `makeSeratoFixtureLibrary` ignores `library.root` and always derives its own path from `dir`, while `demoLibrary()` hardcodes it to `\"\"`. A caller that constructs a library, passes it to `makeSeratoFixtureLibrary(dir, lib)` and then reads `lib.root` silently gets a path that does not contain the generated files (or an empty string). Either drop the field or have `makeSeratoFixtureLibrary` populate/return `library.root`.",
+   "suggestion_code": "export interface FixtureLibrary {\n  tracks: FixtureTrack[];",
+   "existing_code": "export interface FixtureLibrary {\n  root: string;",
+   "start_line": 101,
+   "end_line": 102,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/serato/src/test-fixtures.ts",
+   "content": "`makeSeratoFixtureLibrary` is exported but never referenced anywhere in the repo; `demoLibrary` is likewise unused. The file header states \"Tests call makeSeratoFixtureLibrary() into a temp dir\", but `library.test.ts` builds the fixture inline (`fixtureLibrary()`) and imports only the byte writers. This is dead code plus a stale doc comment: either wire the generator into the tests or remove it and fix the header.",
+   "existing_code": "export function makeSeratoFixtureLibrary(dir: string, library: FixtureLibrary): string {",
+   "start_line": 108,
+   "end_line": 108,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/serato/src/test-fixtures.ts",
+   "content": "Crate/scrate names are interpolated straight into filesystem paths without validation. A name containing path separators or `../` escapes the fixture tree, and two entries sharing a name silently overwrite each other, corrupting the generated fixture. Validate names (reject separators/duplicates) or pass explicit filenames instead of deriving them from `name`.",
+   "existing_code": "    writeFileSync(join(root, \"Subcrates\", `${crate.name}.crate`), writeCrate(crate.trackPaths));",
+   "start_line": 114,
+   "end_line": 114,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/serato/src/test-fixtures.ts",
+   "content": "`extraTags` are written verbatim after the known fields, so a tag such as `pfil`, `otrk`, `vrsn` or a duplicate of a modeled tag (e.g. `tsng`) produces duplicate/reserved records. The fixture then no longer exercises the intended \"unknown tag retention\" path (spec 9.5) and may even be rejected by the dependency parser. Reject reserved/duplicate tags (and tags longer than the 8-byte ASCII tag field) when building the record.",
+   "existing_code": "    for (const extra of track.extraTags ?? []) fields.push(textRecord(extra.tag, extra.text));",
+   "start_line": 77,
+   "end_line": 77,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "packages/show-mixer/src/index.test.ts": [
+  {
+   "path": "packages/show-mixer/src/index.test.ts",
+   "content": "These mocks under-declare the `store` signatures: `loadArtifact` ignores `analyzerVersion`/`fingerprint` and `loadShowPlan` ignores `trackId`/`styleId`/`plannerVersion`, so the test never verifies that the right cache keys are forwarded through the \u00a7138 fast path. A regression that swaps or drops the version/format arguments (which would silently serve a stale cached artifact/plan) would still pass. `loadShowPlan` also always returns a plan, so the plan cache-miss branch is never exercised, and `planJson: null` is asserted only for the track-miss case. Consider recording the received args and asserting them, plus a case where the track hits but the plan misses.",
+   "existing_code": "    const store = {\n      loadArtifact: (trackId: string) => (trackId === \"t\" ? \"/cache/t.json\" : null),\n      loadShowPlan: () => \"{\\\"plan\\\":true}\",\n    };",
+   "start_line": 134,
+   "end_line": 137,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-mixer/src/index.test.ts",
+   "content": "`translateBlackout` returns `blackoutDecision(...).cue`, and for the non-translated branch that is the exact same object reference passed in. So `quiet` and `fired` are the same object and this `toEqual` is effectively tautological \u2014 it cannot detect a `translateBlackout` that returns the input unchanged when it should have translated, and it also cannot detect in-place mutation of the input cue (both sides would change together). Assert the contract explicitly on the returned cue instead, e.g. `expect(quiet.type).toBe(\"blackout\")` and `expect(quiet.target).toBe(\"ALL\")`, and check that `fired` itself was not mutated.",
+   "existing_code": "    const quiet = translateBlackout(fired, { policy: \"auto\", otherWeight: 0.1, side: \"a\", threshold: 0.3 });\n    expect(quiet).toEqual(fired);",
+   "start_line": 61,
+   "end_line": 62,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-mixer/src/index.test.ts",
+   "content": "The comment claims \"base looks from both decks survive\", but deck `b` contributes only an `impact` cue \u2014 no base cue at all. So `toHaveLength(1)` merely confirms deck `a`'s single section-look survived; it does not validate that a base cue from each deck survives, which is what the comment implies. Either add a base cue to deck `b` and assert it too, or fix the comment. The assertion also does not check that the surviving base cue was weight-scaled (`0.8 * 1 = 0.8`).",
+   "existing_code": "    expect(mixed.cues.filter((c) => c.type === \"section-look\")).toHaveLength(1);",
+   "start_line": 108,
+   "end_line": 108,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-mixer/src/index.test.ts",
+   "content": "This fourth hysteresis case cannot fail: `current === \"b\"` with `scoreB (2.0) > scoreA (1.9)`, so `impactOwner` returns `\"b\"` from the final `scoreA >= scoreB` tie-break whether or not the incumbent-retention branch for `\"b\"` is implemented correctly. It therefore adds no coverage of the hysteresis band. Consider a case where the incumbent `\"b\"` is behind by less than the band (e.g. give `a` a slightly higher strength and assert `\"b\"` is kept), which actually depends on the `current === \"b\"` guard.",
+   "existing_code": "    expect(impactOwner(a, b, { factors, hysteresis: 0.2, current: \"b\" })).toBe(\"b\");",
+   "start_line": 47,
+   "end_line": 47,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/show-planner/src/contrast.test.ts": [
+  {
+   "path": "packages/show-planner/src/contrast.test.ts",
+   "content": "This assertion can pass vacuously. The local `mean()` divides by `Math.max(1, inRange.length)`, so it returns `0` when no cue starts in [160, 225). `0 <= breakdownMaxMean + 0.15` is always true, meaning the test would still pass if the engine emitted zero breakdown cues (the exact regression it is meant to catch). The `+ 0.15` fudge further weakens the bound. Assert the range is non-empty (and/or that `breakdown-look`/`texture-hold` exist) before checking the mean.",
+   "suggestion_code": "    const breakdownRange = plan.cues.filter((c) => c.startBeat >= 160 && c.startBeat < 225);\n    expect(breakdownRange.length).toBeGreaterThan(0);\n    expect(mean(160, 225)).toBeLessThanOrEqual(DEFAULT_CONFIG.breakdownMaxMean);",
+   "existing_code": "    expect(mean(160, 225)).toBeLessThanOrEqual(DEFAULT_CONFIG.breakdownMaxMean + 0.15);",
+   "start_line": 73,
+   "end_line": 73,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/contrast.test.ts",
+   "content": "This check cannot detect the behavior it claims to verify. `drop-pattern` cues include both the burst (target `\"ALL\"`, `contrast.ts` line ~123) and the body (target `PRIMARY`/`SECONDARY`). For the first drop alone the target set is already {ALL, PRIMARY}, so `size > 1` holds even if the second drop reuses the same body target. Exclude the burst cues (or compare the two body targets directly) so the assertion actually fails when second-drop variation breaks.",
+   "suggestion_code": "    const bodies = plan.cues.filter(\n      (c) => c.type === \"drop-pattern\" && c.startBeat >= 257 && c.target !== \"ALL\",\n    );\n    expect(bodies.length).toBeGreaterThanOrEqual(2);\n    expect(new Set(bodies.map((c) => c.target)).size).toBeGreaterThan(1);",
+   "existing_code": "    const bodies = plan.cues.filter((c) => c.type === \"drop-pattern\" && c.startBeat >= 257);\n    expect(new Set(bodies.map((c) => c.target)).size).toBeGreaterThan(1);",
+   "start_line": 101,
+   "end_line": 102,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/contrast.test.ts",
+   "content": "The isolated `fakeDropHold` check only asserts the cue count. An incorrect cue type (e.g. an impact/white-hit instead of a hold) or wrong start/end beats would still pass. Assert the returned cue is a darkness hold spanning 300 -> 302 with zero intensity.",
+   "suggestion_code": "    const [hold] = fakeDropHold(300, 302);\n    expect(hold).toMatchObject({ type: \"blackout\", startBeat: 300, durationBeats: 2, intensity: 0 });",
+   "existing_code": "    expect(fakeDropHold(300, 302)).toHaveLength(1);",
+   "start_line": 106,
+   "end_line": 106,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-planner/src/contrast.test.ts",
+   "content": "Filtering on exact `startBeat === 300` only inspects cues that begin on the fake beat. An exclusive impact whose span covers beat 300 but starts earlier (or is slightly off-grid) would slip past this guard, letting the \"fires nothing at the fake impact\" check pass despite broken fake-drop suppression. Match by beat overlap instead.",
+   "suggestion_code": "    const atFake = plan.cues.filter(\n      (c) => c.startBeat <= 300 && c.startBeat + c.durationBeats > 300,\n    );",
+   "existing_code": "    const atFake = plan.cues.filter((c) => c.startBeat === 300);",
+   "start_line": 114,
+   "end_line": 114,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/show-planner/src/events.test.ts": [
+  {
+   "path": "packages/show-planner/src/events.test.ts",
+   "content": "The fixture is force-cast with `as unknown as TrackModel`, so it is never validated against `trackModelSchema` (which is `.strict()` and enforces the `musicalEventTypeSchema` union, `beatGrid` shape, `identity` shape, etc.). The double cast is only needed because `type` is widened to `string` (line 16). Consequence: if the `TrackModel` contract changes (a required field renamed/added, the event union renamed), this fixture keeps compiling and the tests keep passing against a shape that can never occur at runtime. Build the fixture through the schema instead, e.g. `trackModelSchema.parse({...})`, and let contract drift fail loudly.",
+   "existing_code": "  } as unknown as TrackModel;",
+   "start_line": 58,
+   "end_line": 58,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/events.test.ts",
+   "content": "This assertion only proves that *some* cue somewhere in the plan is a `reveal`; it does not tie the reveal to the low-confidence drop. `reveal` is also produced for soft `bass-re-entry`/`drum-re-entry` (events.ts) and could be substituted by restraint, so a regression that placed the reveal on the wrong beat/event would still pass. Bind the assertion to the drop's position (the fixture's drop is at beat 16) and, ideally, assert it is the only reveal.",
+   "suggestion_code": "    const reveal = plan.cues.find((c) => c.type === \"reveal\");\n    expect(reveal?.startBeat).toBe(16);",
+   "existing_code": "    expect(plan.cues.some((c) => c.type === \"reveal\")).toBe(true);",
+   "start_line": 101,
+   "end_line": 101,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/events.test.ts",
+   "content": "The table-driven loop only asserts `cueType` and feeds a constant confidence of 0.9, so it exercises only the confident branch of `planEvent` and never verifies `beat`/`endBeat`/`durationBeats` (the positional numbers 16/24/0.9/0.8 are all `number`, so an argument-order regression in the `planEvent` signature would still compile). The soft/no-confidence behaviour for the other types (e.g. `silence`\u2192`dip`, `bass-re-entry`\u2192`reveal`, `vocal-*`\u2192`static-look`, and the `confidence < floor*0.5 \u2192 null` cutoff) is left untested even though the spec title claims \"consume every event with confidence and strength\". Add soft-path cases and assert the placement fields too.",
+   "existing_code": "      const planned = planEvent(type, 16, 24, 0.9, 0.8, style, DEFAULT_CONFIG, false);",
+   "start_line": 87,
+   "end_line": 87,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-planner/src/events.test.ts",
+   "content": "The `!` non-null assertions hide the fact that `planEvent` can legitimately return `null` (when `confidence < floor * 0.5`). If the implementation ever returns `null` here, the test fails with an opaque `TypeError: Cannot read properties of null` instead of a meaningful assertion. Assert non-null explicitly first, and also pin the scaling basis (the hardcoded `0.5 + strength * 0.3` slope in events.ts) rather than only `strong > weak`, which would pass under any wrong-but-monotonic implementation.",
+   "suggestion_code": "    const weak = planEvent(\"fill\", 16, 17, 0.9, 0.2, style, DEFAULT_CONFIG, false);\n    const strong = planEvent(\"fill\", 16, 17, 0.9, 1, style, DEFAULT_CONFIG, false);\n    if (!weak || !strong) throw new Error(\"planEvent returned null for a confident fill\");",
+   "existing_code": "    const weak = planEvent(\"fill\", 16, 17, 0.9, 0.2, style, DEFAULT_CONFIG, false)!;\n    const strong = planEvent(\"fill\", 16, 17, 0.9, 1, style, DEFAULT_CONFIG, false)!;",
+   "start_line": 106,
+   "end_line": 107,
+   "category": "test",
+   "severity": "low"
+  }
+ ]
+}

@@ -1,0 +1,268 @@
+{
+ "vitest.config.ts": [
+  {
+   "path": "vitest.config.ts",
+   "content": "`readdirSync(workspaceSrc, ...)` runs unguarded at config load and every directory is blindly aliased to `<pkg>/src/index.ts`. Two problems: (1) if `packages/` is missing/unreadable the whole test run aborts with an opaque ENOENT before any test loads; (2) directories that are not real packages (or packages whose entry is not `src/index.ts`) get an alias pointing at a non-existent file, so a later import of that name fails with a confusing module-resolution error. Consider deriving the alias list from the packages' `package.json` (name + `exports`/`main`) or at minimum filtering to directories that actually contain `src/index.ts`, and wrap the scan so a missing `packages/` yields a clear error.",
+   "existing_code": "  readdirSync(workspaceSrc, { withFileTypes: true })\n    .filter((e) => e.isDirectory())\n    .map((e) => [`@autolight/${e.name}`, join(workspaceSrc, e.name, \"src\", \"index.ts\")]),",
+   "start_line": 9,
+   "end_line": 11,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "vitest.config.ts",
+   "content": "The subpath regex only matches exactly one sub-segment and hard-codes the `.ts` extension: `^@autolight/([^/]+)/([^/]+)$` \u2192 `src/$2.ts`. Any deeper subpath (e.g. `@autolight/foo/a/b`), a directory-index subpath (e.g. `@autolight/foo/sub` backed by `src/sub/index.ts`), or a `.tsx` subpath will match and be rewritten to a non-existent file (first-match-wins, so it does NOT fall back to the string aliases), or not match at all \u2014 in which case the string-prefix `@autolight/foo` alias swallows it as a prefix and resolves the package barrel, exactly the T-TRU-04 failure this block was added to prevent. Also note this only works because `subpathAlias` is spread before the string aliases; a future reorder silently reroutes every subpath to the barrel. Broaden the pattern (e.g. `^@autolight\\/([^/]+)\\/(.+)$`) and/or resolve to the real file extension.",
+   "suggestion_code": "    find: /^@autolight\\/([^/]+)\\/(.+)$/,\n    replacement: join(workspaceSrc, \"$1\", \"src\", \"$2.ts\"),",
+   "existing_code": "    find: /^@autolight\\/([^/]+)\\/([^/]+)$/,\n    replacement: join(workspaceSrc, \"$1\", \"src\", \"$2.ts\"),",
+   "start_line": 17,
+   "end_line": 18,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "vitest.config.ts",
+   "content": "All three include globs end in `*.test.ts`, so any `.test.tsx` (or `.spec` variant) is silently not collected. The repo already has `.tsx` components (e.g. `apps/desktop/src/components/kit.tsx`), so a component test authored as `*.test.tsx` would run zero assertions while the suite still reports green. Include the tsx globs so those tests cannot be skipped unnoticed.",
+   "suggestion_code": "      \"packages/*/src/**/*.test.{ts,tsx}\",\n      \"apps/desktop/src/**/*.test.{ts,tsx}\",\n      \"apps/desktop/electron/**/*.test.{ts,tsx}\",",
+   "existing_code": "      \"packages/*/src/**/*.test.ts\",\n      \"apps/desktop/src/**/*.test.ts\",\n      \"apps/desktop/electron/**/*.test.ts\",",
+   "start_line": 34,
+   "end_line": 36,
+   "category": "test",
+   "severity": "medium"
+  }
+ ],
+ "analysis/src/autolight_analysis/artifacts.py": [
+  {
+   "path": "analysis/src/autolight_analysis/artifacts.py",
+   "content": "The docstring claims the hash is tag-insensitive (\"tags edits do not change audio bytes, so an audio-only hash is tag-insensitive\"), but the implementation below hashes the *raw whole file* (`open(path, \"rb\")` + update on every chunk). ID3v2/Vorbis tags live in the file bytes, so a tag-only edit changes the digest, which contradicts the stated contract and the evidence in docs/finish/evidence/T-ANA-13/README.md. Result: renaming/re-tagging a file with identical audio produces a new fingerprint/artifact name and forces a full re-analysis instead of hitting the cache. Either hash the decoded/audio-only bytes, or fix the docstring/contract to say the fingerprint is content (including tags) sensitive.",
+   "existing_code": "    Streams the whole file (tags edits do not change audio bytes, so an\n    audio-only hash is tag-insensitive; audio edits change the key).",
+   "start_line": 33,
+   "end_line": 34,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/artifacts.py",
+   "content": "`tempfile.mkstemp` creates the temp file with mode 0600, and `os.replace` carries that mode onto the final artifact. Any file previously at `target` (potentially world/group-readable when writing to a shared `analysis.cacheDir` or an explicit out dir) is silently replaced by a 0600 file. If other users/processes are expected to read a shared analysis cache, they will get PermissionError. Consider restoring an explicit, umask-derived mode (e.g. chmod the temp file before replace) if shared readability is intended.",
+   "existing_code": "    fd, tmp = tempfile.mkstemp(dir=str(target.parent), prefix=target.name + \".tmp.\")",
+   "start_line": 72,
+   "end_line": 72,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/artifacts.py",
+   "content": "If `os.fdopen(fd, \"wb\")` itself raises after `mkstemp` succeeds, the raw descriptor `fd` is never closed (the `except` only guards `os.unlink(tmp)`), leaking a file descriptor. Wrap the descriptor acquisition so it is closed on this path, e.g. `f = os.fdopen(fd, \"wb\")` outside the `with` guarded by its own try, or close `fd` in the exception handler.",
+   "existing_code": "        with os.fdopen(fd, \"wb\") as f:",
+   "start_line": 74,
+   "end_line": 74,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/artifacts.py",
+   "content": "`json.dumps(config or {})` raises `TypeError` for any non-JSON-serializable value (Path, set, custom objects, bytes). If such values ever reach the analysis config, artifact naming fails hard and the analysis run aborts. If the config is always plain JSON this is fine, but consider `default=str` (or normalizing the config) to make hashing robust against non-primitive values.",
+   "existing_code": "    blob = json.dumps(config or {}, sort_keys=True).encode()",
+   "start_line": 54,
+   "end_line": 54,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "analysis/tests/test_events_full.py": [
+  {
+   "path": "analysis/tests/test_events_full.py",
+   "content": "The module docstring promises detection \"within qa.events.toleranceBeats\", but the tolerance is hardcoded to `1`. The config key `qa.events.toleranceBeats` exists (default 1 today), so if it is ever tightened/changed the suite keeps validating against a stale constant and can pass while the real QA gate fails. Derive `TOL` from config instead, e.g. `from autolight_analysis import config as cfg` then `TOL = float(cfg.get(\"qa.events.toleranceBeats\", 1))`.",
+   "suggestion_code": "TOL = float(cfg.get(\"qa.events.toleranceBeats\", 1))",
+   "existing_code": "TOL = 1",
+   "start_line": 18,
+   "end_line": 18,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/tests/test_events_full.py",
+   "content": "Precision is only asserted as a single micro-average. Because `found` aggregates over all types, a detector that floods false positives for one event type can still clear `>= 0.9` as long as the total extra events are a small fraction of all detections, so a real per-type precision regression (e.g. spurious `fill`/`large-transient`) passes unnoticed. `per_type[...][\"precision\"]` is computed but never asserted. Add a per-type precision floor for the planted types.",
+   "suggestion_code": "    for etype in planted_types:\n        assert per_type[etype][\"precision\"] >= 0.9, (etype, per_type[etype])\n    micro_precision = tp / found if found else 0.0\n    assert micro_precision >= 0.9, (micro_precision, per_type)",
+   "existing_code": "    micro_precision = tp / found if found else 0.0\n    assert micro_precision >= 0.9, (micro_precision, per_type)",
+   "start_line": 90,
+   "end_line": 91,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/tests/test_events_full.py",
+   "content": "The docstring claims a \"Full 19-event vocabulary\", but `_run` only appends `detect_builds` output (which emits `build-start`) plus `detect_drops`. `build-intensification` \u2014 part of `EVENT_TYPES_19` \u2014 is produced by the worker (worker.py) from long builds, is never emitted by these two detectors, and is never planted in the fixture truth. Consequently no assertion in this file can ever exercise it, so the \"full vocabulary\" claim is not actually covered. Mirror the worker's build-intensification synthesis here and/or plant it in `truth`.",
+   "existing_code": "    events = [*events, *builds]",
+   "start_line": 46,
+   "end_line": 46,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "analysis/tests/test_events_full.py",
+   "content": "The negative test calls `detect_drops` without `vocal`, `fills`, or `onset`, so it exercises different detector paths than `_run` (which passes them explicitly): the vocal-fake branch of `_fake_pairs` and the vocal/fill branches of `_secondary_events` are disabled, and `onset` falls back to `novelty`. A flat track therefore cannot guard against these paths spuriously firing on near-constant inputs. Pass explicit flat `vocal`/`fills`/`onset` signals to match the positive tests.",
+   "suggestion_code": "        set(),\n        beat_in_bar=[(i % 4) + 1 for i in range(n)],\n        vocal=[0.02] * n,\n        fills=[],\n        onset=[0.1] * n,\n    )",
+   "existing_code": "        set(),\n        beat_in_bar=[(i % 4) + 1 for i in range(n)],\n    )",
+   "start_line": 108,
+   "end_line": 110,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "analysis/tests/test_worker.py": [
+  {
+   "path": "analysis/tests/test_worker.py",
+   "content": "This test is named `test_analyze_full_with_real_audio` and its own comment claims \"real audio must yield DSP events\", but the coverage assertion accepts both `\"full\"` and `\"structured\"`. Because the worker derives `analysisCoverage` from `compute_readiness(inputs)` (worker._model), a regression where ML (`ml.allinone.structure`) or the plan stage silently drops out downgrades the artifact to `structured` and this test still passes, so the full-pipeline behavior it is supposed to guard is not actually asserted. Either assert `== \"full\"`, or if ML is legitimately optional in CI, gate on the distinguishing input map (e.g. `analysisCoverage2[\"inputs\"][\"ml.allinone.structure\"][\"status\"]`) and skip rather than silently accepting either level.",
+   "existing_code": "    assert model[\"analysisCoverage\"] in (\"full\", \"structured\")",
+   "start_line": 63,
+   "end_line": 63,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/tests/test_worker.py",
+   "content": "This test only asserts `got[\"type\"] == \"failed\"`. A bad native directory is supposed to surface a distinct `native-unreadable` failure (see worker.analyze_job / handle), but any failure at all \u2014 including an unrelated `audio-missing` path \u2014 satisfies this assertion, so the test cannot detect a regression that routes bad native dirs to the wrong error path. Assert the specific reason (e.g. `assert \"native-unreadable\" in got.get(\"reason\", \"\")`) to make it a meaningful regression guard.",
+   "existing_code": "        out_dir=tmp_path,\n    )\n    assert got[\"type\"] == \"failed\"",
+   "start_line": 76,
+   "end_line": 78,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/tests/test_worker.py",
+   "content": "`pathlib` is already imported at module level (line 2), so this local re-import is redundant. Remove it to avoid the duplicated declaration.",
+   "existing_code": "    import pathlib",
+   "start_line": 2,
+   "end_line": 2,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "analysis/tests/test_worker.py",
+   "content": "This indexes `analysisCoverage2`/`inputs`/`source.audio` three levels deep without any guard. If the artifact shape changes or a key is missing, the test raises `KeyError`/`TypeError` instead of producing a clear assertion failure, obscuring the real problem. Use defensive traversal (`.get(..., {})`) so a missing/renamed field fails as a readable assertion.",
+   "existing_code": "    assert model[\"analysisCoverage2\"][\"inputs\"][\"source.audio\"][\"status\"] == \"present\"",
+   "start_line": 64,
+   "end_line": 64,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/scripts/build-main.mjs": [
+  {
+   "path": "apps/desktop/scripts/build-main.mjs",
+   "content": "Alias derivation is fragile: `readdirSync` returns *all* entries (files, `.DS_Store`, etc.), not just package directories, and it assumes every folder exposes `src/index.ts` and that the folder name equals the package name. A stray file or a package without `src/index.ts` silently produces an unresolvable/bogus alias instead of failing with a clear error. Filter to directories and resolve the real entry (e.g. from each package's `package.json` `main`/`exports`). Note also that an alias pointing at a single `index.ts` cannot represent packages that expose subpath entries (e.g. `@autolight/config/registry`, `@autolight/rekordbox-live/follow`), which would break if imported from the main bundle.",
+   "suggestion_code": "  readdirSync(workspaceSrc, { withFileTypes: true })\n    .filter((e) => e.isDirectory())\n    .map((e) => [`@autolight/${e.name}`, join(workspaceSrc, e.name, \"src\", \"index.ts\")]),",
+   "existing_code": "  readdirSync(workspaceSrc).map((p) => [`@autolight/${p}`, join(workspaceSrc, p, \"src\", \"index.ts\")]),",
+   "start_line": 15,
+   "end_line": 15,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/scripts/build-main.mjs",
+   "content": "This alias-derivation plus the `mkdirSync`/`--watch` job-execution logic is duplicated verbatim in `scripts/build-preload.mjs`. Extract a shared helper (e.g. `scripts/esbuild-job.mjs` exporting the alias map and a `runJob(job)` function) so the two bundles cannot drift out of sync.",
+   "existing_code": "const alias = Object.fromEntries(",
+   "start_line": 14,
+   "end_line": 14,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/scripts/build-main.mjs",
+   "content": "The header comment says this bundles \"Electron main + preload\", but `entryPoints` only contains `electron/main.ts`; the preload is built by the separate `scripts/build-preload.mjs`. Correct the comment to describe main only to avoid misleading maintainers.",
+   "suggestion_code": "// Dev + packaging bundle for the Electron main process only (esbuild).",
+   "existing_code": "// Dev + packaging bundle for Electron main + preload only (esbuild).",
+   "start_line": 1,
+   "end_line": 1,
+   "category": "documentation",
+   "severity": "low"
+  },
+  {
+   "path": "apps/desktop/scripts/build-main.mjs",
+   "content": "The top-level `await`s (`context`, `watch`, `build`) run without any error handling. If `workspaceSrc` is missing or a build fails, the script surfaces an opaque unhandled rejection. Wrap the run logic in try/catch to emit a clear message and exit non-zero deterministically (important for CI/packaging).",
+   "existing_code": "  await build(job);",
+   "start_line": 35,
+   "end_line": 35,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/src/app/layout.test.ts": [
+  {
+   "path": "apps/desktop/src/app/layout.test.ts",
+   "content": "`existsSync` returns `true` for files and directories alike, so this assertion does not actually verify that `src/app`, `src/routes`, etc. are *directories*. A single file named `src/app` (e.g. a stray `src/features` file) would satisfy the \"uses the spec 83 renderer directories\" probe while the directory-based renderer layout is broken. Use `statSync(...).isDirectory()` (import `statSync` from `node:fs`) instead of plain existence.",
+   "suggestion_code": "      const dirPath = at(`src/${dir}`);\n      expect(existsSync(dirPath) && statSync(dirPath).isDirectory(), `src/${dir}`).toBe(true);",
+   "existing_code": "      expect(existsSync(at(`src/${dir}`)), `src/${dir}`).toBe(true);",
+   "start_line": 38,
+   "end_line": 38,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/app/layout.test.ts",
+   "content": "This probe only checks that the path exists, so a service file that has been emptied, truncated, or reduced to a stub still passes \"has one file per service\" even though the service behavior is gone. The strongest guard is to import each module (as `services.test.ts` does) or at least assert non-empty content, so the test can fail when the service is broken rather than merely present.",
+   "suggestion_code": "      const filePath = at(`electron/services/${file}`);\n      expect(existsSync(filePath) && statSync(filePath).size > 0, `electron/services/${file}`).toBe(true);",
+   "existing_code": "      expect(existsSync(at(`electron/services/${file}`)), `electron/services/${file}`).toBe(true);",
+   "start_line": 32,
+   "end_line": 32,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/app/layout.test.ts",
+   "content": "This test is titled \"has no legacy electron files that moved into services\", but it also contains positive existence assertions for `provider-manager.ts` and `ipc-router.ts`, which are already covered by the first test. The mixed intent makes the failure message misleading and duplicates coverage; either drop these two lines or rename the test so it describes both the negative and positive checks.",
+   "existing_code": "    expect(existsSync(at(\"electron/services/provider-manager.ts\"))).toBe(true);\n    expect(existsSync(at(\"electron/services/ipc-router.ts\"))).toBe(true);",
+   "start_line": 51,
+   "end_line": 52,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "apps/desktop/src/app/layout.test.ts",
+   "content": "`SERVICE_FILES` is a hand-maintained duplicate of spec 83 section 1. If the spec gains or renames a service, this list silently drifts and the probe keeps passing, so it cannot detect the divergence it is meant to guard. Consider deriving the expected list from a single shared source of truth (or documenting that this list must be updated together with the spec).",
+   "existing_code": "const SERVICE_FILES = [",
+   "start_line": 12,
+   "end_line": 12,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/src/routes/live/live-fields.test.ts": [
+  {
+   "path": "apps/desktop/src/routes/live/live-fields.test.ts",
+   "content": "Fixture casts (`as unknown as DeckState`, `as unknown as TrackModel`, and `cues as never[]`) bypass type checking, so drift between these hand-built shapes and the real `@autolight/contracts` schemas will never fail the test. The cue objects already match `ShowCue` (type/startBeat/durationBeats/intensity/target/priority) and could be typed directly as `ShowCue[]`; the state/track objects can be built via the contracts' factories (`createTrackIdentity`, etc.). Prefer the real types so schema changes surface as compile errors instead of silently passing.",
+   "existing_code": "} as unknown as DeckState;",
+   "start_line": 10,
+   "end_line": 10,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/routes/live/live-fields.test.ts",
+   "content": "This test is named \"prefers drops over breakdowns over builds\", but the fixture contains no `build-ramp` cue at all, and `predictiveLabel` selects by hardcoded cue-type precedence \u2014 it never reads `priority`. As written the assertion (`DROP IN 16`) would still pass if the drop/breakdown/build ordering or the `priority` field handling regressed, so the stated behavior is unverified. Add a `build-ramp` cue to the fixture and assert the full ordering explicitly (and decide whether precedence should actually be driven by `priority`, which the fixture implies with 100 vs 40).",
+   "existing_code": "expect(predictiveLabel(cues as never[], 32)).toBe(\"DROP IN 16\");",
+   "start_line": 50,
+   "end_line": 50,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/routes/live/live-fields.test.ts",
+   "content": "Fallback and boundary paths are untested. `predictiveLabel` is never exercised with an empty cue list, a drop beyond the horizon, or a breakdown-only set (its `BREAKDOWN IN`/`BUILD`/null branches are never asserted), and `nextPhraseBeat` is only checked mid-phrase (33). Add cases such as `predictiveLabel([], 0) === null`, a breakdown-only case, and the exact boundaries `nextPhraseBeat(32) === 32` and `nextPhraseBeat(64) === 64` so off-by-one regressions at phrase boundaries are caught.",
+   "existing_code": "expect(nextPhraseBeat(33)).toBe(64);",
+   "start_line": 51,
+   "end_line": 51,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "apps/desktop/src/routes/live/live-fields.test.ts",
+   "content": "The \"labels missing data instead of guessing\" case asserts only title/nativeBpm/nextEvent, omitting `section`, `analysisQuality`, and derived `bar`/`phrase`. Missing-data guessing for those fields would go undetected. Assert `idle.section === null` and `idle.analysisQuality === \"NEEDS ANALYSIS\"` (and the beat-0 bar/phrase values) to cover the degradation contract fully.",
+   "existing_code": "expect(idle.nextEvent).toBeNull();",
+   "start_line": 36,
+   "end_line": 36,
+   "category": "test",
+   "severity": "low"
+  }
+ ]
+}

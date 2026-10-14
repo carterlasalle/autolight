@@ -1,0 +1,274 @@
+{
+ "apps/desktop/src/routes/venue/device-screens.test.ts": [
+  {
+   "path": "apps/desktop/src/routes/venue/device-screens.test.ts",
+   "content": "This assertion only inspects the returned row, so it cannot detect if `withTransportMode` mutates its argument in place. Since the helper is expected to be pure (the implementation spreads `...row`), the test should also assert the input row is left unchanged; otherwise a refactor to `row.transportMode = mode; return row;` would still pass while breaking aliasing/state assumptions for callers.",
+   "suggestion_code": "    const row = deviceScreenRow(tile, true);\n    const switched = withTransportMode(row, \"lan\");\n    expect(switched.transportMode).toBe(\"lan\");\n    expect(row.transportMode).toBe(\"hybrid\"); // input must not be mutated\n    expect(switched).not.toBe(row);",
+   "existing_code": "    expect(withTransportMode(deviceScreenRow(tile, true), \"lan\").transportMode).toBe(\"lan\");",
+   "start_line": 20,
+   "end_line": 20,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/routes/venue/device-screens.test.ts",
+   "content": "The step list is duplicated from `SETUP_EVIDENCE_STEPS` and then cast with `as never`, which disables all type checking on the argument. This means a renamed/removed step in the source model cannot be caught at compile time, and step removal from `SETUP_EVIDENCE_STEPS` would leave this test green even though the `next === \"ready\"` contract changed. Import the exported constant instead of hardcoding/casting.",
+   "suggestion_code": "    const full = Object.fromEntries(\n      SETUP_EVIDENCE_STEPS.map((s) => [s, true]),\n    ) as Record<(typeof SETUP_EVIDENCE_STEPS)[number], boolean>;\n    expect(setupProgress(full).next).toBe(\"ready\");",
+   "existing_code": "    const full = Object.fromEntries(\n      [\"dj\", \"controller\", \"library\", \"lights\", \"identify\", \"placement\", \"orientation\", \"qualification\", \"analysis\", \"preview\"].map((s) => [s, true]),\n    );\n    expect(setupProgress(full as never).next).toBe(\"ready\");",
+   "start_line": 25,
+   "end_line": 28,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/routes/venue/device-screens.test.ts",
+   "content": "This `toEqual([\"dj\", \"controller\"])` asserts exact array order, coupling the test to the implementation's iteration order (`SETUP_EVIDENCE_STEPS.filter(...)`) rather than to the semantic contract (both steps done, no others). It also never verifies `next` for the partial case. Prefer order-independent membership checks and assert the `next` value for the partial state.",
+   "suggestion_code": "    const partial = setupProgress({ dj: true, controller: true });\n    expect([...partial.done].sort()).toEqual([\"controller\", \"dj\"]);\n    expect(partial.next).toBe(\"library\");",
+   "existing_code": "    expect(setupProgress({ dj: true, controller: true }).done).toEqual([\"dj\", \"controller\"]);",
+   "start_line": 24,
+   "end_line": 24,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "apps/desktop/src/routes/venue/device-screens.test.ts",
+   "content": "Only a single fully-populated, healthy `online` tile with `segments > 0` is exercised, so the qualification/measurement edge cases that actually drive `latencySource`/`segments` are untested: e.g. `qualified: true` with `segments === 0` (implementation returns `segments: null` while `qualifiedResolution` reports \"0 segments\"), and non-online/degraded health. Adding a zero-segment qualified fixture would pin the `qualified && tile.segments > 0` branch and surface that inconsistency.",
+   "existing_code": "const tile = {\n  id: \"lamp-1\", sku: \"H6076\", ip: \"10.0.0.2\", firmware: \"1.2.3\",\n  segments: 14, fps: 30, sentFrames: 100, supersededFrames: 5,\n  latencyMs: 25, health: \"online\" as const,\n};",
+   "start_line": 4,
+   "end_line": 8,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/src/routes/venue/room-preview.tsx": [
+  {
+   "path": "apps/desktop/src/routes/venue/room-preview.tsx",
+   "content": "`referenceById(roomId)` throws for any id that is not present in `REFERENCE_ROOMS` (`if (!found) throw new Error(...)` in packages/venue/src/reference.ts). The result is dereferenced immediately (`ref.room`, `ref.zeroS`, `ref.runs`), so a mistyped/misconfigured `roomId` (e.g. the future wizard passing a user/non-reference room id) will crash the whole venue route during render instead of degrading gracefully. Look up the room safely (or wrap in try/catch) and render an empty/fallback preview when the id is unknown.",
+   "existing_code": "    const ref = referenceById(roomId);",
+   "start_line": 12,
+   "end_line": 12,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/routes/venue/room-preview.tsx",
+   "content": "The `useMemo` depends on `beat`, so `referenceById`, `fieldCellsForReference` and `computeFields` \u2014 all of which depend only on `roomId` and allocate large typed arrays (see computeFields) \u2014 are recomputed on every beat tick even though only `sampleSpatial` actually consumes `beat`. Since `beat` is driven by the numeric input, this re-runs all the static field math on each keystroke/step. Split this into a memo keyed on `[roomId]` that produces `{ cells, fields }`, then a second cheap memo keyed on `[built, beat]` that only maps `sampleSpatial` over the cells.",
+   "existing_code": "  }, [roomId, beat]);",
+   "start_line": 21,
+   "end_line": 21,
+   "category": "performance",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/routes/venue/room-preview.tsx",
+   "content": "The `min`/`max` attributes on the input are declarative only and do not constrain typed or programmatically set values; `onChange` maps only `NaN` (via `Number(...) || 0`) to 0, so negative or `> 16` beats pass straight into `sampleSpatial`. Clamp the parsed value to the declared range before storing it, e.g. `const v = Number(e.target.value); setBeat(Number.isFinite(v) ? Math.min(16, Math.max(0, v)) : 0)` (or use `e.currentTarget.validity.valid`).",
+   "existing_code": "          onChange={(e) => setBeat(Number(e.target.value) || 0)}",
+   "start_line": 48,
+   "end_line": 48,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "apps/desktop/src/routes/venue/room-preview.tsx",
+   "content": "The preview overrides the room's own configuration: `perimeterDirection` is hardcoded to `\"clockwise\"` and the Orbit `params` (`heads`, `beatsPerRevolution`, `tailCells`, `tailCurve`, `phase`) are fixed constants. If the referenced room is counter-clockwise (or the caller expects the real primitive params), the preview silently disagrees with the actual venue configuration. At minimum, derive direction from `ref.room.perimeterDirection` and document that the sampling params are preview-only placeholders.",
+   "existing_code": "    const room = { ...ref.room, logicalZeroS: ref.zeroS, perimeterDirection: \"clockwise\" as const };",
+   "start_line": 13,
+   "end_line": 13,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/vite.config.ts": [
+  {
+   "path": "apps/desktop/vite.config.ts",
+   "content": "The subpath regex `^@autolight\\/([^/]+)\\/([^/]+)$` matches exactly one flat segment and hardcodes the `.ts` extension. Consequences:\n1. A deeper import such as `@autolight/pkg/sub/module` does NOT match, so `resolve.alias` falls through to the next entry \u2014 the **string-form barrel alias**. Vite/`@rollup/plugin-alias` replaces string matches by prefix, so `@autolight/pkg/sub/module` becomes `.../pkg/src/index.ts/sub/module`: a bogus path that only fails at bundle time. That is precisely the fall-through the surrounding comment says this block prevents.\n2. Subpath modules that are `.tsx`, or subdirectories whose entry is `index.ts`, can never resolve because `$2.ts` is forced.\nConsider allowing nested segments and letting Vite's extension resolution handle the leaf, e.g. `find: /^@autolight\\/([^/]+)\\/(.+)$/` with `replacement: join(workspaceSrc, \"$1\", \"src\", \"$2\")`.",
+   "existing_code": "    find: /^@autolight\\/([^/]+)\\/([^/]+)$/,\n    replacement: join(workspaceSrc, \"$1\", \"src\", \"$2.ts\"),",
+   "start_line": 35,
+   "end_line": 36,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/vite.config.ts",
+   "content": "`readdirSync(workspaceSrc)` is called without `withFileTypes`, so every entry (including non-directories such as a stray `.DS_Store`, README, or lock file) becomes an alias, and no check is made that `<pkg>/src/index.ts` actually exists. A package directory that hasn't added a barrel yet, or any file entry, therefore produces a dangling `@autolight/<entry>` alias that only surfaces later as a confusing \"failed to resolve import\" at module load. Filter to entries that are directories and verify `join(workspaceSrc, p, \"src\", \"index.ts\")` exists before adding the alias.",
+   "existing_code": "const workspaceAlias = Object.fromEntries(\n  readdirSync(workspaceSrc).map((p) => [`@autolight/${p}`, join(workspaceSrc, p, \"src\", \"index.ts\")]),\n);",
+   "start_line": 24,
+   "end_line": 26,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "apps/desktop/vite.config.ts",
+   "content": "These `execSync` git calls run synchronously at config-load time with no `timeout` and default `maxBuffer`; a git that hangs (index.lock contention, slow network filesystem) blocks the entire Vite startup. The bare `catch` also swallows every failure, so a genuinely broken git invocation is indistinguishable from \"not a git checkout\" and silently ships `sha: \"unknown\"` \u2014 defeating the stated goal of proving which commit is running. Pass `{ cwd: root, timeout: <ms>, maxBuffer: <bytes> }` and at least warn once when the lookup fails.",
+   "existing_code": "    sha = execSync(\"git rev-parse --short HEAD\", { cwd: root }).toString().trim();",
+   "start_line": 17,
+   "end_line": 17,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "apps/desktop/vite.config.ts",
+   "content": "`fs.allow` is widened to the monorepo root (`join(root, \"..\", \"..\")`), so the dev server will serve any file in the repository \u2014 including `.env`/credential files and unrelated apps \u2014 to anything that can reach `localhost:5173`. Restrict the allow list to the renderer root plus only the aliased package `src` directories that are actually needed (e.g. `join(workspaceSrc, \"*\")` or the resolved package src paths), rather than the whole repo.",
+   "existing_code": "  server: { port: 5173, strictPort: true, fs: { allow: [join(root, \"..\", \"..\")] } },",
+   "start_line": 63,
+   "end_line": 63,
+   "category": "security",
+   "severity": "medium"
+  }
+ ],
+ "packages/analysis-client/package.json": [
+  {
+   "path": "packages/analysis-client/package.json",
+   "content": "The build compiles test files into the published output. `tsconfig.json` includes `\"src\"` with no `exclude`, and `tsconfig.base.json` sets `declaration: true`/`sourceMap: true`, so `tsc -p tsconfig.json` emits `dist/index.test.js`, `dist/index.test.d.ts`, etc. Those emitted files import `vitest`, which is declared only as a devDependency, so any consumer (or bundler/CI that traverses `dist/**`) will hit an unresolved `vitest` import. Exclude test files from the build (e.g. add `\"exclude\": [\"src/**/*.test.ts\"]` to tsconfig.json, or use a dedicated `tsconfig.build.json`).",
+   "existing_code": "    \"build\": \"tsc -p tsconfig.json\",",
+   "start_line": 8,
+   "end_line": 8,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/analysis-client/package.json",
+   "content": "`main`/`types` point into `dist`, but there is no `files` (or `exports`) field. The publish payload is therefore governed by ignore files, and the repo `.gitignore` ignores `dist/` \u2014 so a packed/published tarball can omit `dist/index.js` while `main`/`types` still reference it, producing ERR_MODULE_NOT_FOUND for consumers. Add an explicit allowlist, e.g. `\"files\": [\"dist\"]` (combined with excluding tests from the build), and add `\"private\": true` if this package is not meant to be published.",
+   "existing_code": "  \"main\": \"./dist/index.js\",\n  \"types\": \"./dist/index.d.ts\",",
+   "start_line": 5,
+   "end_line": 6,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/analysis-client/package.json",
+   "content": "`--passWithNoTests` makes the test gate succeed when no tests are collected (broken globs, deleted/renamed test files, or misconfigured vitest), silently masking a missing or non-running suite in CI. Consider dropping the flag (or asserting a minimum test count) so an empty run fails.",
+   "existing_code": "    \"test\": \"vitest run --passWithNoTests\",",
+   "start_line": 9,
+   "end_line": 9,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/analysis-client/package.json",
+   "content": "`lint` is identical to `typecheck`, so the `lint` script performs no linting and cannot catch anything beyond type errors. Either wire it to the actual linter used by the repo (oxlint/eslint) or remove the duplicate script to avoid a misleading lint gate.",
+   "existing_code": "    \"lint\": \"tsc --noEmit -p tsconfig.json\",\n    \"typecheck\": \"tsc --noEmit -p tsconfig.json\"",
+   "start_line": 10,
+   "end_line": 11,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/ble/src/provisioning.test.ts": [
+  {
+   "path": "packages/ble/src/provisioning.test.ts",
+   "content": "The reassembled byte check truncates with `slice(0, expectedPayload.length)`, so any extra bytes written beyond the expected payload (an over-send bug) are silently discarded and the test still passes. Compare the full received buffer so both over- and under-send are caught.",
+   "suggestion_code": "    const received = simProvisionBytes(peripheral);\n    expect(received.length).toBe(expectedPayload.length);\n    expect([...received]).toEqual([...expectedPayload]);",
+   "existing_code": "    const received = simProvisionBytes(peripheral);\n    const trimmed = received.slice(0, expectedPayload.length);\n    expect([...trimmed]).toEqual([...expectedPayload]);",
+   "start_line": 69,
+   "end_line": 71,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/ble/src/provisioning.test.ts",
+   "content": "`chunks.map(() => 0xa1)` is derived from `chunks` itself, so the assertion only checks every decoded frame equals 0xa1 \u2014 it never validates that the number of chunk frames, or the per-chunk payload offsets/ordering, match the encoded payload. An extra or missing chunk frame (e.g. a duplicated or dropped chunk with identical proType/cmd but wrong offset) would go undetected here. Assert the expected chunk count and decode each chunk payload against `bleProvisionChunks(expectedPayload)`.",
+   "suggestion_code": "    const chunks = scripted.frames.slice(1, -1);\n    expect(chunks.length).toBe(Math.ceil(expectedPayload.length / 17));\n    expect(chunks.map((f) => decodeBleFrame(f)?.proType)).toEqual(chunks.map(() => 0xa1));\n    expect(chunks.map((f) => decodeBleFrame(f)?.cmd)).toEqual(chunks.map(() => 0x11));\n    expect(chunks.map((f) => [...(decodeBleFrame(f)?.payload ?? [])])).toEqual(\n      bleProvisionChunks(expectedPayload).map((c) => [...c]),\n    );",
+   "existing_code": "    const chunks = scripted.frames.slice(1, -1);\n    expect(chunks.map((f) => decodeBleFrame(f)?.proType)).toEqual(chunks.map(() => 0xa1));\n    expect(chunks.map((f) => decodeBleFrame(f)?.cmd)).toEqual(chunks.map(() => 0x11));",
+   "start_line": 64,
+   "end_line": 66,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/ble/src/provisioning.test.ts",
+   "content": "The fake clock is inconsistent: `write` advances the simulated time by a hardcoded 300 ms while `sleep` only records the value and never advances time, so the simulator's timeline does not reflect the 3 s start wait or the 300 ms pacing actually requested. Any sim behaviour that depends on `now` (e.g. `budgetHz` rate limiting, which is currently disabled with `budgetHz: null`) would pass or fail for the wrong reason. Wire the clock to the recorded sleeps so the sim timeline mirrors the real flow.",
+   "suggestion_code": "      write(frame: Uint8Array): void {\n        frames.push(frame.slice());\n        peripheral.handleWrite(frame, t);\n      },\n      sleep(ms: number): void {\n        sleeps.push(ms);\n        t += ms;\n      },",
+   "existing_code": "      write(frame: Uint8Array): void {\n        frames.push(frame.slice());\n        t += 300;\n        peripheral.handleWrite(frame, t);\n      },\n      sleep(ms: number): void {\n        sleeps.push(ms);\n      },",
+   "start_line": 28,
+   "end_line": 35,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/ble/src/provisioning.test.ts",
+   "content": "Only happy paths are covered: no test exercises a rejected/failed transport `write`, an aborted transfer, or an `onPasswordSaved` that throws. As a result, `provisionBleWifi`'s error propagation and any stop/cleanup guarantees on failure are unverified, even though the transfer is security-sensitive. Add a failure-path case asserting rejection and that no further frames are written after a mid-transfer failure.",
+   "existing_code": "  it(\"runs start, 3 s wait, paced chunks, stop against the sim\", async () => {",
+   "start_line": 47,
+   "end_line": 47,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/ble/src/sim.test.ts": [
+  {
+   "path": "packages/ble/src/sim.test.ts",
+   "content": "This assertion is vacuous and cannot detect regressions. `simContractChecks` builds checks whose pass conditions are trivially true: `host-color-hold` only asserts `typeof p.hostColorHeld(now) === \"boolean\"` (always a boolean regardless of `now`, so the passed `999` is irrelevant), and `one-connection-rule` is `peripherals.every((p) => !p.connected || ...)` which is satisfied vacuously because `simFamilyPeripherals()` never connects any peripheral (`!p.connected` is true for all). So `checks.every((c) => c.ok)` will be true even if host-colour hold or the one-connection rule is completely broken. Drive real state (connect a peripheral, apply a host colour and probe the hold) or assert on the meaningful state rather than only the boolean `ok` flags.",
+   "existing_code": "    expect(checks.every((c) => c.ok)).toBe(true);",
+   "start_line": 127,
+   "end_line": 127,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/ble/src/sim.test.ts",
+   "content": "The clock is frozen at 1000, so both `write` calls carry the same timestamp and the stall is produced by a zero-length inter-write gap rather than by exhaustion of the time-window budget. Consequently the 1000 ms window filter (`this.writeTimes.filter((t) => now - t < 1000)`) and the `stalledUntil` recovery path are never exercised, and `expect(peripheral.metrics.stalled).toBeGreaterThan(0)` would still pass if that window logic regressed. Use a mutable clock that advances between writes (e.g. write, advance comfortably past the spacing, write again) and assert which specific frame was dropped/acked.",
+   "existing_code": "    const adapter = new SimBleAdapter({ kind: \"noble\", clock: () => 1000 });",
+   "start_line": 67,
+   "end_line": 67,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/ble/src/sim.test.ts",
+   "content": "`17`/`19` are magic offsets that encode the 17-byte frame payload padding rather than the chunk data: `answerProvision` pushes `payload.slice(0, 17)`, so `simProvisionBytes` concatenates padded chunks and the second chunk starts at 17 purely because of the trailing zeros of the first. The test therefore cannot detect padding-related corruption (e.g. per-write trailing zero bytes being stored) and would silently change meaning if chunk storage ever stopped padding. Assert the chunk boundaries explicitly (e.g. inspect `peripheral.provisioned[0]`/`[1]` or a documented chunk-length constant) instead of hard-coding 17/19.",
+   "existing_code": "    expect(received.slice(17, 19)).toEqual([4, 5]);",
+   "start_line": 113,
+   "end_line": 113,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/ble/src/sim.test.ts",
+   "content": "The decoded host colour is only asserted non-null; the sub/payload bytes are never compared with the input `{ r: 9, g: 9, b: 9 }`, and `painted[0]` alone does not prove the RGB order is correct (a swapped channel would still pass for equal values). Also the hold boundary is probed only at 9001, leaving the exact `7000 + renderHoldMs = 9000` boundary untested, so an off-by-one in `hostColorHeld` (`now - hostColorAt < hold`) could go unnoticed. Assert the decoded payload equals `[0x83, 9, 9, 9]` and probe `hostColorHeld(9000)`.",
+   "existing_code": "    expect(decodeHostColor(frame)).not.toBeNull();",
+   "start_line": 94,
+   "end_line": 94,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/cloud/src/cross-check.test.ts": [
+  {
+   "path": "packages/cloud/src/cross-check.test.ts",
+   "content": "Weak assertion: `toContain(\"14\")`/`toContain(\"20\")` only verifies the two digits appear somewhere in the note. The model is \"H6076\" and the hardwareId contains no \"14\"/\"20\", so the test passes even if the note labels the values backwards (e.g. \"Cloud declares 14 ... measured 20\"). A broken or misleading note format therefore goes undetected. Assert the full note (or at least the labeled substrings \"declares 20\" and \"measured 14\").",
+   "existing_code": "    expect(out.evidenceNote).toContain(\"14\");\n    expect(out.evidenceNote).toContain(\"20\");",
+   "start_line": 36,
+   "end_line": 37,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/cloud/src/cross-check.test.ts",
+   "content": "The hand-built mock bypasses the real client shape: `parseDeviceEntry` derives `declaredSegmentCount` from `properties` (`segments`/`segmentCount`/`zoneCount`, floored, `>0`). Tests 1 and 2 feed this literal directly into `crossCheckQualification`, and test 3 only exercises the `null` path. As a result, no test drives a real parsed non-null count into the cross-check, so a regression in `parseDeviceEntry` (renamed/removed key, wrong flooring) leaves the entire \"disagree\" path passing. Add a case that parses `{ ...properties: { zoneCount: 20 } }` and feeds the result into `crossCheckQualification` expecting \"disagree\".",
+   "existing_code": "      cloud: cloudDevice(20),",
+   "start_line": 30,
+   "end_line": 30,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/cloud/src/cross-check.test.ts",
+   "content": "`mismatchRecorded` is asserted only as the boolean returned by `crossCheckQualification`. Nothing verifies the mismatch is actually persisted/emitted downstream, and `crossCheckQualification` currently has no non-test consumer (only re-exported from index.ts). The test therefore cannot distinguish a real record from a flag that is never written to device evidence, leaving the \"records a mismatch\" claim unverified. Either assert the persisted evidence artifact or document that the flag is the contract.",
+   "existing_code": "    expect(out.mismatchRecorded).toBe(true);",
+   "start_line": 33,
+   "end_line": 33,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/cloud/src/cross-check.test.ts",
+   "content": "Boundary coverage is missing: `compareDeclaredSegments`/`crossCheckQualification` are never exercised with declared values of 0, negative, or non-integer, nor with a non-finite/NaN count (e.g. `compareDeclaredSegments(NaN, NaN)` returns \"disagree\" since `NaN === NaN` is false). Note `parseDeviceEntry` maps `0`/negative to `null` (silent), so a cloud declaring \"0 segments\" flows as silent rather than disagree \u2014 worth a test to pin the intended behavior.",
+   "existing_code": "    expect(compareDeclaredSegments(14, 14)).toBe(\"agree\");",
+   "start_line": 85,
+   "end_line": 85,
+   "category": "test",
+   "severity": "low"
+  }
+ ]
+}

@@ -1,0 +1,338 @@
+{
+ "packages/rekordbox-library/src/beat.test.ts": [
+  {
+   "path": "packages/rekordbox-library/src/beat.test.ts",
+   "content": "The monotonicity test claims to cover \"inside and outside the grid\", but the generated grid has 128 beats (indices 0..127 \u2192 musical beats 1..128) while the loop only reaches beat 80 (`i <= 160` \u2192 `i/2`). The upper out-of-grid extrapolation region (beat > 128) is therefore never exercised, so a monotonicity regression in the \"after the last anchor\" nearest-tempo branch would go undetected. Extend the range past the top of the grid (beat 128 requires `i > 256`).",
+   "suggestion_code": "    for (let i = -30; i <= 320; i++) {",
+   "existing_code": "    for (let i = -30; i <= 160; i++) {",
+   "start_line": 103,
+   "end_line": 103,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-library/src/beat.test.ts",
+   "content": "The out-of-grid samples only reach -0.25..1.25 of the grid span, and the out-of-grid error of a nearest-segment extrapolation grows linearly with distance from the ends. An extrapolation bug that is small within \u00b125% of the span (e.g. using the wrong end segment's tempo) can stay under the 1e-6 s tolerance here and survive the round-trip property. Consider widening the offset range (e.g. -2..3) so the extrapolation branches are meaningfully stressed.",
+   "existing_code": "        const offset = -0.25 + rand() * 1.5;",
+   "start_line": 87,
+   "end_line": 87,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/rekordbox-library/src/beat.test.ts",
+   "content": "`expect(Number.isFinite(accumulator)).toBe(true)` only rejects NaN/Infinity; any finite-but-wrong mapping (e.g. a constant value, or an off-by-one beat shift) still satisfies it. Combined with the fact that the timing budget is the only other assertion, this benchmark can pass while the mapping itself is broken. Add a correctness assertion on a known point, e.g. `expect(beatToSourceSeconds(grid, 1 as Beat)).toBeCloseTo(grid.beats[0]!.sourceTimeMs / 1000, 9)` (or accumulate and compare against a reference result).",
+   "suggestion_code": "    expect(Number.isFinite(accumulator)).toBe(true);\n    expect(beatToSourceSeconds(grid, 1 as Beat)).toBeCloseTo(grid.beats[0]!.sourceTimeMs / 1000, 9);",
+   "existing_code": "    expect(Number.isFinite(accumulator)).toBe(true);",
+   "start_line": 146,
+   "end_line": 146,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-library/src/beat.test.ts",
+   "content": "The 250 ms wall-clock budget is calibrated to a specific host (comment claims 86 ms) and measures cold-JIT code on a shared CI runner. On slower/contended machines this assertion fails for environmental reasons unrelated to any regression, making the suite flaky. Prefer a much looser bound (or warm up before timing) so the test only catches order-of-magnitude regressions rather than host speed.",
+   "existing_code": "    expect(elapsedMs).toBeLessThan(BENCH_LIMIT_MS);",
+   "start_line": 147,
+   "end_line": 147,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-library/src/beat.test.ts",
+   "content": "Exact float equality on a `seconds * 1000` product is brittle and inconsistent with the neighbouring `toBeCloseTo(1473, 9)` assertion for the same conversion. It happens to be exact today, but it will break if the conversion/rounding strategy changes even slightly. Use the same tolerant comparison as the second case.",
+   "suggestion_code": "    expect(toNativeBeat({ index: 0, beatInBar: 1, sourceTimeSeconds: 0.05, bpm: 142 }).sourceTimeMs).toBeCloseTo(50, 9);",
+   "existing_code": "    expect(toNativeBeat({ index: 0, beatInBar: 1, sourceTimeSeconds: 0.05, bpm: 142 }).sourceTimeMs).toBe(50);",
+   "start_line": 56,
+   "end_line": 56,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/rekordbox-live/src/agent-api.test.ts": [
+  {
+   "path": "packages/rekordbox-live/src/agent-api.test.ts",
+   "content": "The `requests` buffer (and the `requests` field on `FakeAgent`) is populated on every request but never read by any test, so it is dead code. It is also the only place that could verify wire-level token handling (that the `Authorization: Bearer` header is actually sent, that the token never leaks into a query string, and which endpoint path was hit). Either assert on it (e.g. `expect(agent.requests).toContain(\"/api/data/1234\")` and that no request URL contains `TOKEN`) or remove it \u2014 as written the recorder gives a false impression that the wire traffic is verified.",
+   "existing_code": "  const requests: string[] = [];",
+   "start_line": 23,
+   "end_line": 23,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/agent-api.test.ts",
+   "content": "Hard-coding `port: 1` to mean \"nothing listens\" is environment-dependent and flaky: port 1 can be occupied by a privileged service, and a slow/blocked connect is indistinguishable from `ECONNREFUSED` here because `RekordboxAgentClient.get` maps both a socket error and a timeout to `null` -> `{ present: false }`. The test therefore cannot tell a genuine \"not-present\" from a timeout being misreported (and it also depends on the 300ms budget never elapsing on a loaded CI box). Obtain a guaranteed-free ephemeral port by binding a throwaway server, reading its port, then closing it, and assert the `reason` as well as `present`.",
+   "existing_code": "    const client = new RekordboxAgentClient({ port: 1, timeoutMs: 300 });",
+   "start_line": 113,
+   "end_line": 113,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/agent-api.test.ts",
+   "content": "The endpoint-failover list is never actually exercised: the fake only answers `/api/data/1234` (== `AGENT_RESOLVE_ENDPOINTS[0]`), and the assertion is pinned to index 0. The resolve loop's fallback behavior (first candidate 404s, a later candidate resolves) is untested, so a regression that breaks the ordering/fallback in `AGENT_RESOLVE_ENDPOINTS` would still pass. Add a case where the fake 404s the first candidate and serves the second, then assert `resolved.endpoint` equals `AGENT_RESOLVE_ENDPOINTS[1]`.",
+   "existing_code": "      expect(resolved.endpoint).toBe(AGENT_RESOLVE_ENDPOINTS[0]?.replace(\"{id}\", \"1234\"));",
+   "start_line": 91,
+   "end_line": 91,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/agent-api.test.ts",
+   "content": "No test ever forces the timeout/abort path: every client is built with a 300-500ms timeout and every fake answers immediately, so `req.on(\"timeout\")` -> `req.destroy()` -> `null` -> `not-present`/`denied` interactions are unverified, and a hung request (e.g. the timeout option being ignored) would surface as a test hang rather than a failure. Add a fake route that delays beyond the timeout and assert the resulting reason is `not-present` (timeout) rather than `not-found`.",
+   "existing_code": "      const client = new RekordboxAgentClient({ port: agent.port, timeoutMs: 500 });\n      const probe = await client.probe();",
+   "start_line": 70,
+   "end_line": 71,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/rekordbox-live/src/agent-api.test.ts",
+   "content": "`closeAgent` resolves only when `server.close()`'s callback fires, which waits for all connections to end. `RekordboxAgentClient` issues requests via `node:http`'s default global agent, which keeps sockets alive after each response; the teardown therefore relies on the runtime destroying idle keep-alive sockets inside `server.close()` (Node >= 19). On a runtime that does not, this callback never runs and the suite hangs with a leaked listener. Make teardown explicit, e.g. call `agent.server.closeIdleConnections()` (or `closeAllConnections()`) before/instead of relying on `close()` alone.",
+   "existing_code": "  agent.server.close(() => resolve());",
+   "start_line": 62,
+   "end_line": 62,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "packages/rekordbox-live/src/follow.ts": [
+  {
+   "path": "packages/rekordbox-live/src/follow.ts",
+   "content": "Hardcoded business values: the version remedy embeds the literal version `7.2.19` and the date `2026-10-12` directly in the user-facing detail. These drift independently of `supportedVersions` (macOS `[\"7.2.8\",\"7.2.17\",\"7.2.18\"]`, Windows `[\"7.2.10\"]`) and of the upstream coverage, so the assistant can emit stale/misleading remediation guidance (the date is already in the past). Derive the message from a maintained constant/source of truth (or drop the version-specific date) instead of inlining literals.",
+   "existing_code": "        (input.installedRekordboxVersion.startsWith(\"7.2.19\")",
+   "start_line": 159,
+   "end_line": 159,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/follow.ts",
+   "content": "Destination extraction is unscoped and last-write-wins: the regex matches any IPv4:port substring on any line containing \"osc\", and `destination` keeps whatever the last such line held. A config with more than one OSC-related address (e.g. an input/listen port such as `osc_input = 127.0.0.1:4461` after `osc_dest = 127.0.0.1:4460`) silently reports the wrong destination, which then produces a false `wrong-destination` setup state (or masks a genuinely wrong one). Scope the match to the destination key so only the intended line can set `destination`.",
+   "suggestion_code": "    const dest = /osc[a-z_-]*\\s*[:=]\\s*((?:\\d{1,3}\\.){3}\\d{1,3}:\\d{2,5})\\b/i.exec(line);\n    if (dest) destination = dest[1] ?? null;",
+   "existing_code": "    const dest = /((?:\\d{1,3}\\.){3}\\d{1,3}:\\d{2,5})/.exec(line);\n    if (dest) destination = dest[1] ?? null;",
+   "start_line": 96,
+   "end_line": 97,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/follow.ts",
+   "content": "`subdiv` is only recognized when the entire remainder is exactly the case-sensitive string `beat/subdiv/<n>`. Any casing variation or trailing/extra segment yields `subdiv: null`, and the caller in rkbx-osc.ts then falls through to the path `switch` where the address is dropped into `unknownAddresses` \u2014 subdivision-based follow silently stops working with no error surfaced. Consider matching case-insensitively and/or tolerating surrounding segments (or reporting an explicit parse failure) so a malformed subdiv address is observable.",
+   "existing_code": "  const subdiv = /^beat\\/subdiv\\/(\\d+)$/.exec(rest);",
+   "start_line": 74,
+   "end_line": 74,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "packages/rekordbox-live/src/follow.ts",
+   "content": "The state mapping only covers the five currently-known step ids and its final fallback silently maps any other failed step to `\"no-packets\"`. Because `failed` is the first step that fails, adding/reordering a step (or any id mismatch) will produce a wrong state and a remedy that quotes a different step's detail. Prefer mapping via an explicit `Record<RkbxSetupStep id, state>` or deriving the state from the step itself instead of a hand-maintained ternary chain with a catch-all.",
+   "existing_code": "    : failed.id === \"version\" ? \"unsupported-version\"\n    : \"no-packets\";",
+   "start_line": 177,
+   "end_line": 178,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/rekordbox-live/src/follow.ts",
+   "content": "Prolink takes precedence over AX based only on `peerPresent` and a non-null `beat`, ignoring `prolink.playing`. A paused/stale remote beat therefore overrides live AX playback (and reports its own `playing:false` to consumers). Per the file's stated intent (\"prolink beats win when a peer emits; AX elapsed wins when readable\"), please confirm this is desired; if the remote is paused, the AX reading is the honest live source and should win. At minimum exclude `prolink.playing === false` from the prolink branch.",
+   "existing_code": "  if (opts.prolink.peerPresent && opts.prolink.beat !== null) {",
+   "start_line": 48,
+   "end_line": 48,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/rekordbox-live/src/lighting-ipc.test.ts": [
+  {
+   "path": "packages/rekordbox-live/src/lighting-ipc.test.ts",
+   "content": "This assertion is too weak to prove the decode-failure path. `Buffer.from(str, \"base64\")` is lenient and never throws, so `decodeLightingCaptureBase64(\"!!!not-base64!!!\")` does not hit the `catch` branch (`capture is not base64`) at all \u2014 it silently strips the invalid characters to `notbase64`, decodes 6 garbage bytes, and `decodeLightingCapture` then fails on a bogus huge frame length. `frames` ends up empty, so this test passes even though the intended error-reporting path is never exercised. Also assert `malformed` is non-empty so the rejection is actually verified.",
+   "suggestion_code": "    const notBase64 = decodeLightingCaptureBase64(\"!!!not-base64!!!\");\n    expect(notBase64.frames).toHaveLength(0);\n    expect(notBase64.malformed.length).toBeGreaterThan(0);",
+   "existing_code": "    expect(decodeLightingCaptureBase64(\"!!!not-base64!!!\").frames).toHaveLength(0);",
+   "start_line": 59,
+   "end_line": 59,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/lighting-ipc.test.ts",
+   "content": "The contract suite is run against a provider created with `fixtures: []`, which the sibling test establishes yields `capability() === \"MISSING\"` and `onStart()` \u2192 `unavailable`. The suite never checks the start/lifecycle path: it reaches `\"live\"` solely because `ingestEvent()` unconditionally calls `setStatus({ state: \"live\" })`, bypassing `onStart`. As written, a provider whose start logic is completely broken (e.g. never reports `unavailable`, or fails to transition correctly) would still pass. Exercise the suite with a READY provider (non-empty `fixtures`) and/or add explicit assertions that the MISSING provider reports `unavailable` with the owner `reason`/`remedy` after `start()`.",
+   "existing_code": "    const failures = await runProviderContractSuite({",
+   "start_line": 146,
+   "end_line": 146,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/lighting-ipc.test.ts",
+   "content": "`\"live\"` is only asserted after `replayAll()`. A provider that transitions to live solely as a side effect of replay (and leaves `start()` stuck at `\"starting\"`), or one that never exposes a terminated state on `stop()`, would still pass. Assert the status immediately after `start()` (e.g. `\"starting\"`/`\"unavailable\"` expectations) and after `stop()` so the state machine is actually pinned down.",
+   "existing_code": "    expect(ready.getStatus().state).toBe(\"live\");",
+   "start_line": 139,
+   "end_line": 139,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/lighting-ipc.test.ts",
+   "content": "`fixture()` hardcodes `condition: \"one-deck\"` regardless of the `action` argument, so the `\"loop-roll\"`/master/loop/hotcue test produces an action/condition pair (`loop-roll-one-deck`) that does not correspond to any real matrix cell. Any downstream validation or path derivation that depends on the action\u2194condition pairing is therefore silently accepted rather than exercised. Let `fixture()` accept a `condition` parameter and pass a matching value from the call sites.",
+   "suggestion_code": "function fixture(events: LightingEvent[], action = \"play\", condition = \"one-deck\") {\n  return {\n    rekordboxVersion: \"7.2.19\",\n    platform: \"macos\" as const,\n    action,\n    condition,",
+   "existing_code": "    condition: \"one-deck\",",
+   "start_line": 28,
+   "end_line": 28,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/rekordbox-live/src/lighting-ipc.test.ts",
+   "content": "With only two frames this only checks the first inter-frame gap; dropped/reordered/duplicated intermediate frames, or incorrect cumulative `index * stepMs / rate` accumulation beyond the first step, would go undetected. Add a third event and assert all successive deltas (or the total span) so cumulative timing is validated, not just the first gap.",
+   "existing_code": "    expect(first && second ? second.receivedAtNs - first.receivedAtNs : 0n).toBe(100_000_000n);",
+   "start_line": 85,
+   "end_line": 85,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/rekordbox-live/src/memory-reader.test.ts": [
+  {
+   "path": "packages/rekordbox-live/src/memory-reader.test.ts",
+   "content": "The lint assertion is too weak to be meaningful. `not.toEqual([])` only proves *some* failure string is produced; it does not verify that missing mandatory fields (`rekordboxVersion`, `platform`, `paths`, `verification`, \u2026) are actually detected, nor which error/issue codes are reported. A regression where `lintOffsetsFile` returns a single generic error for every malformed input (or the wrong fields) would still pass. Assert on the specific linted keys/fields for at least one partially-populated object instead of only checking non-emptiness.",
+   "existing_code": "    expect(lintOffsetsFile({})).not.toEqual([]);",
+   "start_line": 42,
+   "end_line": 42,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/rekordbox-live/src/memory-reader.test.ts",
+   "content": "This scanner test is effectively tautological: it writes exactly the values the scanner is meant to discover and then asserts only the *field names* that were found. It never checks the discovered `base`/`offsets`, so a scanner that produced correct field labels at the wrong locations would pass. It also provides only a single observation, so the multi-observation verification branch in `scanMemoryOffsets` (the `rest`/filter path) is never exercised, and there is no negative case (e.g. a candidate value that must NOT be returned). Assert the concrete `{base, offsets}` tuples and add a second observation plus a non-matching value to guard against false positives.",
+   "existing_code": "    expect(found.map((f) => f.field).sort()).toEqual([\"bpm\", \"playheadSamples\", \"trackId\"]);",
+   "start_line": 98,
+   "end_line": 98,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/memory-reader.test.ts",
+   "content": "The consent/version gates are only asserted at the `capability()` level. The disabled, no-consent and wrong-version providers are never started and never `poll()`ed, so a provider that still emits decks from the accessor despite a failing gate would not be caught here (only the no-consent case calls `start()`, and only its status is inspected). Start each gated provider and assert that `poll()` / `getDecks()` produce no data; also exercise `start()` on the READY provider to confirm it actually transitions to live.",
+   "existing_code": "    await noConsent.start();\n    expect(noConsent.getStatus().state).toBe(\"unavailable\");",
+   "start_line": 59,
+   "end_line": 60,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/memory-reader.test.ts",
+   "content": "The harness writes a constant playhead (0.5s) and BPM (128) on every `loadTrack`, and the generated `trackId` is computed but never asserted. As a result, regressions in playhead/time progression (e.g. a frozen or wrongly-reset playhead) and in track-id mapping will pass the suite undetected. Make the playhead/track id vary per generation (e.g. advance the virtual clock and assert `decks[0].playheadSeconds`/`track.id` follow), and add a `cleanup` that actually tears down state if the suite is expected to invoke it.",
+   "existing_code": "        const numeric = 1000 + generation * 10 + deckId;",
+   "start_line": 121,
+   "end_line": 121,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/memory-reader.test.ts",
+   "content": "The slot layout (base `deck`/`region`, indices 0..3 mapped to playhead/bpm/masterDeck/trackId) is hardcoded independently here and again in the contract-suite `loadTrack`. If the offsets layout changes, one of the two sites can silently drift and the tests would no longer reflect the real schema. Extract a shared helper (or derive indices from the `offsets()` fixture) so both writers stay in sync with the declared pointer paths.",
+   "existing_code": "  memory.writeU64(\"deck1\", 0, BigInt(Math.round(12.5 * 44100)));",
+   "start_line": 31,
+   "end_line": 31,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/serato/src/geob.test.ts": [
+  {
+   "path": "packages/serato/src/geob.test.ts",
+   "content": "Only single-marker BeatGrids are ever exercised here (and in the other specs, `payload[5]` is always 1). The per-marker loop in `parseBeatGrid` reads marker `i` at offsets `6 + i*8` / `10 + i*8`; that offset arithmetic is never validated for `i > 0`, so a wrong stride (e.g. `6 + i*4`) or a count read from the wrong byte would go undetected. Add a two-marker fixture (count = 2 with distinct `pos`/`bpm`) and pin both regions.",
+   "existing_code": "    const payload = new Uint8Array([0x01, 0x00, 0x00, 0x00, 0x00, 0x01, ...f32be(0.303), ...f32be(115), 0x37]);",
+   "start_line": 17,
+   "end_line": 17,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/serato/src/geob.test.ts",
+   "content": "The comment claims a \"u32 count\", but the parser reads a single byte at `payload[5]` (`const count = payload[5]`). For count = 1 that byte coincides with the low byte of a BE u32, so this fixture cannot distinguish a correct u32-count parser from a u8 byte-5 parser \u2014 a real regression in count decoding would still pass. Additionally the terminal byte here is `0x37` while the ScratchBeat vector below and the golden in `index.test.ts` use `0x00`, and the parser never validates the footer/version suffix, so the disagreement is silent. Reconcile the fixtures and (if the format defines it) assert the expected terminal byte.",
+   "existing_code": "    // Docs: header 01 00, u32 count 1, terminal (position f32, bpm f32), footer.",
+   "start_line": 16,
+   "end_line": 16,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/serato/src/geob.test.ts",
+   "content": "All three rejection cases use a bare `toThrow()` with no message/type matcher, so an unrelated failure (or an overly broad guard that rejects everything) still passes. Pin the expected error shape, e.g. `toThrow(/version=2/)` for the wrong-version case and `/truncated/` for the short case, so the test verifies *why* it throws.",
+   "existing_code": "    expect(() => parseBeatGrid(new Uint8Array([2, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0]))).toThrow();",
+   "start_line": 31,
+   "end_line": 31,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/serato/src/geob.test.ts",
+   "content": "`toBeGreaterThanOrEqual(4)` is only a lower bound; the fallback region for 60 BPM is exactly 4 beats (`count = round((60/60*4)/(60/60)) = 4`), so an over-extended expansion (e.g. a rounding bug yielding 8 beats) would still satisfy this assertion, and the test title (\"past four beats\") misstates the intent. Assert the exact length (and optionally the last beat time) to catch both under- and over-extension.",
+   "suggestion_code": "    expect(beats).toHaveLength(4);",
+   "existing_code": "    expect(beats.length).toBeGreaterThanOrEqual(4);",
+   "start_line": 46,
+   "end_line": 46,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/serato/src/geob.test.ts",
+   "content": "Two issues with this helper. (1) `for..of` yields code points, but `ch.charCodeAt(0)` returns only the first UTF-16 unit, so a non-BMP path (emoji/CJK extension) is encoded as 2 bytes instead of 4 \u2014 the length field and payload become wrong and the fixture would silently diverge from the real format. Iterate code units instead (e.g. `for (const unit of s) out.push(0, unit.charCodeAt(0))`). (2) The crate fixture is assembled with the exact layout the parser assumes, so it is self-referential: a wrong real-world layout (UTF-16LE vs BE, wrong length endianness) would still pass. Add a real/golden `.crate` byte fixture to validate against a known-good source.",
+   "existing_code": "      for (const ch of s) out.push(0, ch.charCodeAt(0));",
+   "start_line": 55,
+   "end_line": 55,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/serato/src/mapping.test.ts": [
+  {
+   "path": "packages/serato/src/mapping.test.ts",
+   "content": "The \"without cross-talk\" test only asserts `state.deckId`, which is merely the input echoed back by the stateless mapper. It cannot detect cross-talk/state leakage between decks (e.g. if track/loop/fader values from deck 1 were reused for deck 2). Assert at least one non-deckId field per deck (track path, loop, channelFader/crossfader, receivedAtNs) so the test would actually fail on leakage.",
+   "existing_code": "      const { state } = remoteToDeckState({ ...base, deckId }, 1n);",
+   "start_line": 41,
+   "end_line": 41,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/serato/src/mapping.test.ts",
+   "content": "Loop-coalescing coverage gap: only the `trackChanged=true && loopActive=false` branch is exercised. But the mapper (index.ts:66-68) only resets the loop in the `!loopActive` branch; with `trackChanged=true && loopActive=true` it keeps the previous `loopStartSeconds/loopEndSeconds/loopBeatLength`. Stale loop bounds from the previous track would therefore silently persist, and the current tests still pass. Add a case with `trackChanged=true, loopActive=true` plus stale loop values to pin the intended behavior.",
+   "existing_code": "      { ...base, filepath: \"/music/track-b.mp3\", trackChanged: true, loopActive: false },",
+   "start_line": 77,
+   "end_line": 77,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/serato/src/mapping.test.ts",
+   "content": "This \"re-asserted loop on the same track\" case reuses `base` with `trackChanged=false`, so it never re-asserts a loop after an actual track change, and its assertions (`loop.active`, `loop.beatLength`, track path) duplicate the first test. Suggest driving it through a track change (`trackChanged=true, loopActive=true` with fresh loop start/end/beatLength) or removing it, so it adds independent verification.",
+   "existing_code": "  it(\"keeps a re-asserted loop on the same track\", () => {",
+   "start_line": 84,
+   "end_line": 84,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/serato/src/mapping.test.ts",
+   "content": "Null-filepath handling is only tested with `trackChanged=true`. The `filepath=null && trackChanged=false` path (track unloaded without a reported track change) is unverified, and the non-track fields (playhead, playRate, effectiveBpm, faders) are not asserted to survive a null filepath. Since the mapper's stale-loop reset is gated on `trackChanged && !loopActive` (index.ts:66), a null filepath with `trackChanged=false` would keep a stale loop while `track` becomes null. Add a case covering that combo and asserting non-track fields are preserved.",
+   "existing_code": "      { ...base, filepath: null, trackChanged: true, loopActive: false, loopStartSeconds: null, loopEndSeconds: null, loopBeatLength: null },",
+   "start_line": 68,
+   "end_line": 68,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/serato/src/mapping.test.ts",
+   "content": "No boundary/invalid-input coverage: negative or NaN `playheadSeconds`, `NaN`/`Infinity` `effectiveBpm`, `loopStartSeconds > loopEndSeconds`, or a negative `playRate` are never exercised, so the mapper's data-integrity/error behavior for these inputs is unverified. Add tests that pin the expected output (pass-through vs. sanitization) for these edge values.",
+   "existing_code": "describe(\"serato remote mapping (T-SER-02)\", () => {",
+   "start_line": 21,
+   "end_line": 21,
+   "category": "test",
+   "severity": "low"
+  }
+ ]
+}

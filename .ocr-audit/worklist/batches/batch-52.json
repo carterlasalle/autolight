@@ -1,0 +1,305 @@
+{
+ "packages/renderer/src/regions.test.ts": [
+  {
+   "path": "packages/renderer/src/regions.test.ts",
+   "content": "This assertion encodes a contract that cannot actually fail: `physicalRegions` hardcodes `startIndex: 0` for every fixture (`regions.ts:11`), so `toEqual([... startIndex: 0 ...], [... startIndex: 0 ...])` passes regardless of whether the `startIndex` computation is correct. If `startIndex` is intended to be a cumulative offset into a combined address space, this test locks in the bug instead of detecting it. Add a fixture case whose expected `startIndex` is non-zero (or assert the offset relationship explicitly), otherwise the field is effectively untested.",
+   "existing_code": "    expect(physicalRegions(fixtures)).toEqual([\n      { fixtureId: \"a\", startIndex: 0, length: 4 },\n      { fixtureId: \"b\", startIndex: 0, length: 2 },\n    ]);",
+   "start_line": 16,
+   "end_line": 19,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/renderer/src/regions.test.ts",
+   "content": "Cache invalidation is only validated via the callback invocation count. `resolve` builds keys as `${version}:${target}` (`regions.ts:44`), so the `entries` reset on version change is never actually exercised by this test \u2014 even without the reset, the new key `2:LEFT` would still miss and call `compute`, yielding `calls === 2`. Also the return value after the version bump is never asserted. Strengthen: `expect(cache.resolve(2, \"LEFT\", ...)).toEqual([\"a:1\"])`, and assert a repeated `resolve(2, \"LEFT\", ...)` returns the cached reference without incrementing `calls`, so stale-cross-version results and missing caching are actually caught.",
+   "existing_code": "    cache.resolve(2, \"LEFT\", () => { calls++; return [\"a:1\"]; });\n    expect(calls).toBe(2);",
+   "start_line": 35,
+   "end_line": 36,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/renderer/src/regions.test.ts",
+   "content": "The `simplifyColors` assertion only checks the number of distinct output colors is \u2264 2. This passes even if the function collapsed all 10 colours to a single value, returned an arbitrary constant palette, or ignored the gradient entirely \u2014 i.e. it cannot detect a broken reduction. Since `budget` is 2 and there are clearly distinct inputs, assert the exact expected cardinality (`=== 2`) and/or that each output is within a tolerance of a representative input colour.",
+   "existing_code": "    expect(new Set(simplifyColors(many, 2).map((c) => c.join(\",\"))).size).toBeLessThanOrEqual(2);",
+   "start_line": 56,
+   "end_line": 56,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/renderer/src/regions.test.ts",
+   "content": "`plannerAvoidsDegraded` is only covered by one case where a degraded id intersects the targets. The important failover paths are untested: (1) an empty `degradedFixtureIds` should return the original targets unchanged (`regions.ts:106`), and (2) the all-degraded case where every target is filtered out should return `[]`. A planner that mishandles these (e.g. drops everything when nothing is degraded) would still pass. Add assertions for both edge cases.",
+   "existing_code": "    expect(plannerAvoidsDegraded([\"a\", \"b\"], [\"b\"])).toEqual([\"a\"]);",
+   "start_line": 57,
+   "end_line": 57,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/renderer/src/regions.test.ts",
+   "content": "`singleZoneColor(..., \"center-cell\")` uses `cells[Math.floor(cells.length / 2)]` (`capability.ts:42`), so with an even number of cells the \"center\" is arbitrarily the upper-middle element. This expectation hardcodes that tie-breaking choice for a 2-cell input, cementing undefined/arbitrary behaviour. Either exercise the call with an odd cell count where the center is unambiguous, or add a comment documenting the intended even-count tie-break so the behaviour is a deliberate contract rather than an implementation accident.",
+   "existing_code": "    expect(singleZoneColor([[255, 0, 0], [0, 0, 255]], \"center-cell\")).toEqual([0, 0, 255]);",
+   "start_line": 54,
+   "end_line": 54,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/show-mixer/src/weight.test.ts": [
+  {
+   "path": "packages/show-mixer/src/weight.test.ts",
+   "content": "The property sweep's invariants are too weak to prove position dependence. `a <= previousA + 1e-9` / `b >= previousB - 1e-9` are both satisfied by a **constant** weight (equality passes the tolerance), so an implementation that ignores the crossfader position entirely would still satisfy the whole loop (bounds `[0,1]` and monotonic shape also hold for a constant). The sweep additionally draws a single random `fader`/`bMaster` sample, so degenerate values (e.g. `fader` near 0, or a master product that never reaches the clamp) mask regressions. Make the sweep actually assert movement: iterate over several fader values (or a fixed set including 0, 0.5, 1) and assert the endpoints differ (hard-left vs hard-right), not just monotonicity.",
+   "existing_code": "      expect(a).toBeLessThanOrEqual(previousA + 1e-9);\n      expect(b).toBeGreaterThanOrEqual(previousB - 1e-9);",
+   "start_line": 87,
+   "end_line": 88,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-mixer/src/weight.test.ts",
+   "content": "The only master-bonus assertion uses `channelFader: 0.5`, so the product `0.5 * 1 * 1.1 = 0.55` never reaches the `[0,1]` clamp in `audibleWeight`/`deckWeight`. A regression that drops `Math.min(1, ...)` from the master path would go undetected here and in the property sweep (whose single random `fader` is unlikely to exceed 1/1.1 \u2248 0.909). Add a saturating case, e.g. `deckWeightOf(deck({ deckId: 2, channelFader: 1, master: true }), { position: 1 })` should be exactly `1` (it would be 1.1 without the clamp).",
+   "existing_code": "    expect(deckWeightOf(deck({ deckId: 2, channelFader: 0.5, master: true }), { position: 1 })).toBeCloseTo(0.55, 6);",
+   "start_line": 56,
+   "end_line": 56,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-mixer/src/weight.test.ts",
+   "content": "This THRU assertion always uses a deck with `channelFader: 1` and `master: false`, so the expected value `1` cannot distinguish 'the crossfader is ignored for THRU' from 'the weight is hard-coded to 1'. Because `crossfaderGain` returns `1` for `THRU` and the rest of the weight still multiplies the channel fader / master factor, add a THRU deck with a reduced fader and/or master to pin the semantics, e.g. `deck({ deckId: 3, channelFader: 0.5 })` -> 0.5 and `deck({ deckId: 3, channelFader: 1, master: true })` -> 0.55.",
+   "existing_code": "    for (const position of [0, 0.3, 0.5, 1]) {\n      expect(deckWeightOf(deck({ deckId: 3 }), { position })).toBe(1);\n    }",
+   "start_line": 44,
+   "end_line": 46,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-mixer/src/weight.test.ts",
+   "content": "The test name promises DS-26 source decides 'curve and position', but the body only asserts `position`/`source` \u2014 and `resolveCrossfader` does not return a curve field at all. No case in this file ties the resolved DS-26 source to the curve used by `deckWeightOf`, so a source\u2192curve regression would pass unnoticed. Either narrow the title to position/source selection, or add an assertion that the resolved source actually drives the weighting curve.",
+   "existing_code": "  it(\"chooses the curve and position source per DS-26\", () => {",
+   "start_line": 59,
+   "end_line": 59,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-mixer/src/weight.test.ts",
+   "content": "Every deck built by this helper has `playing: true` (from `makeDeck`) and a non-null `track`, so the audibility guard in `audibleWeight`/`deckWeight` (`if (!state.playing || !state.track) return 0;`) is never exercised. A deck that is stopped or has no track loaded must weigh 0; add an explicit case (e.g. `deck({ playing: false })` and `deck({ track: null })`) so a broken guard is caught.",
+   "existing_code": "function deck(over: Partial<DeckState> = {}): DeckState {\n  return makeDeck({ channelFader: 1, crossfader: 1, master: false, track, ...over });\n}",
+   "start_line": 13,
+   "end_line": 15,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/show-planner/src/scoring.test.ts": [
+  {
+   "path": "packages/show-planner/src/scoring.test.ts",
+   "content": "The test title claims rules mode \"ignores evaluators\", but no evaluator is registered (and clearEvaluators() is not called) before this assertion. The two identical calls only prove determinism. If `pickCandidate`'s rules branch were changed to consume evaluators, this test would still pass. To actually exercise the claim, register an evaluator whose maximum sits at a different candidate (e.g. index 2) and assert the rules winner stays 0.",
+   "existing_code": "    expect(pickCandidate(cs, \"rules\").winner).toBe(0);\n    expect(pickCandidate(cs, \"rules\").winner).toBe(0);",
+   "start_line": 8,
+   "end_line": 9,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/scoring.test.ts",
+   "content": "This comparison does not isolate the registered evaluator. `scoreCandidate` defaults to ALL registered evaluators, which include the builtin `contrast = Math.min(1, meanIntensity)`. Since cs[2].meanIntensity=0.8 and cs[0].meanIntensity=0.2, cs[2] already outscores cs[0] via `contrast` alone \u2014 the assertion passes even if the \"loud\" evaluator is never invoked. Add a baseline comparison (e.g. `scoreCandidate(cs[2]!, [])` vs default) or register an evaluator that contradicts the builtins so the hook is genuinely exercised.",
+   "existing_code": "    expect(scoreCandidate(cs[2]!)).toBeGreaterThan(scoreCandidate(cs[0]!));",
+   "start_line": 15,
+   "end_line": 15,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/scoring.test.ts",
+   "content": "The test does not verify its stated claim (\"without changing the planner\") nor the `evaluators` filter argument. Because the builtin evaluators average to the same ordering and \"learned-x\" (density*2) dominates for cs[1], ignoring the `[\"learned-x\"]` third argument entirely would still yield winner 1. Capture the default `pickCandidate(cs, \"scored\")` winner before registering the learned evaluator and assert it is unchanged, and/or choose a filter set whose omission would flip the result so the argument is actually exercised.",
+   "existing_code": "    expect(pickCandidate(cs, \"scored\", [\"learned-x\"]).winner).toBe(1);",
+   "start_line": 32,
+   "end_line": 32,
+   "category": "test",
+   "severity": "medium"
+  }
+ ],
+ "packages/show-runtime/src/estimator.test.ts": [
+  {
+   "path": "packages/show-runtime/src/estimator.test.ts",
+   "content": "`Math.max(...settled)` / `Math.max(...result.errorsMs.slice(-120))` is `-Infinity` when the slice is empty, so the `< MAX_ERROR_MS` assertion passes vacuously if no error samples were recorded (e.g. every observation seeked or lost). Assert the window is non-empty before checking the bound so the test actually exercises the error limit.",
+   "suggestion_code": "    const settled = result.errorsMs.slice(30);\n    expect(result.seeks).toBe(0);\n    expect(settled.length).toBeGreaterThan(0);\n    expect(Math.max(...settled)).toBeLessThan(MAX_ERROR_MS);",
+   "existing_code": "    const settled = result.errorsMs.slice(30);\n    expect(result.seeks).toBe(0);\n    expect(Math.max(...settled)).toBeLessThan(MAX_ERROR_MS);",
+   "start_line": 96,
+   "end_line": 98,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-runtime/src/estimator.test.ts",
+   "content": "The comment claims this exercises a 150 ms error (0.3 beats at 2 beats/s), but after `reset(0, 0n)` one frame later the estimator has already advanced to ~0.0667 beats, so the actual error is `0.3 - 0.0667 \u2248 0.2333` beats \u2248 117 ms \u2014 well below both `seekThresholdBeats` (0.5) and `seekThresholdMs` (150). The inclusive threshold-boundary behavior described in `exceedsSeekThreshold` is therefore never validated, and the comment misstates the magnitude. Either fix the comment or add a case that genuinely lands on the boundary.",
+   "existing_code": "    // 150 ms of error at 2 beats/s (0.3 beats) stays a smooth correction.\n    estimator.reset(0, 0n);",
+   "start_line": 154,
+   "end_line": 155,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-runtime/src/estimator.test.ts",
+   "content": "The correction ratio is hardcoded to exactly 2 rather than derived from `QUALITY_WEIGHT`. This couples the test to the current `exact === 2 * estimated` values; if the weights are retuned (e.g. 1 / 0.4) the behavior is still correct but the test fails misleadingly. Express the expected ratio in terms of the imported weights.",
+   "suggestion_code": "    expect(exact.corrected[stepAt]!).toBeCloseTo(\n      estimated.corrected[stepAt]! * (QUALITY_WEIGHT.exact / QUALITY_WEIGHT.estimated),\n      3,\n    );",
+   "existing_code": "    expect(exact.corrected[stepAt]!).toBeCloseTo(estimated.corrected[stepAt]! * 2, 3);",
+   "start_line": 136,
+   "end_line": 136,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-runtime/src/estimator.test.ts",
+   "content": "These assertions are too permissive to validate paused-deck behavior: any tiny forward correction (the slew cap is only `0.08 * 0.03 \u2248 0.0024` beats, well inside `(64, 64.2]`) satisfies them, and the intermediate observation at `30_000_000n` is never asserted. The claim that a paused deck \"holds in place\" between nudges and converges by the expected magnitude is not actually tested. Assert the un-nudged observation equals 64 and pin the corrected magnitude.",
+   "existing_code": "    expect(nudged.beat).toBeGreaterThan(64);\n    expect(nudged.beat).toBeLessThanOrEqual(64.2);",
+   "start_line": 173,
+   "end_line": 174,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-runtime/src/estimator.test.ts",
+   "content": "`beats` is populated on every observation and returned from `run`, but no test ever reads `result.beats`. This is dead data that adds runtime and reader noise; either drop the field or add an assertion that uses it (e.g. verifying monotonicity on `beats` directly).",
+   "existing_code": "    beats.push(result.beat);",
+   "start_line": 87,
+   "end_line": 87,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/show-runtime/src/seek-equivalence.property.test.ts": [
+  {
+   "path": "packages/show-runtime/src/seek-equivalence.property.test.ts",
+   "content": "The phrase case is only checked for grid membership while `beat <= 192`, so the exact region the comment flags as unverified (beats past the last phrase, 192\u2013200) degrades to a monotonicity-only check. `quantizeResume(beat, \"phrase\", grid)` returns `Math.ceil(beat/16)*16` there (e.g. 208 for 192.5), but a broken fallback (off-by-one multiple, wrong step, or even returning the unquantized `beat`) would still satisfy `toBeGreaterThanOrEqual(beat)` and pass. Pin the fallback value for that region so a regression is actually caught.",
+   "suggestion_code": "      const byPhrase = quantizeResume(beat, \"phrase\", grid);\n      expect(byPhrase).toBeGreaterThanOrEqual(beat);\n      if (beat <= 192) {\n        expect(grid.phraseBeats).toContain(byPhrase);\n      } else {\n        // past the last phrase (192) the committed fallback is a multiple of 16\n        expect(byPhrase).toBe(Math.ceil(beat / 16) * 16);\n      }",
+   "existing_code": "      const byPhrase = quantizeResume(beat, \"phrase\", grid);\n      expect(byPhrase).toBeGreaterThanOrEqual(beat);\n      if (beat <= 192) expect(grid.phraseBeats).toContain(byPhrase);",
+   "start_line": 61,
+   "end_line": 63,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-runtime/src/seek-equivalence.property.test.ts",
+   "content": "`upcomingCues(p, 4, 1)` is only asserted to have length 1, so a wrong selection passes: returning the last cue, returning a cue at/before the current beat, or breaking the start-beat ordering would all still yield length 1. Assert the identity/order of the returned cue instead.",
+   "suggestion_code": "    expect(upcomingCues(p, 4, 1).map((c) => c.startBeat)).toEqual([16]);",
+   "existing_code": "    expect(upcomingCues(p, 4, 1).length).toBe(1);",
+   "start_line": 87,
+   "end_line": 87,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-runtime/src/seek-equivalence.property.test.ts",
+   "content": "The expected pass count is derived from the identical formula `Math.floor((beat - 32) / 16)` and the same literal window (`32, 48`) that are fed to `loopBeat`, so the expectation cannot independently pin the intended semantics \u2014 the `16` is `loopEnd - loopStart` duplicated by hand. A change to the pass definition or the window parameters (updated in one place) would be silently mirrored. Derive the window length from the call parameters or assert a few concrete pass values (e.g. beat 31.5 -> pass 0, beat 48 -> pass 1).",
+   "existing_code": "        expect(pass).toBe(Math.floor((beat - 32) / 16));",
+   "start_line": 38,
+   "end_line": 38,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-runtime/src/seek-equivalence.property.test.ts",
+   "content": "Despite the test name (\"on a grid boundary when one exists\"), the `beat` case only asserts the result is an integer and >= beat \u2014 it never checks membership in `grid.beats`, unlike the bar case which checks `grid.barBeats`. Since the fixture's `beats` covers 0..255 and the sweep stays below 200, the result should always be a real grid boundary; add that assertion so a fallback to `Math.ceil(beat)` (a non-grid integer) is detected.",
+   "suggestion_code": "      const byBeat = quantizeResume(beat, \"beat\", grid);\n      expect(byBeat).toBeGreaterThanOrEqual(beat);\n      expect(Number.isInteger(byBeat)).toBe(true);\n      expect(grid.beats).toContain(byBeat);",
+   "existing_code": "      const byBeat = quantizeResume(beat, \"beat\", grid);\n      expect(byBeat).toBeGreaterThanOrEqual(beat);\n      expect(Number.isInteger(byBeat)).toBe(true);",
+   "start_line": 52,
+   "end_line": 54,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-runtime/src/seek-equivalence.property.test.ts",
+   "content": "The header promises that \"a reconstruction that disagrees across passes fails below\", but the tests only re-derive the pass index and compare it against `loopPassVariant`; there is no cross-pass/seek-vs-playback reconstruction equivalence asserted anywhere in the file. The invariant named by T-QA-12 (spec 58, T-RUN-03) is therefore left uncovered \u2014 either implement the equivalence check or correct the comment so it does not overstate coverage.",
+   "existing_code": "// A loop that escapes its window, a resume that lands before the request, or\n// a reconstruction that disagrees across passes fails below.",
+   "start_line": 14,
+   "end_line": 15,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/storage/src/ops.test.ts": [
+  {
+   "path": "packages/storage/src/ops.test.ts",
+   "content": "This ring-buffer test never checks *which* records survive. It only asserts `count < 400` and `droppedCount > 0`, so a regression that evicts the newest entries instead of the oldest (or that resets the buffer / corrupts head/len bookkeeping) still passes while silently discarding the wrong data. Add assertions tying the retained sequence numbers to the drop count to prove oldest-first eviction.",
+   "suggestion_code": "    expect(rec.count).toBeGreaterThan(0);\n    expect(rec.count).toBeLessThan(400);\n    expect(rec.droppedCount).toBeGreaterThan(0);\n    const kept = rec.entries();\n    // Oldest-first eviction: the first retained seq equals the number evicted.\n    expect(kept[0]?.seq).toBe(rec.droppedCount);\n    expect(kept[kept.length - 1]?.seq).toBe(rec.droppedCount + rec.count - 1);",
+   "existing_code": "    expect(rec.count).toBeGreaterThan(0);\n    expect(rec.count).toBeLessThan(400);\n    expect(rec.droppedCount).toBeGreaterThan(0);",
+   "start_line": 34,
+   "end_line": 36,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/storage/src/ops.test.ts",
+   "content": "This replay test is tautological: the render callback passed to `replaySession` is the exact `frameHashFor` used to generate the recorded hashes. It therefore only proves the recorder/serializer round-trip, not that replay recomputes over the delivered state. If `frameHashFor` ever ignored `inputs`/`configSnapshot` (e.g. returned a constant), record and replay would still agree and this test would still pass. Use an independent render implementation, and/or assert that `frameHashFor` is actually sensitive to the snapshot and inputs.",
+   "suggestion_code": "    // Independent render: must reproduce the same hash from delivered state.\n    const render = (tick: number, inputs: unknown, snap: Record<string, unknown>): string =>\n      frameHashFor(tick, inputs, snap);\n    const result = replaySession(rec.entries(), snapshot, render);\n    // Guard against a no-op hash: different state must yield different hashes.\n    expect(frameHashFor(0, { deck: 0 }, snapshot)).not.toBe(\n      frameHashFor(0, { deck: 1 }, { ...snapshot, style: \"other\" }),\n    );",
+   "existing_code": "    const result = replaySession(rec.entries(), snapshot, (tick, inputs, snap) =>\n      frameHashFor(tick, inputs, snap),\n    );",
+   "start_line": 49,
+   "end_line": 51,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/storage/src/ops.test.ts",
+   "content": "Both malformed-line cases are the first line, so line-number bookkeeping is never actually verified \u2014 an implementation that always reports \"session line 1\" (or mis-indexes per-line records) would pass. Add a case with a valid line first, then a malformed one, and assert the reported line number.",
+   "suggestion_code": "    expect(() => parseSessionNdjson(\"not json\")).toThrow(\"session line 1\");\n    expect(() => parseSessionNdjson(JSON.stringify({ nope: 1 }))).toThrow(\"session line 1\");\n    const good = JSON.stringify({ seq: 1, tMs: 1, kind: \"tick-input\", payload: {} });\n    expect(() => parseSessionNdjson(`${good}\\nnot json`)).toThrow(\"session line 2\");\n    expect(parseSessionNdjson(\"\")).toEqual([]);",
+   "existing_code": "    expect(() => parseSessionNdjson(\"not json\")).toThrow(\"session line 1\");\n    expect(() => parseSessionNdjson(JSON.stringify({ nope: 1 }))).toThrow(\"session line 1\");\n    expect(parseSessionNdjson(\"\")).toEqual([]);",
+   "start_line": 71,
+   "end_line": 73,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/storage/src/ops.test.ts",
+   "content": "`toEqual({ ok: true })` asserts the whole result object, so it breaks if the success payload legitimately gains any field. The adjacent failure branches already use `.ok`, so this is inconsistent. Assert the discriminant instead.",
+   "suggestion_code": "    expect(store.startHelper(\"memory-reader\").ok).toBe(true);",
+   "existing_code": "    expect(store.startHelper(\"memory-reader\")).toEqual({ ok: true });",
+   "start_line": 214,
+   "end_line": 214,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/storage/src/ops.test.ts",
+   "content": "The audit test exercises exactly one denial path and couples the assertion to the reason string embedding the listener name. A security-critical binding check should also cover the IPv6/wildcard hosts (`\"::\"`, `\"0.0.0.0\"` for a control port), the other allowed Govee UDP ports, and a `loopbackOnly` public bind, so an over-permissive or over-restrictive `auditListeners` is actually detected.",
+   "suggestion_code": "    expect(result.denied).toHaveLength(1);\n    expect(result.denied[0]?.listener.name).toBe(\"control-server\");\n    // Additional exposure checks.\n    expect(auditListeners([{ name: \"control-server\", host: \"::\", port: 8080, reason: \"remote control\", loopbackOnly: false }]).denied).toHaveLength(1);\n    expect(auditListeners([{ name: \"govee-ctl\", host: \"0.0.0.0\", port: 4003, reason: \"Govee LAN control\", loopbackOnly: false }]).allowed).toHaveLength(1);",
+   "existing_code": "    expect(result.denied).toHaveLength(1);\n    expect(result.denied[0]?.reason).toContain(\"control-server\");",
+   "start_line": 191,
+   "end_line": 192,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "protocol-fixtures/rekordbox/golden/osc-vectors.json": [
+  {
+   "path": "protocol-fixtures/rekordbox/golden/osc-vectors.json",
+   "content": "Bundle vector uses a different schema than every other vector: a plural `addresses` array and a flat `args` list, and it lacks any `argKinds`. The single-message vectors use singular `address` plus `argKinds`, so a harness with one uniform schema will either skip the bundle's address/type assertions or mis-map its elements \u2014 leaving the bundle path effectively checked only for length and timetag. Align the key naming with the other vectors and add per-element type info (e.g. `\"argKinds\": [\"i\"]`) so the decoder's bundle handling is actually asserted.",
+   "existing_code": "      \"timetag\": 1,\n      \"addresses\": [\"/a\"],\n      \"args\": [1]",
+   "start_line": 31,
+   "end_line": 33,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "protocol-fixtures/rekordbox/golden/osc-vectors.json",
+   "content": "This vector (and the `/1/bpm/current` one with 128) declares `argKinds: [\"f\"]` but stores an integral JSON number and is not marked `roundTrip`. Per the file's own note the encoder picks int32 vs float32 from the number's *value*, so re-encoding 440 would emit int32 and mismatch \u2014 which is presumably why `roundTrip` is omitted. The side effect is that the float32 encoding path for integral values is never byte-verified by any golden vector. Add round-trip vectors whose encoder-side type is unambiguous (or make the encoder honor `argKinds`), otherwise a regression that encodes these floats as int32 stays undetected.",
+   "existing_code": "      \"name\": \"spec example: /oscillator/4/frequency with float 440.0\",\n      \"hex\": \"2f6f7363696c6c61746f722f342f6672657175656e6379002c66000043dc0000\",\n      \"address\": \"/oscillator/4/frequency\",\n      \"args\": [440],\n      \"argKinds\": [\"f\"]",
+   "start_line": 6,
+   "end_line": 10,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "protocol-fixtures/rekordbox/golden/osc-vectors.json",
+   "content": "The `malformed: true` flag does not pin *why* this frame is rejected, and `2f766f6c002c6900` is invalid for several independent reasons at once: the address `/vol\\0` is only 5 bytes so its 4-byte padding is violated (byte 5 is `0x2c`, not NUL), and there are no remaining bytes for the `,i` type-tag padding or the int32 argument. A decoder whose padding validation is broken still passes this vector because it fails on the missing payload alone, so the mispadding case is not exercised. Split this into single-reason vectors (e.g. an address mispadding case with a well-formed type tag/args) and/or record the expected error, and fix the `name` \u2014 the defect is misaligned padding/truncated message, not a truncated string.",
+   "existing_code": "      \"name\": \"malformed: truncated string\",\n      \"hex\": \"2f766f6c002c6900\",\n      \"malformed\": true",
+   "start_line": 43,
+   "end_line": 45,
+   "category": "test",
+   "severity": "medium"
+  }
+ ]
+}

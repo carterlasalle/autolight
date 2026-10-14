@@ -1,0 +1,170 @@
+{
+ "apps/desktop/src/components/ui/switch.tsx": [
+  {
+   "path": "apps/desktop/src/components/ui/switch.tsx",
+   "content": "The checked/unchecked look depends entirely on `data-checked`/`data-unchecked` on the root (`data-checked:bg-primary data-unchecked:bg-input`) and on the thumb (`group-data-[size=*]/switch:data-checked:translate-x-\u2026` / `\u2026:data-unchecked:translate-x-0`). Radix publishes the switch state through `data-state=\"checked\"|\"unchecked\"`, and every other Radix wrapper in this repo keys off that form (see `data-[state=on]:bg-muted` in `ui/toggle.tsx` and `data-[state=delayed-open]` in `ui/tooltip.tsx`). Unless `radix-ui@1.6.7` also emits the `data-checked`/`data-unchecked` aliases \u2014 and emits them on the Thumb itself, not just the Root \u2014 these `[data-checked]`/`[data-unchecked]` selectors never match: the track keeps no `bg-primary`/`bg-input` and the thumb never translates, so the switch can never render as checked. Recommend using `data-[state=checked]:\u2026` / `data-[state=unchecked]:\u2026` (or verifying the alias against the installed Radix build) for both the root and the thumb.",
+   "existing_code": "        \"peer group/switch relative inline-flex shrink-0 items-center rounded-full border border-transparent transition-all outline-none group-has-[:focus-visible]/field-label:border-transparent group-has-[:focus-visible]/field-label:ring-0 after:absolute after:-inset-x-3 after:-inset-y-2 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 data-[size=default]:h-[18.4px] data-[size=default]:w-[32px] data-[size=sm]:h-[14px] data-[size=sm]:w-[24px] dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 data-checked:bg-primary data-unchecked:bg-input dark:data-unchecked:bg-input/80 data-disabled:cursor-not-allowed data-disabled:opacity-50\",",
+   "start_line": 17,
+   "end_line": 17,
+   "category": "bug",
+   "severity": "high"
+  }
+ ],
+ "apps/desktop/src/components/ui/tabs.tsx": [
+  {
+   "path": "apps/desktop/src/components/ui/tabs.tsx",
+   "content": "In both `Tabs` and `ToggleGroup`, `orientation` is destructured out of `...props` and never forwarded to the Radix primitive \u2014 only the `data-orientation` attribute (and, for ToggleGroup, the context) is set. Radix therefore keeps its default `orientation=\"horizontal\"` for roving-focus/keyboard navigation and `aria-orientation`, while the `data-vertical:`/`data-horizontal:` styling renders the control vertically: a vertical group navigates with ArrowLeft/ArrowRight instead of ArrowUp/ArrowDown, so the keyboard behavior contradicts the visual layout. Forward the prop to the primitive (e.g. add `orientation={orientation}`).",
+   "suggestion_code": "    <TabsPrimitive.Root\n      data-slot=\"tabs\"\n      orientation={orientation}\n      data-orientation={orientation}",
+   "existing_code": "    <TabsPrimitive.Root\n      data-slot=\"tabs\"\n      data-orientation={orientation}",
+   "start_line": 12,
+   "end_line": 14,
+   "category": "bug",
+   "severity": "high"
+  }
+ ],
+ "apps/desktop/src/components/ui/tooltip.tsx": [
+  {
+   "path": "apps/desktop/src/components/ui/tooltip.tsx",
+   "content": "`TooltipPrimitive.Root` from Radix throws `Tooltip must be used within TooltipProvider` at runtime when there is no `TooltipProvider` ancestor. Unlike the standard shadcn wrapper (which composes `TooltipProvider` around `TooltipPrimitive.Root`), this implementation renders a bare root. Since no `TooltipProvider` is rendered anywhere in the app (this export is the only reference to it), any consumer that uses `<Tooltip>` without manually wrapping it in `<TooltipProvider>` will crash on render. Either compose the provider here (recommended) or ensure a mandatory app-root provider and document the contract.",
+   "suggestion_code": "function Tooltip({\n  ...props\n}: React.ComponentProps<typeof TooltipPrimitive.Root>) {\n  return (\n    <TooltipProvider>\n      <TooltipPrimitive.Root data-slot=\"tooltip\" {...props} />\n    </TooltipProvider>\n  )\n}",
+   "existing_code": "function Tooltip({\n  ...props\n}: React.ComponentProps<typeof TooltipPrimitive.Root>) {\n  return <TooltipPrimitive.Root data-slot=\"tooltip\" {...props} />\n}",
+   "start_line": 20,
+   "end_line": 24,
+   "category": "bug",
+   "severity": "high"
+  }
+ ],
+ "apps/desktop/src/routes/inspector/inspector-helpers.ts": [
+  {
+   "path": "apps/desktop/src/routes/inspector/inspector-helpers.ts",
+   "content": "Non-finite input is not handled here, so the clamp silently produces `NaN`. If `beat` is `NaN`, `Math.round(NaN) === NaN` and both `Math.max(0, NaN)` and `Math.min(lastBeat, NaN)` return `NaN`, so `clamped` becomes `NaN`; the cue lookup (`c.startBeat <= NaN`) never matches, and the function returns `{ beat: NaN, cueType: \"section-look\", ... }` instead of `null`. That invalid beat then flows to the UI (\"beat NaN\") and can be sent over IPC. `lastBeat` is also unsafe: it is derived only from `s.endBeat` via spread, and the schema permits non-finite numbers (z.number() accepts Infinity), so a single `Infinity`/`NaN` section end poisons `lastBeat` for every call. Guard finiteness explicitly (and consider filtering section ends).",
+   "suggestion_code": "  const lastBeat = Math.max(1, ...track.sections.map((s) => s.endBeat).filter(Number.isFinite));\n  if (!Number.isFinite(beat)) return null;\n  const clamped = Math.min(lastBeat, Math.max(0, Math.round(beat)));",
+   "existing_code": "  const lastBeat = Math.max(1, ...track.sections.map((s) => s.endBeat));\n  const clamped = Math.min(lastBeat, Math.max(0, Math.round(beat)));",
+   "start_line": 20,
+   "end_line": 21,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/routes/inspector/inspector-helpers.ts",
+   "content": "The no-drop branch guards `e.beat` with `Number.isFinite`, but this branch computes `firstDrop + 1` without any finiteness check. Since the schema (z.number()) accepts non-finite values, a drop whose beat is `-Infinity` yields `auditionBeat = Math.min(lastBeat, -Infinity) = -Infinity`, which is not a drop beat and is therefore returned as a valid target (negative beat). `NaN`/`Infinity` drop beats similarly propagate an invalid target. Apply the same finiteness guard used in the branch above.",
+   "suggestion_code": "  if (!Number.isFinite(firstDrop)) {\n    const fallback = events.reduce((m, e) => (Number.isFinite(e.beat) ? Math.max(m, e.beat) : m), 0);\n    return Math.min(lastBeat, fallback);\n  }\n  const auditionBeat = Math.min(lastBeat, firstDrop + 1);",
+   "existing_code": "  const auditionBeat = Math.min(lastBeat, firstDrop + 1);",
+   "start_line": 39,
+   "end_line": 39,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/routes/inspector/inspector-helpers.ts",
+   "content": "The stated contract is to pick a *free* beat, but this no-drop fallback returns `Math.max` of all finite event beats, i.e. the beat already occupied by the track's last event (e.g. a marker/build-start), or `0` when there are no finite events. Adding a drop there produces an overlapping event rather than targeting an unused beat, and `0` may be a degenerate beat. Consider scanning for a beat that is free of all events (not just drops), and only returning a beat that is within `[0, lastBeat]` and unoccupied.",
+   "existing_code": "    const fallback = events.reduce((m, e) => (Number.isFinite(e.beat) ? Math.max(m, e.beat) : m), 0);\n    return Math.min(lastBeat, fallback);",
+   "start_line": 36,
+   "end_line": 37,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/routes/inspector/inspector-helpers.ts",
+   "content": "This clamp does not handle non-finite `mix`: `Math.max(0, NaN) === NaN` and `Math.min(1, NaN) === NaN`, so `NaN`/`Infinity` values pass through unclamped (e.g. `blendView(\"a\", \"b\", NaN).mix === NaN`), unlike the documented bounded behavior. Fall back to a finite default when `mix` is not finite.",
+   "suggestion_code": "  return { styleA, styleB, mix: Number.isFinite(mix) ? Math.min(1, Math.max(0, mix)) : 0 };",
+   "existing_code": "  return { styleA, styleB, mix: Math.min(1, Math.max(0, mix)) };",
+   "start_line": 54,
+   "end_line": 54,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/src/routes/library/track-key.ts": [
+  {
+   "path": "apps/desktop/src/routes/library/track-key.ts",
+   "content": "The guard only rejects `null`/`\"\"`. A whitespace-only selection (e.g. `\"   \"`, which is truthy) slips past it and then `normalizeTrackId(selectedTrackId)` throws, so a predicate named `isSelectedTrack` crashes the render path instead of returning `false`. Trim before deciding there is no selection.",
+   "suggestion_code": "export function isSelectedTrack(row: LibraryRowLike, selectedTrackId: string | null): boolean {\n  if (!selectedTrackId || !selectedTrackId.trim()) return false;",
+   "existing_code": "export function isSelectedTrack(row: LibraryRowLike, selectedTrackId: string | null): boolean {\n  if (!selectedTrackId) return false;",
+   "start_line": 28,
+   "end_line": 29,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/routes/library/track-key.ts",
+   "content": "The `slice(0, 8)` suffix is not guaranteed unique. Two same-title (and same-artist) rows whose TrackIds share the same first 8 characters produce byte-identical labels, defeating the T-ID-03 disambiguation goal even though the underlying keys differ. There is no ordinal/fallback tie-break, so the Map can hold two keys with the same displayed label \u2014 users cannot tell which row is which. Consider a per-collision ordinal or a longer/unique suffix.",
+   "existing_code": "      labels.set(libraryRowKey(row), `${base} (${libraryRowKey(row).slice(0, 8)})`);",
+   "start_line": 51,
+   "end_line": 51,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/routes/library/track-key.ts",
+   "content": "`libraryRowKey`/`libraryRowLabels` call this from the list render path (see `features/library/library-view.tsx`), so a single row carrying an empty/whitespace TrackId throws here and aborts the entire library render instead of degrading gracefully. Throwing is intentional for storage validation, but for the UI helper consider skipping/dropping the malformed row (or substituting a clearly-invalid placeholder key) so one bad id does not blank the whole list.",
+   "existing_code": "  if (!trimmed) throw new Error(\"track-key: empty TrackId (never fall back to title)\");",
+   "start_line": 10,
+   "end_line": 10,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/routes/library/track-key.ts",
+   "content": "Grouping uses the raw `row.title`, so titles that are visually identical but differ by surrounding whitespace or case (e.g. `\"Song\"` vs `\"Song \"`) land in separate single-element groups and render undisambiguated, even though they are indistinguishable to the user. Trim (and optionally case-normalize) the grouping key before grouping to make the disambiguation robust.",
+   "existing_code": "    const list = byTitle.get(row.title);",
+   "start_line": 38,
+   "end_line": 38,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/src/routes/setup/setup-model.test.ts": [
+  {
+   "path": "apps/desktop/src/routes/setup/setup-model.test.ts",
+   "content": "Only `done` is asserted for the partially-completed input; the `next` value (which should be the first incomplete step, \"library\") is never checked. A regression in `setupProgress`'s `next` selection for non-empty/non-complete evidence (e.g. returning `\"dj\"` or `\"ready\"` too early) would pass this test silently. Add an assertion on `next` for at least one partial case.",
+   "suggestion_code": "    expect(setupProgress({ dj: true, controller: true }).done).toEqual([\"dj\", \"controller\"]);\n    expect(setupProgress({ dj: true }).next).toBe(\"controller\");",
+   "existing_code": "    expect(setupProgress({ dj: true, controller: true }).done).toEqual([\"dj\", \"controller\"]);",
+   "start_line": 7,
+   "end_line": 7,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/routes/setup/setup-model.test.ts",
+   "content": "`toMatchObject` only verifies a subset of the evidence flags, so the remaining flags (`identify`, `qualification`, `analysis`, `preview`, `orientation`) are unverified for the empty case. If `setupEvidence` started reporting any of those as `true` with no inputs, this test would still pass. Assert the full object with `toEqual` (or explicitly include the expected `false` flags) so false readiness cannot regress undetected.",
+   "suggestion_code": "    expect(setupEvidence(base)).toEqual({\n      dj: false, controller: false, library: false, lights: false, identify: false,\n      placement: false, orientation: false, qualification: false, analysis: false, preview: false,\n    });",
+   "existing_code": "    expect(setupEvidence(base)).toMatchObject({ dj: false, controller: false, library: false, placement: false });",
+   "start_line": 17,
+   "end_line": 17,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/routes/setup/setup-model.test.ts",
+   "content": "The `as never` cast disables all type checking on this argument. Combined with the locally duplicated step-name list, this means schema drift (e.g. a step removed or renamed in `SETUP_EVIDENCE_STEPS`) would no longer be caught at compile time and the test could keep passing. Build the full input from the exported `SETUP_EVIDENCE_STEPS` and cast to the real parameter type instead.",
+   "suggestion_code": "    const full = Object.fromEntries(SETUP_EVIDENCE_STEPS.map((s) => [s, true])) as Partial<Record<EvidenceStep, boolean>>;\n    expect(setupProgress(full).next).toBe(\"ready\");",
+   "existing_code": "    const full = Object.fromEntries(\n      [\"dj\", \"controller\", \"library\", \"lights\", \"identify\", \"placement\", \"orientation\", \"qualification\", \"analysis\", \"preview\"].map((s) => [s, true]),\n    );\n    expect(setupProgress(full as never).next).toBe(\"ready\");",
+   "start_line": 8,
+   "end_line": 11,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "apps/desktop/src/routes/setup/setup-model.test.ts",
+   "content": "As with the empty case, `toMatchObject` here asserts only a subset of the flags. A negative regression that flips an unrelated flag to `true` (e.g. `controller`, which the model currently hardcodes to `false`) would not be detected. Prefer `toEqual` with the complete expected evidence object.",
+   "existing_code": "    expect(withShow).toMatchObject({\n      dj: true, library: true, lights: true, identify: true,\n      placement: true, orientation: true, qualification: true,\n      analysis: true, preview: true, controller: false,\n    });",
+   "start_line": 27,
+   "end_line": 31,
+   "category": "test",
+   "severity": "medium"
+  }
+ ],
+ "docs/finish/evidence/T-QA-04/vitest.scoped.config.ts": [
+  {
+   "path": "docs/finish/evidence/T-QA-04/vitest.scoped.config.ts",
+   "content": "Hardcoded machine-specific absolute paths throughout `docs/finish/evidence/T-QA-04/vitest.scoped.config.ts`: the `@autolight/config` alias target is pinned to `/Users/rocket/autolight/packages/config/src/index.ts`, so on any other checkout (CI runner, teammate machine, different clone dir) it silently falls back to `node_modules` (or fails) and the QA evidence does not exercise the intended workspace source; likewise the `include` entries hardcode `/Users/rocket/autolight/...`, so elsewhere Vitest finds no matching files and either errors or (with `passWithNoTests`) reports a vacuous pass. Derive both from the config location the way the root `vitest.config.ts` / `apps/desktop/vitest.config.ts` do (`dirname(fileURLToPath(import.meta.url))` + `join`), or use repo-relative values (alias `@autolight/config -> packages/config/src/index.ts`; globs `apps/desktop/electron/services/fault-injection.test.ts` / `secrets-service.test.ts`), and set `test.root` explicitly so the globs are anchored regardless of the invocation cwd.",
+   "suggestion_code": "      \"@autolight/config\": join(repoRoot, \"packages/config/src/index.ts\"),",
+   "existing_code": "      \"@autolight/config\": \"/Users/rocket/autolight/packages/config/src/index.ts\",",
+   "start_line": 6,
+   "end_line": 6,
+   "category": "bug",
+   "severity": "high"
+  }
+ ]
+}

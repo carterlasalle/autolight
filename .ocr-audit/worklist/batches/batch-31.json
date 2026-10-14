@@ -1,0 +1,264 @@
+{
+ "packages/renderer/src/layers.ts": [
+  {
+   "path": "packages/renderer/src/layers.ts",
+   "content": "This fallback cue\u2192layer map is incomplete relative to the canonical spec 33 spelling (`layerForCueName` in show-planner/src/layers-fallback.ts) that the planner actually tags cues with. Real cue types such as `pulse`/`bump`/`decay-hit`/`roll-pattern` (rhythm), `static-look`/`gradient-look`/`outro-release` (base), `orbit`/`sweep`/`wave`/`split`/`breathe` \u2026 (spatial), `phrase-turn`/`fill-accent`/`vocal-focus`/`drop-pattern` (accents) and `reveal`/`strobe-burst` (exclusive) are all missing, so any untagged/legacy cue of those types silently lands on `accents` (the `?? \"accents\"` fallback below), corrupting layer precedence and compositing. Please cover every type from the shared spelling (or, better, reuse a single source of truth) instead of a 9-entry subset.",
+   "existing_code": "const CUE_LAYER: Record<string, RenderLayer> = {",
+   "start_line": 80,
+   "end_line": 80,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/renderer/src/layers.ts",
+   "content": "`ShowCue` (the contract type from @autolight/contracts) declares no `layer` field \u2014 only the planner's `PlanCue` adds it. Because zod `showCueSchema.parse` strips unknown keys, any validated/re-hydrated plan (e.g. the storage fastpath at packages/storage/src/fastpath.ts calls `showPlanSchema.parse(...)`) loses the `layer` tag entirely. The tagged branch here then never fires and *every* cue falls through to the incomplete `CUE_LAYER` fallback above, so a plan rendered after a reload can composite on different layers than the freshly-compiled plan \u2014 a silent visual regression. Either make `layer` an explicit (optional) field of the cue contract so it survives serialization, or stop relying on it and make the fallback complete/correct.",
+   "existing_code": "  if (\"layer\" in cue) {\n    const tagged: unknown = cue.layer;",
+   "start_line": 108,
+   "end_line": 109,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/renderer/src/layers.ts",
+   "content": "Seeding the accumulator with `[0, 0, 0]` is only a neutral identity for `over`/`add`/`max` (and irrelevant for `replace`). For `multiply` the identity is 1, so a multiply contribution applied to a cell that has no lower-layer contribution computes `0 * (...)` = 0 and turns the cell fully black. This is reachable via the `dip` cue (packages/renderer/src/index.ts emits `blend: \"multiply\"`), whose intensity is meant to be \"the light that remains\": a dip targeting a cell that no base/spatial/rhythm layer paints yields black instead of the dip's kept light. Seed the accumulator per blend mode (`1` for multiply).",
+   "suggestion_code": "      const previous: [number, number, number] =\n        out.get(key) ?? (contribution.blend === \"multiply\" ? [1, 1, 1] : [0, 0, 0]);",
+   "existing_code": "      const previous: [number, number, number] = out.get(key) ?? [0, 0, 0];",
+   "start_line": 121,
+   "end_line": 121,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/show-mixer/src/blend.ts": [
+  {
+   "path": "packages/show-mixer/src/blend.ts",
+   "content": "The default/DS-09 mode `oklab-hue-linear-intensity` is never implemented as its own behavior. This ternary only special-cases `\"linear-rgb\"`; every other space (including `\"oklab-hue-linear-intensity\"`) falls into the plain `oklabToLinear(mixOklab(...))` branch. As a result `blendColors(..., \"oklab\")` and `blendColors(..., \"oklab-hue-linear-intensity\")` return bit-identical output, so the documented \"mixes hue perceptually and applies intensity in linear light\" mode is silently a no-op and the module's declared default is indistinguishable from plain OKLab. (The test `differs between the DS-09 blend spaces` only asserts `unique.size > 1`, which still passes because `linear-rgb`/`srgb-legacy` differ, so it masks this.) Either route the combined mode through a dedicated mixing function (e.g. mix L in linear light while mixing a/b for hue) or remove the member from `BlendSpace`/`DEFAULT_BLEND_SPACE`.",
+   "existing_code": "  const colour =\n    space === \"linear-rgb\" ? mixLinearRgb(audible, total) : oklabToLinear(mixOklab(audible, total));",
+   "start_line": 116,
+   "end_line": 117,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/show-mixer/src/blend.ts",
+   "content": "`BlendResult.intensity` is documented (lines above) as \"the unnormalized weight total\", but the returned value is clamped with `Math.min(1, total)`. Any deck total above 1 (e.g. two decks at weight 1 each => total 2) is silently saturated, so a caller trusting the raw weight sum as a loudness/intensity signal gets a wrong value. If saturation is required for the RGB scaling, keep the returned `intensity` as the raw `total` and clamp only the gain applied to the colour channels (or update the contract docs to state that intensity is clamped to 1).",
+   "existing_code": "  const intensity = Math.min(1, total);",
+   "start_line": 112,
+   "end_line": 112,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-mixer/src/blend.ts",
+   "content": "The `srgb-legacy` branch is both inconsistent and contains a redundant round-trip. `linearToRgb(rgbToLinear(x))` cancels itself out (leaving only rounding noise), so the actual result is roughly `scale(mixSrgb(...), intensity)`: intensity is applied to gamma-encoded sRGB values, whereas every other mode (and the module header) applies intensity in linear light. That means `srgb-legacy` does not follow the stated intensity semantics. Apply the gain in linear space to match the other modes and drop the self-cancelling conversion, e.g. `linearToRgb(scale(rgbToLinear(mixSrgb(audible, total)), intensity))`.",
+   "suggestion_code": "    return { rgb: linearToRgb(scale(rgbToLinear(mixSrgb(audible, total)), intensity)), intensity };",
+   "existing_code": "    return { rgb: linearToRgb(rgbToLinear(scale(mixSrgb(audible, total), intensity))), intensity };",
+   "start_line": 114,
+   "end_line": 114,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/show-planner/src/index.test.ts": [
+  {
+   "path": "packages/show-planner/src/index.test.ts",
+   "content": "This test is named \"blends in linear light, not naive sRGB\" but the assertion cannot distinguish the two. Naive per-channel sRGB averaging of red and blue at t=0.5 yields (\u2248128, 0, \u2248128), so both `r > 100` and `b > 100` also hold for the broken naive implementation it claims to guard against. Linear-light mixing returns \u2248188 per channel, so tighten the threshold (or assert the exact expected value) to make the test actually fail on a naive sRGB blend.",
+   "suggestion_code": "    const [r, g, b] = blendRgb([255, 0, 0], [0, 0, 255], 0.5);\n    // Linear-light mix \u2248188 per channel; naive sRGB averaging would be \u2248128.\n    expect(r).toBeGreaterThan(150);\n    expect(b).toBeGreaterThan(150);",
+   "existing_code": "    const [r, g, b] = blendRgb([255, 0, 0], [0, 0, 255], 0.5);\n    expect(r).toBeGreaterThan(100);\n    expect(b).toBeGreaterThan(100);",
+   "start_line": 75,
+   "end_line": 77,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "packages/show-planner/src/index.test.ts",
+   "content": "The test claims to verify \"direction variation on repeat chorus\" but only asserts `target` inequality, and it indexes `cues[0]`/`cues[1]` without first asserting the filtered array has two elements. If the filter returns zero/one cue the non-null assertion becomes a runtime TypeError rather than a clear assertion failure, and an incorrect target mapping (e.g. both sections getting the same side) is only caught by accident. Assert the length explicitly and, where the mapping is intentional, assert the concrete expected targets.",
+   "suggestion_code": "    const cues = planShow(track, style).cues.filter((c) => c.priority === 10 && (c.startBeat === 64 || c.startBeat === 128));\n    expect(cues).toHaveLength(2);\n    expect(cues[0]!.target).not.toBe(cues[1]!.target);",
+   "existing_code": "    const cues = planShow(track, style).cues.filter((c) => c.priority === 10 && (c.startBeat === 64 || c.startBeat === 128));\n    expect(cues[0]!.target).not.toBe(cues[1]!.target);",
+   "start_line": 64,
+   "end_line": 65,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/index.test.ts",
+   "content": "This test only asserts cue counts, which does not confirm the semantics of `regenerateSection`: it never checks that the locked cue is preserved by identity/type nor that the out-of-range stale cues are removed and the `fresh` cues inserted. A regression that drops the original locked cue and inserts a mutated/duplicated copy, or that locks by a stale index after re-sorting, can still yield 2 then 1 and pass. Assert on the specific locked cue object/fields (e.g. `regen.cues[0] === plan.cues[idx]`) and on the presence of both the locked and fresh cues.",
+   "existing_code": "    const regen = regenerateSection(plan, 64, 96, fresh, [idx]);\n    expect(regen.cues.filter((c) => c.startBeat === 64)).toHaveLength(2);",
+   "start_line": 114,
+   "end_line": 115,
+   "category": "test",
+   "severity": "medium"
+  }
+ ],
+ "packages/show-planner/src/scoring.ts": [
+  {
+   "path": "packages/show-planner/src/scoring.ts",
+   "content": "When every candidate is vetoed, `pickCandidate` still returns a vetoed candidate as `winner` (e.g. `winner: 0` in rules fallback, or `best = scored[0]` left vetoed in scored mode) and the `vetoed` list omits that index, so callers emit the pathological candidate as `chosen` and never report it as rejected. The rules branch also always returns `vetoed: []` for non-winners, so veto reporting is inconsistent across modes. Detect the exhausted/partial-verdict case, fail loudly (`winner: -1`) and report every vetoed index consistently.",
+   "suggestion_code": "    return { winner: -1, vetoed: scored.map((s) => s.i) };",
+   "existing_code": "    return { winner: 0, vetoed: scored.slice(1).map((s) => s.i) };",
+   "start_line": 83,
+   "end_line": 83,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/show-planner/src/scoring.ts",
+   "content": "NaN propagation: `SectionCandidate` does not declare a `diagnostics` field (this signature is a widening cast), so at runtime the shape is unchecked. If `diagnostics` is present but `sectionContrast` is missing/non-numeric, `Math.max(0, undefined)` returns `NaN` and this evaluator yields `NaN`, poisoning `total`/average in `scoreCandidate`. In `scored` mode every `s.s > best.s` then evaluates false, silently locking the winner to index 0. Guard with `Number.isFinite` before clamping and fall back to 0.5.",
+   "suggestion_code": "  REGISTRY[\"diagnostics\"] = (c: SectionCandidate & { diagnostics?: PlanDiagnostics }) => {\n    const v = c.diagnostics?.sectionContrast;\n    return typeof v === \"number\" && Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0.5;\n  };",
+   "existing_code": "  REGISTRY[\"diagnostics\"] = (c: SectionCandidate & { diagnostics?: PlanDiagnostics }) =>\n    c.diagnostics ? Math.min(1, Math.max(0, c.diagnostics.sectionContrast)) : 0.5;",
+   "start_line": 43,
+   "end_line": 44,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/scoring.ts",
+   "content": "Unlike the other built-ins this score is not clamped to [0,1]. For `darkness` outside [0,1] (e.g. 1.5) it returns a negative value, dragging down the averaged score in `scoreCandidate` and skewing `pickCandidate` selection. Clamp for consistency with the sibling evaluators.",
+   "suggestion_code": "  REGISTRY[\"darkness-balance\"] = (c) => Math.min(1, Math.max(0, 1 - Math.abs(c.darkness - 0.25)));",
+   "existing_code": "  REGISTRY[\"darkness-balance\"] = (c) => 1 - Math.abs(c.darkness - 0.25);",
+   "start_line": 41,
+   "end_line": 41,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-planner/src/scoring.ts",
+   "content": "The 'no variation' wording does not match the implementation: `density > 0.99` measures packing density, not intensity variation, so the pathological case named in the comment (a flat, unvarying section) can be missed, while a densely-packed-but-varied section gets vetoed. Either rename the reason to match the actual heuristic (`saturated and densely packed`) or test an actual variation metric.",
+   "existing_code": "  if (c.meanIntensity > 0.99 && c.density > 0.99) return \"saturated with no variation\";",
+   "start_line": 54,
+   "end_line": 54,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-planner/src/scoring.ts",
+   "content": "Silently skipping unknown evaluator names makes misconfiguration undiagnosable: a typo in a configured evaluator list yields a different score with no error, warning, or returned diagnostic. Consider throwing or surfacing skipped names to the caller so the scoring config can be validated.",
+   "existing_code": "    const fn = REGISTRY[name];\n    if (!fn) continue;",
+   "start_line": 62,
+   "end_line": 63,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/show-planner/src/validator.test.ts": [
+  {
+   "path": "packages/show-planner/src/validator.test.ts",
+   "content": "Vacuously guarded assertion: the out-of-bounds check is skipped entirely whenever `d.whiteHits === 0`. If `evaluateCompiledPlan` regressed and always returned `whiteHits: 0` (or the fixture stopped producing white hits), `diagnosticsOutOfBounds` would never be exercised and this test would silently pass. Assert the precondition explicitly (or build a plan guaranteed to contain a white-hit cue) and always run the bounds check.",
+   "suggestion_code": "    const tight = { ...cfg, evaluationBounds: { ...cfg.evaluationBounds, whiteHits: [0, 0] as readonly [number, number] } };\n    expect(d.whiteHits).toBeGreaterThan(0);\n    expect(diagnosticsOutOfBounds(d, tight).some((x) => x.includes(\"whiteHits\"))).toBe(true);",
+   "existing_code": "    const tight = { ...cfg, evaluationBounds: { ...cfg.evaluationBounds, whiteHits: [0, 0] as readonly [number, number] } };\n    if (d.whiteHits > 0) expect(diagnosticsOutOfBounds(d, tight).some((x) => x.includes(\"whiteHits\"))).toBe(true);",
+   "start_line": 101,
+   "end_line": 102,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "packages/show-planner/src/validator.test.ts",
+   "content": "`typeof d[k] === \"number\"` also passes for `NaN` (and `Infinity`), so an evaluator that computes any spec-115 metric as `NaN` (e.g. a division/log edge case) would still be considered correct. Assert finiteness instead.",
+   "suggestion_code": "    for (const k of [\"activeDensity\",\"darknessPct\",\"colourChangeRate\",\"whiteHits\",\"blackouts\",\"strobeBeats\",\"patternRecurrence\",\"spatialEntropy\",\"sectionContrast\",\"intensityArc\"] as const) {\n      expect(Number.isFinite(d[k])).toBe(true);\n    }",
+   "existing_code": "    for (const k of [\"activeDensity\",\"darknessPct\",\"colourChangeRate\",\"whiteHits\",\"blackouts\",\"strobeBeats\",\"patternRecurrence\",\"spatialEntropy\",\"sectionContrast\",\"intensityArc\"] as const) {\n      expect(typeof d[k]).toBe(\"number\");\n    }",
+   "start_line": 98,
+   "end_line": 100,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/validator.test.ts",
+   "content": "This test does not isolate the capability under verification. The stripped venue simultaneously drops the `closed-loop` topology AND sets `strobe: false`, and the assertion only matches the generic `\"unsupported capability\"` substring, so it passes if either a `strobe-burst`/`strobe` cue OR a `capability: \"closed-loop\"` (rotation) cue is present. Since rotation only appears when `design.movementVocabulary` happens to include `\"rotation\"` (identity.ts), the topology path may never execute while the test still passes via the strobe flag. Split into two deterministic tests that each construct a plan guaranteed to contain the relevant cue and assert the exact message (`\"unsupported capability closed-loop\"` / `\"unsupported capability strobe\"`).",
+   "existing_code": "    const ps = validateCompiledPlan(plan, 400, cfg, { venue: { ...DEFAULT_VENUE_CLASS, topologies: [\"vertical-line\"], flags: { ...DEFAULT_VENUE_CLASS.flags, strobe: false } } });\n    expect(ps.some((p) => p.includes(\"unsupported capability\"))).toBe(true);",
+   "start_line": 93,
+   "end_line": 94,
+   "category": "test",
+   "severity": "medium"
+  }
+ ],
+ "packages/track-identity/src/seed.ts": [
+  {
+   "path": "packages/track-identity/src/seed.ts",
+   "content": "Nested ternary chain for `pick` selection violates the project rule against nested ternaries and makes the fallback precedence (fingerprint \u2192 fileHash \u2192 nativeId) hard to audit. Refactor to an explicit if/else-if/else so each fallback branch and its `weak` flag is unambiguous.",
+   "suggestion_code": "  let pick: { value: string; source: SeedSource; weak: boolean };\n  if (input.pcmFingerprint !== undefined && input.pcmFingerprint !== \"\") {\n    pick = { value: `pcm:${input.pcmFingerprint}`, source: \"pcm-fingerprint\", weak: false };\n  } else if (input.fileHash !== undefined && input.fileHash !== \"\") {\n    pick = { value: `hash:${input.fileHash}`, source: \"file-hash\", weak: false };\n  } else {",
+   "existing_code": "      : input.fileHash !== undefined && input.fileHash !== \"\"",
+   "start_line": 36,
+   "end_line": 36,
+   "category": "style",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/track-identity/src/seed.ts",
+   "content": "When `pcmFingerprint`, `fileHash` and `nativeId` are all absent, the seed silently collapses to `id:unknown` and every such track deterministically shares the exact same plan/stream. Because the `weak` flag is the only signal, callers that don't strictly gate on `weak` will treat an accidental collision between unrelated tracks as a valid deterministic plan. Consider failing fast (throw) or requiring the caller to explicitly opt into the weak path instead of emitting a shared sentinel seed.",
+   "existing_code": "        : { value: `id:${input.nativeId ?? \"unknown\"}`, source: \"native-id-weak\", weak: true };",
+   "start_line": 38,
+   "end_line": 38,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/track-identity/src/seed.ts",
+   "content": "Two problems in the stream seeding: (1) `derivePlannerSeed` produces a 64-bit digest (16 hex chars) but only the first 8 hex chars (32 bits) are consumed, so two distinct seeds differing only in the tail produce byte-identical PRNG streams \u2014 halving the effective entropy and weakening the collision guarantee the seed was meant to provide. Fold the full seed in, e.g. by taking `seedHex.slice(0, 16)` combined via `Number.parseInt(...)` of both halves into a 32-bit state derived from all 64 bits. (2) `parseInt` on malformed/empty input returns `NaN`, and `NaN >>> 0` is `0`, so any invalid seed silently degenerates into the same state-0 stream with no error signal. Validate the input (or guard the `NaN` result) before seeding.",
+   "existing_code": "  let a = parseInt(seedHex.slice(0, 8), 16) >>> 0;",
+   "start_line": 48,
+   "end_line": 48,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/venue/src/room-fields.property.test.ts": [
+  {
+   "path": "packages/venue/src/room-fields.property.test.ts",
+   "content": "The test claims to verify cells are ordered by x, but the assertion only maps to `fixtureId`. Because both `b` cells come from the same fixture, an implementation that groups/sorts fixtures but never orders cells *within* a fixture (e.g. leaving `b`'s cells in their original `[0.9, 0.8]` order) still produces `[\"a\",\"b\",\"b\"]` and passes. Assert on `cellIndex` (or the full objects) to actually pin the intra-fixture ordering.",
+   "suggestion_code": "    const order = globalCellOrder([mk(\"b\", [0.9, 0.8]), mk(\"a\", [0.1])]);\n    expect(order).toEqual([\n      { fixtureId: \"a\", cellIndex: 0 },\n      { fixtureId: \"b\", cellIndex: 1 },\n      { fixtureId: \"b\", cellIndex: 0 },\n    ]);",
+   "existing_code": "    const order = globalCellOrder([mk(\"b\", [0.9, 0.8]), mk(\"a\", [0.1])]);\n    expect(order.map((c) => c.fixtureId)).toEqual([\"a\", \"b\", \"b\"]);",
+   "start_line": 58,
+   "end_line": 59,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/venue/src/room-fields.property.test.ts",
+   "content": "`applyOrientation` is only ever asserted through a no-op identity: `forward` returns the input and `reverse\u2218reverse` is the identity, so an implementation that ignores `orientation` entirely (returns a copy) satisfies both assertions. This test can pass with a fully broken reverse. Add a single reverse call that proves the order actually changes (as `index.test.ts` does).",
+   "suggestion_code": "    const cells = [{ fixtureId: \"f\", cellIndex: 0 }, { fixtureId: \"f\", cellIndex: 1 }];\n    expect(applyOrientation(cells, \"reverse\").map((c) => c.cellIndex)).toEqual([1, 0]);\n    expect(applyOrientation(applyOrientation(cells, \"reverse\"), \"reverse\")).toEqual(cells);\n    expect(applyOrientation(cells, \"forward\")).toEqual(cells);",
+   "existing_code": "    const cells = [{ fixtureId: \"f\", cellIndex: 0 }, { fixtureId: \"f\", cellIndex: 1 }];\n    expect(applyOrientation(applyOrientation(cells, \"reverse\"), \"reverse\")).toEqual(cells);\n    expect(applyOrientation(cells, \"forward\")).toEqual(cells);",
+   "start_line": 60,
+   "end_line": 62,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/venue/src/room-fields.property.test.ts",
+   "content": "The case is titled \"...and bad openings\", but no opening is ever exercised: `rectangleRoom` returns `openings: []` and the body only covers bowtie, short-outline and empty-id. Opening validation in `validateRoom` (wall out of range, `0 <= from < to <= 1`) is left completely untested while the name implies coverage. Either add a room with an invalid `openings` entry or rename the test.",
+   "existing_code": "  it(\"rejects bowties, short outlines, and bad openings\", () => {",
+   "start_line": 44,
+   "end_line": 44,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/venue/src/room-fields.property.test.ts",
+   "content": "Coupling the assertion to the exact substring \"self-intersects\" makes the test brittle: a correct but reworded message fails, while a message that mentions \"self-intersects\" for an unrelated reason would pass. Since `validateRoom` returns a string[] with no stable codes, consider asserting a stable, specific problem (e.g. the full expected message) and probing more than one degenerate geometry.",
+   "existing_code": "    expect(validateRoom(bowtie).some((p) => p.includes(\"self-intersects\"))).toBe(true);",
+   "start_line": 48,
+   "end_line": 48,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/venue/src/room-fields.property.test.ts",
+   "content": "This assertion is tautological: `perimeterLength` is literally implemented as `wallLengths(outline).reduce(sum)`, so summing `wallLengths` manually and comparing to `perimeterLength` will be equal even if `wallLengths` drops an edge (e.g. skips the closing segment). Compare against a known-independent value to make the check meaningful.",
+   "suggestion_code": "    const walls = wallLengths(room.outline);\n    expect(walls).toHaveLength(4);\n    expect(walls.reduce((a, b) => a + b, 0)).toBeCloseTo(2 * (4 + 6), 9);\n    expect(perimeterLength(room.outline)).toBeCloseTo(2 * (4 + 6), 9);",
+   "existing_code": "    const walls = wallLengths(room.outline);\n    expect(walls.reduce((a, b) => a + b, 0)).toBeCloseTo(perimeterLength(room.outline), 9);",
+   "start_line": 38,
+   "end_line": 39,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/venue/src/room-fields.property.test.ts",
+   "content": "With `targetFps = 24` only one candidate qualifies (`200` fails at `stableFps: 10`), so the \"highest zones wins\" selection is not actually tested \u2014 a naive `find`/`filter()[0]` (no sort) returns the same `40`. Include two qualifying candidates with different `zones` to prove the max-zones tie-break works.",
+   "suggestion_code": "    expect(selectResolution([{ zones: 200, stableFps: 10 }, { zones: 40, stableFps: 30 }, { zones: 80, stableFps: 25 }], 24)).toBe(80);",
+   "existing_code": "    expect(selectResolution([{ zones: 200, stableFps: 10 }, { zones: 40, stableFps: 30 }], 24)).toBe(40);",
+   "start_line": 63,
+   "end_line": 63,
+   "category": "test",
+   "severity": "medium"
+  }
+ ]
+}

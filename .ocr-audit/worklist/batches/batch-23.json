@@ -1,0 +1,370 @@
+{
+ "packages/ble/src/scan.ts": [
+  {
+   "path": "packages/ble/src/scan.ts",
+   "content": "`normalizeMac` strips *every* non-hex character (`[^0-9a-f]`), so malformed/noisy input collapses into a valid MAC and can produce a false binding. Example: `bleWifiMac: \"aa:bb:cc:dd:ee:ffg\"` -> `\"aabbccddeeff\"` (the stray `g` is dropped) -> normalized `aa:bb:cc:dd:ee:ff`, which then matches an unrelated LAN record in `bindBleToLan` and yields a wrong `wifi-mac-match`. Conversely, when the hex count is not 12 the fallback returns `mac.toLowerCase()` *unnormalized*, contradicting the documented contract (\"lowercase, colon separated\"), so the same MAC written with different separators (e.g. `\"aa-bb-cc-dd-ee-ff-00\"` vs `\"aa:bb:cc:dd:ee:ff:00\"`) never matches (false negative). Restrict separators to `:`/`-`, require the full 12 hex digits, and return a value consistent with the normalized form.",
+   "suggestion_code": "  const cleaned = mac.trim().toLowerCase();\n  const hexes = cleaned.replace(/[:-]/g, \"\");\n  if (!/^[0-9a-f]{12}$/.test(hexes)) return cleaned;",
+   "existing_code": "  const hexes = mac.toLowerCase().replace(/[^0-9a-f]/g, \"\");\n  if (hexes.length !== 12) return mac.toLowerCase();",
+   "start_line": 125,
+   "end_line": 126,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/ble/src/scan.ts",
+   "content": "`bindBleToLan` decides the binding through the normalized `ble`/`lan` values, but stores the *raw* `inputs.bleWifiMac` in the returned `wifiMac`. The binding record therefore holds an unnormalized MAC (e.g. `\"AA-BB-CC-DD-EE-FF\"` as in scan.test.ts), which is inconsistent with the value actually used to justify the binding and will not compare equal to a normalized MAC when the record is reused downstream. Store the normalized value (`ble`) instead.",
+   "suggestion_code": "    return { bleAddress: inputs.bleAddress, lanDeviceId: inputs.lanDeviceId, basis: \"wifi-mac-match\", wifiMac: ble };",
+   "existing_code": "    return { bleAddress: inputs.bleAddress, lanDeviceId: inputs.lanDeviceId, basis: \"wifi-mac-match\", wifiMac: inputs.bleWifiMac };",
+   "start_line": 109,
+   "end_line": 109,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/ble/src/scan.ts",
+   "content": "The `missing` parameter is declared as `BleAdvertisement | null` but its value is never read \u2014 it is only tested against `null` to act as a boolean. This forces callers/tests to synthesize a throwaway advertisement object (see scan.test.ts line 46) and always attaches the single global `BLE_NOT_ADVERTISING_GUIDANCE` regardless of which device is missing. Change the parameter to a boolean (`missing = false`) or actually use the object to derive per-device guidance.",
+   "existing_code": "export function toScanEntry(ad: BleAdvertisement, missing: BleAdvertisement | null = null): BleScanEntry {\n  return {\n    kind: \"bluetooth\",\n    advertisement: ad,\n    guidance: missing === null ? null : BLE_NOT_ADVERTISING_GUIDANCE,\n  };\n}",
+   "start_line": 74,
+   "end_line": 80,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/ble/src/scan.ts",
+   "content": "`nameFamilyOf` matches prefixes case-sensitively, while real advertisement names are not guaranteed to use the exact casing. Lowercase forms such as `govee_...` or `gbk_...`, or a mixed-case `Ihoment_...`, all fall through to `unknown`, which can silently change scan/identity behavior (the module explicitly treats family as read live on every scan). Case-insensitive comparison (e.g. compare on `name.toUpperCase()`) makes classification robust; also note the very broad `GV` prefix will classify any unrelated name beginning with `GV` as the `gv` family.",
+   "suggestion_code": "  const upper = name.toUpperCase();\n  if (upper.startsWith(\"GBK_\")) return \"gbk\";\n  if (upper.startsWith(\"GV\")) return \"gv\";\n  if (upper.startsWith(\"IHOMENT_\")) return \"ihoment\";\n  if (upper.startsWith(\"GOVEE_\")) return \"govee\";\n  if (upper.startsWith(\"MINGER_\")) return \"minger\";",
+   "existing_code": "  if (name.startsWith(\"GBK_\")) return \"gbk\";\n  if (name.startsWith(\"GV\")) return \"gv\";\n  if (name.startsWith(\"ihoment_\")) return \"ihoment\";\n  if (name.startsWith(\"Govee_\")) return \"govee\";\n  if (name.startsWith(\"Minger_\")) return \"minger\";",
+   "start_line": 55,
+   "end_line": 59,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/ble/src/scan.ts",
+   "content": "`parseBleAdvertisement` reads the encoded flag, pactType and pactCode directly from manufacturer bytes 0/1/2, assuming no prefix. Standard BLE manufacturer-specific data normally begins with a 2-byte little-endian company identifier, so if the scan backend hands over that raw buffer, bit `0x40`/pactType/pactCode would be misread. The offsets should be confirmed against the BLE protocol spec/source (govee-toolkit docs/protocol/ble.md) or made explicit with a documented comment on the expected layout.",
+   "existing_code": "  const flag = manufacturer.length > 0 ? (manufacturer[0] ?? 0) : 0;",
+   "start_line": 39,
+   "end_line": 39,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "packages/ble/src/stream.test.ts": [
+  {
+   "path": "packages/ble/src/stream.test.ts",
+   "content": "The peripheral is created with `budgetHz: null`, and in `SimPeripheral.handleWrite` the budget/ceiling check is skipped entirely when `budgetHz` is null (and `stalledUntil` is only ever set inside that skipped branch). As a result `peripheral.metrics.stalled` is structurally always 0. The later `expect(peripheral.metrics.stalled).toBe(0)` therefore cannot fail and proves nothing about the link keeping within the device budget. Give the peripheral a real budget (e.g. `budgetHz: 20`, matching `writeBudgetHz`) so an over-budget burst would actually register a stall and the assertion becomes falsifiable.",
+   "suggestion_code": "      zones: 8,\n      budgetHz: 20,",
+   "existing_code": "      zones: 8,\n      budgetHz: null,",
+   "start_line": 107,
+   "end_line": 108,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "packages/ble/src/stream.test.ts",
+   "content": "`writesSent` is incremented inside `BleLink.send`/`pump` before the write is attempted and even when `connection` is null, so it counts attempts, not deliveries. Because the test never inspects `peripheral.metrics.writes`, a regression that drops writes (or leaves the link unconnected) would still satisfy `writesSent === 80`. Assert the peripheral side too, e.g. `expect(peripheral.metrics.writes).toBe(80)` (and/or `metrics.acks`), to prove the writes actually landed.",
+   "suggestion_code": "    expect(link.status().writesSent).toBe(80);\n    expect(peripheral.metrics.writes).toBe(80);",
+   "existing_code": "    expect(link.status().writesSent).toBe(80);",
+   "start_line": 130,
+   "end_line": 130,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/ble/src/stream.test.ts",
+   "content": "The `encodeBleStreamFrame` result is only length-checked and then discarded; the bytes actually sent (`streamed.writes`) are never compared against it or against a golden frame. A diverging/broken encoder would still pass. Cross-check the produced frames against the streamed writes (and ideally a golden hex via `bleHex`/`simGoldenFrame`) instead of a bare length assertion.",
+   "suggestion_code": "      expect(encodeBleStreamFrame(bytes, { zoneCount: 8, budgetHz: 20 }).map(bleHex)).toEqual(streamed.writes.map(bleHex));",
+   "existing_code": "      expect(encodeBleStreamFrame(bytes, { zoneCount: 8, budgetHz: 20 })).toHaveLength(2);",
+   "start_line": 119,
+   "end_line": 119,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/ble/src/stream.test.ts",
+   "content": "The test title claims blackout is \"a masked write of black\", but `payload[0] === 0x0d` is the single-colour fast path (`bleColorSingle`), not the masked `0x15 01` write in `bleColorMasked`. All-black zones collapse to one colour and take the fast path, so this assertion only rules out a power-off (`0x01`) write and does not verify masking. If a masked blackout is actually required, assert `payload[0] === 0x15` and check the mask bytes; otherwise correct the test title/intent.",
+   "existing_code": "    expect(decoded?.payload[0]).toBe(0x0d);",
+   "start_line": 97,
+   "end_line": 97,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/ble/src/stream.test.ts",
+   "content": "This initial `lastFeedback` value is overwritten by the first loop iteration before it is ever read (only the last iteration's value is used after the loop), so the assignment and its frame construction are dead work. Drop it or use it to assert the pre-loop state.",
+   "existing_code": "    let lastFeedback = streamBleRendererFrame(twoColorFrame(8, true), { zoneCount: 8, budgetHz: 20 }).feedback;",
+   "start_line": 114,
+   "end_line": 114,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/govee/src/resolution.ts": [
+  {
+   "path": "packages/govee/src/resolution.ts",
+   "content": "Candidate kind-collision / dropped `logical` candidate. The loop skips a grouped zone equal to `byKind.native`/`byKind.logical`, but the fallback push re-adds `byKind.grouped` unconditionally (only checking that no grouped row exists). This produces two concrete defects:\n\n1) When the grouped head equals `logical`, the fallback emits `{kind:\"grouped\", zones: logical}`; the subsequent logical push is then suppressed by `!rows.some(r => r.zones === byKind.logical)`, so the confirmed `logical` candidate disappears entirely. Repro: `selectResolution({logical:10, native:20, grouped:[10], ...})` \u2192 rows = [native 20, grouped 10], no logical row, and mode \"logical\" can never be satisfied.\n2) When a provided grouped value equals `native`, you get two rows with identical `zones` but different kinds (e.g. `native:20, grouped:[20]` \u2192 [native 20, grouped 20]), which biases the zone sort and the auto pick.\n\nDeduplicate strictly by `zones` (track emitted zones in a Set and assign the kind once per zone) instead of mixing kind-based and zone-based guards.",
+   "existing_code": "  if (byKind.grouped !== undefined && !rows.some((r) => r.kind === \"grouped\")) {\n    rows.push({ kind: \"grouped\", zones: byKind.grouped });\n  }",
+   "start_line": 69,
+   "end_line": 71,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/govee/src/resolution.ts",
+   "content": "The reason string hard-codes \"native\" for `top`, but `top` is only the highest-zone candidate (candidates[0]), which need not be the native row. A provided `grouped` value larger than `native` (or a logical count larger than native) makes `top.kind !== \"native\"`, so the explanation lies about which segment count is being described. Repro: `selectResolution({logical:8, native:12, grouped:[24], targetHz:4, ...})` where grouped 24 is below target \u2192 context reads \"native 24 zones ... is below target\" though 24 is `grouped`. Use `top.kind` in the message instead of the literal \"native\".",
+   "existing_code": "    const context = pick.zones !== top.zones\n      ? ` (native ${top.zones} zones at ${top.stableFps} Hz stable is below target ${target} Hz)`\n      : \"\";",
+   "start_line": 94,
+   "end_line": 96,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/govee/src/resolution.ts",
+   "content": "Explicit-mode fallback returns a mismatched `kind` and a mislabeled reason. When no candidate has the requested `kind`, the code matches by zone count instead, so `...pick` sets `decision.kind` to the *found* kind while `reason` interpolates the *requested* `mode`. Examples: `mode:\"logical\", logical===native` returns `kind:\"native\"` labeled \"logical\"; with the kind collision above, `mode:\"logical\"` returns a `grouped` row labeled \"logical\". Either ensure a candidate of the requested kind always exists (fix the rows builder) or return an explicit error rather than silently relabeling a different kind.",
+   "existing_code": "    const pick = candidates.find((c) => c.kind === mode)\n      ?? (want !== undefined ? candidates.find((c) => c.zones === want) : undefined);",
+   "start_line": 81,
+   "end_line": 82,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/govee/src/resolution.ts",
+   "content": "Two issues in this fallback narrative: (1) `top` may not be `native` (same as the context bug above), so \"native ${top.zones} zones\" can be wrong; (2) when the fastest candidate is also the highest-zone candidate (`fallback === top`), the message contradicts itself \u2014 \"native N zones ... is below target ...; picked native N zones ... instead\". Report the actual `fallback.kind` and only add the \"instead\" clause when `fallback !== top`.",
+   "existing_code": "    reason: `native ${top.zones} zones at ${top.stableFps} Hz stable is below target ${target} Hz; picked ${fallback.kind} ${fallback.zones} zones at ${fallback.stableFps} Hz stable instead`,",
+   "start_line": 107,
+   "end_line": 107,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/govee/src/resolution.ts",
+   "content": "`targetHz` is not validated against NaN. `Math.floor(NaN)` is `NaN` and `Math.max(1, NaN)` is `NaN`, so `target` becomes NaN. Then `stableFps >= target` is always false for every candidate, silently forcing the \"nothing meets target\" fallback branch with a misleading reason (\"below target NaN Hz\") instead of surfacing a config error. Guard with `Number.isFinite(input.targetHz)` and either throw a RangeError or default to a sane value.",
+   "existing_code": "  const target = Math.max(1, Math.floor(input.targetHz));",
+   "start_line": 44,
+   "end_line": 44,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "packages/ipc/src/index.ts": [
+  {
+   "path": "packages/ipc/src/index.ts",
+   "content": "Structured error is discarded here. The channel contract documents errors as `{ ok: false, error: { code, message } }` (see header comment), but `callChannel` flattens it into a plain `Error` with a formatted message string. Callers can no longer branch on the machine-readable `code` (e.g. to distinguish permission vs. transport vs. validation failures) and the IpcError contract is never actually delivered. Preserve the code on the thrown error.",
+   "suggestion_code": "    const err = new Error(`${res.error.code}: ${res.error.message}`) as Error & { code: string };\n    err.code = res.error.code;\n    throw err;",
+   "existing_code": "    throw new Error(`${(res as IpcError).error.code}: ${(res as IpcError).error.message}`);",
+   "start_line": 209,
+   "end_line": 209,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/ipc/src/index.ts",
+   "content": "Neither the invoke promise rejection nor the response `parse` failure is mapped to the documented IpcError shape. If the main process throws/rejects, the raw rejection propagates; if the handler returns output that does not match the response schema, a raw `ZodError` is thrown from `response.parse`. In both cases renderer status UI receives an untyped exception rather than `{ code, message }`, so it cannot reliably surface structured failures. Wrap invoke + parse so failures surface as a consistent structured error (and consider a timeout for hanging invokes).",
+   "existing_code": "  const raw = await invokeFn(channel, parsed);\n  const res = channels[channel].response.parse(raw) as ChannelResponse<C>;",
+   "start_line": 206,
+   "end_line": 207,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/ipc/src/index.ts",
+   "content": "`channels[channel]` is indexed without any runtime guard. The `channel` parameter is only constrained at compile time; if an unvalidated channel string crosses a runtime/IPC boundary this yields `TypeError: Cannot read properties of undefined (reading 'request')` instead of a controlled IpcError. Validate the channel at runtime before dereferencing.",
+   "existing_code": "  const parsed = channels[channel].request.parse(request);",
+   "start_line": 205,
+   "end_line": 205,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/ipc/src/index.ts",
+   "content": "`ok()` builds a strict `z.object` (no `.passthrough()`), so any extra fields a handler returns are silently stripped during `response.parse`. Combined with the `as ChannelResponse<C>` cast on the parse result, a schema/type disagreement is hidden rather than surfaced, causing silent data loss of handler output that callers may expect. Consider preserving unknown keys (passthrough) or removing the unchecked cast so mismatches are visible.",
+   "existing_code": "  return z.object({ ok: z.literal(true), ...payload.shape });",
+   "start_line": 15,
+   "end_line": 15,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/ipc/src/index.ts",
+   "content": "Response schemas drift from the request constraints they mirror. The request enforces `value` in [0,1], but the response validator accepts any number, so out-of-range handler output passes validation and propagates as trusted state (same pattern for `venue/set-color` rgb channels, `config/*` scope enum vs plain `z.string()`, and `config/import` unbounded `applied`). Align response validators with the request constraints so invalid handler output fails fast.",
+   "suggestion_code": "    response: z.union([ok(z.object({ value: z.number().min(0).max(1) })), errorSchema]),",
+   "existing_code": "    response: z.union([ok(z.object({ value: z.number() })), errorSchema]),",
+   "start_line": 35,
+   "end_line": 35,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "packages/renderer/src/capability.ts": [
+  {
+   "path": "packages/renderer/src/capability.ts",
+   "content": "`SingleZoneMode` declares `\"area-weighted-mean-oklab\"` but `singleZoneColor` has no branch for it, so it silently falls through to this plain arithmetic-RGB mean. Any caller requesting Oklab area weighting (or a mistyped/future mode string, since `mode` is never validated) gets mean-linear output with no error, hiding the mismatch. Add an explicit Oklab branch and/or a default that rejects/validates unknown modes.",
+   "existing_code": "  let r = 0;\n  let g = 0;\n  let b = 0;",
+   "start_line": 52,
+   "end_line": 54,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/renderer/src/capability.ts",
+   "content": "This returns a reference to the caller's own input tuple, whereas the other branches (`dominant` via `[...best]`, mean-linear) return fresh arrays. A caller that mutates the returned colour will corrupt the input cell array (aliasing). Return a copy: `return [...cells[Math.floor(cells.length / 2)]!] as [number, number, number];`.",
+   "existing_code": "  if (mode === \"center-cell\") return cells[Math.floor(cells.length / 2)]!;",
+   "start_line": 42,
+   "end_line": 42,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/renderer/src/capability.ts",
+   "content": "The switch has no `default` branch. If `transport` holds a value outside the declared union at runtime (it crosses an IPC/JSON/schema boundary where the type is only compile-time), the function falls off the end and returns `undefined` despite the `EffectiveCapability` return type; consumers then dereference `.zones`/`.maxRateHz` and crash. Add a last-resort/default that returns a conservative degraded capability (or explicitly throw). Also note `zones = f.cells.length` yields `0` for an empty fixture while `degraded` stays `false` here, which may mislead scheduling consumers.",
+   "existing_code": "  const zones = f.cells.length;\n  switch (transport) {",
+   "start_line": 21,
+   "end_line": 22,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/renderer/src/capability.ts",
+   "content": "Clustering is order-dependent: centroids are updated online with an exponential average as cells are visited, and the match test uses a hardcoded `40 * 40` squared-distance threshold (magic number with no documented units). Permuting `cells` can therefore yield a different palette, making output non-deterministic for callers/tests that assume positional stability. Extract the threshold into a named constant and either document the order-dependence or make clustering order-independent.",
+   "existing_code": "      if (dist2(c, palette[i]!) < 40 * 40) { slot = i; break; }",
+   "start_line": 73,
+   "end_line": 73,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/renderer/src/capability.ts",
+   "content": "`f.calibration?.maxStableFps ?? null` conflates two different states \u2014 'no calibration data available' and 'no rate limit' \u2014 into the same `null`, so a downstream rate-limiter cannot distinguish an unknown fixture from an unlimited one and may schedule at an unsafe rate. Consider a distinct sentinel/enum or an accompanying flag rather than reusing `null`.",
+   "existing_code": "      return { zones, maxDistinctColoursPerFrame: null, maxRateHz: f.calibration?.maxStableFps ?? null, singleZone: false, transport, degraded: false };",
+   "start_line": 24,
+   "end_line": 24,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "packages/renderer/src/goldens.test.ts": [
+  {
+   "path": "packages/renderer/src/goldens.test.ts",
+   "content": "Tautological determinism assertion: `levels` is the same `Uint8Array` instance passed to `frameHash` twice, so this only proves `frameHash` is a pure function of its input. It does NOT verify that the render pipeline (`sampleSpatial` + `envelopeLevel` + color packing) reproduces the same output across recomputation \u2014 a non-deterministic renderer (e.g. time/`Math.random`/locale-dependent ordering inside `sampleSpatial`) would still pass. Recompute the buffer independently and/or compare against a checked-in golden hash so drift is detected.",
+   "suggestion_code": "      const first = frameHash(new Map([[\"strip\", levels]]));\n      expect(first).toBe(\"<expected-golden-hash>\");",
+   "existing_code": "      const first = frameHash(new Map([[\"strip\", levels]]));\n      const second = frameHash(new Map([[\"strip\", levels]]));\n      expect(second).toBe(first);",
+   "start_line": 28,
+   "end_line": 30,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "packages/renderer/src/goldens.test.ts",
+   "content": "The `length - 3` tolerance allows up to two primitives to collide on the same hash, so duplicate/no-op primitives (or ones that always render all-zero, see the NaN note below) pass silently. If distinctness is the golden guarantee, assert full uniqueness (`toBe(SPATIAL_PRIMITIVES.length)`); if a small number of known-equal primitives is expected, enumerate them explicitly instead of using a blanket offset.",
+   "suggestion_code": "    expect(new Set(Object.values(hashes)).size).toBe(SPATIAL_PRIMITIVES.length);",
+   "existing_code": "    expect(new Set(Object.values(hashes)).size).toBeGreaterThan(SPATIAL_PRIMITIVES.length - 3);",
+   "start_line": 34,
+   "end_line": 34,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/renderer/src/goldens.test.ts",
+   "content": "`arrayContaining` only asserts the listed ids are present; it ignores extra and duplicated rooms. `REFERENCE_ROOMS` could regress (a room removed/renamed) or drift (duplicate ids) without failing. Use `toEqual` against the exact expected id list (an exact set comparison) so the golden coverage is enforced in both directions.",
+   "suggestion_code": "    expect(REFERENCE_ROOMS.map((r) => r.id)).toEqual([\n      \"square-loop\",\n      \"square-mirrored\",\n      \"square-chunks\",\n      \"club-rectangle\",\n      \"l-room\",\n      \"curved-room\",\n    ]);",
+   "existing_code": "    expect(REFERENCE_ROOMS.map((r) => r.id)).toEqual(\n      expect.arrayContaining([\"square-loop\", \"square-mirrored\", \"square-chunks\", \"club-rectangle\", \"l-room\", \"curved-room\"]),\n    );",
+   "start_line": 38,
+   "end_line": 40,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/renderer/src/goldens.test.ts",
+   "content": "Hardcoded visual/protocol constants: envelope duration `4` and `{ attackBeats: 0.05, releaseBeats: 0.5 }` are magic numbers duplicated across the loop rather than derived from the same source the renderer uses. If the spec changes (envelope length or attack/release), this test keeps computing an unrelated envelope and cannot detect the drift. Prefer importing/deriving these values from the production constants.",
+   "existing_code": "        const env = envelopeLevel(shape.beat, 4, { attackBeats: 0.05, releaseBeats: 0.5 });",
+   "start_line": 22,
+   "end_line": 22,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/renderer/src/goldens.test.ts",
+   "content": "NaN/fault masking: if `sample.level` is `NaN` (or `Infinity` in a bad branch), `Math.max(0, NaN)`/`Math.min(1, NaN)`/`Math.round(NaN)` all yield `NaN`, and assigning `NaN` into a `Uint8Array` stores `0`. A broken sample therefore produces a stable black buffer and the test still passes. Add an explicit finiteness assertion so a defective primitive fails loudly.",
+   "suggestion_code": "        expect(Number.isFinite(sample.level)).toBe(true);\n        const v = Math.round(Math.min(1, Math.max(0, sample.level * env)) * 255);",
+   "existing_code": "        const v = Math.round(Math.min(1, Math.max(0, sample.level * env)) * 255);",
+   "start_line": 23,
+   "end_line": 23,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/simulator/src/govee-lan.ts": [
+  {
+   "path": "packages/simulator/src/govee-lan.ts",
+   "content": "`changedIp` is gated on `reappearAt >= 0` and on `packetCount >= reappearAt`. Consequences: (a) configuring `faults.changedIp` alone (default `reappearAt = -1`) silently has no effect, so the IP-change fault can appear not to work; (b) the IP flip is driven by the received-datagram counter shared with the disappear/reappear fault rather than by the reappearance event itself. Decouple `changedIp` from `reappearAt` (e.g. give it its own threshold, or check `!this.gone() && this.faults.changedIp`).",
+   "existing_code": "    if (this.faults.changedIp && this.packetCount >= this.faults.reappearAt && this.faults.reappearAt >= 0) {",
+   "start_line": 149,
+   "end_line": 149,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/simulator/src/govee-lan.ts",
+   "content": "`paintCount` is reset and incremented but never read or exposed, and the `hold.at` timestamp is stored but never consulted (suggesting an intended TTL that is never enforced). Both are dead state. Either expose/use them (e.g. a getter, or enforce the expiry) or remove them so they do not imply unimplemented behavior.",
+   "existing_code": "  private paintCount = 0;",
+   "start_line": 89,
+   "end_line": 89,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/simulator/src/govee-lan.ts",
+   "content": "The reorder trap dispatches the buffered (`held`) datagram *before* the just-received one, which preserves the incoming order instead of swapping it. In particular with `reorderEvery = 1` every packet takes this branch and the pair is always emitted in original order, so the reorder fault becomes a no-op and tests relying on it can pass without exercising out-of-order handling. To inject a real reorder, dispatch the current `text` first and the `held` message second. Also note the surrounding code mutates `this.hold` around an `await` and relies on the single-threaded message loop for correctness; clearing the pending 5ms timer here (instead of letting it read whatever `this.hold` happens to be later) would make this robust.",
+   "existing_code": "        const held = this.hold;\n        this.hold = { msg: text, at: Date.now() };\n        await this.dispatch(held.msg, rinfo);",
+   "start_line": 193,
+   "end_line": 195,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/simulator/src/govee-lan.ts",
+   "content": "`applyPaint` reads `payload[1]` as the segment count and then indexes `payload[2 + i*3]` / `payload[2 + i*4 ...]` without verifying that the payload actually contains that many bytes. A frame whose declared segment count exceeds the real payload length (the codec only validates the outer frame length, not that `nbSeg` fits) silently writes `?? 0` (black) into `rendered` and still counts as `paintsApplied`, masking a protocol/short-payload mismatch. Validate `payload.length >= 2 + nbSeg * stride` for the opcode before applying, and bail (optionally counting a decode fault) otherwise.",
+   "existing_code": "    if (!this.armed || payload.length < 2) return;",
+   "start_line": 329,
+   "end_line": 329,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/simulator/src/govee-lan.ts",
+   "content": "`maxHz` selects the ceiling by iterating `Object.entries(table)` in insertion order and overwriting `best` on every matching key, so the winner is the *last* matching entry, not the entry with the largest matching threshold. For a table declared out of ascending order (e.g. `{60: 25, 20: 40}`) a 100-zone device returns 40 instead of 25. Track the largest matching key explicitly (or sort the entries) before assigning `best`.",
+   "existing_code": "    let best = 10;\n    for (const [k, v] of Object.entries(table)) {\n      if (zones >= Number(k)) best = v;\n    }",
+   "start_line": 59,
+   "end_line": 62,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/simulator/src/govee-lan.ts",
+   "content": "`turn` may end the channel (`this.armed = false` when armed and `turnEndsChannel`), but unlike `scan`/`colorwc`/`devStatus`/`status` it never resets `this.backToBack`. As a result the counter keeps accumulating across turn/brightness commands, so the 'third back-to-back datagram dropped' trap can fire on a mixed sequence even after the channel was ended. Reset `backToBack` here (or on channel end) to match the documented consecutive-command model.",
+   "existing_code": "      if (this.armed && this.faults.turnEndsChannel) this.armed = false;",
+   "start_line": 250,
+   "end_line": 250,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/simulator/src/govee-lan.ts",
+   "content": "This `error` listener only calls `reject`; after `bind` resolves the promise is already settled, so any later socket `error` (e.g. send failures, EPERM) is swallowed silently, and if `bind` fails the socket is never `close()`d (resource leak plus the message listener stays attached). Add a persistent post-bind error handler and close the socket on bind failure.",
+   "existing_code": "    sock.on(\"error\", (err) => reject(err));",
+   "start_line": 120,
+   "end_line": 120,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/simulator/src/govee-lan.ts",
+   "content": "`Buffer.from(pt, \"base64\")` does not throw on invalid base64 input (Node ignores invalid characters), so this `try/catch` is effectively unreachable dead code; malformed input is instead rejected later by `decodeRaw` returning null. Consider removing the dead catch (and the intermediate conversion is otherwise fine).",
+   "existing_code": "      raw = new Uint8Array(Buffer.from(pt, \"base64\"));",
+   "start_line": 310,
+   "end_line": 310,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ]
+}

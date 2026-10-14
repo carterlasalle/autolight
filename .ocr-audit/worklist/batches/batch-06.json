@@ -1,0 +1,424 @@
+{
+ "apps/desktop/electron/services/library-service.ts": [
+  {
+   "path": "apps/desktop/electron/services/library-service.ts",
+   "content": "`stop()` clears the debounce timer but never clears (or flushes) `this.pending`. Any change events detected before shutdown are silently dropped, and the leftover entries are carried into the first batch emitted after a subsequent `start()` \u2014 with their pre-stop `atMs` timestamps \u2014 delivering stale changes to consumers and corrupting downstream state (`status().counters[\"pendingChanges\"]` also keeps reporting them while stopped). Clear `pending` here (or flush it to listeners before shutting down if drop-on-stop is not intended).",
+   "suggestion_code": "    for (const watcher of this.watchers) watcher.close();\n    this.watchers = [];\n    if (this.debounce !== null) clearTimeout(this.debounce);\n    this.debounce = null;\n    this.pending = [];",
+   "existing_code": "    for (const watcher of this.watchers) watcher.close();\n    this.watchers = [];\n    if (this.debounce !== null) clearTimeout(this.debounce);\n    this.debounce = null;",
+   "start_line": 104,
+   "end_line": 107,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/electron/services/library-service.ts",
+   "content": "No per-listener error isolation: a single throwing listener aborts the loop, so every later listener silently misses the batch, and the exception is thrown inside a `setTimeout` callback (after `this.debounce` was already nulled) where it becomes an uncaught exception. Wrap each invocation so one bad subscriber cannot break delivery to the others.",
+   "suggestion_code": "      for (const listener of this.listeners) {\n        try {\n          listener(batch);\n        } catch (err) {\n          this.tracker.set(\"degraded\", `change listener failed: ${messageOf(err)}`);\n        }\n      }",
+   "existing_code": "      for (const listener of this.listeners) listener(batch);",
+   "start_line": 141,
+   "end_line": 141,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/electron/services/library-service.ts",
+   "content": "An async watcher 'error' only sets the tracker to degraded: the watcher object stays in `this.watchers` and is never closed. Combined with the `if (this.watchers.length > 0) return` guard at the top of `start()`, a later `start()` will short-circuit and refuse to re-establish a working watch, so a root can remain permanently unwatched while `start()` still returns without doing anything. Close/remove the failed watcher so recovery is possible.",
+   "suggestion_code": "        watcher.on(\"error\", (err) => {\n          this.tracker.set(\"degraded\", `watch failed on ${root.path}: ${messageOf(err)}`);\n          try {\n            watcher.close();\n          } catch {\n            // ignore close errors while degrading\n          }\n          this.watchers = this.watchers.filter((w) => w !== watcher);\n        });",
+   "existing_code": "        watcher.on(\"error\", (err) => {\n          this.tracker.set(\"degraded\", `watch failed on ${root.path}: ${messageOf(err)}`);\n        });",
+   "start_line": 84,
+   "end_line": 86,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/electron/services/library-service.ts",
+   "content": "`FileSystemWatcher` may report a null filename, and the interface type is `string | Buffer`. Substituting `eventType` ('rename'/'change') puts a bogus non-path value into `LibraryChange.file`, and passing a Buffer violates the declared `file: string` contract, breaking consumers that treat it as a path. Normalize: skip/omit the file when unknown and coerce Buffer to string.",
+   "suggestion_code": "  const watcher = watch(root, { recursive: true }, (_eventType, filename) => {\n    if (filename === null) return;\n    onEvent(typeof filename === \"string\" ? filename : filename.toString());\n  });",
+   "existing_code": "  const watcher = watch(root, { recursive: true }, (eventType, filename) => {\n    onEvent(filename === null ? eventType : filename);\n  });",
+   "start_line": 158,
+   "end_line": 160,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/services/library-service.ts",
+   "content": "`start()` sets the tracker to 'degraded' when a watcher cannot be opened (both the catch block and the 'error' handler), but the tail of the method unconditionally overwrites it with 'running' whenever at least one root is readable. The result: a service whose watch setup failed reports a healthy 'running' state, masking the degradation from callers and from the status machine. Preserve/aggregate the degraded state (e.g. only set 'running' when all readable roots were actually watched).",
+   "existing_code": "    } else {\n      this.tracker.set(\"running\", readable.map((r) => `${r.provider}: ${r.path}`).join(\", \"));\n    }",
+   "start_line": 97,
+   "end_line": 99,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/services/library-service.ts",
+   "content": "The lazy singleton memoizes the instance built from the first caller's options and is never reset, so later callers passing different `roots`/`watchRoot`/`debounceMs` (notably tests) silently get the original configuration, causing cross-test watcher/timer leakage and tests that exercise the wrong code path. Consider exposing a reset (or ignoring stale options explicitly / documenting the single-config contract) so callers cannot be silently misconfigured.",
+   "existing_code": "  instance ??= new LibraryService(opts);\n  return instance;",
+   "start_line": 170,
+   "end_line": 171,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/rekordbox-live/src/link.ts": [
+  {
+   "path": "packages/rekordbox-live/src/link.ts",
+   "content": "Race: the 'error' handler clears `this.socket` unconditionally, unlike the 'close' handler which guards with `if (this.socket === socket)`. If this socket errors after a newer connection has replaced `this.socket`, the newer socket is clobbered to null (publishes silently dropped, status reports unavailable). Additionally `once(\"error\")` removes the listener after the first error, so any subsequent 'error' on the same socket is unhandled and can crash the process. Guard the assignment and use `on` instead of `once`.",
+   "suggestion_code": "    socket.on(\"error\", (err: Error) => {\n      if (this.socket === socket) this.socket = null;\n      reject(err);\n    });",
+   "existing_code": "    socket.once(\"error\", (err: Error) => {\n      this.socket = null;\n      reject(err);\n    });",
+   "start_line": 111,
+   "end_line": 114,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-live/src/link.ts",
+   "content": "start()/stop() lifecycle is broken: (1) `this.socket` is assigned synchronously before 'connect' succeeds, so a second concurrent (or immediate) start() hits `if (this.socket) return` and resolves immediately, falsely reporting the transport as live while it is still connecting/failing. (2) If stop() runs while the socket is still connecting, `socket.destroy()` emits only 'close' (not 'connect'/'error'), so start()'s promise never settles \u2014 a permanently pending promise/resource leak. Track a connecting state and settle start() on 'close' as well, or reject when stopped mid-connect.",
+   "existing_code": "  async start(): Promise<void> {\n    if (this.socket) return;",
+   "start_line": 104,
+   "end_line": 105,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-live/src/link.ts",
+   "content": "server.close() only completes once all existing connections are closed. If the client sidecar transport is still connected (a common test teardown order), the callback never fires and this promise hangs the test suite. The tracked `sockets` set should be destroyed here; note it is also not exposed on FakeSidecar, so expose it and destroy each socket before/while closing.",
+   "existing_code": "export async function stopFakeSidecar(fake: FakeSidecar): Promise<void> {\n  const { promise, resolve } = Promise.withResolvers<void>();\n  fake.server.close(() => resolve());\n  await promise;\n}",
+   "start_line": 222,
+   "end_line": 226,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-live/src/link.ts",
+   "content": "The fake sidecar does not keep a tail for partial lines: each raw TCP chunk is split on '\\n' independently, so a published JSON object fragmented across chunks is recorded as multiple bogus entries in `received`. Tests then assert against corrupted data and can pass/fail independently of the real client behavior. Buffer the remainder like SidecarLinkTransport.ingest does (keep `tail` and prepend it).",
+   "existing_code": "    socket.on(\"data\", (chunk: string) => {\n      for (const line of chunk.split(\"\\n\")) {\n        const text = line.trim();\n        if (!text) continue;\n        received.push(text);\n        onLine?.(text);\n      }\n    });",
+   "start_line": 197,
+   "end_line": 204,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/link.ts",
+   "content": "The wire protocol carries the sidecar's own clock as `atMs`, but parseSidecarLine discards it and stamps `atNs` with the local receive time (`this.now()`), and ingest never consults `atMs`. Tempo/phase timing fed to the composite provider and adaptive clock is therefore skewed by transport latency with no correction, undermining time synchronization. Consider deriving the timestamp from `atMs` (with a local fallback/offset) rather than always using receive time.",
+   "existing_code": "    const parsed = sidecarTempoSchema.parse(JSON.parse(line));\n    return { ...parsed, atNs };",
+   "start_line": 67,
+   "end_line": 68,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/link.ts",
+   "content": "Listener exceptions are not isolated: if one `onTempo` listener throws, the loop aborts, later listeners are skipped, and the exception propagates out of the 'data' event handler (uncaught exception that can crash the process). Wrap each listener call in try/catch (or defer notification) so a faulty consumer cannot break ingestion.",
+   "existing_code": "      for (const listener of this.listeners) listener(tempo);",
+   "start_line": 177,
+   "end_line": 177,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/rekordbox-live/src/rkbx-osc.ts": [
+  {
+   "path": "packages/rekordbox-live/src/rkbx-osc.ts",
+   "content": "Playing detection is scaled incorrectly and mishandles slow pitch / backward seeks.\n\n1) At 120 Hz the wall period is ~8.33 ms. Any `playRate` below ~0.6 (5 ms / 8.33 ms) makes the per-tick playhead advance smaller than `playingEpsilonMs`, so a *playing* deck falls into the pause branches, sets `pauseSinceNs`, and after `pauseHoldMs` is flipped to `playing = false` \u2014 slow-pitch playback is reported as paused.\n2) A backward jump (backward seek while playing) hits `!forward && deltaMs >= epsilon` and immediately sets `playing = false`, so the deck is briefly reported as paused until the next forward tick re-arms it.\n\nThe epsilon must be relative to the expected movement (e.g. scaled by `playRate`, or derived from the tick period), and a backward seek should not by itself force the pause state.",
+   "existing_code": "      if (forward && deltaMs >= this.options.playingEpsilonMs) {\n        buffer.playing = true;\n        buffer.pauseSinceNs = null;\n      } else if (!forward && deltaMs >= this.options.playingEpsilonMs) {\n        buffer.playing = false;\n        buffer.pauseSinceNs = atNs;",
+   "start_line": 302,
+   "end_line": 307,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-live/src/rkbx-osc.ts",
+   "content": "`deckIdOf` returns 0 for any non-numeric buffer. The `\"master\"` buffer is stored under the string key `\"master\"`, so a seek detected while applying `/master/time` yields `deckId: 0` in the emitted `RkbxSeekEvent` instead of the actual master deck. The same bogus 0 propagates through `requestResolution` when `masterDeckId` is unresolved (`this.masterDeckId ?? 0`), producing resolution requests for a non-existent deck 0. Resolve the master buffer's owning deck (via `masterDeckId`) rather than falling back to 0.",
+   "existing_code": "  private deckIdOf(buffer: DeckBuffer): number {\n    for (const [deck, value] of this.buffers) {\n      if (value === buffer && typeof deck === \"number\") return deck;\n    }\n    return 0;\n  }",
+   "start_line": 325,
+   "end_line": 330,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-live/src/rkbx-osc.ts",
+   "content": "When binding fails (or the socket emits an error before `bind` completes), the rejected promise is caught, status is set to failed, and the error is rethrown \u2014 but the dgram socket stored in `this.socket` is never closed. The socket (and the bound/attempted port, with `reuseAddr`) leaks, and `this.socket` stays set so a later `onStart` silently orphans the previous handle. Close the socket in the failure path before rethrowing.",
+   "suggestion_code": "    await promise.catch((err: unknown) => {\n      this.setStatus({ state: \"failed\", error: `osc bind ${this.options.bind ?? \"\"}: ${err instanceof Error ? err.message : String(err)}` });\n      try { this.socket?.close(); } catch { /* already closed */ }\n      this.socket = null;\n      throw err;\n    });",
+   "existing_code": "    await promise.catch((err: unknown) => {\n      this.setStatus({ state: \"failed\", error: `osc bind ${this.options.bind ?? \"\"}: ${err instanceof Error ? err.message : String(err)}` });\n      throw err;\n    });",
+   "start_line": 144,
+   "end_line": 147,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-live/src/rkbx-osc.ts",
+   "content": "The step window `[atMs - period, atMs]` is inclusive on both ends, so a step whose `atMs` lands exactly on a tick boundary is applied on two consecutive ticks (the tick equal to `atMs` and the following tick, whose lower bound is also `atMs`). This duplicates play/pause/seek/pitch/track datagrams in the generated stream (e.g. a step at `atMs = 0` fires at t=0 and again at t=period), breaking the deterministic replay guarantee. Make the window half-open (e.g. skip when `step.atMs < atMs - period` only for the previous tick, or track which steps were already applied).",
+   "existing_code": "      if (step.atMs > atMs || step.atMs < atMs - period) continue;",
+   "start_line": 480,
+   "end_line": 480,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/rkbx-osc.ts",
+   "content": "A resolution request is produced only when `track/title` arrives, and it captures whatever `artist`/`album` the buffer holds at that instant. Since artist/album are sent separately (and the buffer is never reset between tracks), the title message for a new track typically carries the *previous* track's artist/album, so the enqueued request pairs the new title with stale metadata. Consider refreshing/emitting the resolution request once artist/album for the current identity have arrived (or clearing them when the title changes) rather than firing solely on title.",
+   "existing_code": "      case \"track/title\":\n        buffer.title = asText(value);\n        this.requestResolution(parsed.deck, atNs);\n        return parsed.deck;",
+   "start_line": 251,
+   "end_line": 254,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/rkbx-osc.ts",
+   "content": "`resolveMaster` runs on every `/master/time` message (up to 120 Hz) and unconditionally re-emits state for *all* numbered decks plus re-assigns `masterFlag` even when nothing changed; the 250 ms match threshold is also a hardcoded magic number. This produces redundant deck emissions at high rate and an unconfigurable assignment heuristic. Only emit decks whose `masterFlag` actually changed, and expose the threshold as an option.",
+   "existing_code": "    this.masterDeckId = best && best.deltaMs <= 250 ? best.deck : null;\n    for (const deck of this.buffers.keys()) {\n      if (typeof deck !== \"number\") continue;\n      const buffer = this.bufferFor(deck);\n      buffer.masterFlag = this.masterDeckId === null ? null : deck === this.masterDeckId;\n      this.emit(this.stateFor(deck));\n    }",
+   "start_line": 358,
+   "end_line": 364,
+   "category": "performance",
+   "severity": "medium"
+  }
+ ],
+ "apps/desktop/electron/services/fault-injection.ts": [
+  {
+   "path": "apps/desktop/electron/services/fault-injection.ts",
+   "content": "`sourceSilent` is derived from all active scenarios without applying `affects()`, so it ignores device scoping. A `dj-silence` scenario targeted at one device (e.g. `deviceId: \"a\"`) forces `\"held\"` payloads onto every other device too, diverging from the per-device scoping (`deviceFaults`) used everywhere else in this loop. Compute silence per device against `deviceFaults` (or filter with `affects`) and pass the per-device result to `port.deliver`.",
+   "suggestion_code": "    // (moved into the device loop, see below) const deviceSilent = deviceFaults.some((s) => s.kind === \"dj-silence\");",
+   "existing_code": "    const sourceSilent = active.some((s) => s.kind === \"dj-silence\");",
+   "start_line": 93,
+   "end_line": 93,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/electron/services/fault-injection.ts",
+   "content": "`pending` is incremented here and then unconditionally reset to 0 in every reachable branch below (congested skip, malformed drop, and successful delivery). As a result `pending.get(device)` is never greater than 1, so `maxPending` can only ever be 0 or 1 and the queue-depth metric is meaningless \u2014 a real accumulation regression would go undetected. Either model the queue honestly (only reset on delivery, keep depth while superseded frames are pending) or remove the misleading `maxPending` field.",
+   "existing_code": "      pending.set(device, (pending.get(device) ?? 0) + 1);\n      maxPending = Math.max(maxPending, pending.get(device) ?? 0);",
+   "start_line": 104,
+   "end_line": 105,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/services/fault-injection.ts",
+   "content": "`staleFrames` is hardcoded to the literal 0 for every scenario and for the aggregate result, and `recoveryFrames` is a fixed constant (0 for renderer-reload, 1 otherwise). These values are never measured from the port, so the suite reports success even if the port actually emits stale frames or a recovery gap. This defeats the exact behaviors specs 105/106/108 claim to guard. Derive `recoveryFrames`/`staleFrames` from the recorded deliveries instead of hardcoding them.",
+   "existing_code": "      recoveryFrames: s.kind === \"renderer-reload\" ? 0 : 1,\n      staleFrames: 0,",
+   "start_line": 145,
+   "end_line": 146,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/electron/services/fault-injection.ts",
+   "content": "`framesDuringFault` is computed theoretically as `during * (targeted ? 1 : deviceCount)` and does not subtract frames that were skipped by throttle/latency/loss, dropped as malformed, or superseded. It therefore contradicts the actual delivered count recorded in the loop (e.g. an untargeted `malformed`/`throttle` scenario reports `during * N` even though zero frames were delivered). Count frames actually delivered to the affected device(s) during the window.",
+   "existing_code": "      framesDuringFault: killsDevice ? 0 : during * (targeted ? 1 : opts.devices.length),",
+   "start_line": 142,
+   "end_line": 142,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/electron/services/fault-injection.ts",
+   "content": "`othersContinued` is not a real measurement. `othersSeen` is only set from an unaffected device's delivery, and the fallback `!hasOthers` returns `true` whenever the scenario is untargeted (all devices affected) or targets a single/unknown device \u2014 even though no peer ever actually delivered. For an untargeted fault, or a `deviceId` absent from `opts.devices`, the flag reports `true` despite the fault applying to nothing or everything. Track per-device continued delivery during each scenario window rather than relying on this fallback.",
+   "existing_code": "      othersContinued: !hasOthers || othersSeen.get(s.id) === true,",
+   "start_line": 147,
+   "end_line": 147,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/services/fault-injection.ts",
+   "content": "The `discoveryDegradedFrames` counter is incremented once per logical frame while a discovery-plane fault is active, but the interface comment (line 62) states it \"counts the frames delivered while one was active\". With N devices there are N deliveries per tick, so the reported value (frames) understates deliveries by a factor of N. Align the comment with the implementation or count deliveries.",
+   "existing_code": "    if (active.some((s) => s.kind === \"port-conflict\" || s.kind === \"multicast-blocked\")) {\n      discoveryDegradedFrames += 1;\n    }",
+   "start_line": 94,
+   "end_line": 96,
+   "category": "documentation",
+   "severity": "low"
+  }
+ ],
+ "packages/rekordbox-live/src/lighting-ipc.ts": [
+  {
+   "path": "packages/rekordbox-live/src/lighting-ipc.ts",
+   "content": "Inconsistent lifecycle status when only some (or none) fixtures decode. If `states.length > 0 && malformed.length > 0`, neither branch runs, so the provider stays in `starting` despite having emitted states. And in the `states.length === 0 && malformed.length > 0` branch, `markRejected` is a no-op when the current status is `starting` (see `ProviderBase.markRejected`: it only transitions from `live`/`degraded`), so a fully-undecodable replay also leaves the provider stuck in `starting`. Repro: commit one good fixture and one fixture whose `capture` is garbage, call `replayAll()` \u2014 states are emitted but `getStatus()` still reports `starting` forever. Handle the partial case explicitly and ensure the zero-decode case reaches a terminal state directly via `setStatus`.",
+   "suggestion_code": "    if (states.length > 0 && malformed.length === 0) {\n      this.setStatus({ state: \"live\", updateHz: 0, ageMs: 0 });\n    } else if (states.length > 0) {\n      this.setStatus({ state: \"degraded\", reason: malformed[0] ?? \"some captures did not decode\", updateHz: 0, ageMs: 0 });\n    } else {\n      this.setStatus({ state: \"degraded\", reason: malformed[0] ?? \"lighting capture did not decode\", updateHz: 0, ageMs: 0 });\n    }",
+   "existing_code": "    if (states.length > 0 && malformed.length === 0) {\n      this.setStatus({ state: \"live\", updateHz: 0, ageMs: 0 });\n    } else if (states.length === 0 && malformed.length > 0) {\n      this.markRejected(malformed[0] ?? \"lighting capture did not decode\");\n    }",
+   "start_line": 400,
+   "end_line": 404,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-live/src/lighting-ipc.ts",
+   "content": "Data loss: `ingestBytes` is fail-closed on ANY malformed frame. `decodeLightingCapture` deliberately skips bad frames and returns the decodable ones (`frames` + `malformed`), but this guard discards the entire buffer (returning early and dropping every valid frame) as soon as one malformed entry is present. Repro: feed a stream with 3 good frames and 1 corrupted frame \u2014 all 3 good states are silently dropped and only the error is reported. Ingest the decodable frames, then surface `malformed` (e.g., via `markRejected`) so a partial capture still yields states.",
+   "suggestion_code": "    if (decoded.frames.length === 0) {\n      this.markRejected(decoded.malformed[0] ?? \"lighting bytes did not decode\");\n      return;\n    }\n    if (decoded.malformed.length > 0) {\n      this.markRejected(decoded.malformed[0] ?? \"some lighting bytes did not decode\");\n    }",
+   "existing_code": "    if (decoded.malformed.length > 0 || decoded.frames.length === 0) {\n      this.markRejected(decoded.malformed[0] ?? \"lighting bytes did not decode\");\n      return;\n    }",
+   "start_line": 428,
+   "end_line": 431,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-live/src/lighting-ipc.ts",
+   "content": "`rate` is used as a divisor without validation. `opts.rate ?? 1` accepts `0` (and negatives), producing `Infinity`/`-Infinity` from `Math.round(index * stepMs * 1_000_000 / rate)`, and `BigInt(Infinity)` throws `RangeError: The number Infinity cannot be converted to a BigInt`, aborting replay. Also note the passed `now` clock is ignored (`void clock`), so replay never honors real timestamps. Validate the rate before using it.",
+   "suggestion_code": "    const atNs = baseNs + BigInt(Math.round((index * stepMs * 1_000_000) / rate));\n    // (add above: `if (!Number.isFinite(rate) || rate <= 0) throw new RangeError(...)`)",
+   "existing_code": "    const atNs = baseNs + BigInt(Math.round((index * stepMs * 1_000_000) / rate));",
+   "start_line": 279,
+   "end_line": 279,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-live/src/lighting-ipc.ts",
+   "content": "`this.replayed` grows unbounded and leaks provider state. `replayAll` resets it, but `ingestEvent` and `ingestBytes` only append (never trim/reset), so a long-running live stream grows the array without limit. Worse, `getDecks()` returns the internal mutable array instance, so any caller can mutate provider state (push/splice/sort). Return a defensive copy and bound/reset the buffer on ingest.",
+   "suggestion_code": "  getDecks(): readonly ProviderDeckState[] {\n    return [...this.replayed];\n  }",
+   "existing_code": "  getDecks(): readonly ProviderDeckState[] {\n    return this.replayed;\n  }",
+   "start_line": 383,
+   "end_line": 385,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/lighting-ipc.ts",
+   "content": "`raw[\"provider\"]` is written unconditionally after unknown fields are copied, so a capture that legitimately contains a `provider` key has its value destroyed. This contradicts the module's stated guarantee that unknown JSON fields are \"retained under raw, never dropped\" (spec 9.5). Preserve the captured value (or namespace the injected metadata).",
+   "suggestion_code": "      if (!Object.prototype.hasOwnProperty.call(raw, \"provider\")) {\n        raw[\"provider\"] = LIGHTING_PROVIDER_ID;\n      }",
+   "existing_code": "      raw[\"provider\"] = LIGHTING_PROVIDER_ID;",
+   "start_line": 135,
+   "end_line": 135,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/lighting-ipc.ts",
+   "content": "This `catch` is effectively dead code. `Buffer.from(capture, \"base64\")` does not throw on malformed base64 \u2014 it silently ignores invalid characters and returns a (possibly empty) buffer \u2014 and `new Uint8Array(...)` does not throw either. So the `capture is not base64` branch is unreachable for garbage input, which instead falls through to `decodeLightingCapture` and is reported as a truncated/bad frame. Validate the base64 shape explicitly (e.g., a regex/length check) if a dedicated error is intended.",
+   "existing_code": "  } catch (err) {\n    return { frames: [], malformed: [`capture is not base64: ${err instanceof Error ? err.message : String(err)}`] };\n  }",
+   "start_line": 151,
+   "end_line": 153,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/rekordbox-live/src/memory-reader.ts": [
+  {
+   "path": "packages/rekordbox-live/src/memory-reader.ts",
+   "content": "`pointerPathSchema` allows a multi-level `offsets` array, but `readMemorySample` only ever uses `offsets[0]`. Any real multi-level pointer path (dereference -> follow chain) silently resolves against a single flat slot, so it reads the wrong value and reports a corrupt playhead/BPM/trackId instead of failing. Either resolve the whole chain through the accessor or tighten the schema (`z.array(...).length(1)`) so unsupported paths are rejected at validation time rather than silently mis-decoded.",
+   "existing_code": "      const index = path.offsets[0] ?? 0;",
+   "start_line": 160,
+   "end_line": 160,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-live/src/memory-reader.ts",
+   "content": "The cross-observation verification does not actually verify anything: (1) it only inspects `rest[0]` and ignores all remaining observations, (2) `bpm`/`trackId` candidates fall through to `return true` and are never checked, and (3) the playhead branch accepts a candidate when it equals `expectedSamples`, i.e. the *first* observation it was already matched against, so a stale/non-verifying path always passes. This defeats the stated `verify across a second observation set` guarantee and lets false-positive offsets be recorded as verified. Each candidate should be checked against every observation for its field (and bpm/trackId should be compared too), returning false on the first mismatch.",
+   "existing_code": "    if (candidate.field === \"playheadSamples\") {\n      return accessor.readU64(candidate.base, index) === BigInt(Math.round(obs.playheadSeconds * sampleRateHz))\n        || accessor.readU64(candidate.base, index) === expectedSamples;\n    }\n    return true;",
+   "start_line": 212,
+   "end_line": 216,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-live/src/memory-reader.ts",
+   "content": "`path.sampleRateHz` is parsed but never used: `MemorySample` does not carry it and `stateFor` always converts with the provider-level `this.sampleRateHz` (default 44100). If the offsets file was verified at a different rate, the emitted `playheadSeconds` is scaled by the wrong factor, producing a consistently wrong playhead. Propagate the per-path rate into the sample (or into the provider when the offsets file is loaded) and convert with it.",
+   "existing_code": "    const playheadSeconds = sample?.playheadSamples !== null && sample?.playheadSamples !== undefined\n      ? Number(sample.playheadSamples) / this.sampleRateHz\n      : 0;",
+   "start_line": 326,
+   "end_line": 328,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-live/src/memory-reader.ts",
+   "content": "`poll` only inserts/updates decks and never removes decks that are no longer present in `found`, so `getDecks()` keeps returning stale deck states for decks that vanished (e.g. a deck cleared in Rekordbox). Consumers have no way to know the data is old. Also the `live` status is published with hardcoded `updateHz: 0, ageMs: 0`, which misrepresents freshness and hides stalls from the status contract. Track the previous deck set, delete (and ideally emit/tombstone) decks absent from `found`, and report a real update rate/age derived from `at` vs. the last successful poll.",
+   "existing_code": "    for (const [deck, sample] of found) {\n      this.samples.set(deck, { sample, atNs: at });\n      this.emit(this.stateFor(deck, at));\n    }\n    if (found.size > 0) this.setStatus({ state: \"live\", updateHz: 0, ageMs: 0 });",
+   "start_line": 311,
+   "end_line": 315,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/memory-reader.ts",
+   "content": "`playing` is hardcoded to `true` even though the memory reader has no play/pause signal, and `qualityFor()` marks `playheadSeconds`/`effectiveBpm`/`master` as `\"exact\"` unconditionally. When `playheadSamples`/`bpm` are null (no read) `playheadSeconds` defaults to 0 yet is still labelled `exact`, and `playing` is only labelled `derived` rather than unknown. Downstream observers cannot distinguish a real paused deck from a failed/absent read. Derive `playing` from actual state or report it as unknown, and set each field's quality based on whether the corresponding sample field was actually read (null -> unknown/absent).",
+   "existing_code": "      playing: true,\n      playheadSeconds,",
+   "start_line": 332,
+   "end_line": 333,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/memory-reader.ts",
+   "content": "`rate` is assigned and then only consumed by `void rate;`, so it is dead code. Remove both the local and the `void` statement (the conversion in `stateFor` reads `this.sampleRateHz` directly).",
+   "existing_code": "    void rate;",
+   "start_line": 310,
+   "end_line": 310,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "THIRD_PARTY_NOTICES": [
+  {
+   "path": "THIRD_PARTY_NOTICES",
+   "content": "License values `UNKNOWN` (autolight-analysis) and `UNLICENSED` (hand entries: all-in-one-infer / beat-this weights) are on the policy denylist (`policy.denylist` lists lowercase `\"unknown\"`/`\"unlicensed\"`), yet both are recorded with no documented exception or remediation. Because the values are uppercase while the denylist entries are lowercase, any automated enforcement that compares strings case-sensitively (or lowercases only one side) will silently miss them, defeating the policy. Resolve the actual licenses, or make the check case-insensitive and flag these entries explicitly.",
+   "existing_code": "      \"name\": \"autolight-analysis\",\n      \"version\": \"0.1.0\",\n      \"license\": \"UNKNOWN\"",
+   "start_line": 51,
+   "end_line": 53,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "THIRD_PARTY_NOTICES",
+   "content": "The FFmpeg hand-entry is internally contradictory: `kind` says \"bundled binary\" but `version` says \"system (brew/choco today)\". A bundled artifact and a system-installed binary have different LGPL-2.1 obligations (a bundled LGPL binary triggers distribution/relink/notice duties; an unmodified system-installed one generally does not). This ambiguity makes the T-OPS-05 bundling claim unverifiable. Align `kind`/`version` and state whether the binary is actually redistributed or resolved at runtime.",
+   "existing_code": "      \"name\": \"FFmpeg\",\n      \"kind\": \"bundled binary\",\n      \"license\": \"LGPL-2.1-or-later (unmodified binary; T-OPS-05 bundles it)\",\n      \"version\": \"system (brew/choco today)\"",
+   "start_line": 428,
+   "end_line": 431,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "THIRD_PARTY_NOTICES",
+   "content": "The policy declares `rkbx_link: \"never a dependency\"`, but `pyrekordbox 0.4.4` is listed as a pip dependency. Either the policy statement is wrong or this dependency is unaccounted for; the two sections contradict each other and the manifest's policy block cannot be trusted as-is. Reconcile the policy with the dependency list.",
+   "existing_code": "      \"name\": \"pyrekordbox\",\n      \"version\": \"0.4.4\",\n      \"license\": \"MIT License\"",
+   "start_line": 311,
+   "end_line": 313,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "THIRD_PARTY_NOTICES",
+   "content": "`torch 2.14.0` and `torchaudio 2.11.0` are on mismatched release trains (torchaudio is typically pinned to the same major.minor as torch). This pairing will generally fail at import/version-check time. Verify the pinned versions and keep both packages in lockstep.",
+   "existing_code": "      \"name\": \"torch\",\n      \"version\": \"2.14.0\",",
+   "start_line": 391,
+   "end_line": 392,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "THIRD_PARTY_NOTICES",
+   "content": "`httpcore2` and `httpx2` are not the canonical PyPI distribution names (the real packages are `httpcore` and `httpx`); both are pinned to the identical version `2.13.1`, which looks like a fabricated/renamed pair. Non-standard names are a supply-chain risk (typosquatting / dependency confusion) and can silently pull an unrelated or malicious package. Confirm these resolve to legitimate distributions or correct the names.",
+   "existing_code": "      \"name\": \"httpcore2\",\n      \"version\": \"2.13.1\",\n      \"license\": \"BSD-3-Clause\"",
+   "start_line": 151,
+   "end_line": 153,
+   "category": "security",
+   "severity": "medium"
+  },
+  {
+   "path": "THIRD_PARTY_NOTICES",
+   "content": "The `yarn` section is empty while Node.js 22 / Electron is declared as a runtime and the hand section notes \"Electron bundles its own\" dependencies. Electron/npm transitive packages therefore appear unscanned, so the manifest is incomplete and the denylist is not enforced for the JavaScript side. Regenerate the yarn/npm inventory so the JS dependency tree is covered.",
+   "existing_code": "  \"yarn\": [],",
+   "start_line": 3,
+   "end_line": 3,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "THIRD_PARTY_NOTICES",
+   "content": "`soxr` is LGPL-2.1-or-later \u2014 a weak-copyleft license imposing notice/source/linking obligations \u2014 yet the policy block only addresses GPL/AGPL and does not mention LGPL. Depending on how the denylist is matched, `\"GPL\"` may either miss LGPL libraries (substring match) or wrongly flag them (exact match), and no obligation handling is documented. Add an explicit rule for LGPL/weak-copyleft dependencies.",
+   "existing_code": "      \"name\": \"soxr\",\n      \"version\": \"1.1.0\",\n      \"license\": \"LGPL-2.1-or-later\"",
+   "start_line": 371,
+   "end_line": 373,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "THIRD_PARTY_NOTICES",
+   "content": "The `generated` date (2026-10-01) predates now by ~12 days. If this file is a generated artifact committed and validated in CI, a stale timestamp suggests it was not regenerated after dependency changes, so the inventory can drift from the actual lockfile. Consider regenerating (and/or asserting freshness in CI) so the manifest reflects the current dependency set.",
+   "existing_code": "  \"generated\": \"2026-10-01\",",
+   "start_line": 2,
+   "end_line": 2,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ]
+}

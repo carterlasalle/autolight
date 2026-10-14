@@ -1,0 +1,215 @@
+{
+ "analysis/src/autolight_analysis/config.py": [
+  {
+   "path": "analysis/src/autolight_analysis/config.py",
+   "content": "`snapshot_hash` only hashes keys prefixed `analysis.`/`qa.`, so any override the caller supplied for other keys is silently dropped from the digest. Since `apply_overrides`/`get` accept arbitrary keys (the worker forwards the whole job `config` dict), two jobs whose effective config differs only in non-prefixed keys produce the *same* 16-char hash, which is exactly the identity collision this function exists to prevent (the docstring claims a hash of the *effective* config). Also note the function currently has no caller in the repo, so the intended contract is unclear \u2014 either hash the full effective config, or narrow/document the overrides it is meant to cover.",
+   "suggestion_code": "        {k: effective[k] for k in sorted(effective)},",
+   "existing_code": "            if k.startswith(\"analysis.\") or k.startswith(\"qa.\")",
+   "start_line": 49,
+   "end_line": 49,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/config.py",
+   "content": "`int_param` silently coerces with `int(...)`: a fractional config value is truncated (e.g. `3.7` -> `3`) and any value that fails conversion (e.g. the string `\"3.7\"`, or a nested object) quietly falls back to `default`. Both cases mask a misconfigured value instead of surfacing it, so a bad config changes tuning behavior without any error. Consider validating the converted value (or using `round`/an explicit check) rather than swallowing the mismatch.",
+   "existing_code": "        return int(get(key, default))\n    except (TypeError, ValueError):\n        return default",
+   "start_line": 66,
+   "end_line": 68,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/config.py",
+   "content": "This module-level `json.loads(_DEFAULTS_PATH.read_text())` runs at import time, so a missing or malformed `config_defaults.json` (e.g. a stale/partial codegen artifact \u2014 see the T-CFG-01 export) raises during import and takes down the whole worker process before any job guard runs, rather than failing at the call site with an actionable message. A guarded load that raises a clear, contextual error (or surfaces the file/path) would fail more diagnosably.",
+   "existing_code": "_DEFAULTS: dict[str, Any] = json.loads(_DEFAULTS_PATH.read_text())",
+   "start_line": 18,
+   "end_line": 18,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "analysis/tests/test_fusion.py": [
+  {
+   "path": "analysis/tests/test_fusion.py",
+   "content": "The assertion `confidence == 0.8` is indistinguishable from the implementation's fallback: the phrase input deliberately omits `confidence`, and `build_track_model` uses `p.get(\"confidence\", 0.8)`, so this value is exactly the hardcoded default. The test therefore passes even if confidence derivation is completely broken (or permanently constant), despite the module docstring claiming confidence comes from agreement/probabilities rather than constants. Provide an explicit input confidence (e.g. `\"confidence\": 0.7` on the phrase) and assert that it is preserved, then add a separate case for the default path so a wrong derivation is actually detectable.",
+   "existing_code": "            \"endBeat\": 1,\n            \"confidence\": 0.8,",
+   "start_line": 54,
+   "end_line": 55,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/tests/test_fusion.py",
+   "content": "`pytest.raises(ValueError)` matches any `ValueError` raised anywhere in the call, so an unrelated failure (e.g. a bad input in `blank_inputs`/`compute_readiness`, or a KeyError-turned-ValueError elsewhere) would silently satisfy this test without the coverage-validation branch ever executing. Bind the test to the intended code path by matching the message the implementation raises (`f\"coverage={coverage}\"`).",
+   "suggestion_code": "    with pytest.raises(ValueError, match=\"coverage=nope\"):",
+   "existing_code": "    with pytest.raises(ValueError):",
+   "start_line": 74,
+   "end_line": 74,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "analysis/tests/test_fusion.py",
+   "content": "This is the only provenance test, yet it asserts just the `evidence` field. Regressions in the other `fuse` return fields (`type` from the label and `confidence`) would go unnoticed. Assert the full returned dict so the test actually covers the fusion contract.",
+   "suggestion_code": "    got = fuse(\"build\", [\"rekordbox:PSSI:Up\", \"energy:rising\"], 0.91)\n    assert got == {\n        \"type\": \"build\",\n        \"evidence\": [\"rekordbox:PSSI:Up\", \"energy:rising\"],\n        \"confidence\": 0.91,\n    }",
+   "existing_code": "    got = fuse(\"build\", [\"rekordbox:PSSI:Up\", \"energy:rising\"], 0.91)\n    assert got[\"evidence\"] == [\"rekordbox:PSSI:Up\", \"energy:rising\"]",
+   "start_line": 8,
+   "end_line": 9,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "analysis/tests/test_grid_stems_harmony.py": [
+  {
+   "path": "analysis/tests/test_grid_stems_harmony.py",
+   "content": "The test name promises that tension *rises* on the dominant, but `>=` makes the assertion satisfiable by a constant (or all-zero) `harmonic_tension` output: `mean() >= mean()` is always true, so a completely broken implementation that returns a flat profile still passes. Require a strict, non-trivial margin so the test actually discriminates.",
+   "suggestion_code": "    assert tension[n : 2 * n].mean() > tension[:n].mean() + 0.05, \"dominant must tense\"",
+   "existing_code": "    assert tension[n : 2 * n].mean() >= tension[:n].mean(), \"dominant must tense\"",
+   "start_line": 94,
+   "end_line": 94,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/tests/test_grid_stems_harmony.py",
+   "content": "`assert key[\"confidence\"] > 0` is effectively vacuous: `estimate_key` returns a cosine similarity against all-positive profiles, so any non-degenerate chroma yields a positive value regardless of whether the correct key was found (and `harmonic_tension` below depends on the key being C major). The test never verifies the detected key, so a wrong-key regression slips through. Assert the expected key/mode and a meaningful confidence floor.",
+   "suggestion_code": "    assert key[\"key\"] == \"C\" and key[\"mode\"] == \"major\"\n    assert key[\"confidence\"] > 0.5",
+   "existing_code": "    assert key[\"confidence\"] > 0",
+   "start_line": 91,
+   "end_line": 91,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "analysis/tests/test_grid_stems_harmony.py",
+   "content": "`seg[\"startAnchor\"] >= 60` is too loose to validate segment localization: the synthetic shift starts exactly at anchor 64, so a segmentation bug that anchors the segment anywhere in [60, \u221e) still passes. Pin the anchor to the known shift index (within a small tolerance) so off-by-N anchoring is actually caught.",
+   "suggestion_code": "    assert abs(seg[\"startAnchor\"] - 64) <= 1",
+   "existing_code": "    assert seg[\"startAnchor\"] >= 60",
+   "start_line": 31,
+   "end_line": 31,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "analysis/tests/validation/validation_set.py": [
+  {
+   "path": "analysis/tests/validation/validation_set.py",
+   "content": "Shape validation of the external YAML manifest relies on `assert`. Assertions are removed when Python runs with `-O`/`PYTHONOPTIMIZE`, so under optimized runs a malformed, non-dict, or empty (safe_load returns `None`) manifest silently passes `load_manifest`. Downstream code then hits an opaque `AttributeError`/`TypeError` (e.g. `data.get(...)` on `None`, or iterating a non-list `tracks`) instead of a clear validation error. Replace the assertions with explicit `raise ValueError(...)` guards.",
+   "suggestion_code": "    if not isinstance(data, dict):\n        raise ValueError(\"manifest must be a mapping\")",
+   "existing_code": "    assert isinstance(data, dict), \"manifest must be a mapping\"",
+   "start_line": 49,
+   "end_line": 49,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/tests/validation/validation_set.py",
+   "content": "`coverage()` accepts `min_per` but never reads it, so callers passing `min_per` here may wrongly believe the threshold is enforced at this level (the real comparison lives in `missing_categories`). This dead parameter invites misuse: e.g. `coverage(tracks, min_per=5)` has no effect. Either remove the parameter (and drop it from the `coverage(tracks, min_per)` call in `missing_categories`) or actually apply it.",
+   "suggestion_code": "def coverage(tracks: list[dict]) -> dict[str, int]:",
+   "existing_code": "def coverage(tracks: list[dict], min_per: int = 3) -> dict[str, int]:",
+   "start_line": 57,
+   "end_line": 57,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "analysis/tests/validation/validation_set.py",
+   "content": "`data.get(\"categories\") == CATEGORIES` compares lists, which is order-sensitive. A manifest that is semantically correct but lists the categories in a different order is rejected as a spec-116 mismatch. If category order carries no meaning (it does not appear to be used for ordering anywhere), compare as sets to avoid a false failure; if order is intentional, make that explicit in the error message. (Also note this remains an `assert`, subject to the `-O` issue raised above.)",
+   "suggestion_code": "    if set(data.get(\"categories\") or []) != set(CATEGORIES):\n        raise ValueError(\"manifest categories must match spec 116\")",
+   "existing_code": "    assert data.get(\"categories\") == CATEGORIES, (",
+   "start_line": 50,
+   "end_line": 50,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/src/components/ui/sonner.tsx": [
+  {
+   "path": "apps/desktop/src/components/ui/sonner.tsx",
+   "content": "`{...props}` is spread after the explicitly-set `className`, `icons`, `style`, and `toastOptions`. Because these are not destructured out of `props`, any caller that passes one of them silently replaces the defaults entirely \u2014 e.g. passing `style` drops the `--normal-bg`/`--normal-text`/`--normal-border`/`--border-radius` overrides, and passing `className` drops `toaster group`. Spreading first makes the component's own theming win and avoids this silent regression.",
+   "suggestion_code": "      {...props}\n      theme={theme}\n      className=\"toaster group\"",
+   "existing_code": "      {...props}",
+   "start_line": 39,
+   "end_line": 39,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/components/ui/sonner.tsx",
+   "content": "The `cn-toast` class referenced here (and the `toaster` class on the rendered container) is not defined anywhere in the project CSS (globals.css defines no `.cn-toast`/`.toaster` rule). This makes the toast class-name hook a silent no-op \u2014 any intended toast styling never applies. Either add the class definition or remove the unused class reference.",
+   "existing_code": "          toast: \"cn-toast\",",
+   "start_line": 36,
+   "end_line": 36,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "apps/desktop/src/components/ui/sonner.tsx",
+   "content": "Project rules discourage inline `style` attributes except for genuinely dynamic values. These are static CSS-variable assignments, so they can live as a class in globals.css (e.g. `.toaster { --normal-bg: var(--popover); ... }`) instead of an inline object cast, which also removes the `as React.CSSProperties` type escape hatch.",
+   "existing_code": "      style={\n        {\n          \"--normal-bg\": \"var(--popover)\",",
+   "start_line": 26,
+   "end_line": 28,
+   "category": "style",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/src/routes/inspector/inspector-helpers.test.ts": [
+  {
+   "path": "apps/desktop/src/routes/inspector/inspector-helpers.test.ts",
+   "content": "The mock is force-cast to `TrackModel` via `as unknown as TrackModel`, which completely disables type/schema checking. The real `TrackModel` requires `schemaVersion`, `analyzerVersion`, `durationSeconds`, `analysisCoverage`, `readinessLevel`, `analysisCoverage2`, etc. (see `trackModelSchema` in packages/contracts/src/index.ts:267), none of which are present here. Because of the cast, a renamed/missing field (e.g. `sections[].endBeat`, which `auditionAtBeat` relies on) will not fail compilation \u2014 the helper would silently read `undefined`/`NaN`, and only some tests would catch it. Prefer building the fixture through the schema (e.g. `trackModelSchema.parse({...})`) or a shared typed factory so schema drift surfaces at test time.",
+   "existing_code": "} as unknown as TrackModel;",
+   "start_line": 10,
+   "end_line": 10,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/routes/inspector/inspector-helpers.test.ts",
+   "content": "This clamp assertion only checks `?.beat`. A regression in the clamp-to-end path that also mis-selects the cue (e.g. returning the wrong `cueType` or `sendToLights` for beat 9999) would still pass. Assert the full expected pick (cueType/sendToLights) for the out-of-range case so the boundary behavior is actually covered.",
+   "existing_code": "    expect(auditionAtBeat(track, cues, 9999, false)?.beat).toBe(512);",
+   "start_line": 24,
+   "end_line": 24,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "apps/desktop/src/routes/inspector/inspector-helpers.test.ts",
+   "content": "The undo tests only assert lengths and never verify immutability or ordering: `undoStack` is called with an empty base, so a mutation of the input array would go undetected, and `redoPop` is exercised on a single-entry stack so LIFO ordering / the remaining `rest` entries are never validated. Seed the stack with a pre-existing entry and assert the original array is untouched and that `redoPop` returns the top entry with `rest` preserving order.",
+   "existing_code": "    const s = undoStack([], [{ op: \"add-drop\", beat: 32 }]);",
+   "start_line": 38,
+   "end_line": 38,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "docs/finish/evidence/T-REND-07/benchmark.json": [
+  {
+   "path": "docs/finish/evidence/T-REND-07/benchmark.json",
+   "content": "The `command` field points at `/tmp/rend-bench.mjs`, a transient path outside the repository. Nothing under `/tmp` is committed (a repo-wide search finds no `rend-bench` script), so this benchmark cannot be re-produced from the tree \u2014 the only recorded reproduction step is lost after a reboot. For a pass/fail evidence artifact this is a data-integrity gap. Please commit the harness (e.g. `docs/finish/tools/rend-bench.mjs` or a `tools/` entry) and reference that committed path here.",
+   "existing_code": "\"command\":\"node /tmp/rend-bench.mjs (mixDown + renderFrame x200, 2x1000-cell fixtures, see README)\"",
+   "start_line": 0,
+   "end_line": 0,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "docs/finish/evidence/T-REND-07/benchmark.json",
+   "content": "`machine` is an object here, but the sibling evidence record `docs/finish/evidence/T-PLAN-14/benchmark.json` stores the same key as a plain string (`\"machine\":\"darwin arm64 reference Mac, node 22\"`). The two benchmark.json files therefore disagree on the shape/type of `machine`. No consumer validates these files today, but any shared reader of the evidence `benchmark.json` schema would parse one correctly and break on the other. Pick one representation and apply it consistently across evidence artifacts.",
+   "existing_code": "\"machine\":{\"platform\":\"darwin\",\"arch\":\"arm64\",\"cpuModel\":\"Apple M1 Pro\",\"node\":\"v22.22.2\"}",
+   "start_line": 0,
+   "end_line": 0,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "docs/finish/evidence/T-REND-07/benchmark.json",
+   "content": "The `notes` field itself concedes that the qualification reference numbers (Mac/Windows) are still missing; only the M1 Pro dev machine was measured. Since this file is the DoD evidence for a renderer budget, a `pass:false` verdict measured on a single non-reference machine is not a complete acceptance record. Track/fill the reference-machine runs (or explicitly mark the record as provisional) so downstream readers do not treat this single-machine number as the authoritative verdict.",
+   "existing_code": "\"notes\":\"OVER budget on this machine; T-REND-05 (dense arrays, cached selectors) is the fix. Reference Mac/Windows numbers still missing.\"",
+   "start_line": 0,
+   "end_line": 0,
+   "category": "documentation",
+   "severity": "low"
+  }
+ ]
+}

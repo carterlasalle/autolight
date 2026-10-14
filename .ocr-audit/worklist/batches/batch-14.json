@@ -1,0 +1,316 @@
+{
+ "packages/simulator/src/govee-lan.test.ts": [
+  {
+   "path": "packages/simulator/src/govee-lan.test.ts",
+   "content": "These tests do not capture the simulator's actual status replies: one hand-builds the B2 frame and parses synthetic data, the other only checks `statusQueries`. Neither verifies that no status datagram is emitted while armed, so a simulator that incorrectly answers status while armed would still pass. Bind a listener socket and assert on the real datagrams (or disarm before querying) to validate the silence contract.",
+   "existing_code": "      const armedFrame = new Uint8Array([0xbb, 0, 1, OPCODE.ARM_STATUS, 1, 0xbb ^ 0 ^ 1 ^ OPCODE.ARM_STATUS ^ 1]);",
+   "start_line": 86,
+   "end_line": 86,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "packages/simulator/src/govee-lan.test.ts",
+   "content": "This test is tautological. `RecordingTransport` is only a recording wrapper \u2014 it has no notion of `armed` state, so it can never filter turns on its own. The single `turn` is recorded *before* `arm(true)`, and `slice(armedIdx)` starts at the first `razer` record, so the pre-arm turn is excluded by construction and `turnsAfterArm` is always empty regardless of any real behavior. To assert \"zero turn commands while armed\" the recording must be driven through the simulator's armed-channel logic (e.g. via `GoveeLanSim` plus a capturing transport), not a plain recorder.",
+   "existing_code": "    const armedIdx = rec.records.findIndex((r) => r.kind === \"razer\");\n    const turnsAfterArm = rec.records.slice(armedIdx).filter((r) => r.kind === \"turn\");\n    expect(turnsAfterArm).toHaveLength(0);",
+   "start_line": 218,
+   "end_line": 220,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "packages/simulator/src/govee-lan.test.ts",
+   "content": "These assertions do not prove reappearance or identity change. `sim.replyIp()` computes its result from the *current live* `packetCount` (>= redesign `reappearAt`) rather than from an actual reply, and no reply is captured anywhere in this test, so it would pass even if the sim never emitted a datagram after reappearing. The disappeared window (packets 3-5) and the single 40ms sleep also make the counts timing-sensitive. Consider capturing replies on a listener and asserting the IP on a real post-reappearance reply.",
+   "existing_code": "      expect(sim.metrics.droppedLoss).toBeGreaterThan(0);\n      expect(sim.replyIp()).toBe(\"127.0.0.2\");",
+   "start_line": 188,
+   "end_line": 189,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/simulator/src/govee-lan.test.ts",
+   "content": "Arm-settle behavior is validated only through fixed wall-clock sleeps. `setTimeout`-based waits race against the asynchronous UDP handling in `GoveeLanSim.handle`, so on a loaded CI host the paint could be processed after the settle window (making `paintsApplied` 1) or the post-settle paints could land outside the 40ms window. Prefer polling until the expected state/metric stabilizes (e.g. a `waitFor` helper) rather than fixed delays. The same race exists in `armedSim`'s 20ms wait.",
+   "existing_code": "      await new Promise((r) => setTimeout(r, 30));\n      expect(sim.metrics.paintsApplied).toBe(0);\n      await new Promise((r) => setTimeout(r, 220));",
+   "start_line": 164,
+   "end_line": 166,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/simulator/src/govee-lan.test.ts",
+   "content": "`paintsStuttered > 0` is a very weak threshold and cannot detect a wrong rate ceiling: the test cannot tell whether 1 or 5 paints were throttled, and the 25ms `minGap` for 14 zones is close enough to loopback send jitter that the assertion can flake to 0 under load. Assert an exact expected stutter count (given the 6 paints and the 25ms gap) or drive the timing deterministically.",
+   "existing_code": "      expect(sim.metrics.paintsStuttered).toBeGreaterThan(0);",
+   "start_line": 172,
+   "end_line": 172,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/simulator/src/recording.ts": [
+  {
+   "path": "packages/simulator/src/recording.ts",
+   "content": "Latency timers are fire-and-forget and `unref()`'d, so pending deliveries are never tracked, cancellable, or drained. If a test finishes (or calls `flush()`) before `latencyMs` elapses, the sender is either never invoked (missing datagram / data loss) or invoked after the test has already asserted, producing flaky results. Recommend storing the pending `Timeout` handles so a `flush`/`drain` method can await or force delivery, and only `unref()` when explicitly desired.",
+   "existing_code": "        const timer = setTimeout(() => this.sender(t), this.faults.latencyMs);\n        timer.unref?.();",
+   "start_line": 62,
+   "end_line": 63,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/simulator/src/recording.ts",
+   "content": "`flush()` calls `this.sender(text)` directly instead of `deliver(text)`, so the held datagram bypasses the configured `latencyMs` (and duplicate logic). The delivered set therefore diverges from what `send()` would produce: with `reorderHold` + `latencyMs`, `flush()` emits the held datagram synchronously ahead of the latency-delayed earlier datagrams, breaking the intended ordering. Route `flush()` through the same delivery path used by `send()`.",
+   "existing_code": "    if (this.held !== null) {\n      const text = this.held;\n      this.held = null;\n      this.sender(text);\n    }",
+   "start_line": 85,
+   "end_line": 89,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/simulator/src/recording.ts",
+   "content": "The `reorderHold` branch returns unconditionally, so `duplicateEvery` is silently ignored whenever `reorderHold` is enabled. A test configuring both faults will believe duplicates are injected when they are not, allowing broken behavior to pass. Either apply duplication inside the reorder branch or document/reject the combination explicitly.",
+   "existing_code": "    if (this.faults.reorderHold) {\n      if (this.held !== null) {\n        const first = this.held;\n        this.held = text;\n        deliver(first);\n      } else {\n        this.held = text;\n      }\n      return;\n    }",
+   "start_line": 68,
+   "end_line": 77,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/simulator/src/recording.ts",
+   "content": "Failures are silently discarded: the bare `catch` in datagram classification converts malformed JSON/unexpected shapes into `kind: other` without surfacing the parse error, and the message handler uses `void this.handle(...).catch(() => undefined)`, swallowing async throw/decoder/runtime bugs. Count or log unexpected errors (or surface an explicit error kind) so simulator/test failures are diagnosable.",
+   "existing_code": "  } catch {\n    // Falls through to \"other\" below.\n  }",
+   "start_line": 19,
+   "end_line": 21,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/simulator/src/recording.ts",
+   "content": "Timestamps use the wall clock (`Date.now()`) with no injectable clock, so timing assertions (brightness rate, zero-turn-while-armed) depend on machine scheduling and are nondeterministic/flaky. Consider accepting an optional clock function in the constructor so tests can control time.",
+   "existing_code": "    this.records.push({ atMs: Date.now(), text, kind: classifyDatagram(text) });",
+   "start_line": 32,
+   "end_line": 32,
+   "category": "test",
+   "severity": "medium"
+  }
+ ],
+ "packages/storage/src/migrate.ts": [
+  {
+   "path": "packages/storage/src/migrate.ts",
+   "content": "Legacy-baseline adoption is unsound: a database is stamped at version 1 (and migration 1 is therefore skipped forever) based solely on the presence of a `tracks` table. A partially built / unrelated / abandoned DB that happens to contain `tracks` will be adopted, then migration 2 immediately runs `ALTER TABLE venues/sessions ... ADD COLUMN` and rebuilds `analysis_artifacts`/`show_plans`; those statements fail on the missing tables, the whole upgrade rolls back, and the DB is permanently stuck at version 1 (the adoption INSERT is autocommitted before the failure). Adoption should verify the full baseline signature, otherwise let migration 1 create the missing tables.",
+   "suggestion_code": "  const BASELINE_TABLES = [\"tracks\", \"analysis_artifacts\", \"show_plans\", \"devices\", \"venues\", \"sessions\", \"diagnostic_events\"];\n  if (!BASELINE_TABLES.every((name) => hasTable(db, name))) return false;",
+   "existing_code": "  if (!hasTable(db, \"tracks\")) return false;",
+   "start_line": 369,
+   "end_line": 369,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/storage/src/migrate.ts",
+   "content": "The schema version is read once before the apply loop, and the loop runs each migration under a plain `BEGIN` (deferred) with no lock or re-check inside the transaction. In the file-backed WAL setup this file targets, two migrators (app + CLI, two windows, a worker) can both read `from = 1`; the loser then re-executes migration 2 (duplicate `ALTER TABLE ... ADD COLUMN`, duplicate `CREATE TABLE analysis_artifacts_v2`) and throws a confusing error instead of being a clean no-op, or hits a `schema_migrations` PRIMARY KEY conflict on adoption. Take an exclusive write lock (`BEGIN IMMEDIATE`) and re-check the applied version inside the transaction before applying each migration.",
+   "existing_code": "  const from = schemaVersion(db);",
+   "start_line": 380,
+   "end_line": 380,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/storage/src/migrate.ts",
+   "content": "The recovery path can mask the real failure. `db.exec(\"ROLLBACK\")` is unguarded: if the driver has already aborted the transaction (or `BEGIN` never took effect for this error), the ROLLBACK itself throws \"cannot rollback - no transaction is active\", so the caller never sees the `migration N (...) failed: <reason>` message and the original cause is lost. Wrap the ROLLBACK so it cannot supersede the original error.",
+   "suggestion_code": "      try {\n        db.exec(\"ROLLBACK\");\n      } catch {\n        // The driver may already have rolled back; keep the original error.\n      }\n      throw new Error(`migration ${migration.version} (${migration.name}) failed: ${(error as Error).message}`);",
+   "existing_code": "      db.exec(\"ROLLBACK\");\n      throw new Error(`migration ${migration.version} (${migration.name}) failed: ${(error as Error).message}`);",
+   "start_line": 402,
+   "end_line": 403,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/storage/src/migrate.ts",
+   "content": "`PRAGMA table_info(${table})` interpolates the table name directly into SQL. This is an exported helper, so any caller passing a non-constant name (e.g. derived from user input or config) can break the statement or inject SQL. Validate the identifier against `[A-Za-z_][A-Za-z0-9_]*` or quote it before interpolating.",
+   "existing_code": "  return db.all<ColumnInfo>(`PRAGMA table_info(${table})`).map((row) => ({",
+   "start_line": 311,
+   "end_line": 311,
+   "category": "security",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/storage/src/migrate.ts",
+   "content": "`schemaVersion` (and `migratorStatus`) perform a write via `ensureBookkeeping`'s `CREATE TABLE IF NOT EXISTS`. This makes the read-only `Store.version` getter a hidden DDL write, which can fail on a read-only connection and takes a write lock on every read. Consider ensuring bookkeeping once at open time (or making the read paths tolerate a missing `schema_migrations` table) instead of mutating on every schema-version read.",
+   "existing_code": "export function schemaVersion(db: SqlExec): number {\n  ensureBookkeeping(db);",
+   "start_line": 334,
+   "end_line": 335,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/venue/src/venue.ts": [
+  {
+   "path": "packages/venue/src/venue.ts",
+   "content": "The guard dereferences `file` before validating it, and the fallback `\"version\" in file` also throws when `file` is null/undefined or a primitive. So `importVenue(null)` (or any non-object parsed payload) raises `TypeError: Cannot read properties of null (reading 'format')` / `Cannot use 'in' operator` instead of the intended descriptive error. The error path is not null-safe.",
+   "suggestion_code": "  if (file == null || typeof file !== \"object\" || file.format !== \"autolight-venue\" || file.version !== 1) {",
+   "existing_code": "  if (file.format !== \"autolight-venue\" || file.version !== 1) {",
+   "start_line": 33,
+   "end_line": 33,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/venue/src/venue.ts",
+   "content": "After the format/version check the payload is cloned without validating `file.venue`. If `venue` is missing/non-object, `structuredClone(undefined)` returns `undefined` (or clones an arbitrary shape), so this returns a value typed `Venue` that is actually undefined, and downstream consumers (e.g. `setLogicalZero`, `emptyVenue` usage, renderer reading `venue.room`) will crash or enter an invalid state. Validate the payload shape before returning.",
+   "suggestion_code": "  if (file.venue == null || typeof file.venue !== \"object\" || file.venue.room == null) {\n    throw new Error(\"venue file payload is missing or malformed\");\n  }\n  return structuredClone(file.venue);",
+   "existing_code": "  return structuredClone(file.venue);",
+   "start_line": 37,
+   "end_line": 37,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/venue/src/venue.ts",
+   "content": "The modulo normalization silently accepts non-finite input: for `NaN` or `Infinity`, `s % 1` is `NaN`, so `zero` becomes `NaN` and is stored into both `logicalZeroS` and `room.logicalZeroS` and propagates to `orderLogical` (the exact same `((d % 1) + 1) % 1` pattern), corrupting cell ordering with no error. Guard against non-finite values.",
+   "suggestion_code": "  if (!Number.isFinite(s)) throw new Error(`logical zero must be a finite number, got ${String(s)}`);\n  const zero = ((s % 1) + 1) % 1;",
+   "existing_code": "  const zero = ((s % 1) + 1) % 1;",
+   "start_line": 41,
+   "end_line": 41,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/venue/src/venue.ts",
+   "content": "`switchVenue` reports `rerenderVersion = venue.version + 1` but returns the venue unchanged, so the returned `venue.version` stays stale and diverges from the bumped `rerenderVersion`. Any caller that persists/compares the returned venue version (as `setLogicalZero` does by incrementing `version`) will observe an inconsistent version, causing missed or spurious rerenders. Either bump the venue version or derive `rerenderVersion` from the same value.",
+   "suggestion_code": "  const version = venue.version + 1;\n  return { venue: { ...venue, version }, rerenderVersion: version };",
+   "existing_code": "  return { venue, rerenderVersion: venue.version + 1 };",
+   "start_line": 25,
+   "end_line": 25,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/venue/src/venue.ts",
+   "content": "`VENUE_TEMPLATES` is never read anywhere in the repo and is not re-exported from `index.ts`, so it is currently dead data. Worse, its `describe` strings (e.g. \"5 m square\", \"6 by 10 m\", \"3 by 4 m\") hardcode geometry that no builder consumes, so they can silently drift from `rectangleRoom`/`outlineRuns` defaults. Either wire templates to a room builder or remove them.",
+   "existing_code": "export const VENUE_TEMPLATES: VenueTemplate[] = [",
+   "start_line": 56,
+   "end_line": 56,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/electron/services/secrets-service.ts": [
+  {
+   "path": "apps/desktop/electron/services/secrets-service.ts",
+   "content": "Inconsistent error contract: `getSecret` declares a structured-error return (`{ ok: false; error: {...} }`) but `requireVault()` throws `Error(\"secrets-service not started\")` when the service has not been started (or was stopped), and the call is not wrapped. Unlike `setSecret`, this escapes as an uncaught exception across the API/IPC boundary instead of the documented error shape. Reproduce by calling `getSecret(\"govee.cloud.apiKey\")` before `start()` (or after `stop()`); callers expecting the union will crash. Wrap it in try/catch and map to a structured error.",
+   "suggestion_code": "    let value: string | null;\n    try {\n      value = this.requireVault().get(id);\n    } catch (err) {\n      return { ok: false, error: { code: \"E_SECRET_STORE\", message: messageOf(err) } };\n    }",
+   "existing_code": "    const value = this.requireVault().get(id);",
+   "start_line": 170,
+   "end_line": 170,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/electron/services/secrets-service.ts",
+   "content": "Same unguarded contract violation as `getSecret`: `removeSecret` promises a structured error but `requireVault()` throws when not started, and `vault.remove()` runs `flush()` which throws `\"secret encryption unavailable...\"` when the vault is in a memory-only/degraded state with a persistent value still present. That exception escapes uncaught, unlike `setSecret` which returns `E_SECRET_STORE`. Wrap in try/catch.",
+   "suggestion_code": "    try {\n      this.requireVault().remove(id);\n    } catch (err) {\n      return { ok: false, error: { code: \"E_SECRET_STORE\", message: messageOf(err) } };\n    }",
+   "existing_code": "    this.requireVault().remove(id);",
+   "start_line": 184,
+   "end_line": 184,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/electron/services/secrets-service.ts",
+   "content": "Degraded-mode guard is bypassed. `crypto ?? fallback` passes the *real* crypto port whenever it is non-null, so when `crypto.isEncryptionAvailable()` is false but `path` exists the real port is used instead of `fallback`. Combined with `memoryBlobs`, `SecretVault.flush()` succeeds (or silently no-ops), the value stays in memory and `presence()` reports `\"stored\"`, yet it is never persisted and vanishes on restart \u2014 contradicting the comment's promise that \"every persistent set fails honestly\". Also the `path === null` case with an available port silently drops the value while advertising it as stored. Pass `fallback` (whose `isEncryptionAvailable()` returns false) in this whole degraded branch so persistent sets fail honestly while the memory-only `agent.apiToken` still works via the empty-persist path.",
+   "suggestion_code": "      this.vault = new SecretVault(fallback, memoryBlobs);",
+   "existing_code": "      this.vault = new SecretVault(crypto ?? fallback, memoryBlobs);",
+   "start_line": 113,
+   "end_line": 113,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/services/secrets-service.ts",
+   "content": "Hardcoded duplicate of the secret-id list. `SECRET_IDS` is already exported from `@autolight/config` (the module this file imports from) and is the single source of truth for secret ids. Duplicating the two ids here means any newly added `SecretId` is silently omitted from `liveValues()`, so its raw value would not be redacted at log/crash boundaries and could leak. Derive the iteration from `SECRET_IDS` (import it) instead.",
+   "suggestion_code": "    for (const id of SECRET_IDS) {",
+   "existing_code": "    for (const id of [\"govee.cloud.apiKey\", \"agent.apiToken\"] as const) {",
+   "start_line": 196,
+   "end_line": 196,
+   "category": "maintainability",
+   "severity": "medium"
+  }
+ ],
+ "apps/desktop/src/features/live/live-view.tsx": [
+  {
+   "path": "apps/desktop/src/features/live/live-view.tsx",
+   "content": "`White (hold)` only resumes on `onMouseUp` on the button element. If the pointer is released outside the button (drag away, touch, window blur, lost capture), `master/full` has already fired but `master/resume` never does, leaving the room stuck at full white until the user finds another control. Use pointer capture (or a pointerup/pointercancel/lostpointercapture safety net) so resume always fires before releasing the hold.",
+   "suggestion_code": "              onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); void invoke(\"master/full\", { version: 1 }); }}\n              onPointerUp={() => { void invoke(\"master/resume\", { version: 1, at: \"bar\" }); }}",
+   "existing_code": "              onMouseDown={() => { void invoke(\"master/full\", { version: 1 }); }}\n              onMouseUp={() => { void invoke(\"master/resume\", { version: 1, at: \"bar\" }); }}",
+   "start_line": 182,
+   "end_line": 183,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/src/features/live/live-view.tsx",
+   "content": "The Alternating mode toggle hardcodes `tier: \"MED\"`, while the Pattern and Speed handlers on the same panel send `tier: s.tier ?? \"MED\"`. Enabling/disabling alternating therefore silently overwrites a user-selected HIGH/LOW tier with MED in the show host. Use the same `s.tier ?? \"MED\"` fallback for consistency.",
+   "suggestion_code": "<Switch checked={s.altOn} onCheckedChange={(v) => { s.set({ altOn: v }); void invoke(\"show/energy\", { version: 1, tier: s.tier ?? \"MED\", alternate: v }); }} /> Alternating mode",
+   "existing_code": "<Switch checked={s.altOn} onCheckedChange={(v) => { s.set({ altOn: v }); void invoke(\"show/energy\", { version: 1, tier: \"MED\", alternate: v }); }} /> Alternating mode",
+   "start_line": 245,
+   "end_line": 245,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/src/features/live/live-view.tsx",
+   "content": "`MasterControls` state is passed with hardcoded `frozen: false, blackout: false` in both the empty and loaded branches, so the master bar's labels/`aria-pressed` never reflect a blackout/freeze that is actually active (e.g. after pressing Blackout the button keeps showing \"Blackout (B)\"). Additionally this entire `<section>` (including `masterIntent`) is duplicated verbatim in the two branches \u2014 extract a single `renderMaster()` (or hoist the section above the `if (!live)` return) and derive blackout/frozen from real state instead of literals.",
+   "existing_code": "        <MasterControls state={{ intensity, frozen: false, blackout: false, auto: !manual }} onIntent={masterIntent} />",
+   "start_line": 46,
+   "end_line": 46,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/features/live/live-view.tsx",
+   "content": "`useShell()` without a selector subscribes `ControlGrid` to the whole store, so it re-renders on every store mutation (including per-beat `liveBeat`/countdown updates) even though it only reads a handful of fields. Select only the fields this component needs (or split into smaller subscribed slices) to avoid re-rendering the whole manual grid every beat during a live set.",
+   "existing_code": "  const s = useShell();",
+   "start_line": 117,
+   "end_line": 117,
+   "category": "performance",
+   "severity": "medium"
+  }
+ ],
+ "apps/desktop/src/routes/routes.test.ts": [
+  {
+   "path": "apps/desktop/src/routes/routes.test.ts",
+   "content": "The `library` marker is not unique to the Library screen: SetupView renders each step's `title` from `STEP_LABELS`, and the `\"library\"` step title is literally `\"Library\"` (see `apps/desktop/src/features/setup/setup-view.tsx` line 12 + the `SETUP_EVIDENCE_STEPS.map` list). Because the assertion uses `toContain`, a mis-wiring such as `library: () => <SetupView />` in `routes/index.tsx` would still produce markup containing \"Library\" and the test would pass, defeating the \"a mis-wired import fails here\" intent in the comment above. Use a screen-unique marker (e.g. the `aria-label=\"Library\"` table / \"Preanalysis queue\" heading) or combine positive markers with a negative check against the other screens.",
+   "existing_code": "  [\"library\", \"Library\"],",
+   "start_line": 12,
+   "end_line": 12,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/src/routes/routes.test.ts",
+   "content": "The `\"Lights\"` marker is a generic substring that also appears on other screens' static markup: SetupView renders the `\"lights\"` step title `\"Lights\"`, and DiagnosticsView renders a `\"Lights\"` metric row/TAB_ROWS label (line 97). A mis-wiring like `venue: () => <DiagnosticsView />` (or SetupView) would still satisfy `toContain(\"Lights\")`, so the test cannot detect that failure. Prefer a marker unique to the Venue screen (e.g. the \"Find lights\" heading or the `aria-label=\"Venue sections\"` tablist).",
+   "existing_code": "  [\"venue\", \"Lights\"],",
+   "start_line": 14,
+   "end_line": 14,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/src/routes/routes.test.ts",
+   "content": "Typing MARKERS as `[Route, string][]` does not enforce exhaustiveness: it only guarantees each entry's first element is a valid Route, so a newly added Route member (or an accidentally deleted entry) compiles and silently loses coverage, contradicting the comment claiming the table is exhaustive. Keying the table by Route makes the compiler require every member, e.g.:\n\n```ts\nconst MARKERS: Record<Route, string> = {\n  live: \"No show loaded\",\n  library: \"Library\",\n  inspector: \"Track inspector\",\n  venue: \"Lights\",\n  setup: \"Follow mode\",\n  diagnostics: \"Diagnostics\",\n  settings: \"Search settings\",\n};\n```\nthen iterate `Object.entries(MARKERS)`.",
+   "existing_code": "const MARKERS: [Route, string][] = [",
+   "start_line": 10,
+   "end_line": 10,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/routes/routes.test.ts",
+   "content": "Only the `live: null` prop path is exercised, and `renderToStaticMarkup` never runs effects. Screen content that is produced in `useEffect` (e.g. DiagnosticsView's metric rows, InspectorView's lane loading) is not rendered by SSR, so these assertions only validate the static shell text and would not catch a route that throws or renders nothing once data arrives. Consider also rendering a route with a populated `LiveState` so the non-null live branch is covered.",
+   "existing_code": "      const html = renderToStaticMarkup(createElement(Routes, { route, live: null }));",
+   "start_line": 23,
+   "end_line": 23,
+   "category": "test",
+   "severity": "medium"
+  }
+ ]
+}

@@ -1,0 +1,315 @@
+{
+ "packages/serato/src/setup.ts": [
+  {
+   "path": "packages/serato/src/setup.ts",
+   "content": "Nested (chained) ternaries are prohibited by the project rules, and this chain silently falls through to `\"no-deck-data\"` for any failing step id that is not enumerated. If a new step is added (the module contract already documents \"seven steps\") or a step id is renamed, its failure will be misreported as `no-deck-data` with the wrong remedy. Replace with an explicit lookup/switch so unmapped ids are caught instead of defaulting.",
+   "suggestion_code": "  const stateByStep: Record<string, SeratoSetupState> = {\n    \"remote-enabled\": \"remote-disabled\",\n    \"serato-installed\": \"not-installed\",\n    advertising: \"not-advertising\",\n    connection: \"no-connection\",\n    authentication: \"unauthenticated\",\n    \"deck-rate\": \"no-deck-data\",\n  };\n  const state = stateByStep[failed.id];\n  if (state === undefined) {\n    throw new Error(`unmapped setup step: ${failed.id}`);\n  }",
+   "existing_code": "  const state: SeratoSetupState =\n    failed.id === \"remote-enabled\" ? \"remote-disabled\"\n    : failed.id === \"serato-installed\" ? \"not-installed\"\n    : failed.id === \"advertising\" ? \"not-advertising\"\n    : failed.id === \"connection\" ? \"no-connection\"\n    : failed.id === \"authentication\" ? \"unauthenticated\"\n    : \"no-deck-data\";",
+   "start_line": 108,
+   "end_line": 114,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/serato/src/setup.ts",
+   "content": "Self-contradictory remedy: this step is marked failed (`ok: input.advertised`) yet the detail tells the user \"nothing is needed on this side\". When the app's own advert is down while `serato.remote.enabled` is on, the report has no actionable next step and the state `not-advertising` is not something the owner can fix. Either treat the advert as an app-internal/transient condition rather than a user-actionable failing step, or give a concrete next step (retry/check logs/report the provider failing to publish).",
+   "existing_code": "      : `not advertising yet; the app publishes _SeratoIOSRemote._tcp itself and Serato connects in, so nothing is needed on this side once serato.remote.enabled is on`,",
+   "start_line": 79,
+   "end_line": 79,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/serato/src/setup.ts",
+   "content": "`input.advertisedPort ?? 0` renders \"on port 0\" whenever the advert is up but no port was captured, presenting a misleading port number to the user. Guard the port separately (e.g. omit it or show \"port unknown\") instead of substituting 0.",
+   "existing_code": "      ? `advertising _SeratoIOSRemote._tcp as \"${input.instanceName ?? \"unknown\"}\" on port ${input.advertisedPort ?? 0}`",
+   "start_line": 78,
+   "end_line": 78,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "packages/serato/src/setup.ts",
+   "content": "Filtering out `hz === 0` conflates \"no decks connected\" with \"decks connected but idle/paused\". A deck that is loaded but paused reports 0 Hz, so the step fails and the remedy wrongly instructs the user to \"load a track\". Distinguish a reported-but-idle deck (e.g. keep the entry and report its rate, or use the entry count for presence and `> 0` only for the rate).",
+   "existing_code": "  const decks = input.deckUpdateHz.filter((hz) => hz > 0);",
+   "start_line": 95,
+   "end_line": 95,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "packages/serato/src/setup.ts",
+   "content": "A non-zero `rejectedFrames` (malformed/protocol-mismatch frames) is reported only in the remedy text while the state stays `receiving`, so consumers keying on `state` treat a degraded stream as healthy. This also contradicts the provider's own behaviour, which moves to `degraded` on a malformed frame (see T-SER-01 evidence). Consider surfacing the degradation in the state/step (or a dedicated flag) instead of hiding it behind a passing state.",
+   "existing_code": "    const rejected = input.rejectedFrames === 0 ? \"\" : `, ${input.rejectedFrames} malformed frame(s) rejected`;\n    return { state: \"receiving\", steps, remedy: `Remote state is flowing${rejected}` };",
+   "start_line": 105,
+   "end_line": 106,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/show-mixer/src/index.ts": [
+  {
+   "path": "packages/show-mixer/src/index.ts",
+   "content": "The owner election silently ignores the shared crossfader context that `mixDown` advertises. `MixOptions extends OwnerOptions, WeightContext`, so a caller may pass `position`/`crossfader`/`masterBonus` at the top level; line 330 (`baseWeights(..., opts)`) honours them, but `ownerScore` only reads `opts.weightContext` (line 121), so `impactOwner` recomputes each deck's weight from its own `DeckState.crossfader` instead.\n\nRepro: `mixDown(a, b, { position: 1 })` with both decks' own `crossfader === 1` and equal strength returns `weights: { a: 0, b: 1 }` yet `owner: \"a\"` (both scores are equal from the per-deck crossfader, and the `scoreA >= scoreB` tie-break picks \"a\"). A weight-0 deck is therefore elected owner: its cues are all dropped as inaudible/inadmissible, and the actually audible deck's exclusives are dropped as the non-owner's, so no exclusive ever reaches the frame \u2014 and `MixResult.owner` (surfaced by the show host/Live view) misreports a silent deck as the owner. Weights and ownership must be derived from the same context.",
+   "suggestion_code": "  const weightContext: WeightContext = opts.weightContext ?? {\n    ...(opts.position !== undefined ? { position: opts.position } : {}),\n    ...(opts.crossfader !== undefined ? { crossfader: opts.crossfader } : {}),\n    ...(opts.masterBonus !== undefined ? { masterBonus: opts.masterBonus } : {}),\n  };\n  const owner = impactOwner(ownerInput(a), ownerInput(b), { ...opts, weightContext });",
+   "existing_code": "  const owner = impactOwner(ownerInput(a), ownerInput(b), opts);",
+   "start_line": 337,
+   "end_line": 337,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/show-mixer/src/index.ts",
+   "content": "This `weight <= 0` guard is unreachable under the default `INTRO_DEFAULTS`: `introductionStage(weight <= 0)` returns \"silent\" (paletteAt = 0.05) and `ADMITTED.silent` is empty, so the `admits()` check above already drops every cue of an inaudible deck. Consequently a zero-weight deck's cues are recorded with the misleading reason `introduction stage silent does not admit the <layer> layer` instead of `deck is not audible`. The check only becomes reachable with a custom `intro` whose `paletteAt <= 0`. Consider checking audibility before the admission gate so the guard is live and the recorded reason is accurate.",
+   "existing_code": "      if (weight <= 0) {\n        dropped.push({ side, cue, reason: \"deck is not audible\" });\n        continue;\n      }",
+   "start_line": 351,
+   "end_line": 354,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/storage/src/cache.test.ts": [
+  {
+   "path": "packages/storage/src/cache.test.ts",
+   "content": "This test never asserts `runs`. The `library` rule in the implementation deletes only `analysis_artifacts`, `show_plans` and `native_analysis`, so track `t1`'s two `analysis_runs` rows (both keyed to the old fingerprint `fp1`) survive even though all of `t1`'s artifacts are wiped. Because `toMatchObject` only checks the listed keys, a regression that leaves stale/dangling `analysis_runs` for a re-fingerprinted track would still pass here. Add an explicit `runs` assertion (e.g. `expect(after.runs).toBe(2)` documenting the current contract, or include `analysis_runs` in the expected `deleted` map if those rows are meant to be invalidated).",
+   "existing_code": "      const after = counts(store);\n      expect(after).toMatchObject({ tracks: 2, artifacts: 1, plans: 0, native: 0 });",
+   "start_line": 122,
+   "end_line": 123,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/storage/src/cache.test.ts",
+   "content": "`artifactFresh` compares `row.config_hash === parts.configHash`, but every case here passes `configHash: \"cfg1\"`, which matches the row. The config-hash axis is therefore never exercised: a bug that drops or inverts the `config_hash` comparison would still pass. Add a case with `configHash: \"cfg2\"` expecting `false`.",
+   "existing_code": "    expect(artifactFresh(artifact, { trackId: \"t1\", analyzerVersion: \"a1\", sourceFingerprint: \"fp2\", configHash: \"cfg1\" })).toBe(false);",
+   "start_line": 191,
+   "end_line": 191,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/storage/src/cache.test.ts",
+   "content": "`planFresh` is only varied on `venueClass` and `plannerVersion`; its comparisons on `source_fingerprint` (and the `schema_version` default) are untested. A broken staleness check on the source fingerprint axis would not be caught. Add cases such as `planFresh(plan, { ...key, sourceFingerprint: \"fp2\" })` (and optionally a schemaVersion mismatch) expecting `false`.",
+   "existing_code": "    expect(planFresh(plan, { ...key, venueClass: \"vc2\" })).toBe(false);",
+   "start_line": 216,
+   "end_line": 216,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/storage/src/cache.test.ts",
+   "content": "This assertion only proves that two sub-millisecond-different mtimes round to the same value (the implementation uses `Math.round(parts.mtimeMs)`), which means it passes both if mtime is deliberately rounded and if mtime is ignored entirely. As written it cannot detect a missing/over-coarse mtime component that would cause stale cache hits. Add an assertion that a meaningfully different mtime changes the fingerprint, e.g. `expect(sourceFingerprint(base)).not.toBe(sourceFingerprint({ ...base, mtimeMs: 1236.4 }))`.",
+   "existing_code": "    expect(sourceFingerprint(base)).toBe(sourceFingerprint({ ...base, mtimeMs: 1234.9 }));",
+   "start_line": 173,
+   "end_line": 173,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/storage/src/cache.test.ts",
+   "content": "`seed()` is invoked before the `try`, so if setup throws partway through (e.g. one of the inserts fails), the already-constructed `Store` is never closed in the `finally`, leaking the DB connection and potentially leaking state into other tests. Move the construction inside the `try` (with the variable declared outside) or otherwise guarantee `close()` runs whenever a store was created.",
+   "existing_code": "    const store = seed();\n    try {\n      const report = invalidate(store, { rule: \"analyzer\", analyzerVersion: \"a2\" });",
+   "start_line": 63,
+   "end_line": 65,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/storage/src/fastpath.test.ts": [
+  {
+   "path": "packages/storage/src/fastpath.test.ts",
+   "content": "This assertion is a wall-clock p95 over 150 real file reads, so it is environment-sensitive: a loaded/slow CI runner (or a container with cold page cache) can push p95 over 100 ms and fail the suite non-deterministically, while passing locally. Two additional problems: (1) it uses `toBeLessThan` (<) whereas the production gate `fastPathBudget()` uses `<=`, so p95 exactly at the budget passes the real gate but fails this test; (2) the 100 ms budget is a second hard-coded copy of the `runtime.fastPath.budgetMs` config value (also baked into `configHash` at line 18), so it will silently drift from the actual configured budget. Prefer asserting through `fastPathBudget(budgetMs).pass` (same comparator as the code under test) and derive the budget from a shared constant/config, and/or carve the timing assertion out of the default run so a busy machine does not produce false failures.",
+   "suggestion_code": "      expect(fastPathBudget(budgetMs).pass).toBe(true);",
+   "existing_code": "      expect(stats.p95).toBeLessThan(budgetMs);",
+   "start_line": 195,
+   "end_line": 195,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/storage/src/fastpath.test.ts",
+   "content": "The suite never verifies cache-key isolation, so a broken key would go undetected. Concretely, in \"answers with typed misses\" the `{ styleHash: house }` request is issued after the plain-request load has already populated the LRU with a `plan: null` entry; if `planKey()` dropped `styleHash` (or `artifactKey()` dropped `analyzerVersion`/`sourceFingerprint`), that request would be served from the stale entry and still report `miss === \"no-plan\"` with a non-null track \u2014 the assertions would pass anyway. `fastPathCacheSize() === 1` only proves one entry exists, not that entries are keyed by the request fields. Add a negative test: load two requests that must not collide (e.g. different `configHash`/`sourceFingerprint`/`styleHash`), and assert both are cold misses with `cacheHit === false` (and cache size 2).",
+   "existing_code": "        expect(fastPathCacheSize()).toBe(1);",
+   "start_line": 111,
+   "end_line": 111,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/storage/src/fastpath.test.ts",
+   "content": "This F-DATA-04 regression test points the artifact row at `/cache/real.json`, which does not exist, so `readFileSync` throws ENOENT and the loader reports `invalid-artifact` because the file is missing \u2014 not because its content is not a TrackModel. The test therefore conflates \"file missing\" with \"content invalid\" and would still pass if the missing-file path regressed independently of the invalid-content path. The only line that actually guards the F-DATA-04 regression is `typeof result.track !== \"string\"`. Point the row at an existing file whose contents are not a TrackModel (the next test already does this with `bogus.json`) and add a separate explicit case for the missing-file behavior.",
+   "existing_code": "    const store = storeWith(\"/cache/real.json\", JSON.stringify(showPlan));",
+   "start_line": 69,
+   "end_line": 69,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/storage/src/fastpath.test.ts",
+   "content": "Asserting literal message substrings (`compile from cached features`, `plan key mismatch`, `did not parse to a ShowPlan`, `/cache/real.json`) couples the tests to exact wording in `fastpath.ts` rather than to the miss classification contract. Any copy edit (e.g. the source's \"no cached plan; compile from cached features (spec 138 step 2)\") breaks these tests without an actual behavior change, and conversely they do not check that `detail` is consistent with the reported `miss`. Prefer asserting `miss` (and `track`/`plan` nullability) as the contract, and treat `detail` only as an optional diagnostic.",
+   "existing_code": "        expect(result.detail).toContain(\"compile from cached features\");",
+   "start_line": 138,
+   "end_line": 138,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/storage/src/fastpath.test.ts",
+   "content": "`storeWith` creates and returns a `Store` but performs `saveTrack`/`saveArtifact`/`saveShowPlan` with no cleanup. Every caller relies on `try { ... } finally { store.close(); }`, which only runs after `storeWith` returns; if any of these save calls throws (e.g. a constraint violation), the freshly created Store is never closed and its DB handle/file lock leaks. Wrap the writes in a try/catch that closes the store before re-throwing, or have the helper return the store and let callers create it inside their `try`.",
+   "suggestion_code": "  const store = new Store();\n  try {",
+   "existing_code": "  const store = new Store();",
+   "start_line": 35,
+   "end_line": 35,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "packages/storage/src/index.test.ts": [
+  {
+   "path": "packages/storage/src/index.test.ts",
+   "content": "Coverage gap / misleading test name: this test is named \"round-trips tracks and plans\", but the track written by `saveTrack` is never read back \u2014 there is no assertion on the track at all (and `Store` exposes no `loadTrack` accessor). A regression that breaks the track INSERT/upsert path would still let this test pass. Add an assertion that reads the persisted row back (e.g. `s.get('SELECT identity_json, duration_seconds FROM tracks WHERE id = ?', ['t1'])`) or rename the test so it does not claim track round-trip coverage.",
+   "existing_code": "    s.saveTrack(\"t1\", JSON.stringify({ id: \"t1\" }), 200);",
+   "start_line": 7,
+   "end_line": 7,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/storage/src/index.test.ts",
+   "content": "The comment asserts \"Planner bump keeps TrackModel artifact, drops only the plan\", but only the plan is verified (`loadShowPlan(...0.2.0)` is null). Nothing asserts that the artifact `('t1','a1','fp1')` still loads after the bump, so an invalidation bug that also wipes the TrackModel artifact would go undetected and this test would still pass. Add the missing artifact assertion.",
+   "suggestion_code": "    // Planner bump keeps TrackModel artifact, drops only the plan.\n    expect(s.loadArtifact(\"t1\", \"a1\", \"fp1\")).toBe(\"/cache/t1.json\");\n    expect(s.loadShowPlan(\"t1\", \"club\", \"0.2.0\")).toBeNull();",
+   "existing_code": "    // Planner bump keeps TrackModel artifact, drops only the plan.\n    expect(s.loadShowPlan(\"t1\", \"club\", \"0.2.0\")).toBeNull();",
+   "start_line": 18,
+   "end_line": 19,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/storage/src/index.test.ts",
+   "content": "Test name vs. coverage mismatch: the title claims it invalidates artifacts \"on analyzer bump or fingerprint change\", but the artifact assertions only look up a different analyzer key (`a2` \u2014 a lookup that is always null for any key that was never written, independent of invalidation logic) and a different fingerprint (`fp2`). No analyzer-version bump scenario is actually exercised. Either test a real analyzer bump (write under one version, assert it is not returned for the bumped version) or rename the test to reflect what is covered.",
+   "existing_code": "  it(\"invalidates artifacts on analyzer bump or fingerprint change\", () => {",
+   "start_line": 12,
+   "end_line": 12,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/storage/src/index.test.ts",
+   "content": "Weak assertion: only the `firmware` field is verified. The persisted `sku` and `calibrationJson` payload (the actual calibration data) are never asserted, so a bug that drops or corrupts the calibration payload while storing firmware correctly would pass. Assert the full `CalibrationRecord` (or at least `calibrationJson`/`sku`).",
+   "suggestion_code": "    expect(s.loadCalibration(\"hw1\")).toEqual({\n      sku: \"H6076\",\n      firmware: \"1.0\",\n      calibrationJson: JSON.stringify({ segmentCount: 14 }),\n    });",
+   "existing_code": "    expect(s.loadCalibration(\"hw1\")?.firmware).toBe(\"1.0\");",
+   "start_line": 25,
+   "end_line": 25,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/storage/src/index.test.ts",
+   "content": "Resource cleanup is not exception-safe: `s.close()` runs only if all preceding assertions pass. Any failing expectation aborts the test before `close()`, leaking the `Store`/DB handle and potentially cascading into later tests. Wrap each test body in try/finally (or use an `afterEach` hook with a shared store) so cleanup always runs.",
+   "existing_code": "    expect(s.loadVenue(\"home\")).toBe(JSON.stringify({ fixtures: [] }));\n    s.close();",
+   "start_line": 28,
+   "end_line": 29,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/track-identity/src/identity.test.ts": [
+  {
+   "path": "packages/track-identity/src/identity.test.ts",
+   "content": "`attached` is not a sensitive probe for \"the moved path got attached\". In alias.ts `attached` = `aliases.some(...) || store.aliasesOf(owner).length > 1`, and the first resolve already stored 3 aliases for this owner, so the `|| store.aliasesOf(owner).length > 1` branch alone makes this `true`. A regression where the new canonical path (`path:/sets/aurora (remastered).mp3`) is never inserted would still yield `attached === true` and pass. Assert the new alias directly.",
+   "suggestion_code": "    expect(moved.attached).toBe(true);\n    expect(store.trackIdForAlias(`path:${normalizePath(\"/Sets/Aurora (remastered).mp3\")}`)).toBe(first.trackId);",
+   "existing_code": "    expect(moved.attached).toBe(true);",
+   "start_line": 35,
+   "end_line": 35,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/track-identity/src/identity.test.ts",
+   "content": "`toBeGreaterThan(2)` is a loose lower bound: it passes even if resolveTrackId re-inserts duplicate/stale alias rows on every resolve, so it does not actually validate the dedup/attach path it claims to guard. MemoryAliasStore does dedup by aliasId, so assert the exact alias set for the track (expected 4 rows: `rb:101`, `path:/music/aurora.mp3`, `hash:<hash>`, `path:/sets/aurora (remastered).mp3`).",
+   "suggestion_code": "    expect(store.aliasesOf(first.trackId).map((r) => r.aliasId).sort()).toEqual(\n      [\"rb:101\", `path:${normalizePath(\"/Music/Aurora.mp3\")}`, `hash:${hash}`, `path:${normalizePath(\"/Sets/Aurora (remastered).mp3\")}`].sort(),\n    );",
+   "existing_code": "    expect(store.aliasesOf(first.trackId).length).toBeGreaterThan(2);",
+   "start_line": 36,
+   "end_line": 36,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/track-identity/src/identity.test.ts",
+   "content": "`acousticProposesLink` is only ever asserted to be `true`, and only with the identical hash set (`hSame, hSame`, similarity 1). An implementation that always returns `true` or ignores the threshold would still pass, so the \"propose a link, never auto-merge\" / 0.9-cutoff contract is untested. Add a below-threshold negative case using a different landmark set.",
+   "suggestion_code": "    expect(acousticSimilarity(hSame, hSame)).toBe(1);\n    expect(acousticProposesLink(hSame, hSame)).toBe(true);\n    const hOther = landmarkHashes(other);\n    expect(acousticSimilarity(hSame, hOther)).toBeLessThan(0.9);\n    expect(acousticProposesLink(hSame, hOther)).toBe(false);",
+   "existing_code": "    expect(acousticSimilarity(hSame, hSame)).toBe(1);\n    expect(acousticProposesLink(hSame, hSame)).toBe(true);",
+   "start_line": 68,
+   "end_line": 69,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/track-identity/src/identity.test.ts",
+   "content": "This case is named \"matches a re-encoded copy by pcm-hash\", but it passes the identical `pcmFingerprint: \"pcm-aaa\"`, so it only verifies exact pcm-hash dedup. Per fingerprint.ts, the pcm-hash survives rename/move/retag but not a re-encode; the re-encode path is the acoustic one, which is never exercised here. Rename the case (or drive it through the acoustic similarity/propose-link path) so the test documents what it actually covers.",
+   "existing_code": "    const reencode = resolveTrackId(store, { rekordboxId: \"999\", canonicalPath: \"/Other/copy.mp3\", pcmFingerprint: \"pcm-aaa\" }, () => `t${++n}`);",
+   "start_line": 42,
+   "end_line": 42,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/track-identity/src/identity.test.ts",
+   "content": "The rebuild round-trip only asserts two alias lookups (`rb:101` and the path). It never asserts `rebuilt.all().length` or that `source`/`createdAt` survive, so a lossy `all()`/`insert()` that drops the `hash:` alias or the row fields would still pass these two lookups. Assert full fidelity of the round-trip (row count and alias set/fields).",
+   "existing_code": "    for (const row of store.all()) rebuilt.insert(row);",
+   "start_line": 53,
+   "end_line": 53,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/track-model/src/index.test.ts": [
+  {
+   "path": "packages/track-model/src/index.test.ts",
+   "content": "The hash assertion only checks the prefix, so it passes for any implementation that emits `hash:` prefix. It does not verify the documented truncation (`parts.fileHash.slice(0, 16)`) or the encoded content, so a regression that uses the full/raw hash, or a different field (e.g. `pcm:` prefix), would go undetected. Assert the exact expected id (input \"ab\".repeat(20) \u2192 first 16 chars \"abababababababab\").",
+   "suggestion_code": "    expect(resolveIdentity({ fileHash: \"ab\".repeat(20) }).id).toBe(`hash:${\"ab\".repeat(8)}`);",
+   "existing_code": "    expect(resolveIdentity({ fileHash: \"ab\".repeat(20) }).id.startsWith(\"hash:\")).toBe(true);",
+   "start_line": 11,
+   "end_line": 11,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/track-model/src/index.test.ts",
+   "content": "`toThrow()` does not assert the error type or message. Combined with the fact that this is the only negative case, a bug where the wrong error is thrown (or an unrelated failure occurs inside `resolveIdentity`) would still pass. Assert the specific message, e.g. `.toThrow(/identity needs a native id/)`.",
+   "suggestion_code": "    expect(() => resolveIdentity({ title: \"X\", artist: \"Y\" })).toThrow(/identity needs a native id/);",
+   "existing_code": "    expect(() => resolveIdentity({ title: \"X\", artist: \"Y\" })).toThrow();",
+   "start_line": 6,
+   "end_line": 6,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/track-model/src/index.test.ts",
+   "content": "All fixtures are forced through `as never`, which silences the compiler and bypasses the real `TrackModel`/`BeatGrid`/`Section` types. If `analysisCoverage`, `beats`, `beatInBar`, or `sections` ever change shape, these tests keep compiling and passing even though the fixtures no longer match the contract. Build fixtures typed against the real types (or use only the fields actually consumed by `coverageOf`) so the test acts as a genuine contract check.",
+   "existing_code": "    const grid = { version: 1, beats: [{ index: 0, beatInBar: 1, sourceTimeMs: 0, bpm: 128 }] } as never;\n    expect(coverageOf({ beatGrid: grid, sections: [{ kind: \"chorus\" }], analysisCoverage: \"full\" } as never)).toBe(\"full\");\n    expect(coverageOf({ beatGrid: grid, sections: [], analysisCoverage: \"full\" } as never)).toBe(\"structured\");\n    expect(coverageOf({ beatGrid: { version: 1, beats: [] }, sections: [], analysisCoverage: \"adaptive\" } as never)).toBe(\"adaptive\");",
+   "start_line": 14,
+   "end_line": 17,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/track-model/src/index.test.ts",
+   "content": "The fallback ordering (rekordboxId \u2192 seratoPath \u2192 canonicalPath \u2192 fileHash \u2192 pcmFingerprint) is never exercised with multiple fields present, so no test would fail if the precedence were reordered. Add a case providing e.g. `{ rekordboxId, seratoPath, fileHash }` together and assert the native id wins.",
+   "existing_code": "    expect(resolveIdentity({ seratoPath: \"/m/t.mp3\" }).id).toBe(\"path:/m/t.mp3\");",
+   "start_line": 10,
+   "end_line": 10,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/track-model/src/index.test.ts",
+   "content": "No case covers `analysisCoverage` being `undefined`/missing, nor a missing/empty `beatGrid`. Since `coverageOf` dereferences `model.beatGrid.beats` and `model.sections` unconditionally, the null-safety behavior is untested; add a case with `analysisCoverage` omitted to lock in the expected `structured`/`adaptive` result (and document the intended behavior for a missing beatGrid, which currently throws).",
+   "existing_code": "    expect(coverageOf({ beatGrid: { version: 1, beats: [] }, sections: [], analysisCoverage: \"adaptive\" } as never)).toBe(\"adaptive\");",
+   "start_line": 17,
+   "end_line": 17,
+   "category": "test",
+   "severity": "low"
+  }
+ ]
+}

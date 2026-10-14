@@ -1,0 +1,318 @@
+{
+ "packages/govee/src/razer.ts": [
+  {
+   "path": "packages/govee/src/razer.ts",
+   "content": "`lastAt` is seeded here at construction time, but the first `emit()` can only run after `armSettleMs` has elapsed (via `startTimer`). In `emit()`, `behind = Math.floor((now - lastAt) / intervalMs) - 1` therefore counts the entire settle window as skipped ticks on the very first emit, inflating `missedTicks` (and any downstream `effectiveHz`/health reporting) even though no frame was ever due. Reset `lastAt` to the stream-start time so the settle period is not counted.",
+   "suggestion_code": "    // lastAt is (re)initialised in startStream() once the arm settle window\n    // has elapsed, so the settle period is not counted as skipped ticks.\n    this.lastAt = clock.now();",
+   "existing_code": "    this.lastAt = clock.now();",
+   "start_line": 340,
+   "end_line": 340,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/govee/src/razer.ts",
+   "content": "`started` is written in `startStream()` but never read anywhere in the class. It is dead state \u2014 either remove it or use it to guard re-entry (e.g. ensure the interval is only created once).",
+   "existing_code": "  private started = false;",
+   "start_line": 320,
+   "end_line": 320,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/govee/src/razer.ts",
+   "content": "This `try/catch` is dead: `Buffer.from(str, \"base64\")` does not throw on malformed base64 in Node \u2014 it silently ignores invalid characters and returns a (possibly shorter/empty) buffer. A corrupt `pt` therefore silently yields `armed = false` instead of being flagged as a malformed status payload. Either drop the try/catch and handle a failed `decodeRaw()` result explicitly, or validate the base64/decoded frame and surface the error.",
+   "existing_code": "    try {\n      bytes = new Uint8Array(Buffer.from(data.pt, \"base64\"));\n    } catch {\n      bytes = null;\n    }",
+   "start_line": 94,
+   "end_line": 98,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "packages/govee/src/razer.ts",
+   "content": "The 16-bit length field is written from `payload.length` without an upper-bound check. For payloads larger than 0xFFFF the length is silently truncated (mod 65536) while `out` is still allocated at the full size, producing a frame whose declared length does not match its content \u2014 `decodeRaw` on the peer then rejects it and the actual data is lost. Throw a `RangeError` for oversized payloads instead of silently wrapping.",
+   "suggestion_code": "  if (payload.length > 0xffff) throw new RangeError(`payload length exceeds 16 bits, got ${payload.length}`);\n  out[1] = (payload.length >> 8) & 0xff;\n  out[2] = payload.length & 0xff;",
+   "existing_code": "  out[1] = (payload.length >> 8) & 0xff;\n  out[2] = payload.length & 0xff;",
+   "start_line": 30,
+   "end_line": 31,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/govee/src/razer.ts",
+   "content": "`paintZoned` writes `r`/`g`/`b`/`zone` straight into the `Uint8Array` payload with no range validation (unlike `paint`, which validates zone count and byte grouping). Out-of-range or fractional inputs (e.g. `r = 300`, `zone = 256`, `zone = -1`, or a float) silently wrap/mangle bytes, so the device receives a wrong frame instead of the caller getting an error. Clamp r/g/b to 0-255, validate `zone` fits one byte, and consider validating `gradient`.",
+   "existing_code": "    payload[2 + i * 4] = e.r;\n    payload[2 + i * 4 + 1] = e.g;\n    payload[2 + i * 4 + 2] = e.b;\n    payload[2 + i * 4 + 3] = e.zone;",
+   "start_line": 77,
+   "end_line": 80,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/govee/src/razer.ts",
+   "content": "`gradient` is written into the `Uint8Array` payload without clamping or validation, so out-of-range inputs wrap silently and produce a different gradient than requested. Clamp to 0-255 (or throw) so invalid input is not silently mangled.",
+   "suggestion_code": "  payload[0] = Math.min(255, Math.max(0, Math.round(gradient)));\n  payload[1] = n;",
+   "existing_code": "  payload[0] = gradient;\n  payload[1] = n;",
+   "start_line": 65,
+   "end_line": 66,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "packages/govee/src/resolution.test.ts": [
+  {
+   "path": "packages/govee/src/resolution.test.ts",
+   "content": "The candidates assertion only checks quantity. Production builds `candidates` from distinct rows, filters duplicates (`zones !== byKind.native && zones !== byKind.logical`), and sorts them by `zones` descending (resolution.ts lines 64-78). A regression that emits duplicate/wrong rows or drops the sort would still satisfy `length > 2`, masking incorrect auto-selection metadata. Assert the actual membership/order, e.g. `expect(decision.candidates.map((c) => `${c.kind}:${c.zones}`)).toEqual([\"native:120\", \"grouped:60\", \"grouped:40\", ...])` (or at minimum verify the first candidate is `native:120` and zones are strictly descending).",
+   "existing_code": "    expect(decision.candidates.length).toBeGreaterThan(2);",
+   "start_line": 50,
+   "end_line": 50,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/govee/src/resolution.test.ts",
+   "content": "`toContain(\"120\")` is a very weak check: it matches the bare number anywhere in the reason, so the assertion would still pass even if the reason described the wrong decision (e.g. if it reported the picked zones as 120 or referenced an unrelated number). The neighboring `toContain(\"below target\")` / `toContain(\"grouped 40\")` checks are similarly partial. Prefer asserting the full structured reason string, or at least a distinctive phrase like `\"native 120 zones\"` that ties the number to the native context.",
+   "existing_code": "    expect(decision.reason).toContain(\"120\");",
+   "start_line": 47,
+   "end_line": 47,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/govee/src/resolution.test.ts",
+   "content": "The two error cases only assert that a RangeError is thrown; they do not verify the message, nor that the two distinct branches are distinguished. In production the empty-input case throws `\"selectResolution needs at least one confirmed count (logical or native)\"` (resolution.ts line 62) while the missing-mode-count case throws `\"resolution <mode> has no confirmed zone count\"` (line 83). With a bare `toThrow(RangeError)` a refactor that collapses the two paths (or throws for the wrong reason) would pass. Assert the message content, e.g. `toThrow(/at least one confirmed count/)` and `toThrow(/resolution native has no confirmed zone count/)`.",
+   "existing_code": "    })).toThrow(RangeError);\n    expect(() => selectResolution({",
+   "start_line": 73,
+   "end_line": 74,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/govee/src/resolution.test.ts",
+   "content": "The core rule \"auto picks the highest confirmed count\" is only exercised across a single kind in each test (test 1: native meets logic while logical is below; test 2: grouped meets). There is no case where two different kinds both meet the target (e.g. `logical: 20, native: 60` with both >= target), so the cross-kind tie-break (`meets[0]` after the `sort((a,b) => b.zones - a.zones)`) is never validated and could silently regress. Also uncovered: the equality boundary (`stableFps === targetHz`, where production uses `>=`, line 77) and the explicit `input.grouped` array path (line 51-52). Add targeted cases for these boundaries.",
+   "existing_code": "  it(\"auto picks the highest confirmed count that meets the target\", () => {",
+   "start_line": 24,
+   "end_line": 24,
+   "category": "test",
+   "severity": "medium"
+  }
+ ],
+ "packages/reactive-audio/src/dsp.test.ts": [
+  {
+   "path": "packages/reactive-audio/src/dsp.test.ts",
+   "content": "Vacuous warm-up guard \u2014 the test never actually checks any frame. `60 * hop` = 60 * 2048 = 122,880 samples, but the tone is only 2 s at 8192 Hz = 16,384 samples, so the loop runs 8 iterations (max offset 14,336) and `offset >= 60 * hop` is never true. Consequently `features.onset` is never evaluated and `expect(onsets).toBe(0)` passes unconditionally, even if the extractor fires an onset on every frame. The unit is also wrong: `offset` is in samples, not hops. Make the signal long enough to exceed 60 hops (e.g. `sine(1000, 20)`) or drop/rework the guard so the assertion exercises real frames. (Also note the onset history window is 43 frames, so <43 frames can never be considered 'warm'.)",
+   "existing_code": "      if (offset >= 60 * hop && features.onset) onsets += 1;",
+   "start_line": 156,
+   "end_line": 156,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "packages/reactive-audio/src/dsp.test.ts",
+   "content": "The test title says it verifies clamping \"at the range edges\", but only the maximum edge is asserted (`state.gain` reaching the upper clamp of 4 for the quiet 0.05 signal). The lower clamp (`Math.max(0.25, gain)` in `agcStep`) is never exercised, so a regression that removed or changed the minimum clamp would go undetected. Either add an assertion for the low-gain edge or rename the test so it doesn't overstate coverage.",
+   "existing_code": "    expect(state.gain).toBe(4);",
+   "start_line": 170,
+   "end_line": 170,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/reactive-audio/src/dsp.test.ts",
+   "content": "The fast click-train estimate asserts `confidence > 0.5`, but the slow estimate's confidence is never checked. A spurious/incorrect low-confidence tempo that happens to fall inside the 57\u201363 BPM window would still pass, so the test doesn't actually validate the tempo detector here. Assert `slowEstimate.confidence` too (e.g. `toBeGreaterThan(0.5)`) for parity with the fast case.",
+   "existing_code": "    expect(slowEstimate.bpm).toBeLessThan(63);",
+   "start_line": 185,
+   "end_line": 185,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/rekordbox-library/src/beat.ts": [
+  {
+   "path": "packages/rekordbox-library/src/beat.ts",
+   "content": "`raw.bpm` is copied into `BeatAnchor` without validation. A corrupt PQTZ file can supply `bpm === 0`, a negative value, `NaN`, or `Infinity`; consumers that derive beat/bar durations from the anchor's bpm (e.g. `60000 / bpm`) will then produce `Infinity`/`NaN` durations far from this boundary. Validate a finite, positive bpm here so corrupt data is surfaced instead of silently propagated.",
+   "existing_code": "    bpm: raw.bpm,",
+   "start_line": 65,
+   "end_line": 65,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-library/src/beat.ts",
+   "content": "Neither direction validates its scalar argument: `seconds` here, and `beat` inside `beatToSourceSeconds`, can be `NaN`/`Infinity` (or negative). With `NaN`, every comparison in `anchorPosition`/`beatCaret` is false, so the binary search collapses to segment 0 and the function returns `NaN` (or an arbitrary value) instead of failing fast. Add a `Number.isFinite` guard (plus a range check where negative time/beat is invalid) at the top of both functions.",
+   "suggestion_code": "  if (!Number.isFinite(seconds)) throw new RangeError(`seconds=${seconds}, expected a finite number`);\n  const ms = seconds * MS_PER_SECOND;",
+   "existing_code": "  const ms = seconds * MS_PER_SECOND;",
+   "start_line": 120,
+   "end_line": 120,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-library/src/beat.ts",
+   "content": "Degenerate segments (`span <= 0` or `beatSpan <= 0`) silently return a constant rather than throwing. This also triggers for single-anchor grids (`beats[p + 1] ?? a` makes both spans 0) and for duplicate/equal anchor times or indices. In all those cases the mapping collapses (no longer monotonic or invertible), contradicting the documented contract in the header, and corrupt grids get masked rather than surfaced. Consider throwing (or otherwise rejecting) a grid that cannot support the requested mapping, e.g. requiring >= 2 strictly increasing anchors.",
+   "existing_code": "  if (span <= 0 || beatSpan <= 0) return (a.sourceTimeMs / MS_PER_SECOND) as Seconds;",
+   "start_line": 111,
+   "end_line": 111,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-library/src/beat.ts",
+   "content": "Both `anchorPosition` (searching by `sourceTimeMs`) and `beatCaret` (searching by `index + 1`) assume the array is sorted and duplicate-free, but nothing validates this \u2014 `BeatGridLike` accepts any `readonly` array. An unsorted grid or duplicate anchors silently select the wrong segment and return an incorrect time/beat instead of raising an error. Validate the grid once (non-empty, strictly increasing `sourceTimeMs` and `index`) before searching, or document/enforce the precondition at the call boundary.",
+   "existing_code": "  if (ms <= beats[0]!.sourceTimeMs) return 0;",
+   "start_line": 73,
+   "end_line": 73,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/rekordbox-library/src/service.test.ts": [
+  {
+   "path": "packages/rekordbox-library/src/service.test.ts",
+   "content": "The sidecar mock ignores its call arguments, so nothing in this suite verifies the invocation contract (e.g. that the service forwards `dbPath`, `encrypted`, or any paths to the sidecar). A regression that passes the wrong path or drops arguments entirely would still satisfy every cross-check/fallback assertion in this file. Consider recording the arguments so the tests can assert on them.\n\nFor example track calls:\n```ts\nconst calls: unknown[] = [];\nconst run: SidecarRunner = (args) => { calls.push(args); return Promise.resolve({...}); };\n```",
+   "existing_code": "    return () => Promise.resolve({ code, stdout: JSON.stringify(payload), stderr: \"\" } satisfies SidecarRun);",
+   "start_line": 33,
+   "end_line": 33,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-library/src/service.test.ts",
+   "content": "This failover test wires the service to a junk `dbPath` but feeds the sidecar the payload of the *valid* `master.db`. Because `runnerReturning` ignores its arguments, the test cannot detect if the service forwards the wrong path (or no path) to the sidecar \u2014 it would pass regardless. Additionally the test never asserts *why* the native reader failed (the `not-a-database` error) nor that a sidecar which is also unavailable is surfaced, so a failover decision taken for the wrong reason still passes.",
+   "existing_code": "    const payload = readFixturePayload(join(root, \"master.db\"));\n    const junk = join(root, \"encrypted-master.db\");\n    writeFileSync(junk, \"not a plain sqlite file\");\n    const service = await LibraryService.open({\n      dbPath: junk,",
+   "start_line": 173,
+   "end_line": 177,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-library/src/service.test.ts",
+   "content": "`vi.useFakeTimers()` is called outside the `try` block, and `vi.useRealTimers()` only runs from `finally` after `LibraryService.open(...)` has resolved. If `open` rejects, the fake clock is never restored and leaks into the remaining tests, causing order-dependent/flaky failures. Move `vi.useFakeTimers()` inside the `try` (or restore timers in the `afterEach` hook so it always runs).",
+   "existing_code": "    vi.useFakeTimers();",
+   "start_line": 205,
+   "end_line": 205,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-library/src/service.test.ts",
+   "content": "`missedChanges` is asserted as the hardcoded constant `0`, but the safety-sweep path that increments `missed` (only reachable via the polling interval) is never exercised here \u2014 the fake clock never advances `pollMs: 60_000`, and the stub is `engine: \"auto\"` so `missed` can only grow through `sweep()`. This assertion therefore cannot fail and gives false confidence about the missed-change counter; consider driving a polling sweep to assert a non-zero value.",
+   "existing_code": "      expect(service.diagnostics().watcher).toEqual({ engine: \"auto\", missedChanges: 0, watchedFiles: files.length });",
+   "start_line": 240,
+   "end_line": 240,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/rekordbox-library/src/service.test.ts",
+   "content": "The `anlz` file count is only checked with a loose lower bound (`>= 3`). If the anlz classification regresses (e.g. `ex2` files are dropped, giving 3 instead of the expected 4), the assertion still passes. Prefer an exact expected count derived from the fixture so the classification is actually pinned.",
+   "existing_code": "      expect(files.filter((file) => file.kind === \"anlz\").length).toBeGreaterThanOrEqual(3);",
+   "start_line": 218,
+   "end_line": 218,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/rekordbox-library/src/service.test.ts",
+   "content": "The `NativeWatch` stub records the files passed to `start()` but never asserts their contents (`native.started` is only length-checked in the watcher test), and `stop()` is a no-op that records nothing. As a result the native-vs-poll engine selection, the exact watched-file set, and the teardown path (`stopWatching`/`close` calling `native.stop()`) are never verified. Capture the started files and a `stopped` flag so these can be asserted.",
+   "existing_code": "  stop(): Promise<void> {\n    return Promise.resolve();\n  }",
+   "start_line": 46,
+   "end_line": 48,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/rekordbox-live/src/version-registry.test.ts": [
+  {
+   "path": "packages/rekordbox-live/src/version-registry.test.ts",
+   "content": "Test title vs. assertion mismatch. The test is named \"shows the banner for a simulated 9.9.9 without a modal\", but for 9.9.9 `unverifiedBanner` returns `null` because every seeded entry is `7.2.x` and therefore `unsupported` (see `unverifiedBanner` filtering only `status === \"unverified\"` in version-registry.ts). The assertion is correct for the current implementation, but the title claims the opposite of what it checks, which is confusing and can mask a future regression where an unknown/unsupported version silently stops surfacing any warning (spec 144/145 wants an inline banner). Either rename the test to reflect that 9.9.9 produces no banner (unsupported) or assert the intended unsupported-version behavior explicitly.",
+   "existing_code": "    const banner = unverifiedBanner(registry, \"9.9.9\", \"macos\");\n    expect(banner).toBeNull();",
+   "start_line": 46,
+   "end_line": 47,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/version-registry.test.ts",
+   "content": "The test title claims \"matches version ranges on the stem, not the prefix\", but none of the cases distinguish stem matching from a naive prefix match. A naive implementation such as `version.startsWith(\"7.2\")` (no trailing dot) would satisfy all four assertions here while incorrectly matching `7.20.0`. Add a distinguishing negative case, e.g. `expect(versionInRange(\"7.20.0\", \"7.2.x\")).toBe(false)` (and also assert that an exact-range entry does not match a longer prefix, e.g. `versionInRange(\"7.2.19.0012\", \"7.2.19\")`), so the test actually enforces the behavior it names.",
+   "existing_code": "    expect(versionInRange(\"7.3.0\", \"7.2.x\")).toBe(false);",
+   "start_line": 19,
+   "end_line": 19,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/version-registry.test.ts",
+   "content": "Weak assertion. `statuses.length` >= 6 and `every(... === \"unverified\")` does not verify the exact provider set nor any per-provider difference. Redundant, missing, or wrongly classified providers could still pass. Assert the concrete expected providers/statuses instead (e.g. map to `{ provider, status }` and compare against the six seeded providers, or at minimum `expect(statuses.map((s) => s.provider)).toEqual([...])`).",
+   "existing_code": "    expect(statuses.length).toBeGreaterThanOrEqual(6);\n    expect(statuses.every((s) => s.status === \"unverified\")).toBe(true);",
+   "start_line": 51,
+   "end_line": 52,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/version-registry.test.ts",
+   "content": "Round-trip assertion is too weak to catch serialization field loss. Comparing only the array length and the first entry's `decoder` would still pass if `serializeRegistry`/`parseRegistry` dropped `versionRange`, `fixtures`, or `qualification`, reordered entries, or injected defaults. Compare the full parsed result against the source registry (deep equality), e.g. `expect(parseRegistry(serializeRegistry(registry))).toEqual(registry)`.",
+   "existing_code": "    expect(parsed).toHaveLength(registry.length);\n    expect(parsed[0]?.decoder).toBe(registry[0]?.decoder);",
+   "start_line": 65,
+   "end_line": 66,
+   "category": "test",
+   "severity": "medium"
+  }
+ ],
+ "packages/renderer/src/spatial.test.ts": [
+  {
+   "path": "packages/renderer/src/spatial.test.ts",
+   "content": "Dead code: `corners` is populated but never read; `void corners;` is a no-op whose only purpose is to silence the unused-variable warning. Remove both the array and this statement so the fixture stays clean.",
+   "existing_code": "  void corners;",
+   "start_line": 79,
+   "end_line": 79,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/renderer/src/spatial.test.ts",
+   "content": "Nested ternary expression, which the project rules explicitly prohibit. Split into a plain conditional for readability.",
+   "suggestion_code": "    if (x < -0.375) side[i] = 0;\n    else if (x > 0.375) side[i] = 2;\n    else side[i] = 1;",
+   "existing_code": "    side[i] = x < -0.375 ? 0 : x > 0.375 ? 2 : 1;",
+   "start_line": 68,
+   "end_line": 68,
+   "category": "style",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/renderer/src/spatial.test.ts",
+   "content": "The test name promises \"peaks and decays\" but only the peak is asserted. `level >= 0` is trivially true for every cell because `gauss()` never returns a negative value, so the second assertion verifies nothing, and the decay phase is never exercised. Add an assertion comparing a later beat against the peak (e.g. sample at a beat past the leading edge and expect it to be lower) so a broken/absent decay would fail the test.",
+   "existing_code": "    expect(peak).toBeGreaterThan(0.5);\n    expect(sampleSpatial(\"Ripple\", params, 0, 0, fields).level).toBeGreaterThanOrEqual(0);",
+   "start_line": 144,
+   "end_line": 145,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/renderer/src/spatial.test.ts",
+   "content": "The test name says \"wraps without a jump\", but this only samples beats 0 and 1. With Orbit's default `beatsPerRevolution: 4`, that advances a quarter revolution (head 0 -> 0.25), so the s=0/1 wrap boundary is never crossed and a wrap-handling regression would go undetected. Sample across the boundary (e.g. beats 3.9 and 4.1) and assert the head position is continuous there.",
+   "existing_code": "    const jump = Math.min(Math.abs(h1 - h0), fields.count - Math.abs(h1 - h0));",
+   "start_line": 104,
+   "end_line": 104,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/renderer/src/spatial.test.ts",
+   "content": "`as never` bypasses parameter type-checking entirely (never is assignable to any type), so a drift between `isKnownCueType` and the `PrimitiveName` union would not be caught by the compiler at this call site. Prefer an explicit `as PrimitiveName` cast (with a comment noting the intentionally invalid input) to keep the negative test type-safe.",
+   "existing_code": "    expect(() => sampleSpatial(\"nope\" as never, {}, 0, 0, fields)).toThrowError(UnknownSpatialError);",
+   "start_line": 151,
+   "end_line": 151,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/renderer/src/spatial.test.ts",
+   "content": "The expected side is derived from the sign of `signedSplit`, which is exactly the classifier the implementation uses (`split >= 0 ? 0 : 1`), so the assertions mirror the implementation instead of independent semantics and cannot catch a swapped/wrong side mapping. The fixture also computes a `side` field (0/1/2) that is never exercised, and the center region is untested. Derive expectations from an independent notion of side (and cover the center cells) to make this a meaningful alternation test.",
+   "existing_code": "      if (fields.signedSplit[i]! >= 0) {",
+   "start_line": 123,
+   "end_line": 123,
+   "category": "test",
+   "severity": "low"
+  }
+ ]
+}

@@ -1,0 +1,81 @@
+{
+ "apps/desktop/src/components/ui/select.tsx": [
+  {
+   "path": "apps/desktop/src/components/ui/select.tsx",
+   "content": "Dead code / no-op branch. `position === \"popper\" && \"\"` always evaluates to either `\"\"` (when popper) or `false`, both of which are ignored by `cn()`, so this argument never contributes any class. It appears to be a leftover placeholder where the intended popper styles were meant to go. Remove it, or replace it with the actual classes intended for the popper position.",
+   "existing_code": "            position === \"popper\" && \"\"",
+   "start_line": 81,
+   "end_line": 81,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/src/components/ui/toggle-group.tsx": [
+  {
+   "path": "apps/desktop/src/components/ui/toggle-group.tsx",
+   "content": "`style` (and `data-variant`/`data-size`/`data-spacing`/`data-orientation`) are assigned before `{...props}` is spread, and React does not merge two `style` props \u2014 the last one wins. A caller passing any `style` silently drops `--gap`, after which `gap-[--spacing(var(--gap))]` resolves to `calc(var(--spacing) * <missing>)`, an invalid value that falls back to no gap. Similarly, caller-supplied `data-*` attributes desynchronize the `data-[...]`/`group-data-*` selectors from the actual configuration. Merge the caller style (or spread `props` before the derived attributes) to preserve the computed values.",
+   "suggestion_code": "      style={{ \"--gap\": spacing, ...props.style } as React.CSSProperties}",
+   "existing_code": "      style={{ \"--gap\": spacing } as React.CSSProperties}",
+   "start_line": 42,
+   "end_line": 42,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/src/index.html": [
+  {
+   "path": "apps/desktop/src/index.html",
+   "content": "There is no fallback for a bootstrap failure. If `./app/main.tsx` fails to fetch (transient dev-server error / stale build) or the module throws while evaluating/importing, `#root` stays empty and the Electron window renders completely blank with no visible error \u2014 the only trace is the DevTools console, which is not open by default in the packaged app. This makes startup failures silent and hard to diagnose.\n\nConsider adding a minimal fallback/error surface, e.g. an inline `<noscript>`/placeholder is not enough for module failures; a small inline script that listens for `error`/`unhandledrejection` on the window and renders a visible message into `#root` would make failures observable.",
+   "existing_code": "<script type=\"module\" src=\"./app/main.tsx\"></script>",
+   "start_line": 10,
+   "end_line": 10,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "docs/finish/evidence/T-PLAN-14/benchmark.json": [
+  {
+   "path": "docs/finish/evidence/T-PLAN-14/benchmark.json",
+   "content": "Evidence artifact lacks reproducibility/provenance fields: there is no code revision (commit SHA), toolchain/node version as a structured value, timestamp, or explicit pass/fail verdict. `machine` and `track` are free-text strings that cannot be machine-verified, and `budgetMs` is present but no boolean/derived field records whether `maxMs` (7.22) actually passed `budgetMs` (2000). Add structured fields (e.g. `commit`, `nodeVersion`, `timestamp`, `passed`) so the result can be tied to a specific build and independently reproduced.",
+   "existing_code": "\"machine\":\"darwin arm64 reference Mac, node 22\",",
+   "start_line": 0,
+   "end_line": 0,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/ble/src/index.ts": [
+  {
+   "path": "packages/ble/src/index.ts",
+   "content": "Stale/misleading header. The comment still scopes the package to \"backends, scan, link, commands and sim (T-BLE-01 to T-BLE-04)\", but this barrel also re-exports modules added in later slices: `./stream.js` (T-BLE-05), `./qualify.js` (T-BLE-06), `./encrypted.js` (T-BLE-07) and `./provisioning.js` (T-BLE-10). Consumers reading the header get an incomplete picture of the public surface (and the slice range is wrong). Please update the description/range to match the actual exports.",
+   "suggestion_code": "// @autolight/ble: BLE constants, backends, scan, link, commands, stream, encrypted,\n// sim, provisioning and qualification wizard (T-BLE-01 to T-BLE-10).",
+   "existing_code": "// @autolight/ble: BLE backends, scan, link, commands and sim (T-BLE-01 to T-BLE-04).",
+   "start_line": 1,
+   "end_line": 1,
+   "category": "documentation",
+   "severity": "low"
+  }
+ ],
+ "packages/cloud/src/index.ts": [
+  {
+   "path": "packages/cloud/src/index.ts",
+   "content": "The package's public entrypoint (`index.ts`) is not exercised by any test: `client.test.ts` imports from `./client.js` and `cross-check.test.ts` imports from `./cross-check.js`/`./client.js`, never from `./index.js`. This matters because a value-vs-type misclassification here (e.g. moving a runtime class like `CloudMetadataClient`/`CloudApiError` or a function into the `export type` block) is *not* caught by `tsc` \u2014 a class has a type side, so `export type { CloudApiError } from \"./client.js\"` compiles cleanly but is erased at runtime, producing a runtime/bundler \"export not found\" for consumers. Consider adding a barrel test that imports every re-exported symbol through the package entrypoint (or a `tsc`-based public-surface assertion) so any future drift fails CI.",
+   "existing_code": "export {\n  API_KEY_HEADER,\n  CLOUD_BASE,",
+   "start_line": 2,
+   "end_line": 4,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/govee/src/actions.test.ts": [
+  {
+   "path": "packages/govee/src/actions.test.ts",
+   "content": "The `FakeLamp` construction block (and the matching `ActionFixture` literal passed to `identify`/`testChase`) is copy-pasted almost verbatim across five tests (IDENTIFY stream, armed snap, unarmed colorwc, TEST CHASE, armed ramp). Extracting small factory helpers (e.g. `segmentedLamp(MAC_A, { zones: 4, armSettleMs: 0, answersStatusWhileArmed: false })` and a `fixture(overrides)` builder) removes the repetition and makes future FakeLamp option changes a single edit instead of five.",
+   "existing_code": "    const lamp = new FakeLamp({\n      device: MAC_A,\n      ip: \"10.0.0.42\",\n      sku: \"H6076\",\n      firmware: \"1.02.03\",\n      zones: 4,\n      behaviour: \"segmented\",\n      armSettleMs: 0,\n      answersStatusWhileArmed: false,\n    });",
+   "start_line": 61,
+   "end_line": 70,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ]
+}

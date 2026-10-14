@@ -1,0 +1,100 @@
+{
+ "packages/show-mixer/tsconfig.json": [
+  {
+   "path": "packages/show-mixer/tsconfig.json",
+   "content": "`include` covers the whole `src` tree, and all test files live under `src/` (`index.test.ts`, `blend.test.ts`, `blackout.test.ts`, `intro.test.ts`, `owner.test.ts`, `pipeline.test.ts`, `weight.test.ts`, `weights.property.test.ts`). Since the package `build` script is `tsc -p tsconfig.json` (plain emit, no `--noEmit`) and the base config enables `declaration`/`sourceMap`, these test files are not only type-checked but also **emitted into `dist/`** as `.js`, `.js.map` and `.d.ts`. The package declares `main`/`types` pointing at `dist` and has no `files` allow-list, so test code and test declarations leak into the published package and can be pulled in by consumers. Provide a build-only config that excludes tests (keep the tests included for the `lint`/`typecheck` scripts) \u2014 e.g. add a `tsconfig.build.json` extending this file with `\"exclude\": [\"src/**/*.test.ts\"]` and point the `build` script at it.",
+   "suggestion_code": "  \"include\": [\n    \"src\"\n  ],\n  \"exclude\": [\n    \"node_modules\",\n    \"dist\",\n    \"src/**/*.test.ts\"\n  ]",
+   "existing_code": "  \"include\": [\n    \"src\"\n  ]",
+   "start_line": 7,
+   "end_line": 9,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/show-runtime/package.json": [
+  {
+   "path": "packages/show-runtime/package.json",
+   "content": "This package's tests import Node builtins (`node:fs`, `node:os`, `node:path`, `node:url` in `src/fastpath.test.ts`) and `tsconfig.json` includes the whole `src` tree, so type-checking/`lint`/`typecheck` require the `@types/node` ambient types. `@types/node` is not declared here, unlike sibling packages (`show-host`, `storage`, `analysis-client`, `rekordbox-library`, `track-identity`), so it currently resolves only because a sibling devDependency is hoisted to the root `node_modules`. That is a fragile phantom dependency: if the hoisting set changes, `yarn workspace @autolight/show-runtime typecheck` fails with TS2307 on the `node:*` imports. Declare it explicitly in devDependencies.",
+   "suggestion_code": "  \"devDependencies\": {\n    \"@autolight/simulator\": \"^0.1.0\",\n    \"@types/node\": \"^22.0.0\",\n    \"typescript\": \"^5.6.3\",\n    \"vitest\": \"^4.1.11\"\n  }",
+   "existing_code": "  \"devDependencies\": {\n    \"@autolight/simulator\": \"^0.1.0\",\n    \"typescript\": \"^5.6.3\",\n    \"vitest\": \"^4.1.11\"\n  }",
+   "start_line": 20,
+   "end_line": 24,
+   "category": "maintainability",
+   "severity": "medium"
+  }
+ ],
+ "packages/show-runtime/src/index.test.ts": [
+  {
+   "path": "packages/show-runtime/src/index.test.ts",
+   "content": "These assertions cannot detect a broken resume transition. `advanceOverride` is pure, and both calls are made on the same pre-resume `state` rather than chaining the returned state, so the second call re-reads the un-consumed state. Worse, `advanceOverride(state, 12).state.kind` is tautological: `state.kind` is already `\"none\"` (set by `setOverride(state, \"none\", \u2026)` above), and the non-resumed branch returns `state` verbatim, so the check passes even if `advanceOverride` reports `resumed: true` without ever clearing `pendingResume`/`resumeBeat`. Chain the states and assert the cleared flags so a mis-implemented state machine fails.",
+   "suggestion_code": "    const notYet = advanceOverride(state, 10);\n    expect(notYet.resumed).toBe(false);\n    const resumed = advanceOverride(notYet.state, 12);\n    expect(resumed.resumed).toBe(true);\n    expect(resumed.state.kind).toBe(\"none\");\n    expect(resumed.state.pendingResume).toBe(false);\n    expect(resumed.state.resumeBeat).toBeNull();",
+   "existing_code": "    expect(advanceOverride(state, 10).resumed).toBe(false);\n    expect(advanceOverride(state, 12).resumed).toBe(true);\n    expect(advanceOverride(state, 12).state.kind).toBe(\"none\");",
+   "start_line": 176,
+   "end_line": 178,
+   "category": "test",
+   "severity": "medium"
+  }
+ ],
+ "packages/simulator/vitest.config.ts": [
+  {
+   "path": "packages/simulator/vitest.config.ts",
+   "content": "Each alias unconditionally assumes `<package>/src/index.ts` exists. For any package whose entry point lives elsewhere (e.g. `src/index.tsx`, or a different `exports`/`main` target), the alias resolves to a non-existent file. Imports then fail with a confusing \"cannot resolve\" error at test time rather than a clear diagnostic, and the failure surfaces far from this config. Guard the mapping with an existence check (or read each package's real entry) so misconfigured packages are reported explicitly instead of silently breaking resolution.",
+   "existing_code": "  readdirSync(workspaceSrc).map((p) => [`@autolight/${p}`, join(workspaceSrc, p, \"src\", \"index.ts\")]),",
+   "start_line": 12,
+   "end_line": 12,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/storage/src/driver.test.ts": [
+  {
+   "path": "packages/storage/src/driver.test.ts",
+   "content": "This assertion can never fail: `describeDriver` (driver.ts:264-268) always interpolates `status.chosen` into its return string (`driver ${status.chosen}...`). So the test passes regardless of whether the driver-selection/fallback behavior is correct, and it does not actually validate the status line. Consider asserting the fallback wording/evidence conditionally, e.g. `if (opened.status.fellBack) { expect(describeDriver(opened.status)).toContain(opened.status.fallbackReason ?? \"unknown reason\"); }` so a broken fallback reason is caught.",
+   "existing_code": "      expect(describeDriver(opened.status)).toContain(opened.status.chosen);",
+   "start_line": 42,
+   "end_line": 42,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/storage/src/driver.test.ts",
+   "content": "This assertion is too loose to validate the stated contract (\"a directory is not a database file: a requested driver must never be silently swapped\"). In `openDatabase` (driver.ts:195-206), *any* failure of `openBetterSqlite3` is wrapped as `... better-sqlite3 was requested but failed to open ...`, so this regex matches even when the module simply is not installed in the runtime and no path/swap behavior is exercised. The test therefore passes without proving the directory/open-error path. Consider asserting on the actual cause (e.g. the error includes the path and the underlying open failure), or requesting the driver only when `moduleStatus(\"better-sqlite3\").available` is true.",
+   "existing_code": "    expect(() => openDatabase({ path: \"/\", driver: \"better-sqlite3\" })).toThrow(/better-sqlite3 was requested/);",
+   "start_line": 120,
+   "end_line": 120,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/storage/src/driver.test.ts",
+   "content": "The temp directory is created and `openDatabase` is called *before* the `try` block, so if `openDatabase` throws (e.g. WAL mode cannot be enabled on the filesystem) the `finally` is never reached and the `mkdtempSync` directory leaks into `tmpdir()`. Move the setup inside the `try` (or the `rmSync` into an outer `finally`) so cleanup always runs. The same pattern applies to the \"reports the driver actually in use\" test below.",
+   "existing_code": "    const { dir, file } = tempDb();\n    const opened = openDatabase({ path: file, driver: \"auto\", synchronous: \"NORMAL\", busyTimeoutMs: 4000 });",
+   "start_line": 26,
+   "end_line": 27,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "protocol-fixtures/serato/3.3.5/macos/crossfader/capture.json": [
+  {
+   "path": "protocol-fixtures/serato/3.3.5/macos/crossfader/capture.json",
+   "content": "Several Serato fixtures (`crossfader`, `loop-4-beat`, `pause`, `load-deck-2`, `play`) are self-referential: both the capture bytes and the `expectedEvents` are produced by the same emulator script (`packages/serato/src/emulator.ts`), and `replay.test.ts` additionally asserts the stored frames are byte-identical to the emulator output. As a result, these fixtures can only detect decoder regressions, never protocol-fidelity errors shared by the emulator and decoder (e.g., inverted crossfader, wrong pause encoding, or the load-deck-2 assumption that a stopped deck reports `effectiveBpm: 126` with `playRate: 0`). Mark them as non-normative/pending until a real HW-SER-01 capture replaces them, or add independent assertions (e.g., decode a raw Crossfader float argument) so protocol mismatches are detectable.",
+   "existing_code": "  \"provenance\": \"emulator-generated: scripted peer over loopback TCP; real Serato capture pending HW-SER-01\"",
+   "start_line": 63,
+   "end_line": 63,
+   "category": "test",
+   "severity": "medium"
+  }
+ ],
+ "protocol-fixtures/serato/3.3.5/macos/eject-deck-1/capture.json": [
+  {
+   "path": "protocol-fixtures/serato/3.3.5/macos/eject-deck-1/capture.json",
+   "content": "Inconsistent post-eject state: this second event asserts `track: null` and `playing: false` but `playRate: 1`. The provider documents `playing` as derived from `playRate !== 0` (remote-provider.ts:19-21) and computes the two independently (`playing: (playhead?.playRate ?? 0) !== 0`, `playRate: playhead?.playRate ?? 1`). After the `Song/Valid=0` frame the accumulator's playhead is cleared, so `playRate` is not a measured value here \u2014 it is the `?? 1` fallback leaking into an uninitialized deck, producing a state that violates the stated invariant (playing === false but playRate === 1). Because this fixture is the test oracle and `compareSequences` compares `playRate`, the fixture locks that inconsistent value in: the replay test stays green even though any consumer that advances the playhead from `playRate` would believe an ejected deck is running at 1x. The expected value for an ejected deck should be `playRate: 0` (or the provider's fallback should be fixed) rather than asserting the uninitialized default.",
+   "existing_code": "      \"playRate\": 1,\n      \"effectiveBpm\": null,",
+   "start_line": 42,
+   "end_line": 43,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ]
+}

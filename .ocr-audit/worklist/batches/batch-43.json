@@ -1,0 +1,263 @@
+{
+ "apps/desktop/src/routes/library/library-rows.test.ts": [
+  {
+   "path": "apps/desktop/src/routes/library/library-rows.test.ts",
+   "content": "The test title promises \"grades every spec status without guessing\", but `\"NEEDS ANALYSIS\"` (returned at library-rows.ts:40 for `track:null && !analyzing`, and at :44 for a non-ready track that is not analyzing) is never asserted. Additionally, every assertion activates exactly one flag, so the branch precedence in `libraryTrackRow` (failed \u2192 !track \u2192 sourceMissing \u2192 gridWarned) is never exercised: swapping the `sourceMissing`/`gridWarned` branches, or checking `gridWarned` before `failed`, would still pass. Add a `NEEDS ANALYSIS` case and at least one overlapping case (e.g. `sourceMissing:true, gridWarned:true, analyzing:true` expecting `SOURCE MISSING`; `failed:\"x\", sourceMissing:true` expecting `FAILED`).",
+   "existing_code": "  it(\"grades every spec status without guessing\", () => {",
+   "start_line": 17,
+   "end_line": 17,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/routes/library/library-rows.test.ts",
+   "content": "The queue assertions only spot-check one entry (or the final id list). They never verify that the helpers are non-mutating, that untouched sibling entries keep their `state`/`progress`/`failReason`, or that `prioritiseQueue` actually sets `priority:true` on the hoisted entry. A regression that mutated the input array in place, dropped a sibling entry, or failed to stamp `priority` would still pass. Also note `prioritiseQueue`/`advanceQueue`/`dropFromQueue` with an unknown `trackId` (returns input unchanged / maps to same ids) is untested. Consider capturing the original array and asserting it is unchanged, and asserting the full ordered content.",
+   "existing_code": "    let q = [queueEntry(\"a\"), queueEntry(\"b\")];",
+   "start_line": 27,
+   "end_line": 27,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/routes/library/library-rows.test.ts",
+   "content": "Only the two extremes are covered: a cue fully in the future (`startBeat 40` vs `beat 32`) and a cue fully past (`startBeat 40` vs `beat 100`). The boundary/edge cases of `upcomingForDecks` are untested: (a) a cue already started but still active (`startBeat + durationBeats > beat >= startBeat`), which library-rows.ts:139 labels `\"now\"` via `Math.max(0, ...)`; (b) the exact boundary `startBeat === beat` \u2192 `\"now\"`; and (c) the `limit` slice. An off-by-one in `delta`/the filter would go undetected. Add cases such as `beat: 40` with `startBeat: 38, durationBeats: 8` (expect `\"now\"`) and a `beat: 39` case (expect `\"in 1 beats\"`).",
+   "existing_code": "    expect(out.find((r) => r.deckId === 1)?.label).toBe(\"in 8 beats\");",
+   "start_line": 45,
+   "end_line": 45,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/routes/library/library-rows.test.ts",
+   "content": "`as unknown as TrackModel` bypasses all contract/type validation on the fixture, so a drift in `TrackModel` (e.g. a renamed/removed required field) cannot fail this test. Prefer a typed factory/`satisfies Partial<TrackModel>` (or the schema-validated builder used elsewhere) so schema mismatches surface at compile/test time.",
+   "existing_code": "} as unknown as TrackModel;",
+   "start_line": 12,
+   "end_line": 12,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "apps/desktop/src/routes/library/library-rows.test.ts",
+   "content": "`cues as never[]` casts the fixture to the bottom type `never[]`, which is assignable to any array type and therefore disables all element checking when passing into `cues: ShowCue[]`. Type it as `ShowCue[]` (import the type from `@autolight/contracts`) \u2014 the object literal already satisfies `showCueSchema` (type/startBeat/durationBeats/intensity/target/priority) \u2014 so an invalid cue shape fails the test instead of silently compiling.",
+   "existing_code": "      { deckId: 1, beat: 32, cues: cues as never[] },",
+   "start_line": 42,
+   "end_line": 42,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/contracts/package.json": [
+  {
+   "path": "packages/contracts/package.json",
+   "content": "The declared entrypoints resolve into `./dist`, but the repo `.gitignore` ignores `dist/` and there is no `.npmignore` or `files` allowlist. npm falls back to `.gitignore` when packing, so a published/installed tarball would exclude `dist/` entirely, leaving `main`/`types` pointing at non-existent files (`ERR_MODULE_NOT_FOUND` for consumers). There is also no `prepare`/`prepublishOnly` script, so `dist` may not even be built at publish time. Add a `files` allowlist including `dist` and a build hook, e.g. `\"files\": [\"dist\"]` plus `\"prepublishOnly\": \"yarn build\"` (or `\"prepare\": \"tsc -p tsconfig.json\"`).",
+   "suggestion_code": "  \"main\": \"./dist/index.js\",\n  \"types\": \"./dist/index.d.ts\",\n  \"files\": [\n    \"dist\"\n  ],",
+   "existing_code": "  \"main\": \"./dist/index.js\",\n  \"types\": \"./dist/index.d.ts\",",
+   "start_line": 5,
+   "end_line": 6,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/contracts/package.json",
+   "content": "Unlike sibling packages that define an explicit `exports` map (e.g. `packages/controller-flx4/package.json`), this `\"type\": \"module\"` package exposes only `main`/`types`. Any future subpath entry (or tooling that requires an `exports` field) will fail to resolve, and there is no conditional `require`/`import` boundary. Consider adding an `exports` map for consistency and forward-compatibility.",
+   "existing_code": "  \"type\": \"module\",\n  \"main\": \"./dist/index.js\",\n  \"types\": \"./dist/index.d.ts\",",
+   "start_line": 4,
+   "end_line": 6,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/controller-flx4/package.json": [
+  {
+   "path": "packages/controller-flx4/package.json",
+   "content": "The package declares no runtime dependency section, yet its runtime code loads native addons lazily via `createRequire(import.meta.url)(\"@julusian/midi\")` (backend.ts:410) and `createRequire(import.meta.url)(\"windows-midi-services\")` (backend.ts:479). Because `createRequire` resolves relative to this package's `dist`, these specifiers must be declared by this package. Neither appears here or in any workspace package.json (searched repo-wide), so the `native` and `windows-midi-services` backends will always fail their probe (falling back to `webmidi` with a remedy message), and `docs/finish/wp08-flx4.md:48` explicitly requires `yarn workspace @autolight/controller-flx4 add @julusian/midi` plus Electron rebuild/asarUnpack wiring. Declare the addons as `optionalDependencies` (they are optional/gracefully probed) so installs and the native path actually work. Suggested:\n\n  \"devDependencies\": {\n    \"typescript\": \"^5.6.3\",\n    \"vitest\": \"^4.1.11\"\n  },\n  \"optionalDependencies\": {\n    \"@julusian/midi\": \"^3.4.0\",\n    \"windows-midi-services\": \"^1.0.0\"\n  }",
+   "existing_code": "  \"devDependencies\": {",
+   "start_line": 23,
+   "end_line": 23,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/controller-flx4/package.json",
+   "content": "`build` runs `tsc -p tsconfig.json`, whose `include` is the whole `src` directory (which contains `*.test.ts`) and which has no test exclude; combined with the absence of a `files` allowlist or `private` flag here, the build emits `dist/*.test.js` / `dist/*.test.d.ts` and a publish would ship test artifacts, source maps and `vitest.config.ts`. Add an `exclude` for test files in tsconfig, or constrain the publish surface with a `files` array (e.g. `[\"dist\"]`) / `\"private\": true` if the package is internal-only.",
+   "existing_code": "    \"build\": \"tsc -p tsconfig.json\",",
+   "start_line": 18,
+   "end_line": 18,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/controller-flx4/src/state.ts": [
+  {
+   "path": "packages/controller-flx4/src/state.ts",
+   "content": "`deepCopy` does not clone `mixer.crossfader`, unlike `copyDeck` which deep-copies `tempo`/`channelFader`. The returned snapshot therefore aliases the model's internal `crossfader` object: a caller that (despite the read-only contract) mutates `snapshot.mixer.crossfader.position` corrupts the model's own state. The existing non-aliasing test only exercises `play`/`jog`, so this gap is uncaught.",
+   "suggestion_code": "  mixer: {\n    ...snapshot.mixer,\n    headCue: { ...snapshot.mixer.headCue },\n    crossfader: snapshot.mixer.crossfader === null ? null : { ...snapshot.mixer.crossfader },\n  },",
+   "existing_code": "  mixer: { ...snapshot.mixer, headCue: { ...snapshot.mixer.headCue } },",
+   "start_line": 153,
+   "end_line": 153,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/controller-flx4/src/state.ts",
+   "content": "When no loop control has ever been touched, `loop.active` is `null` and this expression evaluates to `true`, so the first `loop-exit` press is reported as an exit (`active: false, lastAction: \"exit\"`) even though no loop was ever active. Per the button's semantics (\"4 BEAT / RELOOP / EXIT\") a first press should start/reloop. `signals.ts` derives `loop-exit` vs `reloop` straight from `loop.lastAction`, so the wrong value propagates downstream. Treat unknown (`null`) as not active.",
+   "suggestion_code": "      const wasActive = deck.loop.active === true;",
+   "existing_code": "      const wasActive = deck.loop.active !== false;",
+   "start_line": 262,
+   "end_line": 262,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/controller-flx4/src/state.ts",
+   "content": "Pressing sync unconditionally resets `master` to `false`, so toggling sync on a deck that was previously designated master (via `sync-master`) silently drops the master flag. There is no test covering a sync press after `sync-master`. If this state loss is not intended, preserve the existing master flag; otherwise please document the transition.",
+   "suggestion_code": "      deck.sync = { enabled: !(deck.sync.enabled ?? false), master: deck.sync.master, atNs: event.receivedAtNs, quality: \"estimated\" };",
+   "existing_code": "      deck.sync = { enabled: !(deck.sync.enabled ?? false), master: false, atNs: event.receivedAtNs, quality: \"estimated\" };",
+   "start_line": 236,
+   "end_line": 236,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "packages/controller-flx4/src/state.ts",
+   "content": "This is a nested ternary, which the project's review rules prohibit. Expand it into explicit branching (or `Math.sign`) for readability and to satisfy the lint rule.",
+   "suggestion_code": "    let direction: -1 | 0 | 1 = 0;\n    if (event.value > 0) direction = 1;\n    else if (event.value < 0) direction = -1;",
+   "existing_code": "    const direction: -1 | 0 | 1 = event.value > 0 ? 1 : event.value < 0 ? -1 : 0;",
+   "start_line": 286,
+   "end_line": 286,
+   "category": "style",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/controller-flx4/src/state.ts",
+   "content": "The regex captures the deck digit from the id, but the captured group is never used and state is written to `this.state.decks[event.deck]` instead. Today `id` and `event.deck` come from the same control definition so they agree, but if they ever diverge (e.g. a future decoder/mapping change) state is silently written to the wrong deck. Validate the captured group against `event.deck`.",
+   "existing_code": "    const deckMatch = /^mixer\\.deck([12])\\.(.+)$/.exec(id);",
+   "start_line": 347,
+   "end_line": 347,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/diagnostics/src/index.test.ts": [
+  {
+   "path": "packages/diagnostics/src/index.test.ts",
+   "content": "`emptyMetrics` is only verified through a single field (`supersededFrames`). Because `emptyMetrics()` returns a fully-populated `Metrics` object (djUpdateRateHz, djStateAgeMs, beatErrorBeats, renderMs, rendererFps, deviceFps, deviceLatencyMs), a regression that initializes any of the other numeric fields to `undefined`/NaN, or that returns `undefined` for the record fields, would slip through unnoticed. Assert the whole shape instead.",
+   "suggestion_code": "    expect(emptyMetrics()).toEqual({\n      djUpdateRateHz: 0, djStateAgeMs: 0, beatErrorBeats: 0, renderMs: 0,\n      rendererFps: 0, deviceFps: {}, supersededFrames: 0, deviceLatencyMs: {},\n    });",
+   "existing_code": "    expect(emptyMetrics().supersededFrames).toBe(0);",
+   "start_line": 6,
+   "end_line": 6,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/diagnostics/src/index.test.ts",
+   "content": "The overflow test uses an event literally named `\"overflow\"`, which is easily confused with a ring-buffer sentinel, and only asserts `lines[0]`. It never asserts the second retained line (the newest event). As written, a `record()` variant that keeps the count at capacity and leaves `cue` at index 0 but writes the wrong event/kind for the newly appended entry would still pass. Assert the full retained set and the eviction semantics explicitly.",
+   "suggestion_code": "    r.record(\"cue2\", {});\n    expect(r.count()).toBe(2);\n    const lines = r.toNdjson().split(\"\\n\");\n    expect(lines).toHaveLength(2);\n    // oldest (\"deck\") evicted, newest (\"cue2\") retained\n    expect(lines.map((l) => JSON.parse(l).kind)).toEqual([\"cue\", \"cue2\"]);",
+   "existing_code": "    r.record(\"overflow\", {});\n    expect(r.count()).toBe(2);\n    const lines = r.toNdjson().split(\"\\n\");\n    expect(lines).toHaveLength(2);\n    expect(JSON.parse(lines[0]!).kind).toBe(\"cue\");",
+   "start_line": 12,
+   "end_line": 16,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/diagnostics/src/index.test.ts",
+   "content": "Structured-log contract is only checked for `module`. `log()` is expected to return `{ ts, monoNs, module, severity, event }`, so a regression in `severity`, `event`, or a missing/invalid `ts`/`monoNs` would pass. Assert the relevant fields.",
+   "suggestion_code": "    const row = log(\"renderer\", \"info\", \"frame\");\n    expect(row).toMatchObject({ module: \"renderer\", severity: \"info\", event: \"frame\" });\n    expect(typeof row.monoNs).toBe(\"bigint\");\n    expect(Number.isNaN(Date.parse(row.ts))).toBe(false);",
+   "existing_code": "    expect(log(\"renderer\", \"info\", \"frame\").module).toBe(\"renderer\");",
+   "start_line": 19,
+   "end_line": 19,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/diagnostics/src/index.test.ts",
+   "content": "The round-trip covers only a single `\"deck\"` event, so serialization/parsing drift for other event kinds (e.g. `cue`/numeric payloads) or for the `tNs` bigint\u2192string conversion is not exercised. Record more than one kind and assert payload/tNs survive the round trip.",
+   "suggestion_code": "    expect(rows[0]).toMatchObject({ kind: \"deck\", payload: { deckId: 1 } });\n    expect(typeof rows[0]!.tNs).toBe(\"string\");",
+   "existing_code": "    expect(rows[0]!.kind).toBe(\"deck\");",
+   "start_line": 26,
+   "end_line": 26,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/diagnostics/src/index.test.ts",
+   "content": "Only a single-line malformed input is tested, so the 1-based line numbering is never checked against a real line position. A parser that reports a constant or off-by-one line number (e.g. `0` or `len`) would still satisfy this assertion. Add a case where the bad line is not the first line and assert the exact reported index.",
+   "suggestion_code": "    expect(() => parseNdjson(\"not json\")).toThrow(\"session line 1\");\n    expect(() => parseNdjson('{\"kind\":\"deck\",\"payload\":{},\"tNs\":\"1\"}\\nnot json')).toThrow(\"session line 2\");",
+   "existing_code": "    expect(() => parseNdjson(\"not json\")).toThrow(\"session line 1\");",
+   "start_line": 27,
+   "end_line": 27,
+   "category": "test",
+   "severity": "medium"
+  }
+ ],
+ "packages/govee/src/scenes.ts": [
+  {
+   "path": "packages/govee/src/scenes.ts",
+   "content": "Prototype-chain lookup bug. `catalog.scenes[name]` is a plain-object property read that also walks the prototype chain. For names like `__proto__`, `constructor`, or `toString` the lookup returns an inherited member (truthy, and `constructor` even has `length === 1`), so both guards pass and `[...scene]` then throws `TypeError: scene is not iterable`. The function is documented to return `null` for unknown scenes, so a user/service-supplied scene name can crash the resolver instead of producing the expected error result. Guard with an own-property check and an `Array.isArray` check (which also defends against a malformed catalogue where the value is a non-iterable/truthy object).",
+   "suggestion_code": "  if (!Object.prototype.hasOwnProperty.call(catalog.scenes, name)) return null;\n  const scene = catalog.scenes[name];\n  if (!Array.isArray(scene) || scene.length === 0) return null;\n  return [...scene];",
+   "existing_code": "  const scene = catalog.scenes[name];\n  if (!scene || scene.length === 0) return null;\n  return [...scene];",
+   "start_line": 36,
+   "end_line": 38,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/govee/src/scenes.ts",
+   "content": "Producer/parser asymmetry (round-trip is not idempotent). `ptRealCommand` happily serializes an empty `command` array and empty-string entries, but `parsePtRealCommand` rejects both (`command.length === 0` and `entry.length > 0`). So a datagram produced by `ptRealCommand` can fail to parse back via `parsePtRealCommand`. Since `sceneFromCatalog` only rejects empty arrays, a catalogue entry such as `[\"\"]` still yields a wire datagram that the parser (e.g. when reading an echo/ack of the same shape) returns `null` for, which is easy to mistake for a malformed reply. Align the validation on both sides (reject empty/invalid entries at produce time, or tolerate them at parse time).",
+   "existing_code": "  if (!Array.isArray(command) || command.length === 0) return null;\n  if (!command.every((entry) => typeof entry === \"string\" && entry.length > 0)) return null;",
+   "start_line": 31,
+   "end_line": 32,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "packages/matter/src/controller.test.ts": [
+  {
+   "path": "packages/matter/src/controller.test.ts",
+   "content": "This is the only failure assertion for the post-close path, and it omits `name`. `toMatchObject({ reason: \"stopped\" })` performs a partial match, so any rejected value carrying a `reason: \"stopped\"` property (a plain object, a differently-named Error subclass, or the wrong error type) satisfies it. Since the sibling negative test asserts `name: \"MatterError\"`, this one should do the same so it actually verifies the typed error contract.",
+   "suggestion_code": "    await expect(adapter.commission(\"1234-567-8901\", { source: \"manual\", provenance: \"direct\" }))\n      .rejects.toMatchObject({ name: \"MatterError\", reason: \"stopped\" });",
+   "existing_code": "    await expect(adapter.commission(\"1234-567-8901\", { source: \"manual\", provenance: \"direct\" }))\n      .rejects.toMatchObject({ reason: \"stopped\" });",
+   "start_line": 53,
+   "end_line": 54,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/matter/src/controller.test.ts",
+   "content": "`adapter.close()` is the last statement of every test, so a failing assertion above it skips cleanup entirely. If this ever runs against a real adapter (the file explicitly says the in-memory adapter stands in for a matter.js-backed one) this leaks sockets/subscriptions and can contaminate later tests, and it also means the close/teardown path is never exercised when a test fails. Prefer creating the adapter in a helper and closing it in an `afterEach` or a `try/finally`.",
+   "existing_code": "    expect(adapter.state).toBe(\"ready\");\n    await adapter.close();",
+   "start_line": 32,
+   "end_line": 33,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/matter/src/controller.test.ts",
+   "content": "This try/catch block is redundant and can mask the real failure. The same `command(99, ...)` call is already asserted twice above with `.rejects.toMatchObject(...)`. If the call ever resolves, `expect.unreachable()` throws its own error which is swallowed by `catch` and then re-checked with `toBeInstanceOf(MatterError)` \u2014 the test fails, but the reported cause points to the wrong assertion rather than to the command resolving unexpectedly. Remove the block (or replace with a single explicit `rejects.toBeInstanceOf(MatterError)` assertion) instead of re-invoking the command a third time.",
+   "suggestion_code": "    await expect(adapter.command(99, \"onOff\", \"on\")).rejects.toBeInstanceOf(MatterError);",
+   "existing_code": "    try {\n      await adapter.command(99, \"onOff\", \"on\");\n      expect.unreachable();\n    } catch (err) {\n      expect(err).toBeInstanceOf(MatterError);\n    }",
+   "start_line": 84,
+   "end_line": 89,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/matter/src/controller.test.ts",
+   "content": "Rejection coverage for `classifyPairingCode` is thin and misses the boundary cases most likely to regress: 11-character strings containing non-digits (e.g. `\"1234567890a\"`), longer/shorter digit runs (`\"123456789012\"`, `\"1234567890\"`), a `MT:` prefix followed by characters outside `[A-Z0-9.+-]`, and lower/mixed-case `mt:` payloads. Because the validator strips spaces/dashes before the digit check, inputs such as a trailing separator (`\"12345678901-\"`) also misclassify as `manual-code`; without a test pinning the intended behaviour, such defects pass CI unnoticed.",
+   "existing_code": "    expect(classifyPairingCode(\"12345\")).toBeNull();\n    expect(classifyPairingCode(\"MT:\")).toBeNull();",
+   "start_line": 20,
+   "end_line": 21,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/matter/src/controller.test.ts",
+   "content": "The test bakes in the internal `nextNodeId` sequence (always 1 for a fresh adapter) and never verifies the id contract itself. A regression where ids collide across commissions or leak across adapter instances would go undetected. Consider commissioning twice and asserting the second id is distinct/incremented, and asserting that two separate adapters do not share id space.",
+   "existing_code": "    expect(node.nodeId).toBe(1);",
+   "start_line": 29,
+   "end_line": 29,
+   "category": "test",
+   "severity": "low"
+  }
+ ]
+}

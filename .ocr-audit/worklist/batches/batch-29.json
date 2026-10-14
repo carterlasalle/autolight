@@ -1,0 +1,321 @@
+{
+ "packages/show-planner/src/cache.ts": [
+  {
+   "path": "packages/show-planner/src/cache.ts",
+   "content": "Dead/duplicate code: `kept` is computed with a filter identical to `outside` (`c.startBeat + 0 < start` is equivalent to `c.startBeat < start`, the `+ 0` is a no-op leftover), then immediately discarded via `void kept;`. This is never read and wastes a full extra pass over `cues`. Also the awkward `+ 0` hides what was presumably intended to be a duration-aware boundary check. Remove the two lines entirely.",
+   "existing_code": "  const kept = cues.filter((c) => c.startBeat + 0 < start || c.startBeat >= end);\n  void kept;",
+   "start_line": 57,
+   "end_line": 58,
+   "category": "maintainability",
+   "severity": "high"
+  },
+  {
+   "path": "packages/show-planner/src/cache.ts",
+   "content": "`PlanCache` has no eviction policy (no max size, TTL, or LRU). Because a fresh entry is created for every distinct combination of track fingerprint / planner version / style / venue / config, a long-lived instance accumulates entries indefinitely and grows memory without bound. Consider bounding the store (e.g. cap + LRU eviction or TTL) so a long-running process cannot leak.",
+   "suggestion_code": "  set(key: PlanCacheKey, value: T): void {\n    // TODO: bound the store (max size / TTL) to prevent unbounded growth.\n    this.store.set(cacheKeyFor(key), value);\n  }",
+   "existing_code": "  set(key: PlanCacheKey, value: T): void {\n    this.store.set(cacheKeyFor(key), value);\n  }",
+   "start_line": 30,
+   "end_line": 32,
+   "category": "performance",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/cache.ts",
+   "content": "The composite key collapses five inputs into a single 32-bit hash (`fnv1aHex` returns only 8 hex chars / 32 bits). The string inputs themselves are properly delimited by `stableStringify` (arrays/quotes), so the only collision source is the truncated hash space: ~2^16 distinct keys already hit a ~50% birthday collision rate. A collision silently returns another plan's value (stale/incorrect plan) with no verification. For a correctness-critical cache, key on the full `stableStringify` output or use a wider digest (e.g. 64/128-bit) rather than a 32-bit FNV.",
+   "existing_code": "  return hashValue([k.fingerprint, k.plannerVersion, k.styleHash, k.venueHash, k.configHash]);",
+   "start_line": 15,
+   "end_line": 15,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/cache.ts",
+   "content": "Using `undefined` as the presence sentinel conflates \"absent\" with \"present but undefined\": if `T` can include `undefined`, a stored entry is counted as a miss and `get` returns `undefined` for a legitimately cached value. Prefer `this.store.has(...)` for the hit/miss accounting to avoid corrupt stats.",
+   "suggestion_code": "    const k = cacheKeyFor(key);\n    const v = this.store.get(k);\n    if (!this.store.has(k)) this.misses++;",
+   "existing_code": "    const v = this.store.get(cacheKeyFor(key));\n    if (v === undefined) this.misses++;",
+   "start_line": 24,
+   "end_line": 25,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "packages/track-model/src/index.ts": [
+  {
+   "path": "packages/track-model/src/index.ts",
+   "content": "Identity priority is inconsistent between the guard and the generated id. This line (and the file header comment documenting \u00a712 as native ID \u2192 path \u2192 file hash \u2192 PCM fingerprint) resolves the path *before* the hash, but the `id` ternary below resolves `fileHash`/`pcmFingerprint` *before* the path. A track that carries both a `seratoPath`/`canonicalPath` and a `fileHash` therefore gets a `hash:\u2026` id even though it was validated/memoized under the path key (see `identity-service.ts`, which uses this same `key` order for its cache). The same logical track can also yield two different ids depending on which parts a caller supplies (path-only vs path+hash), breaking stable identity resolution.",
+   "suggestion_code": "  const path = parts.seratoPath ?? parts.canonicalPath;\n  const key = parts.rekordboxId ?? path ?? parts.fileHash ?? parts.pcmFingerprint;",
+   "existing_code": "  const key = parts.rekordboxId ?? parts.seratoPath ?? parts.canonicalPath ?? parts.fileHash ?? parts.pcmFingerprint;",
+   "start_line": 14,
+   "end_line": 14,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/track-model/src/index.ts",
+   "content": "The `id` ternary orders hash/fingerprint before path, contradicting the documented \u00a712 priority (native ID \u2192 path \u2192 file hash \u2192 PCM fingerprint) and the `key` guard above. It should fall back to the path before the hash. Additionally, `fileHash`/`pcmFingerprint` are truncated to 16 characters here: two distinct tracks whose hash/fingerprint share the first 16 characters map to the same `TrackIdentity.id`, silently merging unrelated tracks in downstream caches/plans/shows. Prefer the path branch before the hash branch and use the full (or a documented, collision-resistant length of the) hash/fingerprint.",
+   "suggestion_code": "  const path = parts.seratoPath ?? parts.canonicalPath;\n  const id = parts.rekordboxId ? `rb:${parts.rekordboxId}`\n    : path ? `path:${path}`\n    : parts.fileHash ? `hash:${parts.fileHash.slice(0, 16)}`\n    : `pcm:${parts.pcmFingerprint?.slice(0, 16)}`;",
+   "existing_code": "  const id = parts.rekordboxId ? `rb:${parts.rekordboxId}`\n    : parts.fileHash ? `hash:${parts.fileHash.slice(0, 16)}`\n    : parts.pcmFingerprint ? `pcm:${parts.pcmFingerprint.slice(0, 16)}`\n    : `path:${parts.seratoPath ?? parts.canonicalPath}`;",
+   "start_line": 16,
+   "end_line": 19,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/track-model/src/index.ts",
+   "content": "`coverageOf` is a second readiness implementation that diverges from the authoritative one. `computeReadiness` (`packages/analysis-client/src/readiness.ts`, mirrored from `readiness.py`) derives the level purely from the input map; here `full` additionally requires `sections.length > 0`, and the structured branch below ignores the model's declared `analysisCoverage`/`readinessLevel`/`analysisCoverage2.level` entirely. Consequently `coverageOf` can return a level that disagrees with the model's own declared coverage \u2014 e.g. a model with `analysisCoverage === \"full\"` and no sections reports `\"structured\"`, and a model declaring `\"structured\"` with an empty grid reports `\"adaptive\"`. The UI readiness badge (`resolve-live.ts`, `library-rows.ts`, `live-fields.ts`) can then contradict the level the analysis worker issued. Derive from the declared level / `analysisCoverage2.inputs`, or document this as an intentionally coarse heuristic.",
+   "existing_code": "  if (model.analysisCoverage === \"full\" && model.sections.length > 0) return \"full\";",
+   "start_line": 34,
+   "end_line": 34,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/track-model/src/index.ts",
+   "content": "`Coverage` duplicates the `ReadinessLevel` union already exported by `@autolight/contracts` (`readinessLevelSchema`), a package this module already imports types from. Two identical unions risk drifting apart; import and reuse `ReadinessLevel` instead of redefining the type here.",
+   "existing_code": "export type Coverage = \"full\" | \"structured\" | \"adaptive\";",
+   "start_line": 32,
+   "end_line": 32,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/venue/src/groups.test.ts": [
+  {
+   "path": "packages/venue/src/groups.test.ts",
+   "content": "Title promises verification of the DS-33 feathering with 0.5 weight on the split line, but the assertions never verify that. The sum `w[0]+w[1]` is 1 by construction (splitWeights always sets `weights[1] = 1 - weights[0]`), so the first assertion is tautological, and `w[0] > 0.3` is an arbitrary threshold that a completely flat/no-ramp feather (`f` constant) also satisfies. No cell on the split line is checked against 0.5, so a broken/mis-shaped feather passes. Assert the actual feather shape: a cell on the line \u2248 0.5, plus monotonic ramp across the feather band (or check min/max of `w[0]`).",
+   "existing_code": "      expect(w[0]![i]! + w[1]![i]!).toBeCloseTo(1, 6);\n      expect(w[0]![i]).toBeGreaterThan(0.3);",
+   "start_line": 32,
+   "end_line": 33,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/venue/src/groups.test.ts",
+   "content": "`resolveSelector` returns `string[]` on every code path (all branches build and return arrays), so `Array.isArray(zone)` is always true and validates nothing. Additionally, the zone polygon spans [-1,1] while every square-loop cell lies on the 2.5 m loop, so this selector actually resolves to `[]` (weights fall below the 0.5 threshold) \u2014 a non-empty zone selection is never exercised. Assert the concrete expected membership (`toEqual([...])`) instead of the array type.",
+   "existing_code": "    expect(Array.isArray(zone)).toBe(true);",
+   "start_line": 50,
+   "end_line": 50,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/venue/src/groups.test.ts",
+   "content": "Only asserts the fieldRange result is non-empty; it never checks that the returned cells actually lie within s \u2208 [0.2, 0.4]. A wrong/too-wide range (e.g. [0, 1]) would still pass. Verify each returned key's `s` value against the requested bounds (a swapped/empty range is the only failure this currently catches).",
+   "existing_code": "    expect(sRange.length).toBeGreaterThan(0);",
+   "start_line": 43,
+   "end_line": 43,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/venue/src/groups.test.ts",
+   "content": "The polygon spans [-5,5] and therefore fully encloses the 2.5 m loop with a large edge margin, so every cell should receive weight 1. Asserting only `v >= 0.5` is satisfied by any partially-feathered inside value (and would not catch an incorrect inside/outside classification that still yields \u22650.5). Assert the weight is 1 (e.g. `toBeCloseTo(1, 6)`) for the fully-enclosing case.",
+   "existing_code": "    expect([...zw].every((v) => v >= 0.5)).toBe(true);",
+   "start_line": 52,
+   "end_line": 52,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/venue/src/groups.test.ts",
+   "content": "`s` is normalized into [0,1) by `computeFields` (`f.s[i] = ((rel % 1) + 1) % 1`), so these assertions are tautological and cannot detect the 'not population thirds' property the title claims. They do not verify LEFT/RIGHT are actually DJ-relative (e.g. LEFT group members on the DJ-left side). Assert against the geometry, e.g. compare group membership to `fields.side`/DJ-relative x coordinate, or check that LEFT and RIGHT are disjoint and each non-trivially populated.",
+   "existing_code": "    expect(leftS.every((s) => s >= 0 && s <= 1)).toBe(true);\n    expect(rightS.every((s) => s >= 0 && s <= 1)).toBe(true);",
+   "start_line": 23,
+   "end_line": 24,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/venue/src/groups.test.ts",
+   "content": "`derivedGroups` pushes every field into exactly one of LEFT/RIGHT/CENTER (`if/else if/else`), so this Set-size equality is guaranteed by construction and proves nothing about the partition. It also never independently validates CENTER membership. Assert explicit disjointness/coverage (or CENTER contents) rather than relying on the total size.",
+   "existing_code": "    expect(new Set([...g.LEFT, ...g.RIGHT, ...g.CENTER]).size).toBe(fields.count);",
+   "start_line": 25,
+   "end_line": 25,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/venue/src/groups.test.ts",
+   "content": "Magic numbers/near-tolerances are hardcoded with no derivation or comment (featherM 10, threshold 0.3, polygon \u00b11/\u00b15 aligned to the 5 m fixture). These are tied to the square-loop geometry and the default `featherM` (0.25) / `maxDist`, so they silently become meaningless if the fixture or defaults change. Derive the geometry constants from the reference room (or document the expected tolerance) so the intent is auditable.",
+   "existing_code": "    const zw = zoneWeights(fields, { id: \"z\", name: \"z\", polygon: [{ x: -5, y: -5 }, { x: 5, y: -5 }, { x: 5, y: 5 }, { x: -5, y: 5 }] });",
+   "start_line": 51,
+   "end_line": 51,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "protocol-fixtures/rekordbox/ax/windows-tree.json": [
+  {
+   "path": "protocol-fixtures/rekordbox/ax/windows-tree.json",
+   "content": "Deck 2's child schema diverges from Deck 1: it is missing the `remaining` Text element and its Button sits at `position: 3` instead of Deck 1's `position: 4`. Any consumer that indexes deck children by absolute position (e.g. `children[3]` for the transport button) or expects a fixed field set (title/artist/elapsed/remaining/button) will misread Deck 2 \u2014 reading the Play button as the remaining-time Text \u2014 or throw/index-miss. Since this fixture is meant to be representative protocol input, either keep both decks structurally identical (add the `remaining` Text and shift the Button to position 4) or make the parser explicitly tolerant of missing elements.",
+   "existing_code": "        { \"role\": \"Button\", \"position\": 3, \"label\": \"Play\", \"value\": \"\" }",
+   "start_line": 25,
+   "end_line": 25,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "protocol-fixtures/rekordbox/ax/windows-tree.json",
+   "content": "Elapsed-time format is inconsistent: Deck 1 uses a signed value (`+0:12`) while Deck 2 uses an unsigned value (`1:05`). A parser that assumes the leading sign (or a duration parser that concatenates elapsed/remaining using the sign convention) will misparse Deck 2, and conversely this fixture would let a parser that only handles the unsigned form pass while failing on real Rekordbox output. Normalize the format across decks (e.g. `+1:05`) or ensure the parser is explicitly tested against both forms.",
+   "suggestion_code": "        { \"role\": \"Text\", \"position\": 2, \"label\": \"elapsed\", \"value\": \"+1:05\" },",
+   "existing_code": "        { \"role\": \"Text\", \"position\": 2, \"label\": \"elapsed\", \"value\": \"1:05\" },",
+   "start_line": 24,
+   "end_line": 24,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "protocol-fixtures/rekordbox/ax/windows-tree.json",
+   "content": "Both AX tree fixtures (`windows-tree.json` and `macos-tree.json`) are explicitly hand-authored/synthetic ('Not a hardware capture'), yet they are registered as the only fixtures for the `ax/v1` decoder and consumed by tests as if they were recorded trees. Tests driven by them can pass against an invented structure and mask genuine parser defects (missing elements, different ordering, inverted labels). Runbook HW-RB-AX-01 has not run (per STATUS.md). Record the unverified status in the fixtures (e.g., a `capture: synthetic` or `verified: false` key) and generate/validate against the real UIA/AX dumps before relying on them as protocol evidence.",
+   "existing_code": "  \"note\": \"Hand-shaped from Rekordbox's Windows UI Automation structure (UIA_Pane deck containers, Text elements, Button elements). Not a hardware capture: runbook HW-RB-AX-01 records the real tree and the element dump for the UNAVAILABLE_ON_THIS_DEVICE evidence if the elements are not exposed.\",",
+   "start_line": 3,
+   "end_line": 3,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "protocol-fixtures/rekordbox/ax/windows-tree.json",
+   "content": "Both AX tree fixtures encode play/pause state solely through the transport button's `label`, with an inverted convention (`Pause` implies playing, `Play` implies paused). This is implicit, easily inverted, and unverified against real AX toggle semantics. Consumers keying off the label can report the wrong state. Document the assumed label-to-state semantics in the fixture, expose an explicit state field, or record the expected state alongside the button so a real capture (HW-RB-AX-01) can be checked against it.",
+   "existing_code": "        { \"role\": \"Button\", \"position\": 4, \"label\": \"Pause\", \"value\": \"\" }",
+   "start_line": 14,
+   "end_line": 14,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/electron/services/base.ts": [
+  {
+   "path": "apps/desktop/electron/services/base.ts",
+   "content": "Stale/contradictory lifecycle timestamps across a stop/start cycle. Because `startedAtMs` is assigned with `??=`, once set it is never refreshed: a service that is stopped and started again (e.g. LifecycleService.start() -> stop() -> start()) will report the very first start time in `status()`. Additionally `stoppedAtMs` is only cleared for running/degraded, so a transition into `starting`/`idle` after a stop leaves both a stale `stoppedAtMs` and a stale `startedAtMs` in the snapshot, and any invalid transition (e.g. `idle -> stopped`, or `failed -> running` without a fresh start) is silently accepted. Refresh the start timestamp when entering a running/degraded state from a non-running one.",
+   "suggestion_code": "    const previous = this.state;\n    this.state = state;\n    this.detail = detail;\n    if (state === \"running\" || state === \"degraded\") {\n      // Refresh on (re)start; ??= would keep the first ever start time across\n      // stop/start cycles and report a stale startedAtMs.\n      if (previous !== \"running\" && previous !== \"degraded\") {\n        this.startedAtMs = Date.now();\n      }\n      this.stoppedAtMs = undefined;\n    }",
+   "existing_code": "    this.state = state;\n    this.detail = detail;\n    if (state === \"running\" || state === \"degraded\") {\n      this.startedAtMs ??= Date.now();\n      this.stoppedAtMs = undefined;\n    }",
+   "start_line": 42,
+   "end_line": 47,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/electron/services/base.ts",
+   "content": "Two issues here. (1) An explicit but empty string is returned as-is (only `undefined` is rejected), so a caller passing `\"\"` gets a bogus empty path; downstream callers such as SecretsService.blobFile() then do `join(\"\", \"secrets.enc.json\")`, producing a path relative to the CWD instead of the userData dir. (2) The bare `catch` swallows every failure from both the `electron` import AND `app.getPath(\"userData\")`, so a genuine getPath error is indistinguishable from 'electron not installed' and silently degrades to 'no userData dir'. Reject empty strings and narrow the catch to the import step.",
+   "suggestion_code": "  if (explicit !== undefined && explicit.length > 0) return explicit;\n\n  let app: typeof import(\"electron\").app;\n  try {\n    ({ app } = await import(\"electron\"));\n  } catch {\n    // Electron is unavailable (e.g. plain Node/vitest): no userData dir.\n    return undefined;\n  }\n\n  const dir = app.getPath(\"userData\");\n  return dir.length > 0 ? dir : undefined;",
+   "existing_code": "  if (explicit !== undefined) return explicit;\n  try {\n    const { app } = await import(\"electron\");\n    return app.getPath(\"userData\");\n  } catch {\n    return undefined;\n  }",
+   "start_line": 93,
+   "end_line": 99,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/services/base.ts",
+   "content": "`messageOf` only special-cases `Error`; for plain structured error payloads (e.g. `{ code, message }` objects passed from typed error paths) `String(err)` yields `\"[object Object]\"`, so the honest reason that should land in `ServiceStatus.detail` / `ServiceError.error.message` is lost. Handle objects exposing a string `message`.",
+   "suggestion_code": "export function messageOf(err: unknown): string {\n  if (err instanceof Error) return err.message;\n  if (\n    err !== null &&\n    typeof err === \"object\" &&\n    \"message\" in err &&\n    typeof (err as { message: unknown }).message === \"string\"\n  ) {\n    return (err as { message: string }).message;\n  }\n  return String(err);\n}",
+   "existing_code": "export function messageOf(err: unknown): string {\n  return err instanceof Error ? err.message : String(err);\n}",
+   "start_line": 85,
+   "end_line": 87,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "apps/desktop/journeys/m1-slice.journey.ts": [
+  {
+   "path": "apps/desktop/journeys/m1-slice.journey.ts",
+   "content": "Step 1 is the only step that runs today, yet it does not actually prove its stated claim (\"clean profile launches the built app\"). `userDataDir.length > 0` only confirms the harness created a temp path string, and `expect.any(String)` matches an empty title `\"\"`, so a blank/never-loaded window passes. There is no check that the profile is genuinely fresh (e.g. a marker/first-run artifact absent) nor that the launched entry is the built `dist/electron/main.cjs` (the app runs in Simulator mode but nothing distinguishes it from `yarn dev`). Add assertions that verify a fresh profile and the built-app launch so the harness baseline claim is real.",
+   "existing_code": "      expect(harness.userDataDir.length).toBeGreaterThan(0);\n      expect(await harness.window.title()).toEqual(expect.any(String));",
+   "start_line": 15,
+   "end_line": 16,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/journeys/m1-slice.journey.ts",
+   "content": "The step comment claims frames are transported \"at the qualified rate\", but `rateHz` is only written to the console and never asserted. The test will pass even if the transport runs far below or above the qualified rate. Assert `rateHz` against the expected qualified range (and that the measurement window is non-trivial) instead of only logging it.",
+   "existing_code": "      const rateHz = spanMs > 0 ? (frames.length / spanMs) * 1000 : 0;\n      console.log(`m1-step7: ${frames.length} frames over ${spanMs} ms (${rateHz.toFixed(1)} Hz), zero turn commands`);",
+   "start_line": 94,
+   "end_line": 95,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/journeys/m1-slice.journey.ts",
+   "content": "The invariant \"UI snapshot equals the transported logical frame\" can hold vacuously or against a stale frame. `frames.find` accepts ANY previously recorded frame, so an old frame that happens to match satisfies the assertion even if the *current* transported frame differs. Also, when both `f.cells` and `snapshot.cells` are empty arrays, `length === length` and `every(...)` over an empty array return true, so two empty payloads compare equal. Compare against the most recent transported frame and require non-empty cell arrays (e.g. `frames.at(-1)` and `expect(snapshot.cells.length).toBeGreaterThan(0)`).",
+   "existing_code": "      const match = frames.find(\n        (f) =>\n          f.cells.length === snapshot.cells.length &&\n          f.cells.every(",
+   "start_line": 106,
+   "end_line": 109,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/journeys/m1-slice.journey.ts",
+   "content": "Two issues with the blackout deadline: (1) `t0.wallMs` is `Date.now()` captured in the Playwright test-runner process, while `zero.sentAtMs` is the recording transport's timestamp from the main process \u2014 if the transport uses a monotonic/app-relative clock (the `RecordedFrame` type gives no guarantee), the `< 100 ms` subtraction mixes clock domains and is meaningless. (2) `frames` is read once immediately after the keypress with no retry, so the blackout frame may not be recorded yet, making `expect(zero).not.toBeNull()` flaky. Confirm both timestamps share one epoch and poll/wait for the zero frame before asserting the deadline.",
+   "existing_code": "      const t0 = await harness.pressWithTimestamp(\"b\");\n      const frames = await harness.readFrames();\n      const zero = harness.firstZeroFrameAfter(frames, t0.wallMs);\n      expect(zero).not.toBeNull();\n      expect((zero?.sentAtMs ?? 0) - t0.wallMs).toBeLessThan(100);",
+   "start_line": 122,
+   "end_line": 126,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/journeys/m1-slice.journey.ts",
+   "content": "This assertion is tautological: `resume.wallMs` and `t0.wallMs` are both `Date.now()` and the A press necessarily happens after the B press, so it can never fail and validates nothing about \"resume on the next bar\". Either drop it or assert something meaningful (e.g. that a non-black frame resumes after `resume.wallMs` in the next recorded frames).",
+   "existing_code": "      expect(resume.wallMs).toBeGreaterThan(t0.wallMs);",
+   "start_line": 130,
+   "end_line": 130,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "apps/desktop/journeys/m1-slice.journey.ts",
+   "content": "The P-56 continuity check is too weak: it only requires at least one frame with `sentAtMs > lastBefore` and pairwise gaps `< 500 ms` starting from index 1. A single frame emitted right after the freeze begins satisfies it, and the gap between `lastBefore` and the first \"during\" frame is never checked, so a stall at the start of the pause goes undetected. Also, nothing computes that frames actually span the full 5 s freeze window (or the expected frame count for the qualified rate), and the negative-gap case (unsorted `sentAtMs`) would also pass. Assert frame coverage across the whole pause window (first/last timestamps vs. the freeze duration and expected count).",
+   "existing_code": "      const during = after.filter((f) => f.sentAtMs > lastBefore);\n      expect(during.length).toBeGreaterThan(0);\n      for (let i = 1; i < during.length; i++) {\n        expect((during[i]?.sentAtMs ?? 0) - (during[i - 1]?.sentAtMs ?? 0)).toBeLessThan(500);\n      }",
+   "start_line": 139,
+   "end_line": 143,
+   "category": "test",
+   "severity": "medium"
+  }
+ ],
+ "apps/desktop/journeys/night.journey.ts": [
+  {
+   "path": "apps/desktop/journeys/night.journey.ts",
+   "content": "This assertion cannot tell a working blackout from a broken one. `renderFrame` (packages/renderer/src/index.ts:108-137) already returns an all-zero frame for any cell not covered by an active lighting cue, and the only cue here is the blackout itself. If the `blackout` type were dropped/ignored (or `intensity: 1` were mishandled) the fixtures would still render `rgb(0,0,0)` and this test would pass green. Add a lower-priority lit look on the same cells (e.g. a `section-look` on `PRIMARY` with `priority: < 100`) so the frame is black *only because* blackout overrides it, and assert those cells are non-black without the blackout cue.",
+   "existing_code": "  expect(vm.cells.every((c) => c.color === \"rgb(0,0,0)\")).toBe(true);",
+   "start_line": 49,
+   "end_line": 49,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/journeys/night.journey.ts",
+   "content": "The test claims to prove crossfade \"hands over ownership\", but it never asserts `owner`, and it cannot observe which deck dominates: the single fixture (`makeFixture(\"f\", 4)` + `groups: [\"PRIMARY\", \"SECONDARY\"]`) belongs to both target groups, so deck A and deck B paint the *same* cells and `brightness` counts the same lit cells on both sides. The only real check is the weight ordering, which would still pass even if ownership failed to transfer. Assert the handover explicitly, e.g. `expect(left.owner).toBe(\"a\")` / `expect(right.owner).toBe(\"b\")`, and give A and B distinct fixtures so the dominant deck's cells can be distinguished.",
+   "existing_code": "  expect(left.weights.a).toBeGreaterThan(right.weights.a);",
+   "start_line": 30,
+   "end_line": 30,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/journeys/night.journey.ts",
+   "content": "In production `deckA` and `mixA.state` are the *same* object (`resolve-live.ts:80` builds `mixA: { state: deckA, ... }`), but here `makeDeck` is called twice, so `deckA !== mixA.state` (and `deckB !== mixB.state`). The view-model reads `deckA` for `weights` and `mixA.state` inside `mixDown`, so these duplicated-but-identical instances no longer mirror the production shape and could mask a state-synchronization regression. Build one instance per deck and reuse it for both `deckX` and `mixX.state`.",
+   "existing_code": "    deckA: makeDeck({ deckId: 1, channelFader: 1, crossfader: xa, track: { id: \"a\", sourceIds: {} } }),\n    deckB: makeDeck({ deckId: 2, channelFader: 1, crossfader: xb, track: { id: \"b\", sourceIds: {} } }),\n    mixA: { state: makeDeck({ deckId: 1, channelFader: 1, crossfader: xa, track: { id: \"a\", sourceIds: {} } }), beat: 0, cues: cuesA, impactStrength: 0.5 },",
+   "start_line": 18,
+   "end_line": 20,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "apps/desktop/journeys/night.journey.ts",
+   "content": "The title asserts \"with stream armed\", but this test never inspects arming state \u2014 and the comment below admits the \"never a power command\" transport invariant is only asserted elsewhere (T-GOV-09). Nothing in this file would catch a regression that arms/emits commands during blackout. Either add the actual arming/zero-command assertion here or drop the claim from the test name so the test does not overstate its coverage.",
+   "existing_code": "test(\"emergency blackout produces black frames with stream armed\", () => {",
+   "start_line": 33,
+   "end_line": 33,
+   "category": "documentation",
+   "severity": "low"
+  },
+  {
+   "path": "apps/desktop/journeys/night.journey.ts",
+   "content": "Both cell checks (`brightness` here and the blackout `every(...)` assertion) hard-code the exact string `\"rgb(0,0,0)\"`. If the view-model ever changes its color encoding (rgba/hex/uppercase, or a float rounding change), `brightness` silently treats every cell as lit \u2014 making these `toBeGreaterThan(0)` assertions trivially true \u2014 while the blackout check fails for an unrelated reason. Parse/normalize the channel values (or expose a structured color) instead of comparing raw strings.",
+   "existing_code": "    cells.reduce((n, c) => n + (c.color !== \"rgb(0,0,0)\" ? 1 : 0), 0);",
+   "start_line": 27,
+   "end_line": 27,
+   "category": "test",
+   "severity": "low"
+  }
+ ]
+}

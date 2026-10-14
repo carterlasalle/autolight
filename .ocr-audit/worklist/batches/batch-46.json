@@ -1,0 +1,282 @@
+{
+ "packages/venue/src/wizard.test.ts": [
+  {
+   "path": "packages/venue/src/wizard.test.ts",
+   "content": "The `gaps` parameter is accepted but never used: `void gaps;` is a pure no-op statement and the returned strip hardcodes `gaps: []`. This is dead code and an invalid mock \u2014 any caller passing gaps is silently ignored, so gap-related behavior can never be exercised and a reader may wrongly assume gaps are forwarded. Either forward the argument (`gaps: [...gaps]`) or drop the parameter entirely.",
+   "suggestion_code": "    strip: { cellCount: cells, cellToArcM: Array.from({ length: cells }, (_, i) => ((i + 0.5) / cells) * total), mirrored, gaps: [...gaps] },",
+   "existing_code": "    strip: { cellCount: cells, cellToArcM: Array.from({ length: cells }, (_, i) => ((i + 0.5) / cells) * total), mirrored, gaps: [] },",
+   "start_line": 17,
+   "end_line": 17,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/venue/src/wizard.test.ts",
+   "content": "The fixture is self-consistent by construction: `cellToArcM` is generated from the same `run` that is then fitted, and the corners are plain fractions of the same `total` the strip was built from. As a result `maxErrCells < 1` and `topology === \"single\"` can hold even if the anchor/mapping logic is subtly wrong, so this test does not really validate recovery of a \"hidden\" SIM mapping. Build the strip from an independent ground truth (or perturb/offset the synthetic arcs) and assert the specific recovered per-cell arc values/pitch. The `< 1` threshold also has no documented rationale \u2014 add a comment explaining the expected error bound.",
+   "existing_code": "    const fit = runWizardOnSim(strip, run, corners, 0, \"clockwise\");\n    expect(fit.maxErrCells).toBeLessThan(1);",
+   "start_line": 28,
+   "end_line": 29,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/venue/src/wizard.test.ts",
+   "content": "This is the only case that reaches the shift-search branch of `verifyOffset`, yet only `ok` is asserted. The returned `suggestShift` is never checked, so a regression in the -3..3 shift search (wrong sign, wrong normalization by `headS.length`) would pass unnoticed. Assert `off.suggestShift` as well (here it should be `-1`).",
+   "existing_code": "    const off = verifyOffset([0.3, 0.4], [0.1, 0.2], 0.01);\n    expect(off.ok).toBe(false);",
+   "start_line": 49,
+   "end_line": 50,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/venue/src/wizard.test.ts",
+   "content": "`outlineRuns(room, 2.5)[0]!` and `run.polyline[0]!` assert non-null to silence the compiler. If `outlineRuns` ever returns an empty array or a run with an empty polyline, `total` becomes `NaN` (via Math.hypot on undefined) and downstream assertions fail with confusing errors instead of a clear message. Capture the run with an explicit guard/assertion (e.g. `expect(runs.length).toBeGreaterThan(0)`) rather than non-null assertions.",
+   "existing_code": "  const run = outlineRuns(room, 2.5)[0]!;\n  const pts = [...run.polyline, run.polyline[0]!];",
+   "start_line": 9,
+   "end_line": 10,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/venue/src/wizard.test.ts",
+   "content": "Coverage gaps leave failover/invalid-input handling unverified: there is no test for the `split-independent` topology produced by `classifyDirection(\"both\")`, no multi-run or gap scenario for `runWizardOnSim`, and no edge cases for `verifyOffset` (empty/mismatched-length inputs). Consider adding cases for these paths.",
+   "existing_code": "describe(\"T-ROOM-04 strip mapping wizard\", () => {",
+   "start_line": 22,
+   "end_line": 22,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "analysis/src/autolight_analysis/native.py": [
+  {
+   "path": "analysis/src/autolight_analysis/native.py",
+   "content": "A tag whose source file exists but failed to parse is recorded as `absent`. When `ext`/`ex2` is None because `AnlzFile.parse_file` raised (e.g. ConstError on an unknown EXT variant), `guarded` takes this `src is None` branch and emits `status: \"absent\"` for every tag of that file, even though the file was present and unreadable. This mislabels a corruption/parse failure as absence and contradicts the T-RBL-04 per-tag `ok | absent | failed` contract; a consumer scanning per-tag outcomes (as `test_per_tag_outcomes`/`worker.py` do) cannot tell the difference. Propagate the file-load failure into `guarded` (e.g. record `failed` with the parse error when the file existed but `src is None`).",
+   "existing_code": "        if src is None:\n            outcomes.append(_outcome(tag, file, \"absent\"))\n            return None",
+   "start_line": 258,
+   "end_line": 260,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/native.py",
+   "content": "`zip(beats_in_bar, bpms, times_seconds)` silently truncates to the shortest input. If pyrekordbox ever returns mismatched-length arrays, the trailing beats are dropped and neither an outcome nor an error is recorded, so the grid is silently corrupted. Validate that the three arrays have equal length and raise/record a failure on mismatch instead of truncating.",
+   "existing_code": "        for i, (b, bpm, t) in enumerate(zip(beats_in_bar, bpms, times_seconds))",
+   "start_line": 100,
+   "end_line": 100,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/native.py",
+   "content": "When a waveform section has no usable `.entries` (e.g. an empty entries list), `_np.asarray(value)` on the plain section object succeeds and yields a 0-d object array, so `arr.ravel().tolist()` returns a single non-int object while `meta` records dtype `object`/shape `[]` and `encoding` still claims an int format. The fallback int conversion is never reached because no exception is raised, so wrong column data is injected silently. Guard the numpy result (numeric dtype and `ndim > 0`), otherwise fall through to the `list(value)` conversion.",
+   "existing_code": "            arr = _np.asarray(value)\n            meta.update({\"shape\": list(arr.shape), \"dtype\": str(arr.dtype)})\n            flat = arr.ravel().tolist()",
+   "start_line": 205,
+   "end_line": 207,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/native.py",
+   "content": "On a PWVC decode failure `vocal` is still assigned (with an empty `lane`), so `hasVocals` evaluates to True even though nothing was decoded; the failure is only discoverable by scanning `outcomes`. Downstream, `worker.py` keys `native.rekordbox.vocal` coverage off this flag and reports `\"present\"` despite the decode error. Set `vocal = None` (or base this flag on actual decode success) so the boolean reflects a successful lane decode.",
+   "existing_code": "        \"hasVocals\": vocal is not None,",
+   "start_line": 375,
+   "end_line": 375,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "apps/desktop/electron/services/fault-injection.test.ts": [
+  {
+   "path": "apps/desktop/electron/services/fault-injection.test.ts",
+   "content": "This assertion (and every other `staleFrames` assertion in the suite: tests 1, 2, 3, 5, 7 and `m.staleFrames`) can never fail. `runFaultSuite` hardcodes `staleFrames: 0` in the returned result (line 151) and in each measurement (line 146) \u2014 the value is never derived from actual deliveries. So the suite's headline promise (\"goes red if ... stale frames ... regress\") is not actually verified by these tests. Either make the engine compute `staleFrames` from real delivery/tick state so this assertion is meaningful, or assert on something the port can actually observe (e.g. that every delivered frame index is strictly increasing per device).",
+   "existing_code": "    expect(m.staleFrames).toBe(0);",
+   "start_line": 57,
+   "end_line": 57,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/services/fault-injection.test.ts",
+   "content": "The `workerkill` scenario is registered but its measurement is never asserted \u2014 only `hostkill` is checked. A regression in worker-kill recovery (wrong `recoveryFrames`, no `othersContinued`, frames continuing to the killed device) would leave this test green. Also, the reload assertion only counts deliveries at frame 30; it does not verify the payload, so a broken reload that emits `\"held\"`/all-off while still delivering two frames would pass. Add assertions on the workerkill measurement and on the reload payload.",
+   "existing_code": "    expect(rec.deliveries.filter((d) => d.frame === 30)).toHaveLength(2);\n    const reload = result.measurements.find((x) => x.scenarioId === \"reload\")!;\n    expect(reload.recoveryFrames).toBe(0);",
+   "start_line": 120,
+   "end_line": 122,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/services/fault-injection.test.ts",
+   "content": "This aggregate count over the combined duplication+reorder window is a masking assertion: 20 deliveries over frames [30,50) can still be 20 if, e.g., duplication caused extra deliveries on some frames while reorder dropped the same number on others. It proves nothing about per-frame duplicate resolution. Assert per-delivery identity instead, e.g. that each (device, frame) in the window appears exactly once.",
+   "existing_code": "    expect(rec.deliveries.filter((d) => d.frame >= 30 && d.frame < 50)).toHaveLength(20);",
+   "start_line": 91,
+   "end_line": 91,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/services/fault-injection.test.ts",
+   "content": "`toHaveLength(120)` is effectively tautological here: port-conflict and multicast-blocked are discovery-plane faults that never touch the delivery path in `runFaultSuite`, so this count is always frames \u00d7 devices regardless of whether frames actually \"kept flowing\" correctly. The `discoveryDegradedFrames` check below is the only meaningful assertion. Consider asserting per-device frame continuity (every device delivered on every frame in the window) so a broken failover that stalls delivery would be caught.",
+   "existing_code": "    expect(rec.deliveries).toHaveLength(120);",
+   "start_line": 104,
+   "end_line": 104,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/electron/updater/index.test.ts": [
+  {
+   "path": "apps/desktop/electron/updater/index.test.ts",
+   "content": "The requirement being tested is \"no modal\", but this assertion is ineffective. `state.notice` is just a status string; asserting it does not literally contain the word `\"dialog\"` cannot detect whether a modal/dialog was actually opened elsewhere in the flow. As written, this line will always pass even if a real modal is shown, so the core behavioral guarantee is unverified. Assert the actual no-modal contract instead (e.g., that no modal-opening API is called, or that the returned state carries no modal/result flag), or drop the misleading assertion.",
+   "existing_code": "    expect(state.notice).not.toContain(\"dialog\");",
+   "start_line": 30,
+   "end_line": 30,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/updater/index.test.ts",
+   "content": "The precedence between `skip-disabled` and `defer-live` is never constrained: every `decideUpdateCheck` call here passes `checkOnLaunch: true`. Since the implementation returns `defer-live` before checking `checkOnLaunch` (index.ts lines 18-27), a regression that swapped the ordering \u2014 e.g. returning `skip-disabled` while Live is active when checks are disabled \u2014 would go undetected. Add cases with `checkOnLaunch: false` combined with `liveActive: true` and `showLoaded: true` and assert the intended action.",
+   "existing_code": "    expect(decideUpdateCheck({ checkOnLaunch: true, liveActive: false, showLoaded: true }).action).toBe(\"defer-live\");",
+   "start_line": 20,
+   "end_line": 20,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/updater/index.test.ts",
+   "content": "The `canInstallUpdate` truth table is incomplete: it asserts only 3 of the 4 boolean combinations and omits `(true, true)`, which is precisely the case that must return `false`. Because the signature uses positional booleans, a future argument swap in either the test or implementation would not be caught. Add `expect(canInstallUpdate(true, true)).toBe(false);` (and consider named arguments for readability).",
+   "suggestion_code": "    expect(canInstallUpdate(false, false)).toBe(true);\n    expect(canInstallUpdate(true, true)).toBe(false);",
+   "existing_code": "    expect(canInstallUpdate(false, false)).toBe(true);",
+   "start_line": 23,
+   "end_line": 23,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/updater/index.test.ts",
+   "content": "`toMatchObject` performs a partial match and tolerates extra properties on the returned state. For a deferred-update state that is meant to be exact, an unexpected/stale field (e.g. a lingering modal or result flag) would still satisfy this assertion. Use `toEqual` to pin the full shape.",
+   "suggestion_code": "    expect(state).toEqual({ available: \"2.1.0\", deferred: true, notice: expect.any(String) });",
+   "existing_code": "    expect(state).toMatchObject({ available: \"2.1.0\", deferred: true });",
+   "start_line": 28,
+   "end_line": 28,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/package.json": [
+  {
+   "path": "apps/desktop/package.json",
+   "content": "The build script uses the Unix-only `rm -rf`, which is not a valid command under Windows `cmd.exe`/PowerShell. Since `electron-builder.cjs` explicitly targets Windows (`win` \u2192 NSIS, x64+arm64), running `yarn build` on a Windows dev machine/CI agent will fail at the last step. Use a cross-platform removal (e.g. a Node `fs.rmSync` one-liner or `rimraf`).",
+   "suggestion_code": "    \"build\": \"tsc -p tsconfig.json && vite build && node scripts/build-main.mjs && node scripts/build-preload.mjs && node -e \\\"require('node:fs').rmSync('dist/electron-tmp',{recursive:true,force:true})\\\"\",",
+   "existing_code": "    \"build\": \"tsc -p tsconfig.json && vite build && node scripts/build-main.mjs && node scripts/build-preload.mjs && rm -rf dist/electron-tmp\",",
+   "start_line": 8,
+   "end_line": 8,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/package.json",
+   "content": "`electron-builder` is invoked by these scripts but is not declared in this package's `devDependencies` (only in the root `package.json`). Resolution currently relies on hoisting via `nodeLinker: node-modules`; if the linker is switched to PnP or the root dep is removed, packaging breaks. Declare the tool in this package's `devDependencies` (e.g. `\"electron-builder\": \"^26\"`) so the dependency is explicit and version-consistent.",
+   "existing_code": "    \"dist:package\": \"yarn build && node scripts/fetch-vendor.mjs && electron-builder --config electron-builder.cjs\",",
+   "start_line": 17,
+   "end_line": 17,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/package.json",
+   "content": "`dist:package:dir` omits `node scripts/fetch-vendor.mjs`, but `electron-builder.cjs` unconditionally lists `vendor` under `extraResources`. On a clean checkout (no `apps/desktop/vendor/`) electron-builder will fail because the `extraResources.from: \"vendor\"` directory does not exist, so this script produces a broken/incomplete package. Run `fetch-vendor` here as well (matching `dist:package`).",
+   "suggestion_code": "    \"dist:package:dir\": \"yarn build && node scripts/fetch-vendor.mjs && electron-builder --config electron-builder.cjs --dir\"",
+   "existing_code": "    \"dist:package:dir\": \"yarn build && electron-builder --config electron-builder.cjs --dir\"",
+   "start_line": 18,
+   "end_line": 18,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/package.json",
+   "content": "All internal workspace packages are referenced with a semver range (`^0.1.0`) instead of the `workspace:` protocol. Because `^0.1.0` allows `<0.2.0`, any workspace package bumped to `0.2.0` would silently stop matching the local workspace and be resolved from the registry, causing version/schema drift between packages in the same monorepo. Prefer `workspace:^0.1.0` (this repo uses Yarn 4) to guarantee local linking and an explicit version contract.",
+   "existing_code": "    \"@autolight/dj-core\": \"^0.1.0\",",
+   "start_line": 26,
+   "end_line": 26,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/src/app/resolve-live.test.ts": [
+  {
+   "path": "apps/desktop/src/app/resolve-live.test.ts",
+   "content": "`track as never` / `plan as never` bypass **all** type checking: `never` is assignable to every parameter type, so this fixture is never validated against `TrackModel`/`ShowPlan` (both defined as `z.infer` of strict schemas in `packages/contracts`). If the contract gains/renames a required field (e.g. `readinessLevel`, `analysisCoverage2`, a new cue field), the production zod parse would fail but these tests keep compiling and passing against a stale shape \u2014 the exact class of silent divergence the review is meant to catch. Prefer a properly typed fixture (e.g. `satisfies TrackModel`) or build it through the real schema/builder (like `makeDeck`/`makeFixture` are used) so drift is a compile/schema error instead of a hidden one. Same applies to the identical cast in the second test (`... state: snap`).",
+   "existing_code": "      [{ track: track as never, plan: plan as never, deckId: 1, state: stale }],",
+   "start_line": 51,
+   "end_line": 51,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/app/resolve-live.test.ts",
+   "content": "This assertion only holds because `buildLive`'s one-shot fallback uses `a.state.playheadSeconds` **directly as a beat** (`beatA = beat?.a ?? a.state.playheadSeconds`), while the cursor path uses `beat?.a` which is a real beat number. The two paths therefore mix units (seconds vs beats). `playheadSeconds: 10` with `effectiveBpm: 128` should be ~21.3 beats if it were derived from the grid, yet the test hard-codes 10 \u2014 so it locks in the seconds-as-beats conflation and would not catch a fallback bug; it also cannot distinguish a correct snapshot beat from this coincidence. Add a case where the snapshot would yield a different beat than `playheadSeconds` (or derive the expected value from the grid) so the fallback semantics are actually exercised.",
+   "existing_code": "    expect(live?.beat).toBe(10);",
+   "start_line": 70,
+   "end_line": 70,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/app/resolve-live.test.ts",
+   "content": "The file header claims \"the live cursor's computed beat must reach the render sink\" (AL-FLOW-003), but both tests only inspect `buildLive`'s return value. The regression being guarded against actually lives in `useLiveCursor` (beatRef.current \u2192 `buildLive(..., beatRef.current)` \u2192 `set({ live, liveBeat: live.beat })`). A regression where the cursor stops forwarding its computed beat into `buildLive`, or where the returned beat is never written to the store, would still pass here. Add a test that drives `useLiveCursor`/the beat-forwarding integration, or assert on the store sink, to make the stated guarantee meaningful.",
+   "existing_code": "    expect(live?.beat).toBe(70);",
+   "start_line": 57,
+   "end_line": 57,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/app/resolve-live.test.ts",
+   "content": "The cursor override is passed as an opaque `{ a: 70, b: 1 }` literal (which field is the beat is not documented), and only deck A is asserted \u2014 `b` and multi-deck wiring are never verified. Also untested: the `buildLive(...) === null` path (empty decks), the beat exactly on a section boundary (`startBeat`/`endBeat`), and a beat past the last section. These are cheap cases that would catch off-by-one / range regressions in the section lookup and the fallback defaulting. Consider extracting a named helper for the cursor argument and covering the boundary + deck B cases.",
+   "existing_code": "      { a: 70, b: 1 },",
+   "start_line": 54,
+   "end_line": 54,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/src/app/security.test.ts": [
+  {
+   "path": "apps/desktop/src/app/security.test.ts",
+   "content": "`registerAudioWindow` mutates the module-level `audioWindowUrls` Set and there is no `afterEach`/cleanup (and no `unregisterAudioWindow` export to reset it). The `isAudioWindow(...)` assertion below therefore depends on execution order: if any earlier test (in this file or a re-ordered suite) registers the same origin, the `expect(...).toBe(false)` check is no longer meaningful, and the registration leaks into subsequent tests. Wrap the mutation in a reset/unregister helper (or `vi.resetModules()` + re-import) so each test starts from a known empty state.",
+   "existing_code": "    registerAudioWindow(\"file:///audio.html\");\n    expect(isAudioWindow(\"file:///audio.html\")).toBe(true);",
+   "start_line": 53,
+   "end_line": 54,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/app/security.test.ts",
+   "content": "The CSP parsing here is evadable: `.find(d => d.startsWith(\"script-src\"))` only inspects the FIRST directive whose name begins with `script-src`, so an additional `script-src-elem`/second `script-src` slips past the exact-equality check. More importantly, the loop below explicitly `continue`s on `connect-src`, and the only global remote check is `not.toContain(\"https:\")`, so a permissive `connect-src 'self' http://evil.example` (remote HTTP target) passes this suite unnoticed. Assert per-directive that no non-local origin appears (excluding the exact known-local entries) and iterate every `script-src*` directive instead of only the first.",
+   "existing_code": "    const script = csp.split(\";\").map((d) => d.trim()).find((d) => d.startsWith(\"script-src\"));\n    expect(script).toBe(\"script-src 'self'\");",
+   "start_line": 29,
+   "end_line": 30,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/app/security.test.ts",
+   "content": "These assertions inspect only the object returned by `securitySettings()`, which is data, not enforcement. In `main.ts`, `allowNewWindow` and `permissions.audioCaptureOrigins/midiOrigins` are never read at runtime \u2014 the new-window handler hardcodes `{ action: \"deny\" }` and the permission handler decides via `isAudioWindow(url)`. So this test can stay green even if the actual window hardening is removed (e.g. deleting `setWindowOpenHandler`, or changing the permission filter) \u2014 exactly the regression T-SEC-03 claims to catch. Either wire these fields into `main.ts` consumers, or assert observable behavior (handlers/`webPreferences`) instead of the config shape.",
+   "existing_code": "    expect(s.allowNewWindow).toBe(false);\n  });\n\n  it(\"grants media only to the registered audio window, midi locally\", () => {\n    const s = securitySettings(\"preload.cjs\");\n    expect(s.permissions.audioCaptureOrigins).toEqual([\"file://\", \"http://localhost:5173\"]);",
+   "start_line": 44,
+   "end_line": 49,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/app/security.test.ts",
+   "content": "Header comment states the guarantee comes from running against the built artifact (`dist/electron/main.cjs`), but this import resolves to `electron/main.ts` (Vite maps the `.js` specifier to the TS source) and no assertion here ever loads the bundle. If `scripts/build-main.mjs` or the bundling step alters/drops a hardening value, this source-based checklist still passes while the shipped bundle diverges. Add a bundle-level probe (as the orchestrator does) or relocate the guarantee so the checklist actually validates the never-built-here artifact.",
+   "existing_code": "import { securitySettings, registerAudioWindow, isAudioWindow } from \"../../electron/main.js\";",
+   "start_line": 4,
+   "end_line": 4,
+   "category": "test",
+   "severity": "low"
+  }
+ ]
+}

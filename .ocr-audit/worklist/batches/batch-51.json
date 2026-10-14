@@ -1,0 +1,290 @@
+{
+ "packages/config/src/compare.test.ts": [
+  {
+   "path": "packages/config/src/compare.test.ts",
+   "content": "`planLiveChange` returns `{ key, liveSafe, apply, note }`, but these assertions use `toMatchObject`, which only checks a subset. A plan that reports the wrong `key` (or a misleading/empty `note`) for the live-safety classification would still pass, weakening the spec-144 safety guarantee under test. Assert the full object (including `key`) with `toEqual` so regressions in any plan field are caught.",
+   "suggestion_code": "    expect(planLiveChange(\"runtime.snapshot.uiRateHz\")).toEqual({\n      key: \"runtime.snapshot.uiRateHz\",\n      liveSafe: true,\n      apply: \"next-bar\",\n      note: expect.any(String),\n    });\n    expect(planLiveChange(\"runtime.clock.tickHz\")).toEqual({\n      key: \"runtime.clock.tickHz\",\n      liveSafe: false,\n      apply: \"queued\",\n      note: expect.any(String),\n    });",
+   "existing_code": "    expect(planLiveChange(\"runtime.snapshot.uiRateHz\")).toMatchObject({ liveSafe: true, apply: \"next-bar\" });\n    expect(planLiveChange(\"runtime.clock.tickHz\")).toMatchObject({ liveSafe: false, apply: \"queued\" });",
+   "start_line": 11,
+   "end_line": 12,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/config/src/compare.test.ts",
+   "content": "The diff test only exercises a value change on a key present in both snapshots. Added keys (present only in `b`) and removed keys (present only in `a`) are never covered, yet `compareKeys` is supposed to union both key sets. If the diff regressed to intersecting keys or dropping one-sided keys, this test would still pass. Add cases with a key added to `b` and a key removed from `a`.",
+   "suggestion_code": "    const diff = compareKeys(\n      { \"runtime.clock.tickHz\": 60, \"runtime.snapshot.uiRateHz\": 30 },\n      { \"runtime.clock.tickHz\": 90, \"runtime.snapshot.uiRateHz\": 30, \"runtime.snapshot.maxBytes\": 262144 },\n    );\n    expect(diff).toEqual([\n      { key: \"runtime.clock.tickHz\", before: 60, after: 90 },\n      { key: \"runtime.snapshot.maxBytes\", before: undefined, after: 262144 },\n    ]);",
+   "existing_code": "    const diff = compareKeys(\n      { \"runtime.clock.tickHz\": 60, \"runtime.snapshot.uiRateHz\": 30 },\n      { \"runtime.clock.tickHz\": 90, \"runtime.snapshot.uiRateHz\": 30 },\n    );\n    expect(diff).toEqual([{ key: \"runtime.clock.tickHz\", before: 60, after: 90 }]);",
+   "start_line": 27,
+   "end_line": 31,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/config/src/compare.test.ts",
+   "content": "The drain assertions only check the returned `drained.queue` and `applied`, never the input `queue` that was passed in. A regression where `drainLiveQueue` empties the caller's queue in place (mutation/aliasing bug) would leave `drained.queue.keys` empty and still pass. Assert that the original `queue` is left untouched, and consider validating the applied values (not just the key list) so incorrect application is caught.",
+   "suggestion_code": "    const drained = drainLiveQueue(queue);\n    expect(drained.applied).toEqual([\"runtime.clock.tickHz\"]);\n    expect(drained.queue.keys).toEqual([]);\n    expect(queue.keys).toEqual([\"runtime.clock.tickHz\"]);",
+   "existing_code": "    const drained = drainLiveQueue(queue);\n    expect(drained.applied).toEqual([\"runtime.clock.tickHz\"]);\n    expect(drained.queue.keys).toEqual([]);",
+   "start_line": 21,
+   "end_line": 23,
+   "category": "test",
+   "severity": "medium"
+  }
+ ],
+ "packages/contracts/src/index.test.ts": [
+  {
+   "path": "packages/contracts/src/index.test.ts",
+   "content": "The fixture is declared as `any`, which disables all compile-time checking against `deckStateSchema`. Any field-name typo (e.g. `channelFaderr`) or wrong field shape would produce `undefined`/missing-field validation errors, so the test would still pass while never actually exercising the fader bound. Type the fixture as `DeckState` (imported from `./index.js`) so field names/shapes are compiler-checked \u2014 `channelFader: 9` is still assignable by type and gets validated at runtime by Zod.",
+   "suggestion_code": "    const bad: DeckState = { source: \"rekordbox\", deckId: 1, track: null, playing: true, playheadSeconds: 0, playRate: 1, effectiveBpm: 128, loop: { active: false, startSeconds: null, endSeconds: null, beatLength: null }, channelFader: 9, crossfader: null, master: null, receivedAtNs: 0n };",
+   "existing_code": "    const bad: any = { source: \"rekordbox\", deckId: 1, track: null, playing: true, playheadSeconds: 0, playRate: 1, effectiveBpm: 128, loop: { active: false, startSeconds: null, endSeconds: null, beatLength: null }, channelFader: 9, crossfader: null, master: null, receivedAtNs: 0n };",
+   "start_line": 12,
+   "end_line": 12,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/contracts/src/index.test.ts",
+   "content": "This assertion only checks that parsing fails overall, not *why* it fails. The test passes for the wrong reason if the schema later rejects any other field (or becomes stricter for unrelated reasons), so it does not actually guard the `channelFader` max(1) rule. Assert the specific failing path. Additionally, there is no positive test that a valid `DeckState` is accepted \u2014 a schema that rejected everything would still satisfy this only-success/failure test. Add a valid-state acceptance case.",
+   "suggestion_code": "    const result = deckStateSchema.safeParse(bad);\n    expect(result.success).toBe(false);\n    if (!result.success) {\n      expect(result.error.issues.some((i) => i.path.join(\".\") === \"channelFader\")).toBe(true);\n    }",
+   "existing_code": "    expect(deckStateSchema.safeParse(bad).success).toBe(false);",
+   "start_line": 13,
+   "end_line": 13,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/contracts/src/index.test.ts",
+   "content": "These two calls only test the exact grid anchors and only test the functions as mutual inverses; a shared wrong time-base/rounding assumption would cancel out and the test would still pass. Concrete gaps: (1) no time strictly *between* beats, so a broken piecewise interpolation (the `lo`/`hi` search and `(ms - a.sourceTimeMs) / span` math) goes uncaught; (2) no time before the first beat or after the last beat, so the early-return/clamping branches are unverified; (3) `grid.beats` here is uniform 128 BPM, so a function that ignores per-beat BPM/variable tempo passes; (4) `beatToSourceSeconds` clamping (`beat < 0` / `> last index`) is never exercised. Add assertions for these cases.",
+   "suggestion_code": "    // exact anchors\n    expect(sourceSecondsToBeat(grid, 0.46875)).toBeCloseTo(1);\n    expect(beatToSourceSeconds(grid, 1)).toBeCloseTo(0.46875);\n    // interpolation midpoint (between beat 1 and 2)\n    expect(sourceSecondsToBeat(grid, 0.703125)).toBeCloseTo(1.5);\n    expect(beatToSourceSeconds(grid, 1.5)).toBeCloseTo(0.703125);\n    // out-of-range handling (before first / after last beat)\n    expect(sourceSecondsToBeat(grid, 0)).toBeCloseTo(0);\n    expect(beatToSourceSeconds(grid, -5)).toBeCloseTo(0);\n    expect(beatToSourceSeconds(grid, 99)).toBeCloseTo(0.9375);",
+   "existing_code": "    expect(sourceSecondsToBeat(grid, 0.46875)).toBeCloseTo(1);\n    expect(beatToSourceSeconds(grid, 1)).toBeCloseTo(0.46875);",
+   "start_line": 16,
+   "end_line": 17,
+   "category": "test",
+   "severity": "medium"
+  }
+ ],
+ "packages/govee/src/razer-codec.property.test.ts": [
+  {
+   "path": "packages/govee/src/razer-codec.property.test.ts",
+   "content": "Non-exhaustive single-bit coverage. The frame for this test is 10 bytes = 80 bit positions, but only 100 random draws are made from `rand()`; since the frame and LCG are identical every run, the sampled set is fixed. A single-bit flip on a draw-count expectation leaves roughly (1 - 1/80)^100 \u2248 29% of bit positions never tested, so this test can pass even if `decodeRaw` failed to reject a flip at one of those positions \u2014 it does not actually prove \"any single-bit flip\". Iterate every bit `for (let bit = 0; bit < frame.length * 8; bit++)` (and drop the outer 100-iteration loop) to make the property exhaustive and deterministic.",
+   "existing_code": "      const bit = Math.floor(rand() * (frame.length * 8));\n      const evil = frame.slice();\n      evil[Math.floor(bit / 8)]! ^= 1 << (bit % 8);\n      expect(decodeRaw(evil)).toBeNull();",
+   "start_line": 46,
+   "end_line": 49,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/govee/src/razer-codec.property.test.ts",
+   "content": "Weak assertion: only the decoded base64 *length* is checked, not its content. An `envelope` that emitted a same-length but byte-mangled payload (e.g. reordered or corrupted bytes) would still pass. Compare the decoded bytes against the source frame so the test actually validates the envelope round-trip.",
+   "suggestion_code": "    expect(Array.from(Buffer.from(parsed.msg.data.pt, \"base64\"))).toEqual(Array.from(raw));",
+   "existing_code": "    expect(Buffer.from(parsed.msg.data.pt, \"base64\").length).toBe(raw.length);",
+   "start_line": 74,
+   "end_line": 74,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/govee/src/razer-codec.property.test.ts",
+   "content": "Incomplete assertion: `paintZoned` is only verified to produce a ZONED opcode, never the payload. A `paintZoned` that emits a structurally valid frame with the wrong zone/color bytes (wrong field order, swapped r/g/b, dropped zone index) would pass silently. Assert the decoded payload equals the expected `[gradient, count, r, g, b, zone]` bytes.",
+   "suggestion_code": "    const zoned = paintZoned([{ r: 1, g: 2, b: 3, zone: 7 }]);\n    const zonedDecoded = decodeRaw(zoned)!;\n    expect(zonedDecoded.opcode).toBe(OPCODE.ZONED);\n    expect(Array.from(zonedDecoded.payload)).toEqual([0, 1, 1, 2, 3, 7]);",
+   "existing_code": "    const zoned = paintZoned([{ r: 1, g: 2, b: 3, zone: 7 }]);\n    expect(decodeRaw(zoned)!.opcode).toBe(OPCODE.ZONED);",
+   "start_line": 75,
+   "end_line": 76,
+   "category": "test",
+   "severity": "medium"
+  }
+ ],
+ "packages/matter/src/mapping.test.ts": [
+  {
+   "path": "packages/matter/src/mapping.test.ts",
+   "content": "This assertion only checks the *absence* of a color-temperature command. Because the nested `for (const w of toMatterWrites(rgb))` loop simply does not iterate when the implementation returns an empty array, a regression where `toMatterWrites` returns `[]` (or only the `onOff` write) would still make this test pass. Add assertions that each frame produces the expected writes (non-empty, contains on/level/hue) so the test actually validates behavior rather than just the negative case.",
+   "suggestion_code": "      const writes = toMatterWrites(rgb);\n      expect(writes.length).toBeGreaterThanOrEqual(1);\n      for (const w of writes) {\n        expect(w.command).not.toBe(\"moveToColorTemperature\");\n      }",
+   "existing_code": "      for (const w of toMatterWrites(rgb)) {\n        expect(w.command).not.toBe(\"moveToColorTemperature\");\n      }",
+   "start_line": 40,
+   "end_line": 42,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/matter/src/mapping.test.ts",
+   "content": "These index-based assertions (`writes[2]`, `writes[1]`) validate against positions without first asserting the array length or ordering. A regression that drops the `onOff` write (array becomes length 2) or reorders entries would either be masked or produce a confusing failure on an unrelated element. Assert the full expected array (or at least `toHaveLength(3)` plus the ordered elements) so completeness and ordering are enforced.",
+   "suggestion_code": "    const writes = cctToMatterSetupWrites(2700, 1);\n    expect(writes).toHaveLength(3);\n    expect(writes[0]).toEqual({ cluster: \"onOff\", command: \"on\", payload: {} });\n    expect(writes[2]).toEqual({",
+   "existing_code": "    const writes = cctToMatterSetupWrites(2700, 1);\n    expect(writes[2]).toEqual({",
+   "start_line": 49,
+   "end_line": 50,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/matter/src/mapping.test.ts",
+   "content": "The test description claims to cover \"the default 10 Hz command rate\", but it only passes an explicit literal `10`, so the configured/default rate is never actually exercised. Also, no boundary input is tested even though `minIntervalMs` performs an unchecked division: `minIntervalMs(0)` returns `Infinity` and a negative rate yields a negative interval. Add an assertion documenting the intended behavior for the 0/negative edge case (e.g. clamp or guard) so this division-by-zero path is covered.",
+   "suggestion_code": "    expect(minIntervalMs(10)).toBe(100);\n    expect(minIntervalMs(20)).toBe(50);\n    // Guard against division-by-zero / invalid rates once behavior is defined:\n    // expect(minIntervalMs(0)).toBe(...);",
+   "existing_code": "    expect(minIntervalMs(10)).toBe(100);\n    expect(minIntervalMs(20)).toBe(50);",
+   "start_line": 61,
+   "end_line": 62,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/matter/src/mapping.test.ts",
+   "content": "Only the red (hue 0) and green (hue ~85) branches are exercised; the blue branch (`max === b`, line 37 of mapping.ts) and the hue wraparound/scaling around 240\u00b0 \u2192 169 are untested. This is the most likely location for scaling/rounding defects in the 0..254 hue conversion. Add a case such as `rgbToHsl254({ r: 0, g: 0, b: 255 })` asserting hue \u2248 169, plus a rounding-boundary value.",
+   "existing_code": "  it(\"maps pure green near hue 85 in 0..254 units\", () => {\n    const { hue, saturation } = rgbToHsl254({ r: 0, g: 255, b: 0 });",
+   "start_line": 8,
+   "end_line": 9,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/matter/src/mapping.test.ts",
+   "content": "The mid-grey case asserts `saturation` and `level` but not `hue`, even though the implementation explicitly sets `hueDeg = 0` for the zero-range branch. A regression in the achromatic branch could change `hue` without failing this test. Assert the full mapped object (including `hue`) or add a dedicated `hue` assertion.",
+   "suggestion_code": "    const { hue, saturation, level } = rgbToHsl254({ r: 128, g: 128, b: 128 });\n    expect(hue).toBe(0);",
+   "existing_code": "    const { saturation, level } = rgbToHsl254({ r: 128, g: 128, b: 128 });",
+   "start_line": 14,
+   "end_line": 14,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/rekordbox-library/src/pssi.test.ts": [
+  {
+   "path": "packages/rekordbox-library/src/pssi.test.ts",
+   "content": "runPythonProbe swallows every failure mode into `undefined`: spawn failure, 120s timeout (ETIMEDOUT), non-zero exit, and JSON.parse errors all collapse to the same value, and `stdio[2]` is `\"ignore\"` so the Python traceback / uv error is discarded. A genuine Python crash, a corrupt fixture, or a real label regression is therefore indistinguishable from `uv` simply not being installed, and the parity test can never surface the underlying cause. Capture stderr and distinguish the failure modes (e.g. re-throw with the captured stderr appended, or return a discriminated result) so CI logs point at the real problem.",
+   "existing_code": "  } catch {\n    return undefined;\n  }",
+   "start_line": 52,
+   "end_line": 54,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-library/src/pssi.test.ts",
+   "content": "Both `runPythonProbe()` and `loadPssiLabels()` execute as module-level side effects at import/collection time. The probe unconditionally spawns an external `uv` process (up to 120s) for every run of this file even when only the pure-TS tests are executed, and the single captured result is shared across all suites, so one transient failure permanently poisons the parity test for the whole run with no retry. Likewise, if the fixture is missing or malformed, `loadPssiLabels` throws during collection and the entire file errors out with a cryptic import stack instead of a targeted test failure. Prefer loading/parsing inside the tests (or a `beforeAll` with `it.skipIf`) so failures are scoped and attributable.",
+   "existing_code": "const probe = runPythonProbe();\nconst table: PssiLabelTable = loadPssiLabels(labelsPath);",
+   "start_line": 57,
+   "end_line": 58,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-library/src/pssi.test.ts",
+   "content": "`stdout.trim().split(\"\\n\").pop() as string` assumes the JSON payload is exactly the last stdout line and force-casts it. If the process emits any trailing line (warning, blank line) or nothing at all, `.pop()` yields a non-JSON/`undefined` value; the `as string` cast hides that and the subsequent `JSON.parse` throws inside the surrounding try, silently degrading to `undefined` rather than revealing the malformed output. Parse defensively (e.g. verify a non-empty last line and surface the raw stdout on failure) instead of casting the result.",
+   "existing_code": "    return JSON.parse(stdout.trim().split(\"\\n\").pop() as string) as PythonProbe;",
+   "start_line": 51,
+   "end_line": 51,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "packages/rekordbox-library/src/pssi.test.ts",
+   "content": "When the probe is unavailable the drift check `throw`s a generic Error instead of failing through an assertion. This conflates toolchain absence, a timeout, and a real label mismatch into the same opaque message, weakening the signal that F-RBL-07 drift detection is supposed to provide. Assert on the probe availability with an explanatory message (e.g. `expect(probe, \"...\").toBeDefined()`) so the failure reason is explicit and the parity comparisons are only reached when the probe actually ran.",
+   "existing_code": "    if (probe === undefined) {\n      throw new Error(\"uv with the analysis project is required for the Python parity check\");\n    }",
+   "start_line": 101,
+   "end_line": 103,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/rekordbox-library/src/pssi.test.ts",
+   "content": "The fixture-validity check is a raw-text substring `toContain(\"\\\"generator\\\"\")` plus a magic `> 100` case count. A truncated or malformed table that merely still contains the literal key and enough cases would satisfy this, so the \"loads the committed table with a schema\" test does not actually validate the loaded structure. Assert on the parsed object instead (e.g. `table.generator`/`table.source` non-empty, or that the schema equals a shared exported constant) rather than a substring of the file text.",
+   "existing_code": "    expect(readFileSync(labelsPath, \"utf8\")).toContain(\"\\\"generator\\\"\");",
+   "start_line": 64,
+   "end_line": 64,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/rekordbox-live/src/index.ts": [
+  {
+   "path": "packages/rekordbox-live/src/index.ts",
+   "content": "`axFractionalBeat` is imported here but never referenced in this file (it is already surfaced via the `export * from \"./ax.js\"` barrel below). This is dead code and will trip unused-import lint. Remove the import.",
+   "existing_code": "import { axFractionalBeat } from \"./ax.js\";",
+   "start_line": 4,
+   "end_line": 4,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/rekordbox-live/src/index.ts",
+   "content": "`rate` is used as a divisor with no validation. `replayFixture(fixture, 0)` makes `i === 0` compute `0 / 0 = NaN`, so `BigInt(Math.round(NaN))` throws `RangeError: Cannot convert NaN to a BigInt`, and for `i > 0` it divides by zero. A negative rate produces negative/descending `receivedAtNs`, breaking the monotonic virtual-clock invariant callers rely on. Guard against non-positive/non-finite rates.",
+   "suggestion_code": "    receivedAtNs: baseNs + BigInt(Math.round((i * stepMs * 1_000_000) / rate)),",
+   "existing_code": "    receivedAtNs: baseNs + BigInt(Math.round((i * stepMs * 1_000_000) / rate)),",
+   "start_line": 43,
+   "end_line": 43,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/index.ts",
+   "content": "`String.prototype.replace` with a string argument replaces only the FIRST occurrence, so a normal range such as \"7.x.x\" becomes \"7..x\" and `version.startsWith(\"7..x\")` is never true \u2014 every such range silently fails the gate. Additionally, prefix matching on the truncated range over-matches (e.g. \"7.2.x\" vs a hypothetical \"7.2.0-rc\"). Consider an explicit range parser/regex instead of stripping a single literal 'x'.",
+   "existing_code": "  return def.supported && def.platform === platform && version.startsWith(def.versionRange.replace(\"x\", \"\"));",
+   "start_line": 79,
+   "end_line": 79,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "packages/rekordbox-live/src/index.ts",
+   "content": "The comment above the schema states each expected event carries an `expectedBy` naming its human author, but the schema marks it `.optional()`. As written, `parseFixture` accepts fixtures with zero attribution, contradicting the documented fixture-lint contract (\u00a7T-QA-03). Either make it required (`z.string().min(1)`) or update the comment.",
+   "existing_code": "  expectedBy: z.string().min(1).optional(),",
+   "start_line": 29,
+   "end_line": 29,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/rekordbox-live/src/index.ts",
+   "content": "The step generator eagerly computes the ENTIRE replayed array on first advancement (via `replayFixture`) before yielding, so it is not actually incremental; a large fixture is fully materialized instead of one event per step. It also hardcodes rate `1`. If truly stepwise/streaming semantics are intended, iterate lazily without building the intermediate array.",
+   "existing_code": "  for (const state of replayFixture(fixture, 1, stepMs)) yield state;",
+   "start_line": 50,
+   "end_line": 50,
+   "category": "performance",
+   "severity": "low"
+  },
+  {
+   "path": "packages/rekordbox-live/src/index.ts",
+   "content": "Loop state is hardcoded to inactive and `master` to null regardless of the snapshot. `CompositeSnapshot` carries no loop/master fields, so any live loop or master-deck change is silently misreported as `{ active: false }` / `null` on every emit. If loop/master fidelity is a requirement for the composite provider, extend the snapshot; otherwise document the known limitation explicitly.",
+   "existing_code": "      loop: { active: false, startSeconds: null, endSeconds: null, beatLength: null },",
+   "start_line": 119,
+   "end_line": 119,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "packages/rekordbox-live/src/index.ts",
+   "content": "The inline row type (`{ rekordboxId: string; canonicalPath?: string; title?: string; artist?: string }`) is duplicated verbatim three times in this function alone (and again in `CompositeSnapshot.row` and `DecodedMessage`). Extract a shared `LibraryRow`/`RowIdentity` type to prevent the copies from drifting.",
+   "existing_code": "function rowToIdentity(row: { rekordboxId: string; canonicalPath?: string; title?: string; artist?: string }): { rekordboxId: string; canonicalPath?: string; title?: string; artist?: string } {",
+   "start_line": 10,
+   "end_line": 10,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/renderer/src/color.test.ts": [
+  {
+   "path": "packages/renderer/src/color.test.ts",
+   "content": "Tautological assertion: `expected` is derived with `linearToSrgbByte`, which is exactly the helper `fixtureBytes` delegates to for the default \"srgb\" gamma (`color.ts` line 126). Any regression in the sRGB transfer (e.g. swapping the 0.0031308 threshold, changing the 2.4 exponent, or dropping the final clamp) changes both sides identically, so `expect(bytes).toEqual(expected)` still passes. The only independent checks left are `bytes[0] > bytes[2]` and `bytes[1] === 0`, which a broken transfer could easily satisfy. Pin the expected bytes to independently derived literals (for `[1.0, 0, srgb(90)] * 0.3` the sRGB bytes are approximately `[149, 0, 49]`).",
+   "existing_code": "    const expected: [number, number, number] = [linearToSrgbByte(scaled[0]), linearToSrgbByte(scaled[1]), linearToSrgbByte(scaled[2])];\n    expect(bytes).toEqual(expected);",
+   "start_line": 24,
+   "end_line": 25,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/renderer/src/color.test.ts",
+   "content": "This assertion cannot distinguish a correct intensity scaling from a broken no-op: if `applyIntensityLinear` returned its input unchanged (ignoring `intensity` entirely), `applyIntensityLinear(base, 2)` and `applyIntensityLinear(base, 1)` would both be `base` and the assertion would still pass. Combined with the earlier hue check (which also compares `dim` against `base` trivially when the function is a no-op), the whole test passes for an implementation that never applies intensity. Add a magnitude assertion, e.g. `expect(dim[0]).toBeCloseTo(base[0] * 0.3)` (and similarly for the other channels), plus a lower-clamp case for negative/zero intensity.",
+   "existing_code": "    expect(applyIntensityLinear(base, 2)).toEqual(applyIntensityLinear(base, 1));",
+   "start_line": 35,
+   "end_line": 35,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/renderer/src/color.test.ts",
+   "content": "The white-balance test uses a diagonal (hence symmetric) matrix, so it cannot detect a row-major vs. column-major transposition of the matrix in `applyWhiteBalance` \u2014 the transposed result is numerically identical for any diagonal matrix. Since the API documents row-major order (`color.ts` line 37), a regression that transposes the multiplication would silently pass. Use a non-symmetric matrix with distinct off-diagonal entries and assert at least one cross-channel term, e.g. `[0.9, 0.1, 0, 0, 1, 0, 0.2, 0, 1.1]` and check that `balanced[0]` includes `0.1 * linear[1]`.",
+   "existing_code": "    const balanced = applyWhiteBalance(linear, [0.9, 0, 0, 0, 1, 0, 0, 0, 1.1]);",
+   "start_line": 39,
+   "end_line": 39,
+   "category": "test",
+   "severity": "medium"
+  }
+ ]
+}

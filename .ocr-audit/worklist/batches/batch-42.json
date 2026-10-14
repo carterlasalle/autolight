@@ -1,0 +1,282 @@
+{
+ "packages/show-director/src/index.test.ts": [
+  {
+   "path": "packages/show-director/src/index.test.ts",
+   "content": "Dead state collection: `states` is populated on every tick and returned, but no caller ever destructures it (`run(256)` / `run(256, 0.9)` only use `changes`/`ids`). The array is built for all 256 beats yet never read, so any bug in the per-tick `state` transition is never observed via this helper. Either add an assertion that consumes `states` (e.g. check energy/motif progression) or remove the array and the `states: DirectorState[]` return field to avoid dead code.",
+   "existing_code": "  const states: DirectorState[] = [];",
+   "start_line": 24,
+   "end_line": 24,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-director/src/index.test.ts",
+   "content": "Untested branch: `opts.cooldown` is never passed by any caller, so the `{ library, cooldownPhrases: opts.cooldown }` path (and thus the entire `cooldownPhrases` runtime option) is dead code in this suite. The 'respects cooldowns' test therefore only ever exercises the default cooldown, leaving the custom-cooldown contract unverified. Consider driving this branch from a test with a non-default cooldown value, or drop the unused option.",
+   "existing_code": "    const out = directorTick(state, { beat, energy }, opts.cooldown === undefined ? { library } : { library, cooldownPhrases: opts.cooldown });",
+   "start_line": 26,
+   "end_line": 26,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-director/src/index.test.ts",
+   "content": "Weak assertion that can pass despite broken energy handling. From the initial `energy: \"low\"` state with live `energy: 1`, `advisedEnergy` steps exactly one level to `\"mid\"`, so the look should be `\"mid\"`. Asserting `not.toBe(\"low\")` would also pass if the engine over/under-shot (e.g. jumped straight to `\"high\"`) or changed the direction/step contract. Pin the exact expected value.",
+   "suggestion_code": "    expect(combinedLoud.look.energy).toBe(\"mid\");",
+   "existing_code": "    expect(combinedLoud.look.energy).not.toBe(\"low\");",
+   "start_line": 99,
+   "end_line": 99,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-director/src/index.test.ts",
+   "content": "Vacuous-pass risk and opaque failure. `throw` instead of `expect` bypasses the assertion tracker, and the guards only run when `changes` is non-empty. If `directorTick` stopped emitting changes at all (`changes === []`), the nested loops never execute and this test silently passes. An explicit `expect(changes.length).toBeGreaterThan(0)` (or an `expect(...).toBeLessThanOrEqual` assertion) makes the cooldown contract self-guarding. Note the gap unit (index distance in `changes`) does currently match phrase distance, so that part is sound.",
+   "existing_code": "        if (ids[changes[i]!] === ids[changes[j]!] && gap <= DEFAULT_COOLDOWN_PHRASES) {\n          throw new Error(`look ${ids[changes[i]!]} reused after ${gap} phrases`);\n        }",
+   "start_line": 51,
+   "end_line": 53,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-director/src/index.test.ts",
+   "content": "Implicit library coupling in the strobe check. `run(256, 1)` internally rebuilds the library via `buildLookLibrary({ minLooks: DEFAULT_MIN_LOOKS })`, while the lookups below use the locally built `library` (`minLooks: 24`). This only works because `DEFAULT_MIN_LOOKS === 24` today; if that constant changes, `library.find(...)` returns `undefined`, the `!` non-null assertion hides it from TypeScript, and `prev.strobe` throws a confusing `TypeError`. Pass the same `library` into the run (add an option to `run`) instead of relying on the constant matching.",
+   "existing_code": "    const seq = run(256, 1).ids.filter((_, i) => i % PHRASE === 0);",
+   "start_line": 114,
+   "end_line": 114,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-director/src/index.test.ts",
+   "content": "Hardcoded phrase-edge beats duplicate the phrase length (32) instead of deriving it from `PHRASE`/`DEFAULT_PHRASE_BEATS`, and the same literal array appears again in the next test. If the phrase length changes, these tests fail with a misleading message rather than pointing at a genuine regression. Derive the edges from the constant.",
+   "suggestion_code": "    const phraseEdges = Array.from({ length: 8 }, (_, k) => k * PHRASE);\n    expect(changes).toEqual(phraseEdges);",
+   "existing_code": "    expect(changes).toEqual([0, 32, 64, 96, 128, 160, 192, 224]);",
+   "start_line": 38,
+   "end_line": 38,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/show-mixer/src/blend.test.ts": [
+  {
+   "path": "packages/show-mixer/src/blend.test.ts",
+   "content": "Self-referential verification: the reference hues for the two source colours are computed with the same `rgbToOklch` helper used to inspect `mixed.rgb`. If `linearToOklab`/`oklabToOklch` had a bug (e.g. a rotated/wrong matrix) the mixed hue and these reference hues would shift together and the 285\u2013320 band assertion could still pass. Compare against fixed, independently-derived hue constants (cyan \u2248195\u00b0, magenta \u2248328\u00b0) so a shared conversion bug is detectable.",
+   "existing_code": "    expect(rgbToOklch(CYAN).h).toBeGreaterThan(190);\n    expect(rgbToOklch(CYAN).h).toBeLessThan(200);\n    expect(rgbToOklch(MAGENTA).h).toBeGreaterThan(320);",
+   "start_line": 28,
+   "end_line": 30,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-mixer/src/blend.test.ts",
+   "content": "`unique.size > 1` does not confirm the four DS-09 spaces behave distinctly. In `blend.ts`, `blendColors` routes both `\"oklab\"` and `\"oklab-hue-linear-intensity\"` through the same `mixOklab` branch, so two of the four listed spaces are in fact identical here; the assertion passes on the strength of `linear-rgb`/`srgb-legacy` alone. Assert pairwise distinctness only for the spaces expected to differ, or document that the combined mode is an alias.",
+   "existing_code": "    const unique = new Set(hues.map((h) => h.toFixed(1)));\n    expect(unique.size).toBeGreaterThan(1);",
+   "start_line": 36,
+   "end_line": 37,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-mixer/src/blend.test.ts",
+   "content": "Near-vacuous assertion: `not.toBeCloseTo(x, 1)` only fails when the two values are within 0.05, so it is satisfied by virtually any two distinct hues and does not prove the legacy space diverges from the perceptual mix in any meaningful way. Assert a concrete minimum separation (or expected hue range) instead.",
+   "suggestion_code": "    const legacyHue = rgbToOklch(blendColors([{ rgb: CYAN, weight: 1 }, { rgb: MAGENTA, weight: 1 }], \"srgb-legacy\").rgb).h;\n    expect(Math.abs(legacyHue - hues[0]!)).toBeGreaterThan(5);",
+   "existing_code": "    expect(rgbToOklch(blendColors([{ rgb: CYAN, weight: 1 }, { rgb: MAGENTA, weight: 1 }], \"srgb-legacy\").rgb).h).not.toBeCloseTo(hues[0]!, 1);",
+   "start_line": 39,
+   "end_line": 39,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-mixer/src/blend.test.ts",
+   "content": "This pair case cannot detect weight normalization: two white entries at 0.5 sum to a total weight of 1.0, so both a normalized and the unnormalized implementation produce 255. The accompanying comment claims it guards \u00a764 but it is redundant with the `lone` case above (which does exercise non-normalization). Use inputs whose weight total is not 1 (e.g. distinct weights) if this case is meant to add coverage.",
+   "existing_code": "    const pair = blendColors([{ rgb: WHITE, weight: 0.5 }, { rgb: WHITE, weight: 0.5 }]);\n    expect(pair.rgb.r).toBe(255);",
+   "start_line": 53,
+   "end_line": 54,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-mixer/src/blend.test.ts",
+   "content": "The hardcoded 148\u2013150 window encodes a formula-specific, one-point value derived from the current transfer function and rounding rather than expressing the intended invariant (intensity scales the linear-light result). A minor change to the blend space default or transfer constants breaks the test while the actual property is unstated. Prefer deriving the expected value (e.g. via `linearToSrgb`) or asserting a monotonic relationship.",
+   "existing_code": "    expect(lone.rgb.r).toBeGreaterThanOrEqual(148);\n    expect(lone.rgb.r).toBeLessThanOrEqual(150);",
+   "start_line": 45,
+   "end_line": 46,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-mixer/src/blend.test.ts",
+   "content": "Round-trip coverage gap: the loop only feeds in-domain values (0\u2013255 \u2192 sRGB fraction \u2192 back), so it never exercises the clamping that `linearToSrgb` performs on out-of-range input, and the differing domains of the two helpers (srgbToLinear takes 0\u2013255, linearToSrgb takes a [0,1] linear value) are only spot-checked at the endpoints. Add out-of-domain cases (e.g. `linearToSrgb(-0.5)`/`linearToSrgb(2)` \u2192 0/255) to prove clamping rather than relying on already-valid inputs.",
+   "existing_code": "    for (let value = 0; value <= 255; value += 1) {\n      expect(Math.abs(linearToSrgb(srgbToLinear(value)) - value)).toBeLessThanOrEqual(1);\n    }",
+   "start_line": 60,
+   "end_line": 62,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/show-planner/package.json": [
+  {
+   "path": "packages/show-planner/package.json",
+   "content": "The package points its entry points at `./dist` but declares neither a `files` whitelist nor an `exports` map. Without `files`, publishing will ship sources, tsconfig, and any local artifacts instead of just the built output; without `exports`, the subpath/entrypoint surface is implicit and consumers on strict ESM resolution can disagree with `main`/`types`. Add a `files: [\"dist\"]` whitelist and an explicit `exports` map (with matching `types`/`import` conditions).",
+   "existing_code": "  \"main\": \"./dist/index.js\",\n  \"types\": \"./dist/index.d.ts\",",
+   "start_line": 5,
+   "end_line": 6,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/package.json",
+   "content": "There is no `prepare`/`prepublishOnly` hook, so nothing guarantees `dist/index.js` / `dist/index.d.ts` exist before the package is consumed or published. If a consumer installs or links this package before `yarn build` has run (or dist is absent from the tarball), `main`/`types` resolve to missing files and imports fail at runtime/type-check time. Add a `\"prepare\"` (or `\"prepublishOnly\"`) script that runs `tsc -p tsconfig.json`.",
+   "existing_code": "    \"build\": \"tsc -p tsconfig.json\",",
+   "start_line": 8,
+   "end_line": 8,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/package.json",
+   "content": "`lint` is an exact duplicate of `typecheck` (`tsc --noEmit`), so the workspace-wide `yarn lint` never runs a real linter; lint/format regressions in this package pass CI silently. Point `lint` at the actual linter configured for the repo (eslint/oxlint) and declare that tool in `devDependencies` (or explicitly document that this package is intentionally unlinted).",
+   "existing_code": "    \"lint\": \"tsc --noEmit -p tsconfig.json\",\n    \"typecheck\": \"tsc --noEmit -p tsconfig.json\"",
+   "start_line": 10,
+   "end_line": 11,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/package.json",
+   "content": "`--passWithNoTests` makes `yarn test` succeed even when zero tests are collected (e.g. after an accidental deletion or a broken test glob), so a package with no effective coverage still reports a green suite. Consider dropping the flag for this package, or add a minimum test-count gate, so the absence of tests is surfaced rather than masked.",
+   "existing_code": "    \"test\": \"vitest run --passWithNoTests\",",
+   "start_line": 9,
+   "end_line": 9,
+   "category": "test",
+   "severity": "medium"
+  }
+ ],
+ "packages/show-planner/src/color.ts": [
+  {
+   "path": "packages/show-planner/src/color.ts",
+   "content": "`ensureMinDistance` cannot guarantee its documented \"every pair clears minDistance\" invariant and fails silently. The hue search probes only 12 fixed +30\u00b0 steps, and when none is valid the loop exits after the 12th shift wraps the hue back to its starting value \u2014 so the function returns the *original, un-repaired* hues with no indication that repair failed. Callers rely on the invariant: `planIdentity` (packages/show-planner/src/identity.ts:55) feeds the result straight into `globalDesign`, and the identity test only passes because it accepts a 0.06 slack below the configured threshold (identity.test.ts:79-81: `paletteMinDistance - 0.06`), which shows the contract is not actually met. A reproducible failure: `ensureMinDistance([{l:0.6,c:0.25,h:0},{l:0.6,c:0.25,h:180}], 0.6)` \u2014 the maximum achievable distance for these colours is 2\u00b7c = 0.5, so every one of the 12 probes keeps the pair below 0.6 and the violating palette is returned silently. Even for reachable thresholds, a fixed 30\u00b0 grid can step over a narrow valid window when the colour must clear two neighbours. Signal failure (return a result/flag or throw) and/or use a finer/adversarial scan before abandoning the repair.",
+   "existing_code": "    let tries = 0;\n    while (tries < 12) {",
+   "start_line": 125,
+   "end_line": 126,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/show-planner/src/color.ts",
+   "content": "`linearRgbToOklab` is exported but has no callers anywhere in the repository (a repo-wide search finds only this declaration), and it is not re-exported from `src/index.ts`. Unlike the other helpers it is not used by `blendRgb`/`blendOklch`. This is dead code that the project's unused-export gate (documented in docs/finish) would flag. Either route it through the renderer/planner path or remove it.",
+   "existing_code": "export function linearRgbToOklab(r: number, g: number, b: number): Oklab {",
+   "start_line": 35,
+   "end_line": 35,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-planner/src/color.ts",
+   "content": "These clamps are no-ops with the current ranges. `light` is `0.55 + clamp01(energyMean) * 0.15`, i.e. always within [0.55, 0.70], so `light + 0.05` \u2208 [0.60, 0.75] (never reaches 0.8) and `light - 0.05` \u2208 [0.50, 0.65] (never below 0.5) \u2014 `Math.min(0.8, \u2026)`/`Math.max(0.5, \u2026)` always return the non-constant operand, so the \"second brighter / third darker\" contrast is not actually being protected. If the intent is to bound lightness, apply the bound to `light` itself with documented min/max; otherwise drop the misleading clamps (the same no-op applies to the third-colour line below).",
+   "existing_code": "    { l: Math.min(0.8, light + 0.05), c: chroma, h: h2 },",
+   "start_line": 111,
+   "end_line": 111,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/storage/src/validation.test.ts": [
+  {
+   "path": "packages/storage/src/validation.test.ts",
+   "content": "This test is tautological and gives false confidence about cache invalidation. It only hashes two hardcoded JSON strings with node:crypto and asserts the digests differ \u2014 it never calls the validation module or any production cache-key/hashing helper, so it passes even if validation returns nothing for the bad input and bad rows would still be cached. Consider asserting the real behavior instead, e.g. that `validateSections([{ startBeat: 5, endBeat: 1 }], beats(32))` is non-empty while the fixed input yields `[]`, and derive the hash from the same helper the production cache actually uses.",
+   "existing_code": "    const hash = (s: string): string => createHash(\"sha256\").update(s).digest(\"hex\").slice(0, 16);\n    expect(hash(bad)).not.toBe(hash(fixed));",
+   "start_line": 104,
+   "end_line": 105,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "packages/storage/src/validation.test.ts",
+   "content": "Both fixtures are read and JSON.parsed eagerly at module scope. A missing/corrupt fixture therefore aborts the entire file at import time (collection error) instead of failing a single targeted test, and it is not obvious which test depends on which fixture. Prefer loading fixtures lazily inside a `beforeAll` (or a memoized helper) so failures are localized and the file imports cleanly without filesystem I/O.",
+   "existing_code": "const goodModel = JSON.parse(readFileSync(join(fixtureDir, \"live-deck1.trackmodel.json\"), \"utf8\")) as unknown;\nconst goodPlan = JSON.parse(readFileSync(join(fixtureDir, \"live-deck1.showplan.json\"), \"utf8\")) as unknown;",
+   "start_line": 18,
+   "end_line": 19,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/storage/src/validation.test.ts",
+   "content": "Overlap/gap detection is asserted by substring matching on human-readable messages ('overlaps'/'gap') rather than structured codes or paths. Any future message that happens to contain these words (or a reworded message) can make the test pass without exercising the range logic, and a localization/message change will silently break the test. Prefer asserting on the structured `path` (e.g. `sections[1].startBeat`) or an issue code.",
+   "existing_code": "      ).some((i) => i.message.includes(\"overlaps\")),",
+   "start_line": 57,
+   "end_line": 57,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/playwright.config.ts": [
+  {
+   "path": "apps/desktop/playwright.config.ts",
+   "content": "`testDir: \"./journeys\"` restricts test discovery to the `journeys/` directory, and `testMatch: \"**/*.journey.ts\"` only accepts `.journey.ts` files. As a result `apps/desktop/e2e/normal-night.spec.ts` (the T-QA-11 17-row acceptance spec for 99-final-acceptance.md section 3) is never collected by `yarn workspace @autolight/desktop test:e2e` \u2014 it can never pass or fail. This contradicts docs/finish/evidence/T-QA-11/README.md, which states \"the e2e spec is picked up by the same `test:e2e` command\", and it matches the documented run (\"5 passed\": m1-slice + night(2) + soak + live-session = 5 tests over 4 files, i.e. the spec is silently skipped). A silently-unrun acceptance suite means real regressions in those 17 rows go undetected. Either relocate the spec under `journeys/` (e.g. `normal-night.journey.ts`, consistent with e2e/README.md which says the `e2e/` dir stays empty), or widen discovery, e.g. `testDir: \".\"` with `testMatch: [\"**/journeys/**/*.journey.ts\", \"**/e2e/**/*.spec.ts\"]`.",
+   "existing_code": "  testDir: \"./journeys\",\n  testMatch: \"**/*.journey.ts\",",
+   "start_line": 4,
+   "end_line": 5,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/playwright.config.ts",
+   "content": "`retries: 0` is set but there is no `forbidOnly` guard. Several journeys (m1-slice, normal-night) are intentionally-red probes whose whole purpose is to fail until dependencies land. If a developer leaves a stray `test.only(...)` on a green test (night/soak/live-session) and pushes, Playwright silently skips all other tests, so CI passes green while the red probes are never evaluated \u2014 tests passing despite unverified behavior. Suggest adding the standard CI guard so a committed `.only` fails the run.",
+   "suggestion_code": "  retries: 0,\n  forbidOnly: !!process.env.CI,",
+   "existing_code": "  retries: 0,",
+   "start_line": 13,
+   "end_line": 13,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/scripts/build-preload.mjs": [
+  {
+   "path": "apps/desktop/scripts/build-preload.mjs",
+   "content": "The alias map is built from every raw entry returned by `readdirSync`, with no filtering for directories or for the existence of `src/index.ts`. Stray entries (e.g. `.DS_Store`, stray files, or a non-package directory) produce bogus aliases, and any workspace entry whose directory name differs from the actual package name (or that has no `src/index.ts` barrel) yields an alias that either never matches the import specifier or points at a non-existent file, causing opaque `Could not resolve` build failures that appear only once that package is imported. Filter to real directories whose barrel exists before generating aliases.",
+   "suggestion_code": "const alias = Object.fromEntries(\n  readdirSync(workspaceSrc, { withFileTypes: true })\n    .filter((d) => d.isDirectory() && existsSync(join(workspaceSrc, d.name, \"src\", \"index.ts\")))\n    .map((d) => [`@autolight/${d.name}`, join(workspaceSrc, d.name, \"src\", \"index.ts\")]),\n); // add: import { existsSync } from \"node:fs\";",
+   "existing_code": "const alias = Object.fromEntries(\n  readdirSync(workspaceSrc).map((p) => [`@autolight/${p}`, join(workspaceSrc, p, \"src\", \"index.ts\")]),\n);",
+   "start_line": 11,
+   "end_line": 13,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/scripts/build-preload.mjs",
+   "content": "`workspaceSrc` hardcodes the relative path `../../packages` with no existence check. If the script is ever run from a different layout (monorepo moved, file relocated, `packages` renamed/removed), `readdirSync` throws a raw `ENOENT` that gives no hint about the expected workspace layout. Consider validating the directory exists and emitting an actionable error.",
+   "existing_code": "const workspaceSrc = join(root, \"..\", \"..\", \"packages\");",
+   "start_line": 10,
+   "end_line": 10,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "apps/desktop/scripts/build-preload.mjs",
+   "content": "In `--watch` mode the esbuild context is created and watched but never disposed, and no `SIGINT`/`SIGTERM` handler is registered, so the rebuild service is left to be torn down implicitly on process exit. More importantly, `ctx.watch()` performs the initial build internally and only logs failures (with `logLevel: \"warning\"`), so a broken first build still prints `watching ...` and looks successful. Surface the initial build result/errors and dispose the context on termination signals.",
+   "existing_code": "  const ctx = await context(job);\n  await ctx.watch();",
+   "start_line": 28,
+   "end_line": 29,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/scripts/build-preload.mjs",
+   "content": "Both branches `await` esbuild at top level without any `try/catch`, so a build failure bubbles up as an unhandled promise rejection instead of a clean, diagnosable exit; the `bundled ...` log is only reached on success, but there is no `catch` to print a user-facing message or set a non-zero exit code. Wrap the build/watch invocation in a `try/catch` that logs the error and sets `process.exitCode = 1`.",
+   "existing_code": "  await build(job);\n  console.log(\"bundled\", outElectron);",
+   "start_line": 32,
+   "end_line": 33,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/scripts/build-preload.mjs",
+   "content": "This script is a near-verbatim copy of `build-main.mjs` (imports, `root`/`outElectron`/`workspaceSrc`/`alias` derivation, and the watch/build branch). The duplicated scaffolding must be kept in sync manually \u2014 a fix to alias generation or error handling in one file will silently diverge from the other. Consider extracting the shared alias/job/branch logic into a small shared helper module.",
+   "existing_code": "const root = join(dirname(fileURLToPath(import.meta.url)), \"..\");\nconst outElectron = join(root, \"dist\", \"electron\");",
+   "start_line": 7,
+   "end_line": 8,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ]
+}

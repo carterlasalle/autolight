@@ -1,0 +1,179 @@
+{
+ "packages/show-host/vitest.config.ts": [
+  {
+   "path": "packages/show-host/vitest.config.ts",
+   "content": "The alias key `@autolight/${e.name}` is a plain string find. Vite/@rollup/plugin-alias matches string keys by exact match OR by a leading `key + \"/\"` prefix, so any subpath import of a workspace package is rewritten by prefix substitution into a nonsense path: `@autolight/simulator/dist/recording.js` becomes `<packages>/simulator/src/index.ts/dist/recording.js`, which never resolves and throws at import time. This is exercised in `src/snapshot.test.ts` (RECORDING_MODULE_DIST) and in `packages/govee/src/index.test.ts` (SIM_MODULE), where the simulator parity test ends up silently skipping because the dynamic import always fails. Prefer exact-match aliases so package subpaths fall through to normal node resolution, e.g. use the array form with an anchored regex.",
+   "suggestion_code": "const workspaceAlias = readdirSync(workspaceSrc, { withFileTypes: true })\n  .filter((e) => e.isDirectory())\n  .map((e) => ({\n    find: new RegExp(`^@autolight/${e.name}$`),\n    replacement: join(workspaceSrc, e.name, \"src\", \"index.ts\"),\n  }));",
+   "existing_code": "    .map((e) => [`@autolight/${e.name}`, join(workspaceSrc, e.name, \"src\", \"index.ts\")]),",
+   "start_line": 11,
+   "end_line": 11,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-host/vitest.config.ts",
+   "content": "This reads the sibling `packages/` directory unguarded and treats every directory as an `@autolight` package whose entry is `src/index.ts`, and it derives the alias key from the directory name rather than the package's declared `name`. A missing/unreadable path makes the sync read throw and aborts the whole test run with an opaque error, and any non-package directory (scratch dir, tooling dir) or a package whose directory name differs from package.json `name` / uses a different entry point produces a broken or wrong alias that silently resolves to a nonexistent module. Consider verifying `package.json`/entry existence (and reading the real package name) or wrapping the scan in a guard.",
+   "suggestion_code": "    .filter((e) => e.isDirectory() && existsSync(join(workspaceSrc, e.name, \"package.json\")))",
+   "existing_code": "  readdirSync(workspaceSrc, { withFileTypes: true })",
+   "start_line": 9,
+   "end_line": 9,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-host/vitest.config.ts",
+   "content": "The include glob only matches `src/**/*.test.ts`, so `.test.tsx`, `.spec.ts`/`.spec.tsx` files and tests placed outside `src` are silently never executed. Any broken behavior covered only by such files would pass unnoticed. Broaden the pattern if those conventions are (or may become) used in this package.",
+   "suggestion_code": "    include: [\"src/**/*.{test,spec}.{ts,tsx}\"],",
+   "existing_code": "    include: [\"src/**/*.test.ts\"],",
+   "start_line": 17,
+   "end_line": 17,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/show-runtime/src/source-loss.test.ts": [
+  {
+   "path": "packages/show-runtime/src/source-loss.test.ts",
+   "content": "This lower bound is too loose to prove the extrapolation rate is correct. Since the observation is stale (300 ms > seekThresholdMs = 150 ms), no correction is applied and the exact expected beat is deterministic: 64 + 0.3 s * 2 beats/s = 64.6. `> 64.4` admits an advance of only 0.4 beats over 300 ms, i.e. a rate as low as ~1.33 beats/s \u2014 a ~33% tempo error in the extrapolator would still pass. Assert the exact value instead so a wrong extrapolation rate is caught.",
+   "suggestion_code": "    expect(gap300!.beat).toBeCloseTo(64.6, 6);",
+   "existing_code": "    expect(gap300!.beat).toBeGreaterThan(64.4);",
+   "start_line": 86,
+   "end_line": 86,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-runtime/src/source-loss.test.ts",
+   "content": "With `confidence: 1` the confidence weighting in `adaptiveBeat`'s blend branch is unobservable: the expected 124 bpm equals a naive unweighted `(djBpm + audioBpm) / 2`, so a blend implementation that ignores `audioConfidence` entirely would still pass this case (the zero-confidence assertion in the direct test only checks the `source` string). Add an intermediate-confidence case to actually exercise the weighting, e.g. with confidence 0.5 the expected bpm is (120 + 128*0.5)/1.5 = 122.667 and the phase is still seeded from the DJ anchor.",
+   "suggestion_code": "    setAudioTempo(world, { bpm: 128, confidence: 1, beat: null, anchorNs: null });\n    // Note: also cover confidence < 1 so the blend weighting is exercised, not just confidence 1.",
+   "existing_code": "    setAudioTempo(world, { bpm: 128, confidence: 1, beat: null, anchorNs: null });",
+   "start_line": 129,
+   "end_line": 129,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-runtime/src/source-loss.test.ts",
+   "content": "This fallback case asserts only the returned `source`. A fallback that produced the right `source` but a wrong `bpm`/`beat` (e.g. a reverse-weighted or unweighted tempo) would still pass. Assert the numeric result too: the fallback must be the DJ-only clock, bpm 120 and beat = 64 + 10*120/60 = 84.",
+   "suggestion_code": "    const fallback = adaptiveBeat({ ...inputs, audioConfidence: 0 }, now, \"blend\")!;\n    expect(fallback.source).toBe(\"dj-bpm\");\n    expect(fallback.bpm).toBe(120);\n    expect(fallback.beat).toBeCloseTo(84, 9);",
+   "existing_code": "    expect(adaptiveBeat({ ...inputs, audioConfidence: 0 }, now, \"blend\")!.source).toBe(\"dj-bpm\");",
+   "start_line": 167,
+   "end_line": 167,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/track-identity/package.json": [
+  {
+   "path": "packages/track-identity/package.json",
+   "content": "The `lint` and `typecheck` scripts execute the identical `tsc --noEmit` command, so the `lint` gate performs only type checking and cannot detect any lint-class defects it is expected to cover. This gives a false sense of quality gating in CI. Either wire `lint` to a real linter (e.g. add `eslint` to `devDependencies` and run it here) or drop the misleadingly-named duplicate script.",
+   "existing_code": "    \"lint\": \"tsc --noEmit -p tsconfig.json\",\n    \"typecheck\": \"tsc --noEmit -p tsconfig.json\"",
+   "start_line": 10,
+   "end_line": 11,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/track-identity/package.json",
+   "content": "`vitest run --passWithNoTests` exits with success when zero test files are discovered. Since this package's behavior is only covered by source-adjacent `*.test.ts` files (`include: [\"src/**/*.test.ts\"]`), a rename or relocation that silently drops the test file would leave CI green with no coverage. Consider removing `--passWithNoTests` for the published library package so a missing test file fails the build.",
+   "existing_code": "    \"test\": \"vitest run --passWithNoTests\",",
+   "start_line": 9,
+   "end_line": 9,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/track-identity/package.json",
+   "content": "The package declares `main`/`types` entrypoints into `./dist` but specifies no `files` allowlist or `exports` map. As a result `npm publish` would include the entire package directory (src, tests, tsconfig, vitest.config.ts) and consumers can deep-import arbitrary `dist/*` subpaths, coupling them to internal module layout. Add a `files: [\"dist\"]` allowlist (and optionally an explicit `exports` map) to constrain the published surface.",
+   "existing_code": "  \"main\": \"./dist/index.js\",\n  \"types\": \"./dist/index.d.ts\",",
+   "start_line": 5,
+   "end_line": 6,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "analysis/src/autolight_analysis/events.py": [
+  {
+   "path": "analysis/src/autolight_analysis/events.py",
+   "content": "`votes` sums **10** boolean signals (bass_jump, drum_jump, energy_jump, preceded_by_build, preceded_by_dip, on_downbeat, section_boundary, onset_peak, novelty_peak, pssi_transition), but confidence normalizes by 7.0. With this divisor only 7/10 signals already saturate confidence to 1.0, and the remaining three (on_downbeat, section_boundary, onset_peak, novelty_peak, pssi_transition) contribute to `votes` but effectively no longer raise confidence. `detect_drops` gates on `confidence >= min_conf` (0.6 \u21d2 votes \u2265 5) and `votes >= min_votes`, so this mis-weighting distorts the planner-facing confidence for exactly the structural drop signals spec 24 lists. The 7.0 appears copied from `build_score`'s 7 boostable signals; make the divisor match the number of contributing signals (10) or document the intended threshold explicitly.",
+   "suggestion_code": "    confidence = min(1.0, votes / 10.0)",
+   "existing_code": "    confidence = min(1.0, votes / 7.0)",
+   "start_line": 119,
+   "end_line": 119,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/events.py",
+   "content": "`rel = slope / max(1e-6, mean)` does not actually neutralize near-silent windows. For a quiet (RMS near-zero) window a tiny absolute rise still yields a large relative slope, and once `mean < 1e-6` the 1e-6 floor defines the denominator, so any positive slope is amplified by ~1e6 and `strength` saturates at 1.0. `detect_builds` (structure.py) accepts any window with `seg[-1] > seg[trim] * 1.05` and then selects on relative climb, so a faint noise-floor rise in a silent passage can be emitted as a maximum-strength build. Consider flooring the denominator with an absolute energy level (or returning a low strength when the window level is below an audibility floor) rather than the 1e-6 epsilon.",
+   "suggestion_code": "    rel = slope / mean if mean > 1e-3 else 0.0",
+   "existing_code": "    rel = slope / max(1e-6, mean)",
+   "start_line": 59,
+   "end_line": 59,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "analysis/tests/fixtures/make_tracks.py": [
+  {
+   "path": "analysis/tests/fixtures/make_tracks.py",
+   "content": "The comment says the plateau is dipped \"for a bar\" and the slam lands \"on beat 65\", but the code dips five beats (indices 60-64, i.e. beats 61-65) and the slam is at index 65 = beat 66. The `truth` list encodes the real ground truth (fake-drop beat 65, drop beat 66), so the comment is the misleading part and could cause a future maintainer to re-index the planted events incorrectly. Please fix the comment to match the code.",
+   "suggestion_code": "    # Fake-drop sculpt: dip the plateau (beats 61-65), slam back on beat 66.",
+   "existing_code": "    # Fake-drop sculpt: dip the plateau for a bar, slam back on beat 65.",
+   "start_line": 58,
+   "end_line": 58,
+   "category": "documentation",
+   "severity": "low"
+  },
+  {
+   "path": "analysis/tests/fixtures/make_tracks.py",
+   "content": "`render_wav` returns the full envelope `truth`, but the audio it writes only encodes `energy` (clicks), `bass` and `vocal` \u2014 `data[\"silence\"]` is never used, and energy on the silence beats (100-101, 120-123) is non-zero (0.25 / 0.1). So the rendered WAV contains no silence/pause (nor any `novelty`/`onset`/`fills` evidence), yet the returned ground truth advertises `silence`/`pause` (and, on the docstring's promise of \"clicks plus bass plus noise swells\", no noise is rendered either). Any audio-path test driven by this helper would assert events that the audio cannot produce, so the returned truth does not describe the file that was written. Either bake the silence (and other signals) into the audio, or return a truth list restricted to events the render actually encodes.",
+   "existing_code": "    \"\"\"Render the suite as audio (clicks plus bass plus noise swells).\"\"\"\n    data, truth = suite()",
+   "start_line": 115,
+   "end_line": 116,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "analysis/tests/test_metrical.py": [
+  {
+   "path": "analysis/tests/test_metrical.py",
+   "content": "This test can never fail for the behavior it claims to verify. `beat_this_available()` is implemented as `try: import beat_this.inference; return True / except ImportError: return False`, so it *always* returns a `bool`; `isinstance(..., bool)` is trivially true regardless of whether beat-this is installed, whether detection is broken, or whether the native-only fallback path works. The test name/comment promise native-only operation but nothing forces the optional dependency to be absent. Simulate the missing dependency (e.g. `monkeypatch.setitem(sys.modules, 'beat_this.inference', None)` or patch the import to raise `ImportError`) and assert `beat_this_available() is False`, plus that the native-only call path returns as expected.",
+   "existing_code": "    assert isinstance(beat_this_available(), bool)",
+   "start_line": 12,
+   "end_line": 12,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/tests/test_metrical.py",
+   "content": "The tolerance boundary is left untested. `grid_warning` returns `abs(native[0] - ml[0]) > tol` with `tol=0.05`, so an offset of exactly `0.05` must yield `False`. Choosing only `0.01` (well inside) and `0.2` (well outside) means a regression that flips the comparison (`>` vs `>=`) or changes the `tol` default would go undetected. Add an exact-boundary case, e.g. `assert not grid_warning([0.0], [0.05])`.",
+   "suggestion_code": "    assert not grid_warning([0.0], [0.01])\n    assert not grid_warning([0.0], [0.05])\n    assert grid_warning([0.0], [0.2])",
+   "existing_code": "    assert not grid_warning([0.0], [0.01])\n    assert grid_warning([0.0], [0.2])",
+   "start_line": 5,
+   "end_line": 6,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "analysis/tests/test_native_full.py": [
+  {
+   "path": "analysis/tests/test_native_full.py",
+   "content": "The module docstring claims this test exercises the \"EXT variant that raises ConstError\" falling back *per tag, keeping every other tag*, but the mock replaces `AnlzFile.parse_file`, which fails the *entire* EXT file. That routes the failure through the file-level `except` in `extract_anlz` (native.py L244-252) and sets `ext` to `None`, so `guarded()` never calls `src.getall(tag)` and its per-tag ConstError fallback (native.py L261-265) is never executed. Consequently this test still passes if the per-tag fallback is broken, and it actually asserts the opposite of its stated intent (PSSI is fully lost, `phrases == []`). Consider monkeypatching the parsed EXT object's `getall` (or `AnlzFile.getall`) to raise `ConstError` for a single tag and asserting the other EXT tags (e.g. PWV3/PCO2) are still `ok`.",
+   "existing_code": "    monkeypatch.setattr(AnlzFile, \"parse_file\", staticmethod(boom))",
+   "start_line": 147,
+   "end_line": 147,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/tests/test_native_full.py",
+   "content": "This final check is tautological: `_outcome` only ever emits `ok` / `absent` / `failed`, so `all(...)` can never be false and adds no failure guarantee. Combined with the loop above, a tag silently missing from `outcomes` surfaces only as an opaque `KeyError` from `by_tag[tag]` rather than a clear assertion. Consider asserting the complete expected `{tag: status}` mapping (and its length) instead.",
+   "existing_code": "    assert all(o[\"status\"] in (\"ok\", \"absent\", \"failed\") for o in got[\"outcomes\"])",
+   "start_line": 132,
+   "end_line": 132,
+   "category": "test",
+   "severity": "low"
+  }
+ ]
+}

@@ -1,0 +1,293 @@
+{
+ "apps/desktop/src/routes/venue/mapping-wizard.tsx": [
+  {
+   "path": "apps/desktop/src/routes/venue/mapping-wizard.tsx",
+   "content": "The `direction` captured at step 3 never reaches the persisted result. `onDone` receives only `check.topology`, which is derived solely from `mirrorCheck(places)`. So if the user picks \"both ways at once (split)\" and leaves `places` at 1, the saved topology is `\"single\"`, silently contradicting the UI note at the bottom (\"Split detected at the direction step...\"). `classifyDirection` already exists in `@autolight/venue` for exactly this mapping and is never used here. The saved calibration can therefore differ from what the user selected.",
+   "suggestion_code": "          <button\n            type=\"button\"\n            onClick={() => onDone(direction === \"both\" ? \"split-independent\" : check.topology)}\n            className=\"rounded border px-2 py-1 text-sm\"\n          >\n            Save mapping\n          </button>",
+   "existing_code": "          <button type=\"button\" onClick={() => onDone(check.topology)} className=\"rounded border px-2 py-1 text-sm\">\n            Save mapping\n          </button>",
+   "start_line": 75,
+   "end_line": 77,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/src/routes/venue/mapping-wizard.tsx",
+   "content": "The upper bound on `places` is only enforced via the HTML `max={4}` attribute, which does not clamp typed input. `Math.max(1, Number(e.target.value) || 1)` clamps only the lower bound, so typing `5` (or `1000`) is stored as-is and flows into `mirrorCheck(places)` and the saved topology. Enforce both bounds in the handler and extract the constant instead of hardcoding `4` in two places.",
+   "suggestion_code": "              onChange={(e) => setPlaces(Math.min(MAX_PLACES, Math.max(1, Math.floor(Number(e.target.value) || 1))))}",
+   "existing_code": "              onChange={(e) => setPlaces(Math.max(1, Number(e.target.value) || 1))}",
+   "start_line": 49,
+   "end_line": 49,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/routes/venue/mapping-wizard.tsx",
+   "content": "`Next` has no prerequisite validation, and steps 1, 2, 4, 5, 6, 8, 9 define labels (strip outline, controller position, ends, corners, gaps, anchors, verification) but render no inputs and collect no state. A user can click straight through to step 10 and invoke \"Save to device calibrations\" with an empty/unverified topology that is still persisted. Either gate `Next`/save on the required data for each step or remove the steps that capture nothing to avoid persisting an incomplete calibration.",
+   "existing_code": "            onClick={() => setStep((Math.min(10, step + 1)) as WizardStep)}",
+   "start_line": 69,
+   "end_line": 69,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "apps/desktop/vitest.config.ts": [
+  {
+   "path": "apps/desktop/vitest.config.ts",
+   "content": "`include` only collects `src/**/*.test.ts`, so every Electron unit test under `apps/desktop/electron/**` is silently dropped: `electron/services/audit-log.test.ts`, `fault-injection.test.ts`, `live-show-bridge.test.ts`, `secrets-service.test.ts`, `simulator-show.test.ts` and `electron/updater/index.test.ts` all exist but are never collected here. Because `apps/desktop/package.json` runs `vitest run` in the package cwd and Vitest resolves the nearest config (`apps/desktop/vitest.config.ts`), the root `yarn test` (`yarn workspaces foreach --all run test`) executes this config and reports green while those suites are skipped \u2014 while the root `vitest.config.ts` explicitly includes `apps/desktop/electron/**/*.test.ts`. Add the electron glob so both entry points stay consistent.",
+   "suggestion_code": "    include: [\"src/**/*.test.ts\", \"electron/**/*.test.ts\"],",
+   "existing_code": "    include: [\"src/**/*.test.ts\"],",
+   "start_line": 28,
+   "end_line": 28,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/vitest.config.ts",
+   "content": "This regex only matches a single subpath segment (`@autolight/<pkg>/<module>`). A deeper specifier such as `@autolight/<pkg>/a/b` does not match, falls through to the string alias `@autolight/<pkg>` (Vite/@rollup/plugin-alias treats string `find` as a prefix match), and is rewritten to `<packages>/<pkg>/src/index.ts/a/b` \u2014 a mangled, nonexistent path (or a silently wrong module) rather than an error. The repo already uses multi-segment specifiers (e.g. `@autolight/simulator/dist/govee-lan.js` in `packages/govee/src/index.test.ts`), so any such import reachable from a desktop test resolves incorrectly. Widen the capture (e.g. `/^@autolight\\/([^/]+)\\/(.+)$/`) or make deep paths fail loudly instead of resolving to a bogus path.",
+   "existing_code": "    find: /^@autolight\\/([^/]+)\\/([^/]+)$/,",
+   "start_line": 17,
+   "end_line": 17,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/vitest.config.ts",
+   "content": "`readdirSync` is unfiltered here, unlike the root `vitest.config.ts` which uses `{ withFileTypes: true }` plus an `isDirectory()` filter. Any non-directory entry in `packages/` (a stray file, `.DS_Store`, a shared config file) produces a bogus `@autolight/<name>` alias, and every entry is assumed to expose `src/index.ts` \u2014 a package with a different entry point resolves to a nonexistent file, which then silently falls back to the installed `node_modules` copy (exactly the stale-dist behavior this config exists to avoid). There is also no guard around the read, so a missing/unreadable `packages` directory aborts config loading with an opaque stack trace. Filter to directories and guard the read.",
+   "suggestion_code": "  readdirSync(workspaceSrc, { withFileTypes: true })\n    .filter((e) => e.isDirectory())\n    .map((e) => [`@autolight/${e.name}`, join(workspaceSrc, e.name, \"src\", \"index.ts\")]),",
+   "existing_code": "  readdirSync(workspaceSrc).map((p) => [`@autolight/${p}`, join(workspaceSrc, p, \"src\", \"index.ts\")]),",
+   "start_line": 12,
+   "end_line": 12,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "docs/finish/tools/check-coverage.mjs": [
+  {
+   "path": "docs/finish/tools/check-coverage.mjs",
+   "content": "Unguarded input reads in both `docs/finish/tools/check-coverage.mjs` and `docs/finish/tools/make-status.mjs`: only STATUS.md is existence-checked; the other plan inputs (e.g. `01-findings-register.md`, `02-conformance-matrix.md`, `03-config-and-decisions.md`, `wp05-room-and-venue.md`, `wp15-verification-qualification.md`) are read with bare `readFileSync`, so a renamed/moved/missing input throws an uncaught ENOENT with an opaque stack trace instead of reporting the problem \u2014 and in make-status.mjs it throws before `writeFileSync`, leaving a stale STATUS.md. Additionally, make-status.mjs silently drops any task whose file isn't named `wp*`/`03-*`/`04-*` or whose heading doesn't match `^### (T-[A-Z]+-\\d{2})`, producing an incomplete board with no error (check-coverage validates F-IDs, not task presence). Guard these reads (e.g. a small `readPlan(name)` helper) and `fail(...)`/warn/exit when an input is absent or unexpected.",
+   "suggestion_code": "const registerPath = join(planDir, \"01-findings-register.md\");\nif (!existsSync(registerPath)) {\n  console.error(`check-coverage: missing ${rel(registerPath)}`);\n  process.exit(1);\n}\nconst register = read(registerPath);",
+   "existing_code": "const registerPath = join(planDir, \"01-findings-register.md\");\nconst register = read(registerPath);",
+   "start_line": 94,
+   "end_line": 95,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "docs/finish/tools/check-coverage.mjs",
+   "content": "Finding-reference checks use plain substring matching. `taskFileText.includes(id)` (and `tasks.get(t).body.includes(id)` a few lines below) will treat a finding like `F-BLE-01` as referenced whenever the text merely contains `F-BLE-011`, silently skipping the intended validation. Check 2's STATUS test already uses `new RegExp('\\\\b' + id + '\\\\b')`, so apply the same word-boundary match here (and to the `body.includes(id)` check).",
+   "suggestion_code": "  if (!new RegExp(`\\\\b${id}\\\\b`).test(taskFileText)) fail(`${id} is not referenced by any task file`);",
+   "existing_code": "  if (!taskFileText.includes(id)) fail(`${id} is not referenced by any task file`);",
+   "start_line": 106,
+   "end_line": 106,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "docs/finish/tools/check-coverage.mjs",
+   "content": "Dead filter. `expandTaskRefs` only ever produces ids matching `T-[A-Z]+-\\d{2}`, so `tasks.has(t) || /^T-[A-Z]+-\\d{2}$/.test(t)` is always true and the predicate never filters anything. It is misleading because it looks like it guards against unknown ids, while the actual unknown-heading detection happens in the loop below. Drop it.",
+   "suggestion_code": "  const closedByTasks = [...expandTaskRefs(closedBy)];",
+   "existing_code": "  const closedByTasks = [...expandTaskRefs(closedBy)].filter((t) => tasks.has(t) || /^T-[A-Z]+-\\d{2}$/.test(t));",
+   "start_line": 107,
+   "end_line": 107,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "docs/finish/tools/check-coverage.mjs",
+   "content": "Brittle status-cell detection. `cells.find((c) => VALID.has(c.replace(/`/g, \"\")))` returns the first column whose entire trimmed content exactly equals a token. An annotated status such as `` `DONE-VERIFIED (2026-01)` `` is treated as \"no valid status\" (and its evidence file is then never checked), while an unrelated notes column that happens to equal a token (e.g. a `TODO` note) would be misread as the status and drive the wrong `evidence/<id>/*` checks. Prefer matching the known status column, or match the token as a whole word anchored at the start of the cell rather than requiring exact equality.",
+   "existing_code": "    const st = cells.find((c) => VALID.has(c.replace(/`/g, \"\")));",
+   "start_line": 134,
+   "end_line": 134,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "docs/finish/tools/check-coverage.mjs",
+   "content": "Probe short-form acceptance masks undefined probes. Because `shortForms` is derived from the numeric/ROOM prefix of defined probes, once `P-56-ui-freeze` exists any reference of the form `P-56-*` (e.g. a typo `P-56-ui-freze`) satisfies `shortForms.has(short)` and is accepted, defeating check 7's purpose of catching undefined probe references. If short forms are genuinely required, keep an explicit alias list of the accepted short forms instead of matching on a prefix, or require exact `probeDefs` membership.",
+   "existing_code": "    if (short && shortForms.has(short)) continue;",
+   "start_line": 189,
+   "end_line": 189,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "docs/finish/tools/check-coverage.mjs",
+   "content": "The config-key check can only see namespaces already present in the catalog. `KEY_REF` is built by interpolating the catalog-derived `namespaces` into the pattern, so a backticked key whose namespace is misspelled or simply absent from 03 (`foo.bar` when the catalog has no `foo.*` entry) is never matched and never reported, contradicting the stated guarantee that every backticked config key exists in the catalog. Additionally, an empty catalog degenerates the pattern to the alternation `(?:)\\.`, which then matches unrelated backticked text. Match any backticked dotted identifier (e.g. /`[a-z0-9]+(?:\\.[A-Za-z0-9.<>*]+)+`/g) and flag the ones `keyDefined` rejects.",
+   "existing_code": "const KEY_REF = new RegExp(\"`((?:\" + namespaces.join(\"|\") + \")\\\\.[A-Za-z0-9.<>*]+)`\", \"g\");",
+   "start_line": 238,
+   "end_line": 238,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/ble/src/link.test.ts": [
+  {
+   "path": "packages/ble/src/link.test.ts",
+   "content": "This test does not reproduce the \"burst / catch-up\" scenario it claims to cover. `clock.advance(100)` between sends is exactly the 10 Hz budget spacing, so `BleLink.send()` always takes its immediate-flush fast path (`now - lastFlushAt >= spacing`) and the queue/`pump()` path is never exercised. As a result `stalled === 0` holds trivially even if the catch-up/burst guard is removed, and `send()`'s queueing logic is untested. Send several frames with no clock advance (or advance less than the spacing) so writes must be paced through `pump()`, then assert the burst is bounded. Also assert `peripheral.metrics.writes` (and `writesDroppedBudget === 0`): `writesSent` is incremented before the write is issued, so a silently dropped write would still leave `writesSent === 30`.",
+   "existing_code": "      link.send(new Uint8Array([0x33, 0x01, i & 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]));\n      clock.advance(100);\n      link.tick();",
+   "start_line": 52,
+   "end_line": 54,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/ble/src/link.test.ts",
+   "content": "The assertions are too weak to prove newest-wins actually replaced the queued frame. `pendingWrites <= 1` and `peripheral.metrics.writes <= 2` both have no lower bound, so they pass when zero writes ever fire; and `writes <= 2` explicitly permits the very \"queued behind\" behaviour (two writes) the test name says must never happen. Most importantly, nothing verifies *which* frame reached the peripheral, so writing the stale first frame (0x01) instead of the newest (0x00) would still pass. Assert exact values and inspect `peripheral.written`.",
+   "suggestion_code": "    expect(link.status().pendingWrites).toBe(1);\n    expect(link.status().writesSuperseded).toBe(1);",
+   "existing_code": "    expect(link.status().pendingWrites).toBeLessThanOrEqual(1);\n    expect(link.status().writesSuperseded).toBe(1);",
+   "start_line": 80,
+   "end_line": 81,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/ble/src/link.test.ts",
+   "content": "Add a lower bound and verify the payload written is the newest frame, not the superseded one.",
+   "suggestion_code": "    expect(peripheral.metrics.writes).toBe(1);\n    expect(Array.from(peripheral.written[0] ?? [])).toEqual([0x33, 0x01, 0x00, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);",
+   "existing_code": "    expect(peripheral.metrics.writes).toBeLessThanOrEqual(2);",
+   "start_line": 85,
+   "end_line": 85,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/ble/src/link.test.ts",
+   "content": "This test never exercises the drain hold during `close()` that its name promises. By the time `close()` runs, `clock.now()` (100320) is already past `lastWriteAt + drainMs` (100010 + 300 = 100310), so the `wait > 0` branch in `BleLink.close()` is skipped and no drain timer is scheduled \u2014 only the `busy` getter is verified. A regression that disconnects immediately inside the drain window would not be caught. Add a case that calls `close()` while still inside the window and asserts the disconnect is deferred until `writeDrainMs` elapses.",
+   "existing_code": "    clock.advance(300);\n    expect(link.busy).toBe(false);\n    await link.close();",
+   "start_line": 99,
+   "end_line": 101,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/ble/src/link.test.ts",
+   "content": "The reconnect assertions don't verify the behaviour under test. `reconnects >= 1` is incremented in `reconnect()` before the backoff wait, so it would also pass with a zero/broken backoff and even if the final connect never succeeded; the 500 ms `backoffMs` schedule and the `advertiseGapMs` trigger are never checked. Tighten to `toBe(1)` and assert timing (e.g. that `peripheral.metrics.connects` only advances after the 500 ms timer fires). Separately, driving the async chain with exactly two `await Promise.resolve()` per iteration and fixed 600 ms advances couples the test to the current microtask resolution order; use `await vi.runAllTimersAsync()`-style advancement or a helper that drains until the state settles so it does not silently break when `link.ts` adds/removes an `await`.",
+   "existing_code": "    expect(link.status().reconnects).toBeGreaterThanOrEqual(1);\n    expect(link.status().state).toBe(\"connected\");",
+   "start_line": 123,
+   "end_line": 124,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/ble/src/link.test.ts",
+   "content": "The test name says the budget stays unmeasured \"until the wizard records one\", but the test never covers the measured transition \u2014 it only checks the unmeasured state before and after `open()`. If a measurement path exists (or is added), add an assertion that the badge clears once a measured budget is supplied, otherwise the stated requirement is only half-verified.",
+   "existing_code": "    expect(link.status().budgetBadge).toBe(\"unmeasured\");\n    await link.open(() => undefined);\n    expect(link.status().budgetBadge).toBe(\"unmeasured\");",
+   "start_line": 67,
+   "end_line": 69,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/govee/src/lan-fake.test-support.ts": [
+  {
+   "path": "packages/govee/src/lan-fake.test-support.ts",
+   "content": "`powerCycle()` resets `armed`/`on`/`painted`/`offlineUntil` but leaves the reply queue (and any waiters) from before the plug-pull intact. A `status`/`devStatus` reply that was queued before the cycle is shifted by the *first* `reply()` after reconnect and handed to the caller, so `readDevStatus().answered` becomes true even though the unit is still rebooting. `stepReconnect()` keys its pass/fail on exactly that `answered` flag (`qualification.ts` step 15), so a stale reply makes an unreachable unit look reconnected. A real plug-pull drops anything in flight: clear the queue and drain pending waiters here.",
+   "suggestion_code": "  powerCycle(): void {\n    this.metrics.powerCycles += 1;\n    this.armed = false;\n    this.on = true;\n    // A plug-pull drops anything in flight: replies queued before the cycle\n    // must not surface after reconnect (step 15 keys on the next answer).\n    this.queue = [];\n    this.waiters.forEach((waiter) => { waiter.settle(null); });\n    this.waiters = [];\n    // Derived paint state belongs to the old session; a post-cycle assertion\n    // must not read a pre-cycle value (and a stale lastPaintAt can turn the\n    // first post-reconnect paint into a spurious stutter).\n    this.lastPaintLanded = false;\n    this.lastPaintReason = \"none\";\n    this.landedDelayMs = null;\n    this.lastPaintAt = 0;",
+   "existing_code": "  powerCycle(): void {\n    this.metrics.powerCycles += 1;\n    this.armed = false;\n    this.on = true;",
+   "start_line": 115,
+   "end_line": 118,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/govee/src/lan-fake.test-support.ts",
+   "content": "The offline branch resolves `null` after the caller's `timeoutMs` and never consults `offlineUntil`, so a single `reply()` call whose timeout outlasts the remaining offline window still returns `null` even though the unit is reachable again (the leading comment even claims the opposite). Any test that calls `reply()` once instead of retrying in a loop will therefore mis-assert reachability right after a power cycle, and a test whose `timeoutMs < reconnectDelayMs` can never observe the unit come back. Wait out the offline window (then fall through to the normal queue/waiter path) rather than always answering at the deadline.",
+   "existing_code": "      return new Promise<string | null>((resolve) => {\n        const timer = setTimeout(() => {\n          resolve(null);\n        }, Math.max(1, timeoutMs));\n        timer.unref?.();\n      });",
+   "start_line": 139,
+   "end_line": 144,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/govee/src/lan-fake.test-support.ts",
+   "content": "`confirmPaint` infers its answer from the persistent `lamp.painted` array instead of the paint under test, so it reports success whenever *any* earlier paint left >=2 bands. In the probe, B0 lands (2 bands) and then B4 is sent immediately after; if the B4 frame is dropped (settle/`rateCeilingHz`/`ignores-paints`), `painted` still holds the B0 pattern and this returns `true`, so `b4Confirmed` becomes a false positive and the test passes despite the B4 paint never landing. Require that the paint being confirmed actually landed.",
+   "suggestion_code": "  confirmPaint(_pattern: \"B0-two-colour\" | \"B4-zoned\"): Promise<boolean> {\n    // The answer must describe the paint under test, not whatever an earlier\n    // paint left behind: a dropped B4 must not inherit B0's bands.\n    return Promise.resolve(this.lamp.lastPaintLanded && countDistinctBands(this.lamp.painted) >= 2);\n  }",
+   "existing_code": "  confirmPaint(_pattern: \"B0-two-colour\" | \"B4-zoned\"): Promise<boolean> {\n    return Promise.resolve(countDistinctBands(this.lamp.painted) >= 2);\n  }",
+   "start_line": 364,
+   "end_line": 366,
+   "category": "test",
+   "severity": "medium"
+  }
+ ],
+ "packages/reactive-audio/src/dsp.ts": [
+  {
+   "path": "packages/reactive-audio/src/dsp.ts",
+   "content": "Inconsistent band-edge rounding double-counts bins across adjacent live bands. `first` uses `Math.floor(lo / binHz)` (includes the bin just *below* `lo`) while `last` uses `Math.ceil(hi / binHz) - 1` (may exclude the bin exactly at `hi`). Since the live bands are contiguous, the lower edge of each band re-includes the last bin of the previous band.\n\nConcrete case: sampleRate 44100, fftSize 2048 -> binHz = 21.53. For the 150 Hz boundary, bass `last = ceil(150/21.53)-1 = 6` and lowMid `first = floor(150/21.53) = 6`, so bin 6 (~129 Hz, which is below 150 Hz) is summed into *both* bass and lowMid (same happens at 500/2000 Hz). This inflates the totals behind `bandMix` and distorts the per-band proportions even though the mix still sums to 1.\n\nUse one consistent convention, e.g. include bins whose centre frequency lies inside [lo, hi].",
+   "suggestion_code": "    const first = Math.min(bins - 1, Math.max(0, Math.ceil(lo / binHz)));\n    const last = Math.min(bins - 1, Math.floor(hi / binHz));",
+   "existing_code": "    const first = Math.max(0, Math.floor(lo / binHz));\n    const last = Math.min(bins - 1, Math.ceil(hi / binHz) - 1);",
+   "start_line": 204,
+   "end_line": 205,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/reactive-audio/src/dsp.ts",
+   "content": "The AGC config described in the file header (`audio.agc.*`) is effectively dead for every returned feature. `FrameAgc` is constructed with no options, so the defaults are always used, and within `agcStep` the `rise`/`decay` values only affect `smoothed`, which `FrameAgc.process` returns as `envelope` \u2014 but the extractor discards it (`const { gain } = this.agc.process(...)`). The `gain` that actually drives `level`/`peak` is updated with a hard-coded `0.01` step and is independent of `rise`/`decay`. So the documented \"AGC with rise/decay smoothing\" / \"audio.agc.rise / audio.agc.decay\" has no observable effect on the extractor output.\n\nEither thread the AGC config through `LiveFeatureExtractorOptions` and use it in `agcStep`, or derive `gain` from the smoothed envelope so `rise`/`decay` actually influence the result.",
+   "existing_code": "    this.agc = new FrameAgc();",
+   "start_line": 428,
+   "end_line": 428,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/reactive-audio/src/dsp.ts",
+   "content": "The gain update has no signal gate, so true silence drives the gain to the maximum clamp. With `input === 0`, `Math.min(1, input * prev.gain)` is 0, so the error term equals `target` (0.5) and `gain` grows by 0.005 every frame until it saturates at the `Math.max(0.25, ...)`/`Math.min(4, ...)` bound of 4. This contradicts the comment \"silence cannot run it away\": after any silent stretch `gain` is pinned at 4, which then multiplies the first real frame (`level`/`peak` saturate to 1).\n\nConsider skipping the gain update (or decaying it) when the input is below a small noise floor.",
+   "existing_code": "  const gain = prev.gain + (target - Math.min(1, input * prev.gain)) * 0.01;",
+   "start_line": 36,
+   "end_line": 36,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "packages/reactive-audio/src/dsp.ts",
+   "content": "`tempoFromOnsets` returns a non-null `TempoEstimate` whenever `strengths.length >= 8`, even when there is no periodicity at all. In that case `bestScore` stays at its initial value (often 0 or negative), yet the function still reports `bpm = 60 / (minLag * hopSeconds)` (i.e. the maximum configured BPM) with `confidence: 0`. A consumer that uses `tempo.bpm` for the fallback clock without checking `confidence` will latch onto a meaningless BPM.\n\nReturn `null` when no lag has any positive correlation.",
+   "suggestion_code": "  if (bestScore <= 0) return null;\n  return { bpm: 60 / (bestLag * hopSeconds), confidence: Math.min(1, Math.max(0, bestScore)), lagFrames: bestLag };",
+   "existing_code": "  return { bpm: 60 / (bestLag * hopSeconds), confidence: Math.min(1, Math.max(0, bestScore)), lagFrames: bestLag };",
+   "start_line": 346,
+   "end_line": 346,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "packages/reactive-audio/src/dsp.ts",
+   "content": "`hopSize` is taken from options without validation. `hopSize === 0` propagates to `Math.max(1, Math.ceil(this.fftSize / this.hopSize))` -> `refractoryFrames: Infinity`, so `OnsetDetector` never fires again, and `hopSize / this.sampleRate === 0` makes `tempoFromOnsets` return `null` for every frame. A negative/non-integer hop likewise breaks the ring-buffer/tempo assumptions silently. Validate the option (positive integer, ideally <= fftSize) in the constructor and throw a clear error.",
+   "suggestion_code": "    this.hopSize = opts.hopSize ?? DEFAULT_HOP_SIZE;\n    if (!Number.isInteger(this.hopSize) || this.hopSize <= 0) {\n      throw new Error(`hop size must be a positive integer, got ${this.hopSize}`);\n    }",
+   "existing_code": "    this.hopSize = opts.hopSize ?? DEFAULT_HOP_SIZE;",
+   "start_line": 417,
+   "end_line": 417,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "packages/rekordbox-live/src/prolink.ts": [
+  {
+   "path": "packages/rekordbox-live/src/prolink.ts",
+   "content": "Dead variable / dropped field: `bpmRaw` is decoded from offset 0x92 but never read, and `ProlinkStatusFrame` declares no `bpm`, so the BPM carried by status packets is silently discarded. This is not cosmetic: `ProlinkProvider.applyStatus` (prolink-provider.ts) never assigns `buffer.bpm`, so a deck that emits only status packets (no beat packets) reports `effectiveBpm` as null/`estimated` even though the packet carries the BPM \u2014 the T-LIVE-05 evidence doc explicitly lists \"BPM at 0x92\" as a mapped status field. Either expose the field on the interface and consume it, or delete the unused read.",
+   "suggestion_code": "    const bpmRaw = dv.getUint16(0x92, true);\n    const bpm = bpmRaw === 0xffff || bpmRaw === 0 ? null : bpmRaw / 100;",
+   "existing_code": "    const bpmRaw = dv.getUint16(0x92, true);",
+   "start_line": 134,
+   "end_line": 134,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-live/src/prolink.ts",
+   "content": "Documentation mismatch: the status offset list here stops at pitch (0x8c), but the decoder also reads BPM at 0x92 and beat-in-bar at 0x94 (both documented in the T-LIVE-05 evidence README). Since validation only checks packet length/magic and never field values, an undocumented/incorrect offset silently yields wrong status data. Add the missing offsets to this comment.",
+   "suggestion_code": "// track ID at 0x2c, source slot at 0x28, pitch at 0x8c, BPM x 100 at 0x92,\n// beat within bar at 0x94. Keepalives (port",
+   "existing_code": "// track ID at 0x2c, source slot at 0x28, pitch at 0x8c. Keepalives (port",
+   "start_line": 9,
+   "end_line": 9,
+   "category": "documentation",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/prolink.ts",
+   "content": "Round-trip gap: `buildStatusPacket` writes the `bpm` option to 0x92, but `decodeProlinkPacket` throws that value away (see the status branch), so this builder cannot round-trip its own `bpm` input. Because the status tests only pass `bpm` without asserting the decoded value, a fixture can never catch the dropped-BPM defect. Keep the builder and decoder in lockstep by mapping/consuming status BPM (or drop the option).",
+   "existing_code": "  dv.setUint16(0x92, opts.bpm === undefined ? 0xffff : Math.round(opts.bpm * 100), true);",
+   "start_line": 210,
+   "end_line": 210,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ]
+}

@@ -1,0 +1,287 @@
+{
+ "packages/dj-core/src/index.ts": [
+  {
+   "path": "packages/dj-core/src/index.ts",
+   "content": "Non-positive `beatsPerSecond` collapses `errorMs` to `Infinity`, so `seek` is `true` for *every* observation of a paused/zero-tempo deck \u2014 even one with zero beat error.\n\nThis is reachable from production: `show-runtime`'s `tickWorld` builds the observation with `beatsPerSecond: state.playing ? tempoBps * state.playRate : 0` (packages/show-runtime/src/index.ts:641), so while a deck is paused `beatsPerSecond` is exactly `0`. After the cold-start observation, each subsequent paused tick computes `errorMs = Infinity > seekThresholdMs` -> `seeked: true`, which hard-resets `beat`/`rate`/`playing` and (in `tickWorld`) re-triggers the seek branch that clears `world.transients`/`world.cursor` and reports a transport event every frame. The existing \"holds a paused deck\" test masks this because it passes `beatsPerSecond: BEATS_PER_SECOND` instead of `0`.\n\nFix: only apply the millisecond threshold when the tempo is positive; a zero-tempo deck should be judged by the beat threshold alone.",
+   "suggestion_code": "    const errorMs = obs.beatsPerSecond > 0\n      ? (Math.abs(errorBeats) / obs.beatsPerSecond) * MS_PER_SECOND\n      : 0;\n    const seek =\n      Math.abs(errorBeats) > this.opts.seekThresholdBeats ||\n      (obs.beatsPerSecond > 0 && errorMs > this.opts.seekThresholdMs);",
+   "existing_code": "    const errorMs = obs.beatsPerSecond > 0\n      ? (Math.abs(errorBeats) / obs.beatsPerSecond) * MS_PER_SECOND\n      : Number.POSITIVE_INFINITY;\n    const seek =\n      Math.abs(errorBeats) > this.opts.seekThresholdBeats || errorMs > this.opts.seekThresholdMs;",
+   "start_line": 110,
+   "end_line": 114,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/dj-core/src/index.ts",
+   "content": "`reset()` leaves the clock anchor and the motion state inconsistent. When `nowNs` is omitted (the default here, and also the default of `ShowRuntime.seek(deckId, beat)` -> `seekWorld(..., null)`), `lastNs` keeps its pre-seek value while `beat` jumps to the new position; `playing`/`rate` are likewise retained. The next `advance()`/`observe()` therefore extrapolates from the post-seek beat across the stale pre-seek interval at the pre-seek rate, and `advance()` itself is what feeds the non-fresh path in `tickWorld`, so the warped position can be consumed directly before any observation corrects it. A hard seek should re-anchor the clock (and, since the tempo/transport at the new location is unknown, not silently keep the old rate).",
+   "suggestion_code": "  reset(beat: number, nowNs: bigint | null = null): void {\n    this.beat = beat;\n    // Re-anchor: without a time the next advance()/observe() must not\n    // extrapolate from the post-seek beat over the stale pre-seek interval.\n    // Leaving `lastNs` null forces the next observe() to re-adopt the\n    // observation's position, rate and playing state outright.\n    this.lastNs = nowNs;\n  }",
+   "existing_code": "  reset(beat: number, nowNs: bigint | null = null): void {\n    this.beat = beat;\n    if (nowNs !== null) this.lastNs = nowNs;\n  }",
+   "start_line": 92,
+   "end_line": 95,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/matter/src/binding.test.ts": [
+  {
+   "path": "packages/matter/src/binding.test.ts",
+   "content": "Cleanup is enqueued only after all assertions. If any `expect(...)` throws or `bindNode` unexpectedly resolves/rejects, `await adapter.close()` is never reached, so the adapter leaks and the cleanup failure can mask the real assertion failure. Move close into an `afterEach` (or wrap each test body in try/finally) so the adapter is always released.",
+   "existing_code": "    expect(store.get(\"strip-1\")).toEqual(record);\n    await adapter.close();",
+   "start_line": 26,
+   "end_line": 27,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/matter/src/binding.test.ts",
+   "content": "This assertion only proves that an `identify/identify` command exists somewhere in the recorded command list; it does not validate the documented flow (flash \u2192 confirm \u2192 persist). Since reads are not recorded by InMemoryAdapter, a regression that runs `read(basicInformation)` after the identify command, or that writes the record before `confirmIdentify` resolves, would still pass. Assert the ordering explicitly (e.g. `commands.findIndex(...)` before any write, or inject/instrument `confirmIdentify` and check `commands`/`store` state at the moment it is invoked) rather than mere membership.",
+   "existing_code": "    expect(adapter.commands.map((c) => `${c.cluster}/${c.command}`)).toContain(\"identify/identify\");",
+   "start_line": 25,
+   "end_line": 25,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/matter/src/binding.test.ts",
+   "content": "The test name claims the decline happens \"after the flash\", but nothing verifies a flash actually occurred, nor that the store was left untouched as a whole. A regression that skips the identify flash (e.g. confirms before flashing) or performs a partial write before rejecting would still pass. Add an assertion that the identify command was issued and that `store.size === 0`.",
+   "existing_code": "    })).rejects.toMatchObject({ reason: \"not-confirmed\" });\n    expect(store.get(\"strip-2\")).toBeUndefined();",
+   "start_line": 38,
+   "end_line": 39,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/matter/src/binding.test.ts",
+   "content": "The rejected-rebind case only checks `matterNodeId`; it does not verify the stored record is otherwise unchanged (vendorId, productId, multiAdmin, boundAtMs) nor that no new identify/command side effects were emitted during the rejected attempt. A partial overwrite or a spurious flash on the rejected path would go undetected. Snapshot the full record before the attempt and assert `store.get(\"strip-3\")` deep-equals it (and, if the flow intends the guard to run before flashing, that no extra command was recorded).",
+   "existing_code": "    expect(store.get(\"strip-3\")?.matterNodeId).toBe(first.nodeId);",
+   "start_line": 51,
+   "end_line": 51,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/matter/src/binding.test.ts",
+   "content": "This block re-implements the same adapter/commission sequence as the `commissioned()` helper above instead of reusing it, so setup logic can drift from the commissioning contract. Consider extending/reusing the helper for the two-node setup.",
+   "existing_code": "    const first = await adapter.commission(\"1234-567-8901\", { source: \"manual\", provenance: \"direct\" });\n    const second = await adapter.commission(\"MT:Y.K9042C00KA0648G00\", { source: \"scan\", provenance: \"multi-admin\" });",
+   "start_line": 44,
+   "end_line": 45,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/matter/src/mapping.ts": [
+  {
+   "path": "packages/matter/src/mapping.ts",
+   "content": "`clampByte` does not guard non-finite input: `Math.round(NaN)` is `NaN`, and `Math.max(0, Math.min(255, NaN))` is `NaN`. Nothing validates the `Rgb` fields, so a `NaN`/`Infinity` channel propagates through `rgbToHsl254` (hue 0, saturation `NaN`, level `NaN`), bypasses the black check in `toMatterWrites` (since `NaN !== 0`), and is emitted as `NaN` payload values on the wire. Coerce non-finite values (e.g. to 0) so invalid input cannot silently produce malformed writes.",
+   "suggestion_code": "function clampByte(v: number): number {\n  if (!Number.isFinite(v)) return 0;\n  return Math.max(0, Math.min(255, Math.round(v)));\n}",
+   "existing_code": "function clampByte(v: number): number {\n  return Math.max(0, Math.min(255, Math.round(v)));\n}",
+   "start_line": 21,
+   "end_line": 23,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/matter/src/mapping.ts",
+   "content": "HSL saturation is combined with a level derived from `max(r,g,b)` (the HSV value). These are different colour models, so for desaturated/pastel inputs the saturation is inflated: e.g. `{r:255,g:128,b:128}` yields HSL saturation `254` (fully saturated) even though HSV saturation is `127`. This makes on-device colours wrong if the target interprets saturation as HSV (the model that pairs with a max-channel level). Either use the HSV saturation (`range / max`) to match the level derivation, or document/verify the intended model.",
+   "suggestion_code": "  const saturation = max === 0 ? 0 : range / max;",
+   "existing_code": "  const saturation = range === 0 ? 0 : range / (1 - Math.abs(2 * lightness - 1));",
+   "start_line": 41,
+   "end_line": 41,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/matter/src/mapping.ts",
+   "content": "`kelvin` and `level01` are not validated. `kelvin <= 0` produces `Infinity` (for 0) or a negative mireds that is silently clamped to 147/652, and a non-finite `kelvin`/`level01` yields `NaN` payloads (`Math.min(652, NaN) === NaN`). Invalid setup inputs therefore produce misleading commands instead of being rejected. Add finite/range validation (kelvin > 0, level01 within [0,1]) before computing.",
+   "suggestion_code": "  const safeKelvin = Number.isFinite(kelvin) && kelvin > 0 ? kelvin : 2700;\n  const mireds = Math.max(147, Math.min(652, Math.round(1_000_000 / safeKelvin)));",
+   "existing_code": "  const mireds = Math.max(147, Math.min(652, Math.round(1_000_000 / kelvin)));",
+   "start_line": 67,
+   "end_line": 67,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/matter/src/mapping.ts",
+   "content": "No guard against a zero or negative rate. `minIntervalMs(0)` returns `Infinity` and a negative rate returns a negative interval; the config key `govee.matter.commandRateHz` has no min constraint, so an unset/typo value can reach this helper and stall or mispace command output. Clamp to a sane positive floor (or throw) instead of returning `Infinity`/negative values.",
+   "suggestion_code": "export function minIntervalMs(rateHz: number): number {\n  if (!Number.isFinite(rateHz) || rateHz <= 0) return Number.POSITIVE_INFINITY;\n  return 1000 / rateHz;\n}",
+   "existing_code": "export function minIntervalMs(rateHz: number): number {\n  return 1000 / rateHz;\n}",
+   "start_line": 79,
+   "end_line": 81,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/matter/src/mapping.ts",
+   "content": "The `onOff` 'on' + `levelControl` `moveToLevel` pair is duplicated verbatim in `toMatterWrites` and `cctToMatterSetupWrites`. Any change to the level/transition semantics must be applied in both places, which invites drift. Extract a small helper that builds these two writes.",
+   "existing_code": "    { cluster: \"levelControl\", command: \"moveToLevel\", payload: { level, transitionDs: 0 } },",
+   "start_line": 59,
+   "end_line": 59,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/rekordbox-library/src/db.ts": [
+  {
+   "path": "packages/rekordbox-library/src/db.ts",
+   "content": "Search input is wrapped as `%${search}%` without escaping LIKE metacharacters (`%`, `_`, and the escape char), so user text such as `100%`, `a_b` or `%%` broadens matches far beyond a literal substring. Worse, this diverges from the sidecar reader, whose `matchesSearch` uses a plain `String(...).includes()` comparison (sidecar.ts:335-340), so the same query returns different row sets (and a different `total`) depending on which reader is active \u2014 exactly what the DS-15 cross-check is meant to keep identical. Escape the wildcards and align both readers' semantics (or document the divergence).",
+   "suggestion_code": "// Escape LIKE metacharacters before building the pattern, mirroring the\n// sidecar's literal `includes()` match.\nconst SEARCH_WHERE = \" WHERE c.Title LIKE :search ESCAPE '\\\\' OR ar.Name LIKE :search ESCAPE '\\\\' OR c.FolderPath LIKE :search ESCAPE '\\\\'\";",
+   "existing_code": "const SEARCH_WHERE = \" WHERE c.Title LIKE :search OR ar.Name LIKE :search OR c.FolderPath LIKE :search\";",
+   "start_line": 127,
+   "end_line": 127,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-library/src/db.ts",
+   "content": "Routing `Attribute` through `numberOrNull` means any non-`number` value (a TEXT-typed attribute column, a driver returning strings) collapses to `0`, so folders (1) and smart playlists (4) are silently reported as `\"playlist\"`. The `?? \"playlist\"` fallback also masks genuinely unknown attribute codes instead of surfacing them. Coerce the raw value directly and keep the fallback for truly unknown codes (or make unknown a distinct kind).",
+   "suggestion_code": "    kind: PLAYLIST_ATTRIBUTE_KINDS[String(row[\"Attribute\"] ?? \"\")] ?? \"playlist\",",
+   "existing_code": "    kind: PLAYLIST_ATTRIBUTE_KINDS[String(numberOrNull(row[\"Attribute\"] ?? null) ?? 0)] ?? \"playlist\",",
+   "start_line": 177,
+   "end_line": 177,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-library/src/db.ts",
+   "content": "`text()` only accepts a real `string`; any numeric/BigInt ID (a driver or sidecar returning `ID`/`ContentID` as a number) is turned into the `\"\"` fallback. `mapTrackRow`, `mapPlaylistRow`, `songPlaylistRows` and `historyTrackCounts` all use `text(row[\"id\"], \"\")`, whereas `service.ts` and `sidecar.ts` consistently use `String(row[\"ID\"] ?? \"\")`. That inconsistency makes the same row map to `\"\"` here but `\"101\"` there, so `trackRow(id)` lookups and `tracksForEntries` membership resolution can silently return empty results for the TypeScript reader while the sidecar path works. Use `String(...)` (or extend `text()` to coerce numbers) for identity columns.",
+   "suggestion_code": "    rekordboxId: String(row[\"ID\"] ?? \"\"),",
+   "existing_code": "    rekordboxId: text(row[\"ID\"], \"\"),",
+   "start_line": 149,
+   "end_line": 149,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-library/src/db.ts",
+   "content": "`numberOrNull` returns `null` for anything that is not a JS `number`. SQLite is dynamically typed, so numeric-looking columns can legitimately come back as strings (TEXT-declared columns such as BPM/Length/Rating/FileSize/SampleRate/BitRate/Seq/TrackNo) or as BigInt, and every such value is silently dropped to `null` rather than reporting a schema mismatch \u2014 the library would just show blank BPM/rating/duration with no error. Accept numeric strings/BigInt (e.g. coerce and reject non-finite results) or fail loudly on unexpected column types.",
+   "suggestion_code": "export function numberOrNull(value: unknown): number | null {\n  if (typeof value === \"number\") return Number.isFinite(value) ? value : null;\n  if (typeof value === \"bigint\") return Number(value);\n  if (typeof value === \"string\" && value.trim() !== \"\") {\n    const parsed = Number(value);\n    return Number.isFinite(parsed) ? parsed : null;\n  }\n  return null;\n}",
+   "existing_code": "export function numberOrNull(value: unknown): number | null {\n  return typeof value === \"number\" ? value : null;\n}",
+   "start_line": 129,
+   "end_line": 131,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-library/src/db.ts",
+   "content": "`historyTrackCounts` is only referenced by `db.test.ts`; it is not part of the `LibrarySource` interface (so `SidecarReader` has no equivalent) and `LibraryService.history()` computes the same count via a separate `songHistoryRows(...).length` path. This leaves two parallel counting implementations for the same data, one of which is unreachable from production code. Either expose it on `LibrarySource` and use it in the service, or drop it.",
+   "existing_code": "  historyTrackCounts(): Record<string, number> {",
+   "start_line": 290,
+   "end_line": 290,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/rekordbox-library/src/identity.test.ts": [
+  {
+   "path": "packages/rekordbox-library/src/identity.test.ts",
+   "content": "`storeWithLibrary` never seeds the `MemoryAliasStore`, and every lookup is served from the local `rows` map. Since `resolveTrackId` mints a brand-new id via `makeId` whenever the store has no matching alias, `resolveLiveTrack`'s alias-store integration is never actually exercised \u2014 these tests would still pass even if the store argument were ignored entirely. Seed the store with a known alias (e.g. `rekordbox:101 -> \"T-101\"`) and assert the exact returned `trackId` so wrong-row/path selection is caught.",
+   "start_line": 0,
+   "end_line": 0,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-library/src/identity.test.ts",
+   "content": "`expect(r.trackId).not.toBeNull()` is tautological here: with an unseeded store the resolver always returns the `makeId()` value (`\"t1\"`), so this assertion can never fail even if a different/incorrect library row were selected. Assert the concrete id instead.",
+   "suggestion_code": "    expect(r.trackId).toBe(\"t1\");",
+   "start_line": 0,
+   "end_line": 0,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-library/src/identity.test.ts",
+   "content": "Same weak pattern for the path branch: `not.toBeNull()` cannot detect a wrong result. Additionally the path branch's documented confidence (0.7) is never asserted, so a drift there goes undetected. Assert `matchedStep === \"title-path\"`, `confidence === 0.7` and the resolved id/value.",
+   "start_line": 0,
+   "end_line": 0,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-library/src/identity.test.ts",
+   "content": "The test name/theme promises \"confidence per step\", but only the memory-reader confidence (`1`) is ever asserted. The DS-22 confidences for `lighting-ipc-id` (0.95), `agent-api` (0.9) and `history-table` (0.8) are never checked, so a regression in the resolver's confidence table passes silently. Add per-step confidence assertions for these branches.",
+   "start_line": 0,
+   "end_line": 0,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-library/src/identity.test.ts",
+   "content": "The history-miss case only asserts `trackId` is null. It does not verify `matchedStep` (should be null), `confidence` (0) or that the emitted `history-table` step reports `matched: false` with the \"id not in history table\" note. A false-positive match or wrong step attribution would therefore go undetected. Assert the full outcome object.",
+   "start_line": 0,
+   "end_line": 0,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/rekordbox-library/src/index.ts": [
+  {
+   "path": "packages/rekordbox-library/src/index.ts",
+   "content": "Data loss: `??` only falls back to `filePath` when `canonicalPath` is `null`/`undefined`. If `canonicalPath` is an empty string (\"\") \u2014 e.g. a DB row where the composite provider stringified a blank canonical path \u2014 `??` returns \"\", and the later `path !== \"\"` guard then drops it, discarding the valid `filePath` entirely. The track's location is silently lost. Fall back when `canonicalPath` is empty/blank, not only when nullish.",
+   "suggestion_code": "  const path = row.canonicalPath !== undefined && row.canonicalPath !== \"\" ? row.canonicalPath : row.filePath;",
+   "existing_code": "  const path = row.canonicalPath ?? row.filePath;",
+   "start_line": 33,
+   "end_line": 33,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-library/src/index.ts",
+   "content": "`rekordboxId` is declared required but is copied into the identity without any validation/trimming. Since \u00a712 resolution starts at the native ID, an empty or whitespace-only `rekordboxId` yields an identity with no resolvable native ID downstream. Consider normalizing the value here (e.g. trim and reject empty) or documenting the caller contract that a non-empty ID must be supplied.",
+   "existing_code": "  const out: { rekordboxId: string; canonicalPath?: string; title?: string; artist?: string } = { rekordboxId: row.rekordboxId };",
+   "start_line": 34,
+   "end_line": 34,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/rekordbox-live/src/contract-suite.ts": [
+  {
+   "path": "packages/rekordbox-live/src/contract-suite.ts",
+   "content": "The guard `check(provider.getStatus() !== undefined, ...)` only records a message; the very next line(s) then dereference the value unconditionally (`provider.getStatus().state`). If a provider ever returns `undefined` (the check exists precisely because that is considered possible), the suite throws here and aborts, discarding all accumulated `failures` \u2014 directly contradicting the module contract stated at the top of the file (\"returns the failures it found instead of throwing\"). Bind the status once and guard the dereference.",
+   "suggestion_code": "    const status = provider.getStatus();\n    check(status !== undefined, \"status missing after start\");",
+   "existing_code": "    check(provider.getStatus() !== undefined, \"status missing after start\");",
+   "start_line": 83,
+   "end_line": 83,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/contract-suite.ts",
+   "content": "More generally, the suite body is not wrapped to catch exceptions. Any throw from `provider.start()`, `subject.loadTrack()`, `subject.advance()` or `subject.malformed()` (e.g. a real socket provider that fails to bind, or the intentionally-leaky subject throwing) escapes out of `runProviderContractSuite` instead of being appended to `failures`. The red-run test relies on the suite returning a non-empty list (`expect(failures.length).toBeGreaterThan(0)`), so a throwing subject makes that test error rather than report the intended failure. Consider catching per-step and pushing a failure string.",
+   "suggestion_code": "  try {\n    try {\n      await provider.start();\n      await provider.start();\n    } catch (e) {\n      failures.push(`start() threw: ${String(e)}`);\n    }",
+   "existing_code": "  try {\n    await provider.start();\n    await provider.start();",
+   "start_line": 80,
+   "end_line": 82,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/contract-suite.ts",
+   "content": "This assertion does not actually exercise the bounded queue. `ProviderBase.emit()` already clamps `queueDepth` with `Math.min(1, this.queueDepth + 1)`, so for every provider in this package the value can never exceed 1 and the check is tautological; additionally the loop only advances virtual time and never feeds new updates, so for harnesses whose `advance()` emits nothing the depth is just a leftover from the earlier `loadTrack` and nothing is measured at all. A provider with a genuinely unbounded queue would not be caught. Drive a burst of updates without draining and then assert the bound.",
+   "existing_code": "    check(provider.getStats().queueDepth <= 1, `queue depth grew to ${provider.getStats().queueDepth} (latest-wins is 1)`);",
+   "start_line": 122,
+   "end_line": 122,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/contract-suite.ts",
+   "content": "The comment states deck 2 \"must stay at generation 0 and not borrow deck 1's track\", but the assertions only verify a state exists and that its title differs from \"Generation A\". A leaked `id`/`artist` from deck 1, or a wrong/borrowed generation on deck 2, goes undetected. Assert its own track identity (id/title/artist) rather than merely \"not Generation A\".",
+   "suggestion_code": "    check(deckTwo?.track?.id === \"gen-c\" && deckTwo?.track?.title === \"Deck Two\", \"deck 2 did not report its own track text\");",
+   "existing_code": "    check(deckTwo?.track?.title !== \"Generation A\", \"deck 2 inherited deck 1 metadata\");",
+   "start_line": 108,
+   "end_line": 108,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/rekordbox-live/src/contract-suite.ts",
+   "content": "`onDeckState` and `onConnection` return unsubscribe functions (see `DJLiveProvider`), but both return values are discarded here. The listeners are never removed, so they survive `provider.stop()` and any reuse of the same provider instance accumulates callbacks, causing cross-suite contamination and a memory/resource leak. Keep the unsubscribers and invoke them when the suite finishes.",
+   "existing_code": "  provider.onDeckState((state) => states.push(state));\n  provider.onConnection((status) => statuses.push(status.state));",
+   "start_line": 62,
+   "end_line": 63,
+   "category": "maintainability",
+   "severity": "medium"
+  }
+ ]
+}

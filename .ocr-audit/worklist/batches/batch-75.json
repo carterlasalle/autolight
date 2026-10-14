@@ -1,0 +1,148 @@
+{
+ "packages/ipc/package.json": [
+  {
+   "path": "packages/ipc/package.json",
+   "content": "`lint` is an exact alias of `typecheck` (`tsc --noEmit`), so it never runs an actual linter. Because the root script `yarn lint` fans out to `yarn workspaces foreach --all run lint`, the repo's lint gate for this package silently degrades to a type check and lint-only defects (unused code, unsafe patterns, etc.) are never caught. If a linter is intended, run it here (e.g. `eslint`/`oxlint`); otherwise rename the script to avoid implying lint coverage.",
+   "existing_code": "    \"lint\": \"tsc --noEmit -p tsconfig.json\",",
+   "start_line": 10,
+   "end_line": 10,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/ipc/package.json",
+   "content": "The package declares only `main`/`types`, with no `exports`, no `files`, and no `private: true`. If this package is ever published (the repo carries `publint`/`license-checker` tooling, suggesting publishing intent), (1) the missing `files` allowlist will ship `src/`, tests, `tsconfig.json` and `vitest.config.ts` in the tarball, and (2) the missing `exports` map means consumers get no conditional/subpath export resolution for this ESM package. Add `\"files\": [\"dist\"]` and an `\"exports\"` map (or mark it `\"private\": true` if it is workspace-only).",
+   "existing_code": "  \"main\": \"./dist/index.js\",\n  \"types\": \"./dist/index.d.ts\",",
+   "start_line": 5,
+   "end_line": 6,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/matter/src/binding.ts": [
+  {
+   "path": "packages/matter/src/binding.ts",
+   "content": "The `already-bound` / `allowRebind` guard runs *after* the identify flash and the user confirmation, even though that guard does not depend on either side effect. Consequence: a rebind that will be rejected still flashes the physical device and prompts the user (who answers `confirmIdentify`) only to receive `already-bound`. This wastes the flash and misleads the operator, and it also means `confirmIdentify` is invoked for operations that can never succeed. Move the existing-binding check above the identify command so the flash/confirmation only happen for bindings that are actually permitted.",
+   "suggestion_code": "  const existing = store.get(req.fixtureId);\n  if (existing !== undefined && existing.matterNodeId !== req.nodeId && !req.allowRebind) {\n    throw new MatterError(\"already-bound\", `fixture ${req.fixtureId} is bound to node ${existing.matterNodeId}`);\n  }\n  await adapter.command(req.nodeId, \"identify\", \"identify\", { identifyTime: 5 });",
+   "existing_code": "  await adapter.command(req.nodeId, \"identify\", \"identify\", { identifyTime: 5 });",
+   "start_line": 39,
+   "end_line": 39,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/matter/src/binding.ts",
+   "content": "The guard only rejects `null`; a missing/`undefined` value (e.g. from a real adapter crossing an IPC boundary where the attribute is absent) would satisfy this check and be persisted as `vendorId`/`productId`, corrupting the device identity that downstream schema relies on. Use a nullish check so absent values are treated as \"no Basic Information cluster\".",
+   "suggestion_code": "  if (vendorId === null || vendorId === undefined || productId === null || productId === undefined) {",
+   "existing_code": "  if (vendorId === null || productId === null) {",
+   "start_line": 36,
+   "end_line": 36,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "packages/matter/src/simulator.ts": [
+  {
+   "path": "packages/matter/src/simulator.ts",
+   "content": "Every `VirtualLight` is bound to the same hardcoded storage literal `\"matter-sim-storage\"`. It is safe today only because `InMemoryAdapter` keeps its state in per-instance fields (`nodes`/`recorded`/`nextNodeId` in controller.ts) and treats `storageDir` as an opaque string. That ties test isolation to an implementation detail: if storage semantics ever change (persistence, fabric keyed by storageDir, safeStorage), parallel or repeated `startVirtualLight()` runs will collide and bleed state across tests. Make the identifier unique per instance or parameterizable.",
+   "suggestion_code": "  return { pairingCode, adapter: new InMemoryAdapter(`matter-sim-${storageName}`) };",
+   "existing_code": "  return { pairingCode, adapter: new InMemoryAdapter(\"matter-sim-storage\") };",
+   "start_line": 19,
+   "end_line": 19,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/matter/src/simulator.ts",
+   "content": "This fixed test credential is re-exported from the package's public entry point (`packages/matter/src/index.ts` line 10), making a test-only pairing code part of the production API surface. The simulator tests import it directly from `./simulator.js`, so the public re-export is not required for them. Consider removing it from `index.ts` (or clearly gating the simulator behind a test-only entry) so a fixed commissioning code cannot leak into non-test consumption.",
+   "existing_code": "export const TEST_PAIRING_CODE = \"1234-567-8901\";",
+   "start_line": 11,
+   "end_line": 11,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/rekordbox-library/package.json": [
+  {
+   "path": "packages/rekordbox-library/package.json",
+   "content": "`rekordbox-connect` is declared as a hard runtime dependency, but the code treats it as optional: `src/options.ts` (lines 166-181) calls it \"an optional runtime dependency\", loads it via a dynamic variable specifier inside try/catch, and falls through to the pyrekordbox sidecar/blob derivation when it is absent. It also pulls in the native `better-sqlite3-multiple-ciphers` module (see yarn.lock), which is itself correctly declared optional here. Because it is listed under `dependencies`, `yarn/npm install` will attempt to build that native module and fail on platforms where the build is unavailable, even though the library can run without it (auto mode falls back in `service.ts`, line 136-140). To match the runtime behavior, move `rekordbox-connect` to `optionalDependencies` (it will then also be marked optional in yarn.lock's `dependenciesMeta`).",
+   "existing_code": "    \"rekordbox-connect\": \"^1.2.17\"",
+   "start_line": 15,
+   "end_line": 15,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-library/package.json",
+   "content": "Only `main`/`types` are declared \u2014 there is no `files` allowlist nor an `exports` map. Without `files`, npm/yarn publish will include the whole package directory (source, tests, tsconfig) rather than just `dist`, since the repo-root `.gitignore` that ignores `dist/` does not apply to this sub-package. Without `exports`, the published module surface is unpinned and ESM deep imports (e.g. `@autolight/rekordbox-library/watch`) resolve relative to the package root instead of `dist`, so they break. Add a `files` allowlist and an `exports` map (the sibling `@autolight/config` package already follows this pattern).",
+   "suggestion_code": "  \"main\": \"./dist/index.js\",\n  \"types\": \"./dist/index.d.ts\",\n  \"files\": [\n    \"dist\"\n  ],\n  \"exports\": {\n    \".\": {\n      \"types\": \"./dist/index.d.ts\",\n      \"default\": \"./dist/index.js\"\n    }\n  },",
+   "existing_code": "  \"main\": \"./dist/index.js\",\n  \"types\": \"./dist/index.d.ts\",",
+   "start_line": 5,
+   "end_line": 6,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/rekordbox-library/vitest.config.ts": [
+  {
+   "path": "packages/rekordbox-library/vitest.config.ts",
+   "content": "An alias is registered for *every* filesystem entry in `packages/` without verifying that the entry is a package directory containing `src/index.ts`. The canonical root `vitest.config.ts` deliberately guards this (`readdirSync(workspaceSrc, { withFileTypes: true }).filter((e) => e.isDirectory())`). Two failure modes follow from the missing guard:\n1. Any non-directory entry or scratch directory in `packages/` (e.g. a stray `README.md`, `.DS_Store`, `packages/tmp/`) registers a bogus key such as `@autolight/README.md`.\n2. A package whose entry point is not `src/index.ts` still gets an unconditional `@autolight/<name>` alias pointing at a non-existent path, which *shadows* the real workspace/node_modules resolution instead of falling back to it, surfacing as a confusing 'failed to resolve' error rather than a clear module-not-found.\nFilter to real package directories (and ideally assert `src/index.ts` exists) so the alias only covers legitimately importable workspace packages.",
+   "suggestion_code": "const workspaceAlias = Object.fromEntries(\n  readdirSync(workspaceSrc, { withFileTypes: true })\n    .filter((e) => e.isDirectory() && existsSync(join(workspaceSrc, e.name, \"src\", \"index.ts\")))\n    .map((e) => [`@autolight/${e.name}`, join(workspaceSrc, e.name, \"src\", \"index.ts\")]),\n);",
+   "existing_code": "  readdirSync(workspaceSrc).map((p) => [`@autolight/${p}`, join(workspaceSrc, p, \"src\", \"index.ts\")]),",
+   "start_line": 9,
+   "end_line": 9,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-library/vitest.config.ts",
+   "content": "`readdirSync(workspaceSrc)` at module load has no error handling: if `packages/` is missing or unreadable (permissions, partial checkout, config run outside the monorepo), the whole config evaluation throws before a single test is collected, producing an opaque failure that is hard to diagnose. Consider wrapping the scan (or validating the directory) and failing with an explicit, actionable message.",
+   "existing_code": "const workspaceSrc = join(root, \"..\");",
+   "start_line": 7,
+   "end_line": 7,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/rekordbox-live/package.json": [
+  {
+   "path": "packages/rekordbox-live/package.json",
+   "content": "Unused dependency. `@autolight/rekordbox-library` is declared in `dependencies`, but nothing in `packages/rekordbox-live/` ever imports it (grep for `rekordbox-library`/`@autolight/` in this package only matches this manifest line). This pulls an unused workspace package (and its `rekordbox-connect`/`better-sqlite3` dependencies) into every consumer's install graph. Either remove the declaration or wire up the intended usage; the repo's `knip` gate in the root `analyze` script would flag this as an unused dependency.",
+   "existing_code": "    \"@autolight/rekordbox-library\": \"^0.1.0\",",
+   "start_line": 30,
+   "end_line": 30,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/package.json",
+   "content": "Missing `@types/node` devDependency. This package's own source directly imports Node built-ins (`node:http`, `node:net`, `node:dgram`, `node:fs`, `node:path`, `node:url` in e.g. `agent-api.ts`, `link.ts`, `os2l.ts`, `prolink-provider.ts`, `rkbx-osc.ts`), yet no `@types/node` is declared. Type checking currently only succeeds because `@types/node` is hoisted from sibling packages into the root `node_modules/@types` (`nodeLinker: node-modules`); it will fail with TS2307 under an isolated/focused install or if those siblings drop it. Add `\"@types/node\": \"^22.15.29\"` to `devDependencies`.",
+   "suggestion_code": "    \"@types/node\": \"^22.15.29\",\n    \"typescript\": \"^5.6.3\",\n    \"vitest\": \"^4.1.11\"",
+   "existing_code": "    \"typescript\": \"^5.6.3\",\n    \"vitest\": \"^4.1.11\"",
+   "start_line": 34,
+   "end_line": 35,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/renderer/src/layers.test.ts": [
+  {
+   "path": "packages/renderer/src/layers.test.ts",
+   "content": "The unaffected-side assertion is too weak: `some(v => v > 0)` only requires a single non-zero byte, so a regression that darkens most of the untouched fixture (e.g. resolveTarget leaking or a spatial shape collapsing) would still pass. This applies to both `frames.get(\"right\")` and the mirrored `mirrored.get(\"left\")`. Pin the exact per-cell bytes (or at least assert every cell is lit) so targeting regressions are caught.",
+   "existing_code": "    expect([...frames.get(\"right\")!].some((v) => v > 0)).toBe(true);",
+   "start_line": 67,
+   "end_line": 67,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/renderer/src/layers.test.ts",
+   "content": "This assertion is self-referential: the `add` result is clamped with `Math.min(ADD_CEILING, ...)` (layers.ts:149), so it can never exceed `ADD_CEILING`, and comparing the output to the same constant being tested makes the test tautological about the ceiling's *value*. If `ADD_CEILING` were changed to e.g. 4, `1 + 1` clamped to 4 would return 2 and the assertion would still pass. Assert the concrete saturated value instead so the spec ceiling is actually pinned.",
+   "existing_code": "    expect(ceiling.get(\"c\")![0]).toBeLessThanOrEqual(ADD_CEILING);",
+   "start_line": 180,
+   "end_line": 180,
+   "category": "test",
+   "severity": "low"
+  }
+ ]
+}

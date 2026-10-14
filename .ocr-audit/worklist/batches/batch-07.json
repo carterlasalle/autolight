@@ -1,0 +1,352 @@
+{
+ "packages/rekordbox-library/src/identity.ts": [
+  {
+   "path": "packages/rekordbox-library/src/identity.ts",
+   "content": "Provenance is mislabelled at maximum confidence. `memory-reader-id` silently falls back to `input.rekordboxId`, so when only a native Rekordbox content ID is reported the match is still recorded as `step: \"memory-reader-id\"`, `matchedStep: \"memory-reader-id\"`, `confidence: 1`. Downstream auditing (and any logic that keys off `matchedStep`) will attribute the match to the wrong provider at the highest confidence tier. Give `rekordboxId` its own step (or drop the `??` fallback) so `matchedStep` reflects the real source.",
+   "existing_code": "    { step: \"memory-reader-id\", confidence: 1, id: input.memoryReaderId ?? input.rekordboxId },",
+   "start_line": 80,
+   "end_line": 80,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-library/src/identity.ts",
+   "content": "The path-based branch emits `step: \"title-path\"`, the same id used by the title branch below. When the path lookup fails and the title path then matches, `steps` contains two consecutive `\"title-path\"` outcomes with different confidences (0 / 0.5), and `matchedStep` cannot tell a caller which mechanism actually resolved the track. Use a distinct step id (e.g. `\"path-library\"`) for the path branch. Also, the `note: \"path not in library\"` is inaccurate when `libraryByPath` returned a row that simply lacks a `rekordboxId` \u2014 the row was found, so the message misleads debugging.",
+   "existing_code": "      : { step: \"title-path\", matched: false, confidence: 0, trackId: null, note: \"path not in library\" };",
+   "start_line": 110,
+   "end_line": 110,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-library/src/identity.ts",
+   "content": "`titleIndex` is documented to return candidate *native IDs*, but `candidates[0]` is stuffed into `IdentityParts.rekordboxId`, which `aliasesFor` turns into the alias `rb:<candidate>`. If the candidate is not a Rekordbox content ID (e.g. a Serato/native id or a path), this writes a bogus `rb:` alias into the store, permanently corrupting the alias graph and potentially attaching the wrong library row to the track. Only use the candidate as the lookup key for `libraryById`; never write it into `rekordboxId`.",
+   "existing_code": "      const fallback: IdentityParts = { rekordboxId: candidates[0], title: input.title };",
+   "start_line": 118,
+   "end_line": 118,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-library/src/identity.ts",
+   "content": "All three external lookup hooks (`libraryById`, `libraryByPath`, `titleIndex`) are invoked with optional chaining but no error handling. A single throw from any hook (DB/IPC failure) propagates out of `resolveLiveTrack`, aborting the entire DS-22 chain and skipping every lower-priority step and the title fallback \u2014 the exact failover behaviour the chain exists to provide. Wrap each hook call in try/catch (recording a failed step outcome) so the chain continues to the next step.",
+   "existing_code": "    const row = input.libraryById?.(id);",
+   "start_line": 94,
+   "end_line": 94,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-library/src/identity.ts",
+   "content": "The identity-parts assembly (`...row`, `rekordboxId` fallback, `fileHash`/`pcmFingerprint` merge) and the `resolveTrackId` call are duplicated across the id-step loop, the path branch, and the title branch, and they diverge: the path branch passes `row` verbatim, dropping the input `fileHash`/`pcmFingerprint` that the id steps include, so a moved/renamed file cannot attach via hash on the path step. Extract a single helper (e.g. `resolveWithParts(parts, hash, fingerprint)`) so every step applies the same merge rules.",
+   "existing_code": "    const parts: IdentityParts = {\n      ...(row ?? {}),\n      rekordboxId: row?.rekordboxId ?? id,\n      ...(input.fileHash !== undefined ? { fileHash: input.fileHash } : {}),\n      ...(input.pcmFingerprint !== undefined ? { pcmFingerprint: input.pcmFingerprint } : {}),\n    };",
+   "start_line": 95,
+   "end_line": 100,
+   "category": "maintainability",
+   "severity": "medium"
+  }
+ ],
+ "packages/rekordbox-live/src/prolink-provider.ts": [
+  {
+   "path": "packages/rekordbox-live/src/prolink-provider.ts",
+   "content": "On bind failure the socket is never closed: the `catch` re-throws without calling `socket.close()`, leaving the UDP socket (and its `reuseAddr` bound port) leaked, while `this.socket` still references it. Additionally two `error` listeners are registered for the same event (the persistent `socket.on(\"error\", ...)` and `socket.once(\"error\", onError)`), so a bind error fires both handlers and sets two different failed statuses. Close the socket (and null out `this.socket`) before re-throwing, and keep only one error path.",
+   "suggestion_code": "    await promise.catch((err: unknown) => {\n      this.setStatus({ state: \"failed\", error: `prolink bind ${this.options.bind ?? \"\"}: ${err instanceof Error ? err.message : String(err)}` });\n      this.socket = null;\n      socket.close();\n      throw err;\n    });",
+   "existing_code": "    await promise.catch((err: unknown) => {\n      this.setStatus({ state: \"failed\", error: `prolink bind ${this.options.bind ?? \"\"}: ${err instanceof Error ? err.message : String(err)}` });\n      throw err;\n    });",
+   "start_line": 128,
+   "end_line": 131,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-live/src/prolink-provider.ts",
+   "content": "The socket is created without `setBroadcast(true)`, but `tick()` later sends to the broadcast address `255.255.255.255`. Without enabling broadcast, most platforms reject the datagram with EACCES/ENETUNREACH, so virtual-CDJ keepalives never reach the network. Enable broadcast on the socket.",
+   "suggestion_code": "    const socket = createSocket({ type: \"udp4\", reuseAddr: true });\n    socket.setBroadcast(true);",
+   "existing_code": "    const socket = createSocket({ type: \"udp4\", reuseAddr: true });",
+   "start_line": 114,
+   "end_line": 114,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-live/src/prolink-provider.ts",
+   "content": "`socket.send` is invoked with no error callback and `lastKeepaliveNs` is advanced to `at` immediately before the send. A failed transmission is therefore silently swallowed (contradicting the file's stated S5 \"never silently swallowed\" contract) and the keepalive timer will not retry until another full `keepaliveMs` interval elapses. Pass a callback to surface the error (and only advance `lastKeepaliveNs` after a successful send).",
+   "suggestion_code": "    if (this.options.sendDatagram) this.options.sendDatagram(bytes);\n    else if (this.socket) {\n      this.socket.send(Buffer.from(bytes), PROLINK_PORTS.keepalive, \"255.255.255.255\", (err) => {\n        if (err) this.setStatus({ state: \"failed\", error: `prolink keepalive: ${err.message}` });\n      });\n    }",
+   "existing_code": "    if (this.options.sendDatagram) this.options.sendDatagram(bytes);\n    else if (this.socket) this.socket.send(Buffer.from(bytes), PROLINK_PORTS.keepalive, \"255.255.255.255\");",
+   "start_line": 211,
+   "end_line": 212,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-live/src/prolink-provider.ts",
+   "content": "`shouldSendKeepalive` receives `atNs` but calls `effectiveMode()` without it, so peer expiry (and thus the auto-mode collision decision) is evaluated at `this.now()` instead of the caller-supplied time. In `tick()` this makes the promotion/gating decision disagree with the timestamp the caller is driving (flaky under virtual/advanced clocks). Forward the timestamp.",
+   "suggestion_code": "    if (this.effectiveMode(atNs) !== \"virtual-cdj\") return false;",
+   "existing_code": "    if (this.effectiveMode() !== \"virtual-cdj\") return false;",
+   "start_line": 174,
+   "end_line": 174,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/prolink-provider.ts",
+   "content": "`estimatePlayhead` uses the nominal `bpm` while `stateFor` independently reports `playRate = buffer.pitch / 0x100000`. Whenever pitch != 1 the estimated playhead drifts from the actual position and is inconsistent with the reported rate. Scale the estimate by the current pitch.",
+   "suggestion_code": "    return ((buffer.beatCounter - 1) * 60) / (buffer.bpm * (buffer.pitch / 0x100000));",
+   "existing_code": "    return ((buffer.beatCounter - 1) * 60) / buffer.bpm;",
+   "start_line": 295,
+   "end_line": 295,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/rekordbox-live/src/providers.ts": [
+  {
+   "path": "packages/rekordbox-live/src/providers.ts",
+   "content": "Generation bump is keyed on the fabricated track id, and `toTrack` collapses every id-less track to the shared literal `\"unknown\"`. Because the comparison uses `(incoming?.id ?? null)`, loading two *distinct* tracks that both lack an `id` yields `\"unknown\" !== \"unknown\"` \u2192 false, so `generation` is never incremented. Every downstream consumer that keys on `generation` (fusion, loop-roll, hot-cue/phrase reset) then keeps serving the previous track's fields, violating the header contract (\"every provider increments `generation` on track load, unload and replacement\"). Fix by deriving identity from a stable composite (id \u222a canonicalPath \u222a title/artist) and never mapping two different tracks onto the same `\"unknown\"` sentinel.",
+   "existing_code": "    if (incoming !== undefined && (incoming?.id ?? null) !== (previous?.id ?? null)) {",
+   "start_line": 244,
+   "end_line": 244,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-live/src/providers.ts",
+   "content": "`this.beats` is never cleared when `generation` increments, and when a hint omits `beat` (i.e. `hint.beat === undefined`) the mapper silently reuses the cached beat from the *previous* generation. After a track load/unload the emitted state therefore carries the old track's `beat` value, directly breaking the stated invariant \"never emits a field belonging to the previous generation after the increment\". Clear the per-deck caches (`beats`, and any other generation-scoped state) inside the generation-bump branch so a new generation starts clean.",
+   "existing_code": "    const beat = hint.beat === undefined ? (this.beats.get(deckId) ?? null) : hint.beat;\n    if (beat !== null) this.beats.set(deckId, beat);",
+   "start_line": 250,
+   "end_line": 251,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-live/src/providers.ts",
+   "content": "`started` is set to `true` *before* `await this.onStart()`, with no error handling. Real providers do reject here (e.g. `Os2lProvider.onStart` re-throws bind failures and `SeratoRemoteProvider.onStart` re-throws client start failures), so: (1) `this.started` remains `true` after a failed start and all subsequent `start()` retries are silently swallowed; (2) a later `stop()` will set `started = false` and call `onStop()` on a provider whose `onStart()` never completed; (3) concurrent `start()` callers return before initialization finishes. Reset `started` on failure (and surface the error) so the lifecycle stays consistent. `stop()` has the mirror problem: `started` is cleared before `onStop()` runs, so a rejecting `onStop()` is not retryable and can leak resources.",
+   "suggestion_code": "  async start(): Promise<void> {\n    if (this.started) return;\n    this.started = true;\n    try {\n      await this.onStart();\n    } catch (err) {\n      this.started = false;\n      throw err;\n    }\n  }",
+   "existing_code": "  async start(): Promise<void> {\n    if (this.started) return;\n    this.started = true;\n    await this.onStart();\n  }",
+   "start_line": 143,
+   "end_line": 147,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-live/src/providers.ts",
+   "content": "Two problems in `emit`. (1) The monotonic-timestamp fix reassigns a *copy* to the local `state`, so listeners receive the corrected `receivedAtNs` while the object the caller stores/returns (e.g. `ScriptedProvider.update`'s `merged`, `this.decks.set(...)`) keeps the stale timestamp. `getDecks()` consumers and event listeners therefore observe different `receivedAtNs` values, and the documented \"monotonic timestamps\" guarantee only holds for one of them. Mutate the received object instead (or return the adjusted state and have callers use it). (2) `this.queueDepth = Math.min(1, this.queueDepth + 1)` pins `queueDepth` to 1 forever \u2014 it is never decremented \u2014 so `getStats().queueDepth` is a meaningless constant and can never report a drain.",
+   "suggestion_code": "    this.received += 1;\n    this.queueDepth = Math.min(1, this.queueDepth + 1);\n    if (state.receivedAtNs <= this.lastStateAtNs) {\n      state.receivedAtNs = this.lastStateAtNs + 1n;\n    }",
+   "existing_code": "    this.received += 1;\n    this.queueDepth = Math.min(1, this.queueDepth + 1);\n    if (state.receivedAtNs <= this.lastStateAtNs) {\n      state = { ...state, receivedAtNs: this.lastStateAtNs + 1n };\n    }",
+   "start_line": 185,
+   "end_line": 189,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/providers.ts",
+   "content": "`quality` (and `fieldSources`) are rebuilt from scratch on every update, so any label not present in the current `hint.quality` is discarded even for deck fields that are unchanged. A provider that reports quality incrementally (e.g. only the fields touched by a given message) will silently lose the labels established by earlier updates, and downstream fusion/quality consumers will see `undefined` for still-valid fields. Merge into the previously stored labels rather than replacing. Also note `fieldSources` only ever labels `track`, `playing`, `playheadSeconds`, `effectiveBpm` (+ optional faders) \u2014 fields like `beat`, `beatInBar`, `pitchPercent`, `sync`, `loopRoll`, `lastHotCue`, `phrase`, `loop` and `master` are set on the state but get no source label.",
+   "existing_code": "      quality: hint.quality ?? {},",
+   "start_line": 281,
+   "end_line": 281,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/storage/src/session.ts": [
+  {
+   "path": "packages/storage/src/session.ts",
+   "content": "The eviction `while` loop runs before the `size > this.maxBytes` guard, so a single oversized record first evicts every stored entry (data loss) and is then dropped anyway. Move the size check above the loop so an undroppable record never touches existing entries.",
+   "suggestion_code": "    const size = JSON.stringify(entry).length;\n    if (size > this.maxBytes) {\n      this.dropped += 1;\n      return;\n    }\n    while (this.len > 0 && this.bytes + size > this.maxBytes) {",
+   "existing_code": "    const size = JSON.stringify(entry).length;\n    while (this.len > 0 && this.bytes + size > this.maxBytes) {",
+   "start_line": 77,
+   "end_line": 78,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/storage/src/session.ts",
+   "content": "Byte budget mismatch: `maxBytes` is derived from `maxMb` as true bytes, but record sizes are measured with `JSON.stringify(entry).length`, which counts UTF-16 code units, not encoded bytes (and also mishandles surrogate pairs). For non-ASCII payloads the buffer silently exceeds the configured budget and eviction thresholds are wrong. Compute the size with `Buffer.byteLength(JSON.stringify(entry), \"utf8\")` (and use the same measure when subtracting evicted entries).",
+   "existing_code": "    this.maxBytes = Math.max(1, Math.floor(options.maxMb * 1024 * 1024));",
+   "start_line": 62,
+   "end_line": 62,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/storage/src/session.ts",
+   "content": "`stableHash` relies on `JSON.stringify`, whose output depends on object key insertion order. Two semantically identical inputs/config snapshots built with different key order produce different hashes, so `frameHashFor` is not a stable determinism check and replay can report false mismatches (or should-be mismatches can be masked). Serialize with a canonical form (recursively sorted keys) before hashing.",
+   "existing_code": "export function frameHashFor(tick: number, inputs: unknown, configSnapshot: Record<string, unknown>): string {\n  return stableHash([tick, inputs, configSnapshot]);\n}",
+   "start_line": 46,
+   "end_line": 48,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/storage/src/session.ts",
+   "content": "`split(\"\\n\")` yields empty trailing/middle segments for NDJSON with a trailing newline or blank lines, and `JSON.parse(\"\")` then throws `invalid JSON` for a perfectly valid file (exportNdjson itself produces no trailing newline, so a round-tripped file with an added newline breaks). Filter out empty lines before parsing. Also `row.kind` is cast to `SessionKind` without validating it against the allowed union, so unknown kinds are silently accepted.",
+   "suggestion_code": "  return ndjson\n    .split(\"\\n\")\n    .filter((line) => line.trim() !== \"\")\n    .map((line, i) => {",
+   "existing_code": "  return ndjson.split(\"\\n\").map((line, i) => {",
+   "start_line": 127,
+   "end_line": 127,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/storage/src/session.ts",
+   "content": "Replay passes `inputs.get(tick)` straight into `render`; when a frame-hash tick has no matching `tick-input` record (or when duplicate tick-inputs collide via last-write-wins), the renderer is invoked with `undefined`/wrong inputs and the mismatch is silently recorded without surfacing the real cause. Distinguish \"missing input\" from an explicit `undefined` input and report it (e.g. add to `mismatchedTicks` or throw) instead of rendering with unknown inputs.",
+   "existing_code": "    const again = render(tick, inputs.get(tick), configSnapshot);",
+   "start_line": 175,
+   "end_line": 175,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/track-identity/src/fingerprint.ts": [
+  {
+   "path": "packages/track-identity/src/fingerprint.ts",
+   "content": "`AcousticOptions` is declared twice with identical members. TypeScript declaration merging makes this compile, so it's not an error, but it is a clear copy-paste duplicate; delete one of the two declarations to avoid divergence if the interface later changes.",
+   "existing_code": "  /** Similarity at or above this proposes a link (never auto-merges). */\n  threshold?: number;\n}\n\n/**\n * Acoustic similarity in [0, 1] between two landmark-hash sets. Documented",
+   "start_line": 51,
+   "end_line": 56,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/track-identity/src/fingerprint.ts",
+   "content": "Host-endianness bug: `new Uint8Array(quantized.buffer, ...)` exposes the Int16Array's native byte order, so identical canonical PCM produces a different SHA-256 on a big-endian host than on the (LE) host that produced the stored hash \u2014 silently breaking the exact-match contract this fingerprint exists to guarantee. Write the samples explicitly little-endian instead, and drop the `as unknown as ArrayBuffer` cast that hides view/offset mistakes.",
+   "existing_code": "  const bytes = quantized instanceof Uint8Array ? quantized : new Uint8Array(quantized.buffer, quantized.byteOffset, quantized.byteLength);",
+   "start_line": 40,
+   "end_line": 40,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/track-identity/src/fingerprint.ts",
+   "content": "`(start / hopSize) & 0xff` truncates the window index to 8 bits, so windows 256 hops apart alias to the same packed value. Because `acousticSimilarity` compares Sets, these collisions dedupe: long stationary audio (drones, silence, sustained pads) collapses to a handful of hashes and yields inflated Jaccard similarity, proposing false 'probably the same track' links. Use a wider, non-truncated window index (e.g. mix a hash of the full index) or accumulate rather than dedupe.",
+   "existing_code": "    hashes.push(((start / hopSize) & 0xff) | (first! << 8) | (second! << 12));",
+   "start_line": 99,
+   "end_line": 99,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/track-identity/src/fingerprint.ts",
+   "content": "No validation of caller-supplied `windowSize`/`hopSize`. `hopSize === 0` makes `start += hopSize` never advance (infinite loop/hang), and a negative `hopSize` iterates backwards forever; `windowSize <= 0` also misbehaves. Guard these parameters (or clamp) before the loop.",
+   "existing_code": "  for (let start = 0; start + windowSize <= mono.length; start += hopSize) {",
+   "start_line": 83,
+   "end_line": 83,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/track-identity/src/fingerprint.ts",
+   "content": "These are not spectral bins: the index is derived from the sample position `i` within the window (`floor((i / windowSize) * bins)`), i.e. it partitions the time axis of the window, not frequency energy. The comment/design promises Chromaprint-style spectral-peak landmarks over the signal's spectrum, but no frequency transform is performed, so the 're-encode matching' reliability this path advertises is unsubstantiated. Either implement an actual spectral (e.g. FFT band) energy computation or correct the documentation.",
+   "existing_code": "      energy[Math.min(bins - 1, Math.floor((i / windowSize) * bins))]! += v * v;",
+   "start_line": 87,
+   "end_line": 87,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "analysis/tests/test_config_bridge.py": [
+  {
+   "path": "analysis/tests/test_config_bridge.py",
+   "content": "The guard only matches decimal float literals (`\\d+\\.\\d+`), so hardcoded *integer* tuning constants are never flagged (e.g. `minVotes = 3`, `minAnchors = 32`, `windows = (8, 16, 32)`). Given the detection must see a numeric literal on the line, integer thresholds slip through silently, giving a false sense of enforcement. Match integers too, e.g. `\\d+(?:\\.\\d+)?`.",
+   "suggestion_code": "            if re.search(r\"(?<![\\w.])\\d+(?:\\.\\d+)?\", line) and any(",
+   "existing_code": "            if re.search(r\"(?<![\\w.])\\d+\\.\\d+\", line) and any(",
+   "start_line": 60,
+   "end_line": 60,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "analysis/tests/test_config_bridge.py",
+   "content": "The skip condition `\"config\" in low` is a broad substring match: ANY line whose text merely contains the letters \u201cconfig\u201d is exempted \u2014 including comments such as `min_votes = 3  # not from config` or a stray mention of \u201cconfiguration\u201d. A hardcoded tuning value on such a line is hidden from the check, defeating the test\u2019s purpose. Restrict the exemption to actual config reads (e.g. `cfg.get(`/`cfg[`), not an arbitrary substring.",
+   "existing_code": "                \"config\" in low",
+   "start_line": 54,
+   "end_line": 54,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "analysis/tests/test_config_bridge.py",
+   "content": "The skip list and the detection list use different casing for the same concepts (`min_anchors`/`tolerance_ms` vs `minAnchors`/`tolerance`), and the real sources use snake_case (`min_votes`, `min_strength`, `min_anchors`, `tolerance_ms`). Therefore a genuinely hardcoded assignment like `min_anchors = 32` or `tolerance_ms = 0.05` is explicitly skipped, while the camelCase detection keywords only ever occur inside `cfg.get(\"analysis...minAnchors\")` strings (already skipped). Net effect: the test can never flag a real offender. Use consistent, snake_case-aware keywords in both lists.",
+   "suggestion_code": "                    \"min_anchors\",\n                    \"min_votes\",\n                    \"min_jump\",\n                    \"min_strength\",\n                    \"min_conf\",",
+   "existing_code": "                    \"minAnchors\",",
+   "start_line": 68,
+   "end_line": 68,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "analysis/tests/test_config_bridge.py",
+   "content": "`test_defaults_match_schema` only compares key sets, so a default whose *value* disagrees with the schema (wrong magnitude, wrong type, drifted threshold) still passes \u2014 the test name promises a match it never verifies. Consider also asserting the value in `defaults[k]` equals `schema[\"properties\"][k].get(\"default\")` where a default is declared, which is the actual invariant being claimed.",
+   "existing_code": "    assert set(defaults) == set(schema[\"properties\"]), \"defaults and schema disagree\"",
+   "start_line": 37,
+   "end_line": 37,
+   "category": "test",
+   "severity": "medium"
+  }
+ ],
+ "apps/desktop/src/app/resolve-live.ts": [
+  {
+   "path": "apps/desktop/src/app/resolve-live.ts",
+   "content": "The pending-style handover can never fire in practice. `Math.ceil(beat / 32) * 32` is always >= beat, so `beat >= boundary` is true only when `beat` is exactly a multiple of 32 (0/32/64\u2026). Since the cursor advances the beat fractionally, an exact hit virtually never happens, so a style chosen mid-playback (`pendingStyle`) is never applied and the UI keeps showing \"Pending \u2026: applies at the next phrase boundary\" indefinitely. Detect the crossing instead (store the previous beat / last applied boundary and compare).",
+   "existing_code": "            const boundary = Math.ceil((live.beat ?? 0) / 32) * 32;\n\n            if ((live.beat ?? 0) >= boundary) set({ style: st.pendingStyle, pendingStyle: null });",
+   "start_line": 236,
+   "end_line": 238,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/src/app/resolve-live.ts",
+   "content": "In preview mode (the store default, `followMode: 'preview'`) `useAx` is false, so this fallback branch runs \u2014 but it multiplies the per-tick advance by an extra `* 0.1`. The `estimatedBeat` fed to `combineTransport` on the previous line has no such factor, so preview playback advances the show beat ~10x slower than real time (expected `0.25 * bpm/60`). Remove the `* 0.1` so both estimates are consistent.",
+   "suggestion_code": "        const nextA = useAx && combined.beat !== null ? combined.beat : beatRef.current.a + 0.25 * ((decks[0]?.track.beatGrid.beats[0]?.bpm ?? 120) / 60);",
+   "existing_code": "        const nextA = useAx && combined.beat !== null ? combined.beat : beatRef.current.a + 0.25 * ((decks[0]?.track.beatGrid.beats[0]?.bpm ?? 120) / 60) * 0.1;",
+   "start_line": 228,
+   "end_line": 228,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/src/app/resolve-live.ts",
+   "content": "`Math.min(nextA, grid.length || nextA)` clamps the beat to the *number of grid beats* (a count), not to a valid beat/time bound. Once the AX/estimated beat exceeds `grid.length` (long tracks, or AX elapsed beyond the analysed grid), the beat is pinned at `grid.length` forever, so every section/cue past that point stops rendering. Use a meaningful bound (e.g. the last beat index) or drop the clamp.",
+   "existing_code": "        beatRef.current = { a: Math.min(nextA, grid.length || nextA), b: beatRef.current.b + 0.02 };",
+   "start_line": 229,
+   "end_line": 229,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/app/resolve-live.ts",
+   "content": "Deck B's cursor beat is advanced by a constant `+0.02` per tick regardless of deck B's bpm, play rate, or playing state. This makes deck B's section lookup and rendering drift arbitrarily from the real transport (and it keeps advancing even when deck B is paused). Drive B from its own beat/bpm (or the deck-2 AX reading) the same way deck A is driven.",
+   "existing_code": "        beatRef.current = { a: Math.min(nextA, grid.length || nextA), b: beatRef.current.b + 0.02 };",
+   "start_line": 229,
+   "end_line": 229,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/app/resolve-live.ts",
+   "content": "`invoke('follow/ax')` is fired on every 250ms tick with no tracking of the in-flight request. If an IPC round-trip takes longer than the interval, polls overlap and a late response can land after a newer one, writing a stale beat into `beatRef` (and `set`), making the cursor jump backwards. Guard with an in-flight flag or sequence number (the refetch path already uses a `refetching` flag).",
+   "existing_code": "      void (invoke(\"follow/ax\", { version: 1 }) as Promise<unknown>).then((raw: unknown) => {",
+   "start_line": 211,
+   "end_line": 211,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/app/resolve-live.ts",
+   "content": "`planShow` recompiles the full plan for every deck on every 250ms tick, and the result is written straight back into the shared `LoadedDeck` object held in `decksRef` (`d.plan = want`). This mutates state shared with the mount-fetch path and can silently clobber a plan the show host computed (e.g. a different venue/planner version), while burning CPU 4x/sec. Compile only when the style actually changes and keep the loaded plan immutable (or cache by trackId+styleId).",
+   "existing_code": "      for (const d of decks) {\n        const want = planShow(d.track, styleObj);\n\n        if (want.seed !== d.plan.seed || want.styleId !== d.plan.styleId) d.plan = want;\n      }",
+   "start_line": 205,
+   "end_line": 209,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/app/resolve-live.ts",
+   "content": "`LoadedDeck.deckId` is populated in both fetch paths (lines 150 and 184) but never read anywhere \u2014 `buildLive` and the cursor only use `state`/`track`/`plan`. Either remove the unused field, or use it to resolve the decks instead of hardcoding deck 1/2 in the follow math.",
+   "existing_code": "  deckId: number;",
+   "start_line": 22,
+   "end_line": 22,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ]
+}

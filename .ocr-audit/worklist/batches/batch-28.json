@@ -1,0 +1,323 @@
+{
+ "packages/rekordbox-live/src/os2l.test.ts": [
+  {
+   "path": "packages/rekordbox-live/src/os2l.test.ts",
+   "content": "The TCP test has no `try`/`finally` cleanup path. If `await seen.promise` rejects (connection refused, server error) or any assertion between `start()` and the trailing cleanup throws, `provider.stop()` and `sender.destroy()` never run, leaking the listening server/socket and hanging the test until the Vitest timeout. Wrap the body in `try { ... } finally { sender.destroy(); await provider.stop(); }` (and destroy the socket on error) so the server is always torn down.",
+   "existing_code": "    const clock = virtualClock();\n    const provider = new Os2lProvider({ now: () => clock.nowNs(), bind: \"127.0.0.1:0\" });\n    await provider.start();",
+   "start_line": 85,
+   "end_line": 87,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-live/src/os2l.test.ts",
+   "content": "Two problems here: (1) the promise resolves on the *first* `data` chunk, not on the feedback line, and the assertion only checks `toContain('\"feedback\"')` \u2014 so a bug that emits the wrong `name`/`state` (or any other JSON containing `feedback`) would still pass. (2) There is no `sender.on(\"error\", ...)` handler; a socket error between connect and destroy raises an unhandled `'error'` event and crashes the test. Assert the exact payload (`formatOs2lFeedback(\"program1\", \"on\") + \"\\n\"`) and register an error handler.",
+   "existing_code": "    sender.on(\"data\", (chunk: string) => {\n      feedback.push(chunk);\n      resolve();\n    });",
+   "start_line": 105,
+   "end_line": 108,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/os2l.test.ts",
+   "content": "Assertions are too weak: `tail.length > 0` accepts any non-empty tail, so a splitter that drops/corrupts the partial object would still pass. `splitOs2lMessages` is documented to return the exact incomplete tail; assert it explicitly, e.g. `expect(first.tail).toBe('{\"evt\":\"beat\",');`, and also assert `first.garbage` is empty for this input.",
+   "existing_code": "    expect(first.texts).toHaveLength(1);\n    expect(first.tail.length).toBeGreaterThan(0);",
+   "start_line": 22,
+   "end_line": 23,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/rekordbox-live/src/os2l.test.ts",
+   "content": "`decodeOs2lText` is only validated on an all-valid buffer, so `malformed` is asserted `[]` and never exercised alongside parsed messages. The branch where garbage and valid objects coexist in one call (both `messages` and `malformed` populated) is untested; add a mixed buffer such as `'{\"evt\":\"beat\"...}\\nnot json\\n{\"evt\":\"cmd\",...}\\n'` and assert both arrays.",
+   "existing_code": "    expect(decoded.malformed).toEqual([]);\n    expect(decoded.messages).toHaveLength(4);",
+   "start_line": 37,
+   "end_line": 38,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/rekordbox-live/src/os2l.test.ts",
+   "content": "This N/A filter keys on exact failure strings produced by the shared contract suite. The wording is owned by another module, so a benign message change makes the filter stop matching and the test fails for a misleading reason (and any real regression that happens to surface these specific strings is masked). If possible match on a stable code/identifier rather than the human-readable message, or pin the expectation to the suite's exported failure constants.",
+   "existing_code": "    const notApplicable: Record<string, true> = {\n      \"generation did not increase on track change\": true,\n      \"no deck state emitted for the second deck\": true,\n    };",
+   "start_line": 143,
+   "end_line": 146,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/rekordbox-live/src/os2l.test.ts",
+   "content": "The test pins only pos 42 -> beatInBar 3, which is consistent with the provider's documented 4:4 convention (`pos % 4 == 0` marks the bar line). Because no boundary value is asserted, an off-by-one in `beatInBarOf` (e.g. treating pos 40 as beat 4 instead of 1) would not be caught. Add a bar-line case such as `pos: 40` -> `beatInBar: 1` to lock the convention.",
+   "existing_code": "    expect(decks[0]?.beatInBar).toBe(3);",
+   "start_line": 61,
+   "end_line": 61,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/serato/src/library.ts": [
+  {
+   "path": "packages/serato/src/library.ts",
+   "content": "`evaluateSmartCrate` returns `matched` rows whenever `crate.rules.length > 0`, ignoring `crate.unsupported` entirely. The docstring above explicitly claims \"unsupported rules are not silently treated as true\", but for a real smart crate whose rule records this build cannot decode, the undecoded conditions are effectively dropped: rows that do not satisfy all of Serato's conditions are reported as matched. This silently over-matches (unless the unsupported records are known to be non-constraints, e.g. `vrsn`/embedded `otrk`). Consider gating `matched` on `crate.unsupported.length === 0`, or exposing a `complete`/`partial` flag so callers never surface a partially-evaluated crate as authoritative.",
+   "existing_code": "  if (crate.rules.length === 0) return { matched: [], unsupportedRules: crate.unsupported.length };",
+   "start_line": 294,
+   "end_line": 294,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/serato/src/library.ts",
+   "content": "The module header states roots come from `library.serato.root` \"when set, otherwise auto-detection\", which implies a configured root replaces auto-detection. In practice the default `~/Music/_Serato_` and every `/Volumes/*/_Serato_` are always appended even when `configured` is provided, so a user who pins a specific library still gets unrelated default/external libraries merged in. Combined with the first-wins dedup in `mergeSeratoRows`, this can keep rows the operator did not intend. Either short-circuit when `configured` is set, or fix the header comment to match the priority-merge behavior.",
+   "existing_code": "  if (configured !== null) push(configured, false);\n  push(defaultSeratoRoot(opts.home), false);",
+   "start_line": 123,
+   "end_line": 124,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/serato/src/library.ts",
+   "content": "For numeric fields only `>`, `<`, `>=`, `<=` are handled; any other operator (e.g. `is`, `equals`, `contains`) silently falls through to `left === right`. A rule such as `bpm contains 12` would be decoded as a supported numeric rule but compared for exact equality, giving a wrong (non-)match instead of being reported as unsupported.",
+   "existing_code": "    if (rule.operator === \"<=\") return left <= right;\n    return left === right;",
+   "start_line": 309,
+   "end_line": 310,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/serato/src/library.ts",
+   "content": "For text fields, comparison operators (`>`, `<`, `>=`, `<=`) are accepted by `parseSmartCrateRule`'s regex but silently degrade to string equality here. A rule like `title > House` parses as a supported rule yet only ever matches an exact `title === \"house\"`, silently producing wrong results rather than surfacing the unsupported operator. Recommend rejecting operators that are not meaningful for the field type in `parseSmartCrateRule`, or handling them explicitly.",
+   "existing_code": "  if (rule.operator === \"contains\") return left.includes(right);\n  return left === right;",
+   "start_line": 314,
+   "end_line": 315,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/serato/src/library.ts",
+   "content": "`database V2` is read twice (here and again inside `parseDatabaseSync`), and retention is keyed by a manually decoded `pfil` path (`decodeUtf16be`) while lookup uses `track.filePath` produced by serato-connect. If the two decoders/normalizers ever diverge (trailing nulls, BOM, normalization, separators), every lookup misses and all `rawTags` are silently lost (empty objects) even though `retainedTagCount` is non-zero \u2014 the fixture uses an identical encoder so tests cannot catch this. Prefer reading the file once and reusing that buffer, and/or keying retention off the parsed track path (or a single shared path-decoder) to guarantee they line up.",
+   "existing_code": "  const bytes = readFileSync(join(root, \"database V2\"));\n  const parsed = parseDatabaseSync(join(root, \"database V2\"));",
+   "start_line": 208,
+   "end_line": 209,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/serato/src/library.ts",
+   "content": "`readdirSync` is guarded here but the per-file `readFileSync`/`parseCrateSync` calls are not: a single unreadable or corrupt `.scrate` (or `.crate` in `readSeratoCrates`, or `database V2`) throws out of the whole function, so one bad file aborts listing of every crate. Wrap the per-file read/parse in try/catch (or record a per-file error) so a single malformed file cannot drop the entire library view.",
+   "existing_code": "  return entries.sort().map((name) => {\n    const path = join(dir, name);\n    const bytes = readFileSync(path);",
+   "start_line": 258,
+   "end_line": 260,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "packages/serato/src/library.ts",
+   "content": "`walkRecords` aborts the entire walk on the first record whose length would exceed `end` (`break`). A single truncated or mis-sized record therefore silently discards every subsequent record in the buffer (e.g. all following `otrk` tracks in `database V2`), yielding a partially-read library with no error signal. Consider surfacing/skipping the malformed record instead of dropping the remainder.",
+   "existing_code": "    if (offset + length > end) break;",
+   "start_line": 169,
+   "end_line": 169,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "packages/serato/src/readonly.test.ts": [
+  {
+   "path": "packages/serato/src/readonly.test.ts",
+   "content": "The write-shape guard is anchored (`^...$`), so it only matches an export whose name is *exactly* one of the bare verbs. Any prefixed mutator (e.g. `writeCrate`, `saveTrack`, `insertTrack`, `deleteCrate`) slips through \u2014 and the module already demonstrates this: `serato` re-exports `createSeratoWatcher` from `library.ts`, which the anchored regex does not flag. Combined with the three hardcoded `in` checks, the \"no write API\" invariant is effectively unverified. Broaden the pattern to prefixes (accepting that genuinely-reader names like `createSeratoWatcher` must be reviewed/allow-listed), or assert against an explicit export allowlist.",
+   "suggestion_code": "      expect(name).not.toMatch(/\\b(insert|update|delete|upsert|write|save|remove|drop|exec|checkpoint)\\w*/i);",
+   "existing_code": "      expect(name).not.toMatch(/^(insert|update|delete|upsert|write|save|remove|create|drop|exec|run|checkpoint)$/i);",
+   "start_line": 83,
+   "end_line": 83,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "packages/serato/src/readonly.test.ts",
+   "content": "These `toThrow()` calls assert only that *something* throws, not why. A regression that made `parseCrate`/`parseBeatGrid` fail for an unrelated reason (e.g. an offset/length bug, or the fixture no longer reaching the version check) would still pass, so the \"rejects corrupt input loudly\" behavior is not actually pinned. Assert the specific error, which the parser already produces (`bad crate magic`, `beatgrid version=2`, `beatgrid too short`).",
+   "suggestion_code": "    expect(() => serato.parseCrate(new Uint8Array([1, 2, 3, 4, 0, 0, 0, 0]))).toThrow(/bad crate magic/);\n    expect(() => serato.parseBeatGrid(new Uint8Array([2, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0]))).toThrow(/beatgrid version=2/);\n    expect(() => serato.parseBeatGrid(new Uint8Array([1, 0]))).toThrow(/beatgrid too short/);",
+   "existing_code": "    expect(() => serato.parseCrate(new Uint8Array([1, 2, 3, 4, 0, 0, 0, 0]))).toThrow();\n    expect(() => serato.parseBeatGrid(new Uint8Array([2, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0]))).toThrow();\n    expect(() => serato.parseBeatGrid(new Uint8Array([1, 0]))).toThrow();",
+   "start_line": 53,
+   "end_line": 55,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/serato/src/readonly.test.ts",
+   "content": "This purity check cannot detect input mutation. `{ ...msg }` for the second call is taken *after* the first call, so if `remoteToDeckState` mutated any field of `msg` (e.g. `playheadSeconds`, `channelFader`, `loopActive`) both outputs would still match, and only `msg.filepath` is re-asserted. Snapshot the whole input before any call and compare deeply, or freeze/fail-on-write the input.",
+   "suggestion_code": "    const snapshot = structuredClone({ ...msg, raw: { ...msg.raw } });\n    const a = serato.remoteToDeckState(msg, 5n);\n    const b = serato.remoteToDeckState({ ...msg, raw: { deck: 1 } }, 5n);\n    expect(b).toEqual(a);\n    expect(msg).toEqual(snapshot);",
+   "existing_code": "    const a = serato.remoteToDeckState(msg, 5n);\n    const b = serato.remoteToDeckState({ ...msg, raw: { deck: 1 } }, 5n);\n    expect(b).toEqual(a);\n    expect(msg.filepath).toBe(\"/m/track.mp3\");",
+   "start_line": 75,
+   "end_line": 78,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/serato/src/readonly.test.ts",
+   "content": "`crateFixture` returns `bytes` but every caller destructures only `path` (`const { path } = crateFixture();`), so the returned byte buffer is dead. Either consume it or drop it from the return type to avoid a misleading \"the fixture bytes are used\" signal.",
+   "suggestion_code": "function crateFixture(): { path: string } {",
+   "existing_code": "function crateFixture(): { path: string; bytes: Uint8Array } {",
+   "start_line": 11,
+   "end_line": 11,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/serato/src/replay.test.ts": [
+  {
+   "path": "packages/serato/src/replay.test.ts",
+   "content": "This negative control can pass for the wrong reason. `replaySeratoFixture(mutated, ...)` can throw (e.g. flipping the byte corrupts the frame delimiter/length so `splitFrames` or the provider rejects the stream), and the `catch` then sets `states = []`. Because `compareSequences` immediately reports an array-length mismatch whenever counts differ, `problems.length > 0` is then trivially true \u2014 the test no longer proves that `compareSequences` actually detects the *mutated* state. Swallowing the exception turns a real crash into a false positive. Either let the throw fail the test (so framing corruption is surfaced), or assert explicitly that replay succeeded and that the comparison flags the corrupted value against the original expectation (using `froundNumbers`).",
+   "suggestion_code": "    const states = replaySeratoFixture(mutated, \"1x\");\n    const problems = compareSequences(fixture.expectedEvents.map(froundNumbers), states, { toleranceMs: TOLERANCE_MS });\n    expect(problems.length).toBeGreaterThan(0);",
+   "existing_code": "    let states: DeckState[] = [];\n    try {\n      states = replaySeratoFixture(mutated, \"1x\");\n    } catch {\n      states = [];\n    }",
+   "start_line": 174,
+   "end_line": 179,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "packages/serato/src/replay.test.ts",
+   "content": "This test compares the raw (non-float32-rounded) `wrong.expectedEvents` against decoder output, whereas the positive replay test must apply `froundNumbers` to match the wire's float32 values (`compareSequences` only tolerates keys ending in `Ns`/`Ms`, so `playheadSeconds` etc. are compared exactly). Float32 rounding noise alone already produces problems, so `problems.length > 0` passes even if the injected `playheadSeconds: 999` is never actually exercised \u2014 the assertion doesn't prove the mismatch is detected. Apply `froundNumbers` and assert on the specific injected field.",
+   "suggestion_code": "    const states = replaySeratoFixture(wrong, \"1x\");\n    const problems = compareSequences(wrong.expectedEvents.map(froundNumbers), states, { toleranceMs: TOLERANCE_MS });\n    expect(problems.some((problem) => problem.path.endsWith(\"playheadSeconds\"))).toBe(true);",
+   "existing_code": "    const states = replaySeratoFixture(wrong, \"1x\");\n    const problems = compareSequences(wrong.expectedEvents, states, { toleranceMs: TOLERANCE_MS });\n    expect(problems.length).toBeGreaterThan(0);",
+   "start_line": 187,
+   "end_line": 189,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/serato/src/replay.test.ts",
+   "content": "Fragile mutation: `frames[frames.length - 1]?.bytes as Buffer` uses the `as Buffer` cast to hide a possible `undefined`, and `Buffer.from(undefined)` throws a confusing TypeError instead of a meaningful assertion failure. Also, flipping the hardcoded `corrupted[3]` is not guaranteed to change decoded state: it may corrupt the frame framing (causing `splitFrames`/parse to throw \u2014 see the swallowed catch above) rather than a payload value, or be a no-op, in which case the intended negative control isn't exercised. Assert the frame list is non-empty and mutate a byte known to be part of the OSC payload that the decoder reads.",
+   "existing_code": "    const corrupted = Buffer.from(frames[frames.length - 1]?.bytes as Buffer);\n    corrupted[3] = corrupted[3] === 0x2f ? 0x2e : 0x2f;",
+   "start_line": 171,
+   "end_line": 172,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/serato/src/replay.test.ts",
+   "content": "The burst-gap `50` duplicates the production constant `SERATO_BURST_GAP_MS` (exported from `./replay.js`). If that constant changes, this helper silently groups frames differently from `seratoBursts`, so the 'same burst units both harnesses replay' assumption becomes false and the shared-harness comparison could pass/fail for the wrong reason. Reuse the exported constant.",
+   "suggestion_code": "    if (pending.length > 0 && frame.atMs - previousAt >= SERATO_BURST_GAP_MS) flush(previousAt);",
+   "existing_code": "    if (pending.length > 0 && frame.atMs - previousAt >= 50) flush(previousAt);",
+   "start_line": 58,
+   "end_line": 58,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/show-host/src/clock.ts": [
+  {
+   "path": "packages/show-host/src/clock.ts",
+   "content": "`fire(0)` runs synchronously *before* `setInterval` is installed. Consequences:\n1. Resource leak on auto-stop: if `options.ticks` is 0 or 1, `fire(0)` reaches `fired >= maxTicks` and calls `stop()`, but at that moment `timer` is still `null`, so nothing is cleared. The `setInterval` created on the next statement is then never cleared and keeps firing forever (each callback early-returns because `running` is false), pinning the event loop open permanently. The timeout-spin/hybrid strategies fire zero ticks and stop cleanly in this case.\n2. Inconsistent tick numbering: `ticks: 0` still emits one tick here, unlike the other two strategies.\n3. API hazard: because `onTick` is invoked synchronously inside `startClock`, a callback that references the not-yet-returned `ClockHandle` (e.g. `handle.stop()`) will hit a TDZ ReferenceError.\nInstall the interval first, then guard the initial fire, e.g. `timer = setInterval(...); if (maxTicks === undefined || maxTicks > 0) fire(0);` \u2014 that also lets `stop()` from `fire(0)` actually clear the interval.",
+   "existing_code": "    fire(0);\n    let next = 1;",
+   "start_line": 122,
+   "end_line": 123,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/show-host/src/clock.ts",
+   "content": "The comment claims this branch 'degrades to timeout-spin shape', but it does not spin. Here `coarseMs = (expected - now) - spinMs`, yet the callback calls `fire(index)` immediately instead of busy-waiting until the anchored `expected`. Ticks therefore land up to `spinWindowMs` (default 1.5ms) early, and because `fire` floors jitter at zero the early phase error is silently hidden. Add the same spin tail used by timeout-spin before firing.",
+   "suggestion_code": "        if (!coarseOk) {\n          // Thread forbids Atomics.wait: fall back to the timeout-spin shape.\n          timer = setTimeout(() => {\n            if (!running) return;\n            while (running && now() < expected) {\n              // Spin tail to the anchored time.\n            }\n            if (!running) return;\n            fire(index);",
+   "existing_code": "        if (!coarseOk) {\n          // Thread forbids Atomics.wait: same shape as timeout-spin.\n          timer = setTimeout(() => {\n            if (!running) return;\n            fire(index);",
+   "start_line": 170,
+   "end_line": 174,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-host/src/clock.ts",
+   "content": "`fire(index)` calls the caller-supplied `onTick` and is followed by the recursive `arm(index + 1)` (and `setImmediate(step(...))` in the hybrid path). If `onTick` throws, the reschedule never runs, so the timeout-spin/hybrid clock halts permanently with no `stop()` call and no surfaced error \u2014 whereas the interval strategy simply fires again on the next interval. Guard the reschedule so a throwing callback cannot silently kill the tick stream.",
+   "suggestion_code": "        try {\n          fire(index);\n        } finally {\n          arm(index + 1);\n        }",
+   "existing_code": "        fire(index);\n        arm(index + 1);",
+   "start_line": 147,
+   "end_line": 148,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-host/src/clock.ts",
+   "content": "Drift correction is one-directional: only `behind > next` is handled. When the interval timer fires slightly earlier than `nominalNs`, `behind < next`, yet the code still emits the future index immediately. `scheduledNs` is then in the future while `jitterMs` is floored to 0, so the early phase error is masked and the phase can walk ahead of the anchored schedule. Consider waiting until `scheduledNs` (or at least not emitting a tick whose scheduled time has not yet arrived) instead of firing regardless.",
+   "existing_code": "      if (behind > next) next = behind;",
+   "start_line": 129,
+   "end_line": 129,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "packages/show-host/src/invariants.ts": [
+  {
+   "path": "packages/show-host/src/invariants.ts",
+   "content": "The single outer try/catch collapses every internal failure into code `finite-beats`, even though this is not a beat problem. Consequences: (1) a caller cannot distinguish an internal contract breach (e.g. `ctx === undefined` or a malformed sub-field) from a genuine non-finite beat; (2) because all checks run sequentially inside one try, an exception thrown by an early check (e.g. `Object.entries(ctx.pendingPerDevice)` when a sub-field is missing) silently skips every later invariant, so `out` contains only the misleading `finite-beats` report and all real diagnostics for that frame are lost. Consider isolating each check (its own try/catch) and adding a dedicated `INVARIANT_CODES` entry such as `\"invariant-error\"` for internal failures instead of reusing `finite-beats`.",
+   "existing_code": "  } catch {\n    out = [violation(\"finite-beats\", \"invariant check failed internally\")];\n  }",
+   "start_line": 83,
+   "end_line": 85,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/show-host/src/invariants.ts",
+   "content": "`hostThreadId`/`rendererThreadId` are typed `number | string`, but this uses strict `===`. A numeric host id and its stringified renderer id (e.g. `1` vs `\"1\"`) are the same thread yet compare unequal, so a real same-thread violation is silently missed. The existing test only assigns identical types (`ctx.rendererThreadId = ctx.hostThreadId`) so this gap is not covered. Normalize both sides before comparing.",
+   "suggestion_code": "  if (String(ctx.hostThreadId) === String(ctx.rendererThreadId)) {",
+   "existing_code": "  if (ctx.hostThreadId === ctx.rendererThreadId) {",
+   "start_line": 157,
+   "end_line": 157,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-host/src/invariants.ts",
+   "content": "`actual ?? 0` conflates two distinct situations: a frame that genuinely carries 0 zones and a device that has no frame entry at all (`ctx.frameZones[deviceId] === undefined`). Both report `frame carries 0`, misreporting the observed value and making the diagnostic misleading. Branch on `deviceId in ctx.frameZones` so a missing frame is reported as such, and only render the numeric value when the entry exists.",
+   "existing_code": "          `segmented fixture expects ${expected} zones, frame carries ${actual ?? 0}`,",
+   "start_line": 148,
+   "end_line": 148,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-host/src/invariants.ts",
+   "content": "`checkBeats` returns after the first non-finite beat, so a frame with multiple bad beats only ever produces one report (later bad beats are suppressed) and the message does not identify which beat/index is invalid. Also an empty `ctx.beats` array passes with no signal. Prefer accumulating violations (drop the early `return`) and including the beat index/value in the message so diagnostics are complete.",
+   "existing_code": "      out.push(violation(\"finite-beats\", \"non-finite beat value in frame context\"));\n\n      return;",
+   "start_line": 165,
+   "end_line": 167,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "packages/show-host/src/snapshot.ts": [
+  {
+   "path": "packages/show-host/src/snapshot.ts",
+   "content": "`scratchHold` is hardcoded to `false`, but `snapshotCursorSchema` declares it as a real boolean field that the UI consumes. Any actual scratch-hold state is therefore silently dropped: during a scratch/jog the published `cursor.scratchHold` is always `false`, so the renderer cannot distinguish a held scrubbed deck from a playing one. `HostSnapshot`'s deck schema has no scratch flag, so the value cannot be derived from `host` here \u2014 either source it (e.g. via a per-deck scratch/play field on `UiSnapshotContext`) or remove the field from the cursor contract so callers are not misled.",
+   "existing_code": "      cursor: { beat: deck.beat, loopPass: deck.loopPass, scratchHold: false },",
+   "start_line": 151,
+   "end_line": 151,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/show-host/src/snapshot.ts",
+   "content": "`latestPublishedSnapshot` seeds `latest` with `snapshots[0]` and only replaces it on a strictly greater tick, so on equal ticks it returns the *earliest* element rather than the most recently received one. This violates the documented `latest wins` contract: a re-publish or resubscribe replay that appends a same-tick snapshot is ignored, and if the host tick counter ever resets/rolls over (new session or restart) a newer snapshot with a lower tick can never replace the stale one, pinning the UI to an obsolete frame. Consider comparing arrival order/element index as a tie-breaker (or handling tick resets) instead of relying on a monotonic tick alone.",
+   "existing_code": "    if (snapshot.tick > latest.tick) latest = snapshot;",
+   "start_line": 140,
+   "end_line": 140,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-host/src/snapshot.ts",
+   "content": "`SNAPSHOT_MAX_BYTES` is a hardcoded copy of the `runtime.snapshot.maxBytes` default. `measureSnapshot` uses it as its default budget, but the host actually enforces the effective configured value (`options.config.maxBytes` in index.ts). If the runtime config is set to anything other than the default (range allows 16384..4194304), `withinBudget` is computed against the wrong limit \u2014 e.g. a 20 KB snapshot is reported within budget while the host would reject it at a 16 KB configured ceiling. Prefer threading the effective configured limit through rather than duplicating the default here.",
+   "existing_code": "export const SNAPSHOT_MAX_BYTES = 262144;",
+   "start_line": 28,
+   "end_line": 28,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-host/src/snapshot.ts",
+   "content": "`SNAPSHOT_UI_RATE_HZ` is exported but never referenced anywhere in the codebase; the publish rate actually comes from `runtime.snapshot.uiRateHz` / `options.config.uiRateHz`. This is dead configuration that can silently drift from the real rate. Remove it, or source the value from the runtime config so there is a single source of truth.",
+   "existing_code": "export const SNAPSHOT_UI_RATE_HZ = 30;",
+   "start_line": 29,
+   "end_line": 29,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ]
+}

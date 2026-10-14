@@ -1,0 +1,215 @@
+{
+ "apps/desktop/build/installer.nsh": [
+  {
+   "path": "apps/desktop/build/installer.nsh",
+   "content": "The return value of `nsDialogs::Create` is popped into `$Dialog` but never validated. On failure `nsDialogs::Create` pushes the literal string `error`, and the script continues, creating the label on an invalid/nonexistent dialog and then calling `nsDialogs::Show` \u2014 producing a silently broken page or a hard crash instead of a clean abort. Guard against the `error` sentinel before proceeding.",
+   "suggestion_code": "  nsDialogs::Create 1018\n  Pop $Dialog\n  ${If} $Dialog == error\n    Abort\n  ${EndIf}",
+   "existing_code": "  nsDialogs::Create 1018\n  Pop $Dialog",
+   "start_line": 11,
+   "end_line": 12,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/build/installer.nsh",
+   "content": "The label is given a fixed height of `60u`, but the text is ~350 characters. At the default dialog width this needs many more lines than 60 pixels can render, so the firewall/microphone/Bluetooth guidance will be visually truncated and the user will miss part of the security instructions. Increase the control height (or the label should wrap over the full available area) so the full text is visible.",
+   "suggestion_code": "  ${NSD_CreateLabel} 0 0 100% 120u \"First launch: Windows Firewall will ask about network access for UDP ports 4001-4003 (Govee LAN discovery and control). Allow it on private networks. Microphone access (live reactive overlay) and Bluetooth (Govee BLE where LAN is unavailable) are requested only when those features are used; enable them in Windows privacy settings if prompted.\"",
+   "existing_code": "  ${NSD_CreateLabel} 0 0 100% 60u \"First launch: Windows Firewall will ask about network access for UDP ports 4001-4003 (Govee LAN discovery and control). Allow it on private networks. Microphone access (live reactive overlay) and Bluetooth (Govee BLE where LAN is unavailable) are requested only when those features are used; enable them in Windows privacy settings if prompted.\"",
+   "start_line": 13,
+   "end_line": 13,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/build/installer.nsh",
+   "content": "Two maintainability issues with this user-facing string: (1) the Govee port range `4001-4003` is hardcoded here while the same values are duplicated across `apps/desktop/electron/govee-lan.ts`, `packages/govee/src/probe.ts`, `packages/config/src/registry.ts`, etc. If the discovery/control ports change in code, the installer silently advertises the wrong firewall instructions. Consider deriving/generating this text from a single source of truth. (2) The string is English-only and hardcoded, bypassing NSIS/MUI localization, so localized installers will show mixed-language security guidance.",
+   "existing_code": "  ${NSD_CreateLabel} 0 0 100% 60u \"First launch: Windows Firewall will ask about network access for UDP ports 4001-4003 (Govee LAN discovery and control). Allow it on private networks. Microphone access (live reactive overlay) and Bluetooth (Govee BLE where LAN is unavailable) are requested only when those features are used; enable them in Windows privacy settings if prompted.\"",
+   "start_line": 13,
+   "end_line": 13,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/electron/preload.ts": [
+  {
+   "path": "apps/desktop/electron/preload.ts",
+   "content": "The `unknown-channel` guard is ineffective because `channels` is a plain object literal, so a bracketed lookup resolves inherited `Object.prototype` members. Calling `invoke(\"constructor\")`, `invoke(\"toString\")`, `invoke(\"valueOf\")`, `invoke(\"__proto__\")`, etc. returns a truthy inherited value, so `!ch` is `false` and the intended `unknown-channel` error is never thrown; execution then falls through to `ch.request.parse`, which throws an untyped `TypeError: Cannot read properties of undefined (reading 'parse')`. Use an own-property check instead.",
+   "suggestion_code": "    if (!Object.hasOwn(channels, channel)) throw new Error(`unknown-channel: ${channel}`);\n    const ch = channels[channel as Channel];",
+   "existing_code": "    const ch = channels[channel as Channel];\n    if (!ch) throw new Error(`unknown-channel: ${channel}`);",
+   "start_line": 23,
+   "end_line": 24,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/preload.ts",
+   "content": "`ipcRenderer.invoke` rejects with a raw Electron `Error` (e.g. `No handler registered for '<channel>'`, main-process crash, or a handler that throws before the router's try/catch wraps it) and that rejection is never normalized to the documented `\\`${code}: ${message}\\`` shape. Renderers relying on the typed error code (per the file header contract) instead receive an inconsistent generic Electron error message. Normalize the rejection into the typed form.",
+   "suggestion_code": "  let raw: unknown;\n  try {\n    raw = await ipcRenderer.invoke(channel, parsed);\n  } catch (err) {\n    const message = err instanceof Error ? err.message : String(err);\n    throw new Error(`E_IPC: ${message}`);\n  }",
+   "existing_code": "  const raw = await ipcRenderer.invoke(channel, parsed);",
+   "start_line": 16,
+   "end_line": 16,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/preload.ts",
+   "content": "`api.invoke` is implemented with two parameters `(channel, request)` but cast to the single-parameter type `(request: unknown) => Promise<unknown>`, so the exposed type lies about the arity at the IPC boundary. Additionally, the trailing loop assigns `api[channel]` for every key in `channels`; if any channel key were ever named `invoke`, it would silently overwrite this generic handler. Type the API to accept variadic arguments and build the named handlers without clobbering the generic one.",
+   "suggestion_code": "const api: Record<string, (...args: unknown[]) => Promise<unknown>> = {\n  invoke: async (channel: string, request: unknown) => {",
+   "existing_code": "const api: Record<string, (request: unknown) => Promise<unknown>> = {\n  invoke: (async (channel: string, request: unknown) => {",
+   "start_line": 21,
+   "end_line": 22,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/src/app/tokens.ts": [
+  {
+   "path": "apps/desktop/src/app/tokens.ts",
+   "content": "Inconsistent token contract: the status tokens are raw CSS variable references (`var(--ok)` etc.) while every other export in this module is a Tailwind class string. These raw values only work when applied via inline `style` (as `tokenForTone` does in kit.tsx), and passing them to `className` silently applies no colour instead of failing at compile time. Note also that `--ok`/`--warn`/`--bad` are declared in `:root` of styles/globals.css but are never mirrored as `--color-*` inside the `@theme inline` block, so no `text-ok`/`bg-ok` utility exists and these values cannot be used as class strings at all. Consider exposing them as Tailwind theme colours / class strings, or explicitly documenting that these four tokens are raw CSS values for inline styles while all others are class names.",
+   "existing_code": "  export const statusOk = \"var(--ok)\";\n  export const statusWarn = \"var(--warn)\";\n  export const statusBad = \"var(--bad)\";\n  export const statusIdle = \"var(--muted-foreground)\";",
+   "start_line": 23,
+   "end_line": 26,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/app/tokens.ts",
+   "content": "These duplicate existing entries: `fontBody` repeats `type.body` (`text-sm`) and `fontTiming` repeats `type.timing` (`font-timing tabular-nums`). Two independent copies of the same class strings will drift when only one is updated, producing inconsistent typography across components. Alias them to the `type.*` entries (e.g. `export const fontTiming = type.timing;`) or drop the duplicates.",
+   "existing_code": "  export const fontBody = \"text-sm\";\n  export const fontTiming = \"font-timing tabular-nums\";",
+   "start_line": 37,
+   "end_line": 38,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/app/tokens.ts",
+   "content": "This comment documents a `token()` helper that does not exist anywhere in this module (only the `tokens` namespace of exported constants). The documented API is either missing or the comment is misleading for consumers; either implement `token()` or correct the comment to describe the actual exports.",
+   "existing_code": "// token() emits Tailwind class strings; the --color-* variables come from",
+   "start_line": 7,
+   "end_line": 7,
+   "category": "documentation",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/src/components/ui/input-group.tsx": [
+  {
+   "path": "apps/desktop/src/components/ui/input-group.tsx",
+   "content": "The internal `onClick` is declared before `{...props}`. Since `props` is the rest of `React.ComponentProps<\"div\">` (callers' `onClick` is NOT destructured out), any caller-supplied `onClick` is spread last and silently replaces this handler, disabling the addon's click-to-focus behavior. Merge the caller handler with the built-in one instead of letting the spread override it.",
+   "suggestion_code": "      {...props}\n      onClick={(e) => {\n        props.onClick?.(e)\n        if ((e.target as HTMLElement).closest(\"button\")) {\n          return\n        }\n        const group = e.currentTarget.parentElement\n        group?.querySelector<HTMLElement>(\n          \"[data-slot=input-group-control]\"\n        )?.focus()\n      }}",
+   "existing_code": "      onClick={(e) => {\n        if ((e.target as HTMLElement).closest(\"button\")) {\n          return\n        }\n        e.currentTarget.parentElement?.querySelector(\"input\")?.focus()\n      }}\n      {...props}",
+   "start_line": 55,
+   "end_line": 61,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/components/ui/input-group.tsx",
+   "content": "`querySelector(\"input\")` only matches `<input>` elements, so an addon placed next to an `InputGroupTextarea` fails to forward focus (the exported textarea subcomponent is never targeted). Prefer selecting the group control via its data-slot (`[data-slot=input-group-control]`) so both input and textarea are handled.",
+   "suggestion_code": "        e.currentTarget.parentElement\n          ?.querySelector<HTMLElement>(\"[data-slot=input-group-control]\")\n          ?.focus()",
+   "existing_code": "        e.currentTarget.parentElement?.querySelector(\"input\")?.focus()",
+   "start_line": 59,
+   "end_line": 59,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/components/ui/input-group.tsx",
+   "content": "`e.target` is cast to `HTMLElement` without verifying it is an element. If the click lands on a non-Element node (e.g. a text node) `e.target` is not an `HTMLElement`, and `.closest` would be undefined, throwing at runtime. Guard with an `instanceof Element` check before calling `.closest`.",
+   "suggestion_code": "        const target = e.target\n        if (target instanceof Element && target.closest(\"button\")) {",
+   "existing_code": "        if ((e.target as HTMLElement).closest(\"button\")) {",
+   "start_line": 56,
+   "end_line": 56,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/src/components/ui/slider.tsx": [
+  {
+   "path": "apps/desktop/src/components/ui/slider.tsx",
+   "content": "Thumb count is derived from `_values.length`, but `_values` does not reflect what Radix actually manages. When neither `value` nor `defaultValue` is supplied, the memo falls back to `[min, max]`, so this renders 2 Thumbs while `SliderPrimitive.Root` (no `defaultValue` forwarded) defaults to a single value (`[min]`). Radix positions each Thumb by `value[index]`, so the extra Thumb reads `value[1] === undefined` and ends up mis-positioned/NaN. Symmetrically, `value={[]}` renders 0 Thumbs. Either forward a matching `defaultValue`/`value` to the Root, or make the fallback consistent with Radix (single `[min]`).",
+   "existing_code": "      {Array.from({ length: _values.length }, (_, index) => (",
+   "start_line": 47,
+   "end_line": 47,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/components/ui/slider.tsx",
+   "content": "Nested ternary expression (chained `Array.isArray(...)` conditionals) is explicitly disallowed by the project rules and makes the fallback logic hard to verify. Refactor to early returns inside the memo.",
+   "suggestion_code": "    () => {\n      if (Array.isArray(value)) return value\n      if (Array.isArray(defaultValue)) return defaultValue\n      return [min, max]\n    },",
+   "existing_code": "    () =>\n      Array.isArray(value)\n        ? value\n        : Array.isArray(defaultValue)\n          ? defaultValue\n          : [min, max],",
+   "start_line": 16,
+   "end_line": 21,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/components/ui/slider.tsx",
+   "content": "These guards are always true: `min` and `max` have destructuring defaults (`min = 0`, `max = 100`), so `min !== undefined` / `max !== undefined` can never be false. The empty false-branch is dead code and the conditional spread adds noise \u2014 forward the props directly.",
+   "suggestion_code": "      min={min}\n      max={max}",
+   "existing_code": "      {...(min !== undefined ? { min } : {})}\n      {...(max !== undefined ? { max } : {})}",
+   "start_line": 30,
+   "end_line": 31,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/src/routes/library/track-key.test.ts": [
+  {
+   "path": "apps/desktop/src/routes/library/track-key.test.ts",
+   "content": "The disambiguation test only asserts that the two same-title labels are *not equal* (`not.toBe`) rather than checking the deterministic label format the module produces (`<title> - <artist> (<trackId prefix>)`). A broken implementation that appended anything differing per-row (index, random suffix, title duplicated with a counter) would still pass. Also, the two rows here have distinct artists (`\"A\"`/`\"B\"`), so an implementation keyed on title+artist would look correct while still colliding when two rows share both title and artist. Add an exact-value assertion and a same-title + same-artist case (with trackIds differing after the 8-char prefix, which is where `libraryRowKey(row).slice(0, 8)` can collide).",
+   "existing_code": "    expect(labels.get(\"t3\")).toBe(\"Only One\");\n    expect(labels.get(\"track-aaa-1\")).not.toBe(labels.get(\"track-bbb-2\"));",
+   "start_line": 30,
+   "end_line": 31,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/routes/library/track-key.test.ts",
+   "content": "This rename-stability case alone cannot prove keying identity: it would also pass if `libraryRowKey` returned a constant (e.g. `\"row\"`), since both inputs yield the same key. Nothing here asserts that two *different* trackIds produce *different* keys, which is the core contract of `libraryRowKey` (stable, unique React keys). Add an assertion that `libraryRowKey({ trackId: \"t2\" }) !== libraryRowKey({ trackId: \"t1\" })`.",
+   "existing_code": "    expect(libraryRowKey(after)).toBe(libraryRowKey(before));",
+   "start_line": 13,
+   "end_line": 13,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/routes/library/track-key.test.ts",
+   "content": "Only the empty-string case is exercised for `normalizeTrackId`. Since the implementation `trim()`s before validating, whitespace-only ids (e.g. `\"   \"`, `\"\\t\"`) also throw and are the realistic invalid case. Tests should cover whitespace-only (and optionally a non-string/null/undefined input) so an implementation that drops trimming or falls back to title for these is caught.",
+   "existing_code": "    expect(() => normalizeTrackId(\"\")).toThrow();",
+   "start_line": 6,
+   "end_line": 6,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/src/routes/settings/simulator-mode.ts": [
+  {
+   "path": "apps/desktop/src/routes/settings/simulator-mode.ts",
+   "content": "Protocol mismatch: the `simulator/mode` request schema in `packages/ipc/src/index.ts` declares only `{ version, enabled }` (no `scenario`), and the main-process handler calls `setSimulatorMode(req.enabled)` which records/persists only `enabled`. The `scenario` field produced here is therefore not part of the channel contract and is silently stripped by the zod `parse` in the IPC router (unknown keys are dropped by default), so the selected scenario never reaches the backend. A consumer that wires this intent into `invoke` will believe the scenario is transmitted when it is not. Either extend the `simulator/mode` request schema + handler to carry `scenario`, or drop `scenario` from the payload so the intent matches the wire contract.",
+   "existing_code": "  return { channel: \"simulator/mode\", payload: { version: 1, enabled: pick.enabled, scenario: pick.scenario } };",
+   "start_line": 21,
+   "end_line": 21,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/routes/settings/simulator-mode.ts",
+   "content": "Duplicate policy source: this re-implements the exact \u00a7144 no-modal rule already expressed by `isModalAllowed` in `app/shortcuts.ts` (`return !liveActive`), and the test asserts both. Two independent copies of the same policy can drift; derive one from the other, e.g. `return isModalAllowed(liveActive) ? \"show-dialog\" : \"route-to-status\";`. Note that (like `isModalAllowed`) this helper is currently referenced only from the test file \u2014 it is not wired into any dialog/toast path, so the no-modal guarantee is documented but not actually enforced (cf. F-UI-13).",
+   "existing_code": "  return liveActive ? \"route-to-status\" : \"show-dialog\";",
+   "start_line": 32,
+   "end_line": 32,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/routes/settings/simulator-mode.ts",
+   "content": "The comment overstates the guarantee: the function only checks the 95th percentile, so up to ~5% of samples may still exceed one frame. Reword to match the implementation (e.g. \"p95 must stay under one frame\"). Note also the boundary uses strict `<`, so a p95 exactly equal to the budget (16.7ms) is reported as failing \u2014 that matches the current test expectation, but callers relying on \"under or equal to one frame\" would be surprised.",
+   "existing_code": "// p95 frame budget at 60fps: every sample must stay under one frame.",
+   "start_line": 24,
+   "end_line": 24,
+   "category": "documentation",
+   "severity": "low"
+  }
+ ]
+}

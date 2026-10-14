@@ -1,0 +1,168 @@
+{
+ "packages/renderer/src/primitive-params.ts": [
+  {
+   "path": "packages/renderer/src/primitive-params.ts",
+   "content": "This file hand-duplicates `PrimitiveParams` and `PrimitiveName` from `@autolight/show-planner` (`packages/show-planner/src/primitives.ts`, lines 13-65), but the renderer already depends on that package (`packages/renderer/package.json` line 15) and show-planner re-exports both types (`packages/show-planner/src/index.ts` line 77: `export * from \"./primitives.js\"`). Because the shape is copied rather than imported, it is a silent drift hazard: if the registry ever renames or narrows a field (e.g. renames `beatsPerRevolution` or drops a union member), this copy keeps compiling and `sampleSpatial`'s local cast (`params as PrimitiveParams[\"Orbit\"]` in `spatial.ts`) will read `undefined` at runtime with no compile error. Prefer re-exporting the authoritative type (type-only re-export is erased at build time, so there is no runtime coupling):",
+   "suggestion_code": "export type { PrimitiveParams, PrimitiveName } from \"@autolight/show-planner\";",
+   "existing_code": "export interface PrimitiveParams {",
+   "start_line": 8,
+   "end_line": 8,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/renderer/src/primitive-params.ts",
+   "content": "The header claim that these shapes \"declare the fields each sampler reads and nothing more\" is inaccurate and misleading. The interface is a verbatim copy of the full registry params (e.g. `Orbit.tailCurve`/`includeProjected`, `PerimeterOrbit.path`, `SplitAlternate.strobe`, `Mirror.axis`/`inner`), and several of these fields are never read by the renderer samplers (`Mirror` in `spatial.ts` even does `void params`). Maintainers trusting this comment may believe the shape can be trimmed or that it is automatically kept in sync. Update the comment to state it mirrors the registry's full param shapes (or, preferably, remove the copy and import the authoritative type as noted above).",
+   "existing_code": "// reads and nothing more. If the registry adds a field, the sampler ignores",
+   "start_line": 5,
+   "end_line": 5,
+   "category": "documentation",
+   "severity": "low"
+  }
+ ],
+ "packages/serato/vitest.config.ts": [
+  {
+   "path": "packages/serato/vitest.config.ts",
+   "content": "`readdirSync(packages)` returns every entry in the `packages/` directory, including non-directory files (e.g. `.DS_Store`, `README.md`, `tsconfig.json`, stray config files). Each such file produces a bogus alias like `@autolight/.DS_Store` -> `<packages>/.DS_Store/src/index.ts`, pointing at a path that does not exist and injecting invalid entries into the resolver. Every sibling package config (e.g. `packages/renderer/vitest.config.ts`, `packages/show-host/vitest.config.ts`) guards against this with `{ withFileTypes: true }` and `.filter((e) => e.isDirectory())`; this file omits that guard, so it diverges from the established pattern. Add the directory filter.",
+   "suggestion_code": "  readdirSync(packages, { withFileTypes: true })\n    .filter((entry) => entry.isDirectory())\n    .map((entry) => [\n      `@autolight/${entry.name}`,\n      join(packages, entry.name, \"src\", \"index.ts\"),\n    ]),\n);",
+   "existing_code": "  readdirSync(packages).map((name) => [",
+   "start_line": 12,
+   "end_line": 12,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/serato/vitest.config.ts",
+   "content": "The include glob only matches `*.test.ts` under `src/`. Tests named `*.test.tsx`, `*.spec.ts`, or placed outside `src/` (e.g. `test/`, `__tests__/`) will be silently ignored and never executed, so a broken implementation can still yield a green run. If this package ever adds `.tsx`/`.spec` tests, broaden the pattern; otherwise the narrow scope should at least be a conscious, documented decision.",
+   "existing_code": "    include: [\"src/**/*.test.ts\"],",
+   "start_line": 21,
+   "end_line": 21,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/show-host/src/invariants.test.ts": [
+  {
+   "path": "packages/show-host/src/invariants.test.ts",
+   "content": "Most tests only assert that the expected violation code is *present* via `.some()`. A checker that also emits spurious/extra violations for the same context would still pass, so these tests cannot catch false positives. Prefer asserting the full result (e.g. `expect(out).toEqual([...])`) or add `expect(out).toHaveLength(1)` alongside the code check, mirroring the stricter pattern used in the clean-context and telemetry tests.",
+   "existing_code": "    expect(out.some((v) => v.code === \"pending-frames\" && v.deviceId === \"lamp1\")).toBe(true);",
+   "start_line": 37,
+   "end_line": 37,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-host/src/invariants.test.ts",
+   "content": "All seven timestamps fall within 500ms of `nowMs`, so a checker that ignored the one-minute window (e.g. just counted total entries) would still pass. Add timestamps outside the window \u2014 including exactly `nowMs - 60_000` (excluded by `t > windowStart`) and one just before it \u2014 to actually exercise the sliding-window boundary in `checkBrightness`.",
+   "existing_code": "    ctx.brightnessTimestampsMs = [9500, 9600, 9700, 9800, 9900, 9950, 9990];",
+   "start_line": 84,
+   "end_line": 84,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-host/src/invariants.test.ts",
+   "content": "`deckAgeMs = 900` is well past `staleMs = 500`, leaving the exact boundary untested: `checkDeckAge` uses a strict `>`, so `deckAgeMs === staleMs` must NOT flag. The `clockHealth !== 'live'` branch is also uncovered. Add boundary cases (equal age, and non-live health) to guard the inclusive/exclusive logic from regressions.",
+   "existing_code": "    ctx.deckAgeMs = 900;",
+   "start_line": 77,
+   "end_line": 77,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-host/src/invariants.test.ts",
+   "content": "This only proves the null-context path does not throw; it never asserts the returned violations (which should be `[{ code: 'finite-beats', ... }]`), and the throwing `record` callback is never exercised against a normal (non-null) context. Add an assertion on the return value here, plus a case using a real `clean()`-derived context with a throwing telemetry to confirm real violations are still returned and not swallowed.",
+   "existing_code": "      checkInvariants(null, {",
+   "start_line": 105,
+   "end_line": 105,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/show-mixer/vitest.config.ts": [
+  {
+   "path": "packages/show-mixer/vitest.config.ts",
+   "content": "Every subdirectory of the packages folder is turned into an alias that is assumed to resolve to `<dir>/src/index.ts`, but that entry file is never verified to exist. Any sibling directory that is not a standard package (tooling/hidden dirs, fixtures, or a package whose entrypoint differs) silently produces a broken alias, and the resulting failure is a confusing module-resolution error rather than a clear message. Additionally, because `resolve.alias` performs prefix matching for string keys, such an entry also hijacks subpath imports (e.g. an alias for `@autolight/config` would rewrite `@autolight/config/registry` to `packages/config/src/index.ts/registry`). Filter the scan to directories that actually contain the source entry (and add a brief comment documenting why `..` is scanned) so the alias map only contains valid targets.",
+   "suggestion_code": "  readdirSync(workspaceSrc, { withFileTypes: true })\n    .filter((e) => e.isDirectory() && existsSync(join(workspaceSrc, e.name, \"src\", \"index.ts\")))\n    .map((e) => [`@autolight/${e.name}`, join(workspaceSrc, e.name, \"src\", \"index.ts\")]),",
+   "existing_code": "  readdirSync(workspaceSrc, { withFileTypes: true })\n    .filter((e) => e.isDirectory())\n    .map((e) => [`@autolight/${e.name}`, join(workspaceSrc, e.name, \"src\", \"index.ts\")]),",
+   "start_line": 9,
+   "end_line": 11,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-mixer/vitest.config.ts",
+   "content": "`include` is narrowed to `src/**/*.test.ts` and `exclude` overrides Vitest's defaults. As a result any test authored as `.spec.ts` or `.tsx` (or placed outside `src/`) is silently never discovered and the suite still reports success, which can hide regressions. The override also drops Vitest's built-in exclusions (e.g. `**/*.config.*`, `.git`/`.idea`/`.cache` dirs). Prefer broadening the pattern and only adding project-specific excludes on top of the defaults.",
+   "suggestion_code": "    include: [\"src/**/*.{test,spec}.{ts,tsx}\"],",
+   "existing_code": "    include: [\"src/**/*.test.ts\"],\n    exclude: [\"node_modules/**\", \"dist/**\"],",
+   "start_line": 17,
+   "end_line": 18,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/show-planner/src/golden.test.ts": [
+  {
+   "path": "packages/show-planner/src/golden.test.ts",
+   "content": "The try/catch conflates two very different failures. `JSON.parse(readFileSync(...))` throws a `SyntaxError` for a corrupt/truncated `planner-golden.json`, but the handler unconditionally rethrows it as \"missing golden ... run `yarn golden:update`\". That message actively misleads: a reviewer would regenerate the golden (masking a real integrity problem, e.g. a bad merge or partial write) instead of fixing the corruption, and the original `SyntaxError` is discarded so the actual parse location is lost. Only treat `ENOENT` as \"missing\"; rethrow everything else.",
+   "suggestion_code": "    try {\n      golden = JSON.parse(readFileSync(goldenPath, \"utf8\"));\n    } catch (err) {\n      if ((err as NodeJS.ErrnoException).code !== \"ENOENT\") throw err;\n      throw new Error(\n        `missing golden ${goldenPath}: run \\`yarn golden:update --reason \"<why the plan changed>\"\\` to record it deliberately`,\n      );\n    }",
+   "existing_code": "    try {\n      golden = JSON.parse(readFileSync(goldenPath, \"utf8\"));\n    } catch {\n      throw new Error(\n        `missing golden ${goldenPath}: run \\`yarn golden:update --reason \"<why the plan changed>\"\\` to record it deliberately`,\n      );\n    }",
+   "start_line": 22,
+   "end_line": 28,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/golden.test.ts",
+   "content": "This assertion is tautological and can never fail: `planShow` stamps `plannerVersion` from the same `PLANNER_VERSION` constant (see `compile.ts`), so `plan.plannerVersion === PLANNER_VERSION` holds by construction regardless of whether the plan is correct. It gives false confidence of a \"version drift\" check that is already enforced by the `expect(plan).toEqual(golden)` deep comparison. Assert on the committed golden's version instead (or drop the line) so the check is meaningful.",
+   "existing_code": "    expect(plan.plannerVersion).toBe(PLANNER_VERSION);",
+   "start_line": 20,
+   "end_line": 20,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/show-planner/src/identity.ts": [
+  {
+   "path": "packages/show-planner/src/identity.ts",
+   "content": "`colourChangeAllowed` uses `Array.includes`, which is strict `===` on numbers. Beat positions in `TrackModel` are plain `number` and can be fractional (grid/analysis-derived), so a boundary stored as `16.0000000001` will not match `beat = 16` and a musically justified colour change is silently rejected (spec 29 requires all changes to land on section/phrase/motif-return boundaries). The three linear scans are also O(n) per query. Quantise beats consistently and use a Set lookup.",
+   "suggestion_code": "  const boundaries = new Set<number>([\n    ...sectionStarts.map((b) => Math.round(b)),\n    ...phraseStarts.map((b) => Math.round(b)),\n    ...motifReturnBeats.map((b) => Math.round(b)),\n  ]);\n  return boundaries.has(Math.round(beat));",
+   "existing_code": "    sectionStarts.includes(beat) || phraseStarts.includes(beat) || motifReturnBeats.includes(beat)",
+   "start_line": 94,
+   "end_line": 94,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/identity.ts",
+   "content": "The core palette is derived only from `mean` section energy and `style.colorSaturation`. The T-PLAN-02 requirement (docs/finish/wp11-planner.md \u00a781-83) specifies palettes chosen from track features including key/mode, the spectral centroid profile and genre hints in addition to the energy distribution; none of those are read here, so the chosen colour story ignores key/timbre and can pick hues clashing with the track's key. Confirm whether those inputs are intentionally deferred or missing.",
+   "existing_code": "  const core = ensureMinDistance(\n    generateCorePalette(rand, style.colorSaturation, mean, third),\n    config.paletteMinDistance,\n  );",
+   "start_line": 55,
+   "end_line": 58,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "packages/show-runtime/vitest.config.ts": [
+  {
+   "path": "packages/show-runtime/vitest.config.ts",
+   "content": "`readdirSync(workspaceSrc)` is mapped without filtering to directories, unlike sibling workspace configs. Any non-directory entry (`.DS_Store`, stray files, etc.) or a directory whose package name differs from its folder produces bogus aliases such as `@autolight/.DS_Store` that point at nonexistent files and pollute resolution. Filter to real package directories (ideally reading each package.json name) before building the alias map.",
+   "suggestion_code": "  readdirSync(workspaceSrc, { withFileTypes: true })\n    .filter((e) => e.isDirectory())\n    .map((e) => [`@autolight/${e.name}`, join(workspaceSrc, e.name, \"src\", \"index.ts\")]),",
+   "existing_code": "  readdirSync(workspaceSrc).map((p) => [`@autolight/${p}`, join(workspaceSrc, p, \"src\", \"index.ts\")]),",
+   "start_line": 12,
+   "end_line": 12,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-runtime/vitest.config.ts",
+   "content": "The `include` glob only matches `.test.ts`. Any future test written as `.test.tsx` (relevant since this workspace also ships `.tsx` sources) or `.spec.ts` will be silently excluded from the run, so CI can report green while those tests never execute. Consider broadening the pattern (e.g. `src/**/*.{test,spec}.{ts,tsx}`) if such files may be added.",
+   "suggestion_code": "    include: [\"src/**/*.{test,spec}.{ts,tsx}\"],",
+   "existing_code": "    include: [\"src/**/*.test.ts\"],",
+   "start_line": 18,
+   "end_line": 18,
+   "category": "test",
+   "severity": "low"
+  }
+ ]
+}

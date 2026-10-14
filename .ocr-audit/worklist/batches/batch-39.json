@@ -1,0 +1,346 @@
+{
+ "packages/rekordbox-live/src/master-fields.test.ts": [
+  {
+   "path": "packages/rekordbox-live/src/master-fields.test.ts",
+   "content": "This test cannot detect the regression its title claims. In `prolink.ts` the loop flag is derived as `loopActive: playState === 4`, so flipping `playState` from 4 to 3 already turns `loopRoll.active` false regardless of the track-change reset in `prolink-provider.ts` (lines 241-244). The test therefore still passes if that reset is deleted. Secondary issue: the title also claims the beat counter is cleared, but no beat packet is ever sent (so `buffer.beatCounter` stays 0) and `deck.beat` is never asserted. To actually exercise the reset, keep `playState: 4` in the second packet, change only `trackId`, and assert the loop flag flips plus `deck.beat`/counter state.",
+   "existing_code": "    provider.ingestPacket(buildStatusPacket({\n      deviceName: \"CDJ-1\", deviceNumber: 1, trackId: 222, trackSlot: 1,\n      playState: 3, master: true, sync: false, beatInBar: 2,\n    }), now);",
+   "start_line": 21,
+   "end_line": 24,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/master-fields.test.ts",
+   "content": "The test name claims the loop/roll is not carried across the mid-loop track switch, but no loop or roll state is asserted (only `generation` and `track.title`). Since `generation` is bumped by any track change, the assertion holds trivially and the 'without carrying the loop generation' behavior is never verified. Also, the track title and the playhead are changed together, so a change caused by the playhead cannot be distinguished from one caused by the title. Assert `after.loopRoll`/loop state after the switch to actually cover the intended behavior.",
+   "existing_code": "    send(\"/1/track/title\", VIRTUAL_TRACK_B.title, now);\n    send(\"/1/time\", 0.5, now);\n    const after = provider.getDecks()[0];\n    expect((after?.generation ?? 0)).toBeGreaterThan(generationBefore);",
+   "start_line": 41,
+   "end_line": 44,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/master-fields.test.ts",
+   "content": "The per-field authority conflict is never actually exercised: `prolink` supplies no `pitchPercent` and `rkbx-osc` supplies no `sync`, so each asserted field has only a single candidate and the test would still pass if fusion simply took any present value instead of applying authority ranking. Worse, the title's 'fuses master from prolink' is never asserted, and per `DEFAULT_FUSION_AUTHORITY` (`rkbx-osc` at index 2 outranks `prolink` at index 3) the fused `master` would actually come from rkbx's `false`, contradicting the title. Have both providers supply the same field with conflicting values and assert the higher-authority winner.",
+   "existing_code": "      playheadSeconds: 10, effectiveBpm: 128, pitchPercent: 2.0, master: false, atNs: now,",
+   "start_line": 59,
+   "end_line": 59,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/master-fields.test.ts",
+   "content": "`600n * 1_000_000n` is a hardcoded magic number; the default `live.fusion.switchHoldMs` is 500 (see `DEFAULT_FUSION_OPTIONS`). Reference the config constant or pass `switchHoldMs` explicitly into `FusionEngine` so the test does not silently break if the default changes. More importantly, only the challenger (`prolink`) is refreshed while the holder (`composite-flx4`) is left unrefreshed: after 600ms it exceeds the default `staleMs` (500), so the flip is attributed to 'stale-takeover', not to hysteresis/higher-authority. The test can therefore pass for the wrong reason. Re-ingest `composite-flx4` during the wait to keep it fresh (or assert the emitted switch reason is 'higher-authority').",
+   "existing_code": "    now += 600n * 1_000_000n;\n    prolink.update({\n      deckId: 1, track: { id: \"rb:9\", title: \"Loop\" }, playing: true,",
+   "start_line": 101,
+   "end_line": 103,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/master-fields.test.ts",
+   "content": "Mutable module-level `now` is shared by all providers in every test, while tests 3 and 4 later reassign it (`now = 1_000n...`, `now = 2_000n...`) and test 1 reads it without reassigning. This makes the tests order-dependent and cross-interfering: reordering or running them concurrently produces different timestamps and can change staleness/ordering behavior. Define a fresh clock inside each test instead of a shared mutable module binding.",
+   "existing_code": "let now = 1_000n * 1_000_000_000n;\nconst clock = (): bigint => now;",
+   "start_line": 10,
+   "end_line": 11,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/rekordbox-live/src/prolink.test.ts": [
+  {
+   "path": "packages/rekordbox-live/src/prolink.test.ts",
+   "content": "Dead/unused fixture data: the `offsets` field is declared on `ProlinkVector` and populated in `prolink-vectors.json`, but no test ever reads it. Instead the \"reads the documented raw offsets\" test below hardcodes the same offsets/values (0x24=50000, 0x28=25000, 0x38=0x100000, 0x5a=12800, 0x5c=1, 0x2c=1234567, 0x6f=3, 0x75=0x30). This duplicates the fixture and lets the two drift apart silently (the fixture `offsets` block is effectively dead). Drive the offset assertions from `beat.offsets` / `status.offsets` so the fixture remains the single source of truth, or drop the unused `offsets` field.",
+   "existing_code": "  offsets?: Record<string, { offset: string; value: number }>;",
+   "start_line": 22,
+   "end_line": 22,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/prolink.test.ts",
+   "content": "Silent coverage skip: when a non-malformed vector has no `fields`, this `continue` skips every field assertion without failing, and there is no assertion that each vector was actually verified or that its `kind` is one of the handled kinds (beat/status/keepalive). A fixture typo (e.g. `kind: \"beet\"`, or a missing `fields` block) therefore silently reduces coverage instead of failing the test. Consider asserting that every non-malformed vector has `fields` and that its `kind` is explicitly handled (e.g. `expect([\"beat\",\"status\",\"keepalive\"]).toContain(vector.kind)` / count verified vectors), so an unhandled or malformed fixture fails loudly.",
+   "existing_code": "      if (decoded.kind === \"malformed\" || !vector.fields) continue;",
+   "start_line": 37,
+   "end_line": 37,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/prolink.test.ts",
+   "content": "Weak generation assertion: only `>` is checked, so an incorrect increment (e.g. jumping from 0 to 5, or bumping generation on every emit instead of only on track change) still passes. Since the mapper increments by exactly 1 per track change, assert the exact values and that the intermediate beat emission did not bump generation, e.g. `expect(first?.generation).toBe(1); expect(second?.generation).toBe(2);`. Also consider asserting `states).toHaveLength(3)` so the positional `.at(-2)`/`.at(-1)` indices remain meaningful.",
+   "existing_code": "    expect((second?.generation ?? 0) > (first?.generation ?? 0)).toBe(true);",
+   "start_line": 187,
+   "end_line": 187,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/prolink.test.ts",
+   "content": "Round-trip tautology: `buildBeatPacket` and `decodeProlinkPacket` are two separate implementations of the same offsets, so a compensating encode/decode error (e.g. the writer and reader agree on a wrong offset) still passes this assertion. Only the direct `pitchPercent` literals above are independent. The beat/status offset correctness is better asserted against the committed `golden/prolink-vectors.json` hex (which is hand-built) rather than against a packet this suite just encoded.",
+   "existing_code": "    const packet = buildBeatPacket({ deviceName: \"CDJ-1\", deviceNumber: 1, nextBeatMs: 500, pitchRaw: 0x110000, bpm: 128 });",
+   "start_line": 108,
+   "end_line": 108,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/rekordbox-live/src/prolink.test.ts",
+   "content": "This assertion can pass while the rejection path is broken. `markRejected` only transitions status to `degraded` when the current state is `live` or `degraded` (see providers.ts), but the provider here is never `start()`ed, so it stays `starting` regardless of whether rejection is handled correctly. The test also omits `mode`, silently relying on the default `passive`. To actually exercise the degrade behavior, start the provider (with a deterministic `bind: null`), ingest a valid packet to reach `live`, then ingest the malformed datagram and assert `state === \"degraded\"`.",
+   "existing_code": "    expect(provider.getStatus().state).toBe(\"starting\");",
+   "start_line": 91,
+   "end_line": 91,
+   "category": "test",
+   "severity": "medium"
+  }
+ ],
+ "packages/serato/src/setup.test.ts": [
+  {
+   "path": "packages/serato/src/setup.test.ts",
+   "content": "The short-array deck case only asserts the remedy text and never the resulting state. `input({ deckUpdateHz: [0] })` filters down to zero positive rates, which the production code maps to `state === \"no-deck-data\"`; without asserting `noDecks.state`, a regression that maps a length-1 array to a different state (or that wrongly treats `[0]` as healthy) would still pass as long as the remedy happens to contain 'load a track'. Assert the state explicitly so the boundary is really covered.",
+   "suggestion_code": "    const noDecks = checkSeratoSetup(input({ deckUpdateHz: [0] }));\n    expect(noDecks.state).toBe(\"no-deck-data\");",
+   "existing_code": "    const noDecks = checkSeratoSetup(input({ deckUpdateHz: [0] }));",
+   "start_line": 53,
+   "end_line": 53,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/serato/src/setup.test.ts",
+   "content": "The failure-path checks all use a single short `toContain` fragment of `remedy`. A truncated or otherwise wrong remedy that still embeds that fragment (e.g. a generic dump that repeats the raw step detail) would pass, so the 'next step' guidance the file claims to prove is not actually verified. Assert on a distinctive, complete-enough portion of the message (or the exact expected remedy) to make the assertion meaningful.",
+   "existing_code": "    expect(report.remedy).toContain(\"serato.remote.enabled\");",
+   "start_line": 37,
+   "end_line": 37,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/serato/src/setup.test.ts",
+   "content": "None of the failure-state tests inspect `report.steps`, so the per-step `ok` flags and ordering that drive `state` selection are never validated. Because `state` is derived from the first failing step, a broken step order (e.g. advertising/connection reported as failing when an earlier step fails) would be invisible. Add assertions on the expected step ids/`ok` values for at least the multi-precondition failure cases.",
+   "existing_code": "    const report = checkSeratoSetup(input({ remoteEnabled: false }));",
+   "start_line": 35,
+   "end_line": 35,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/serato/src/setup.test.ts",
+   "content": "The `input()` factory accepts contradictory combinations, but no test exercises them, so precedence and null-handling in `checkSeratoSetup` are unverified: e.g. `advertised: true` with `advertisedPort: null` (production falls back to `?? 0`, silencing a real bug into a harmless-looking 'port 0'), or `seratoInstalled: true` with `detectedVersion: null`. Add cases that combine overlapping failures to confirm the first failing step wins and that missing optional fields do not produce misleading details.",
+   "existing_code": "    ...over,",
+   "start_line": 18,
+   "end_line": 18,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/serato/src/setup.test.ts",
+   "content": "The port literal 53211 is duplicated between the fixture and the assertion against `advertising?.detail`, and the service type string is likewise hardcoded. If the production message changes shape the fixture can silently desync rather than fail meaningfully. Prefer deriving the expected fragment from a named constant or assert the structured value so the test fails for the right reason.",
+   "existing_code": "    advertisedPort: 53211,",
+   "start_line": 12,
+   "end_line": 12,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/show-mixer/src/intro.test.ts": [
+  {
+   "path": "packages/show-mixer/src/intro.test.ts",
+   "content": "The cue priorities chosen here (10 < 11 < 50 < 100) happen to order exactly the same as the layer tags asserted in the test (`base`\u2192`spatial`\u2192`accents`\u2192`exclusive`). The test comment claims \"Layer tags, not cue priorities, decide what enters\", but because both orderings agree, an implementation that admitted cues by sorting on `priority` (rather than `admits(stage, layerForCue(cue))`) would still produce the exact same `layers` arrays and `introductionStage` results \u2014 so this test cannot detect a regression to the priority heuristic it is meant to guard against. Assign priorities that contradict the layer order (e.g. `accents` lower than `spatial`) so a priority-based implementation fails.",
+   "suggestion_code": "  cue({ type: \"section-look\", target: \"PRIMARY\", priority: 10 }), // base\n  cue({ type: \"chase-flip\", target: \"SECONDARY\", durationBeats: 8, priority: 90 }), // spatial\n  cue({ type: \"build-ramp\", target: \"ALL\", durationBeats: 8, priority: 20 }), // accents\n  cue({ type: \"white-hit\", target: \"ALL\", durationBeats: 0.25, intensity: 1, priority: 200 }), // exclusive",
+   "existing_code": "  cue({ type: \"section-look\", target: \"PRIMARY\", priority: 10 }), // base\n  cue({ type: \"chase-flip\", target: \"SECONDARY\", durationBeats: 8, priority: 11 }), // spatial\n  cue({ type: \"build-ramp\", target: \"ALL\", durationBeats: 8, priority: 50 }), // accents\n  cue({ type: \"white-hit\", target: \"ALL\", durationBeats: 0.25, intensity: 1, priority: 100 }), // exclusive",
+   "start_line": 27,
+   "end_line": 30,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-mixer/src/intro.test.ts",
+   "content": "This filters layers by `side === \"a\"`, which only identifies the incoming deck because `mixDown` assigns side \"a\" to its first argument. If `mixDown`'s positional side assignment ever changed (or the arguments were swapped), this would silently start asserting the *outgoing* deck's layers and the test would not fail loudly \u2014 it would just assert the wrong thing. Consider deriving the deck identity from the incoming weight, or asserting both sides' layers explicitly.",
+   "existing_code": "    layers: mixed.layers.filter((l) => l.side === \"a\").map((l) => l.tag),",
+   "start_line": 50,
+   "end_line": 50,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-mixer/src/intro.test.ts",
+   "content": "This only asserts that four hashes differ; it never checks that each stage's frame actually reflects the admitted layers. The frame is sampled at `BEAT + 0.5` (beat 64.5), while the exclusive `white-hit` cue spans beats 64 \u2192 64.25. `renderFrame` drops cues where `beat >= startBeat + durationBeats`, so the white-hit is already expired at the sample beat and the exclusive/impacts stage contributes no exclusive content at all. As a result the impacts frame differs from the rhythm frame only by intensity scaling, and the test still passes even if exclusive-layer admission is completely broken. Sample inside the white-hit window (e.g. beat 64.1) and assert frame content per stage.",
+   "existing_code": "    const hashes = [0.02, 0.1, 0.5, 0.9].map((w) => atWeight(w).hash);\n    expect(new Set(hashes).size).toBe(4);",
+   "start_line": 71,
+   "end_line": 72,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-mixer/src/intro.test.ts",
+   "content": "Only the `base` cue (priority 10) scaling is verified. The weight scaling of the `spatial`/`accents`/`exclusive` cues and the effect of the `impactStrength` inputs (0.5 incoming / 0.4 outgoing) are never asserted, so a bug that scales some layers incorrectly (or ignores `impactStrength`) would go undetected. Add assertions for at least one non-base layer at different weights.",
+   "existing_code": "    const baseAt = (cues: ShowCue[]): number => cues.find((c) => c.priority === 10)!.intensity;\n    expect(baseAt(palette.cues)).toBeCloseTo(0.9 * 0.1, 6);\n    expect(baseAt(rhythm.cues)).toBeCloseTo(0.9 * 0.5, 6);",
+   "start_line": 78,
+   "end_line": 80,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-mixer/src/intro.test.ts",
+   "content": "The weight list `[0.02, 0.1, 0.5, 0.9]` is duplicated verbatim in the next test (\"samples a distinct frame at every stage\"). Extracting a shared constant keeps the two tests in sync if a stage weight changes.",
+   "existing_code": "    const stages = [0.02, 0.1, 0.5, 0.9].map((w) => ({ weight: w, ...atWeight(w) }));",
+   "start_line": 58,
+   "end_line": 58,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/show-planner/src/primitives.test.ts": [
+  {
+   "path": "packages/show-planner/src/primitives.test.ts",
+   "content": "`parsePrimitiveParams` is imported but never referenced anywhere in this test file. It's dead code and will also trip `noUnusedLocals`/lint rules. Either remove it or add coverage that actually exercises parameter parsing/validation (currently `parsePrimitiveParams` \u2014 one of the most complex exports with the unknown-param/range checks \u2014 has zero test coverage).",
+   "suggestion_code": "import { isPrimitiveName, requirePrimitive, checkTopology, checkFixtureRate, PRIMITIVE_REGISTRY, SPATIAL_PRIMITIVES, SPEC_PRIMITIVES, UnknownPrimitiveError } from \"./primitives.js\";",
+   "existing_code": "import { isPrimitiveName, parsePrimitiveParams, requirePrimitive, checkTopology, checkFixtureRate, PRIMITIVE_REGISTRY, SPATIAL_PRIMITIVES, SPEC_PRIMITIVES, UnknownPrimitiveError } from \"./primitives.js\";",
+   "start_line": 2,
+   "end_line": 2,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/primitives.test.ts",
+   "content": "`toBeDefined()` also passes for `null`, so a primitive mapped to a `null` value would still satisfy this \"completeness\" assertion and the test would pass despite a broken registry entry. Assert truthiness/shape instead.",
+   "suggestion_code": "      expect(PRIMITIVE_REGISTRY[name], name).toBeTruthy();",
+   "existing_code": "      expect(PRIMITIVE_REGISTRY[name], name).toBeDefined();",
+   "start_line": 7,
+   "end_line": 7,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/primitives.test.ts",
+   "content": "Only the sizes of the two source arrays are asserted; nothing verifies that the registry key set exactly equals their union. An orphan/extra key added directly to the registry (e.g. via `COORD`) \u2014 or a duplicated entry \u2014 would go undetected, because the loop only checks that array members exist in the registry, never the reverse. Add a set-equality assertion to catch registry/array drift.",
+   "suggestion_code": "    expect(SPEC_PRIMITIVES).toHaveLength(27);\n    expect(SPATIAL_PRIMITIVES).toHaveLength(23);\n    expect(Object.keys(PRIMITIVE_REGISTRY).sort()).toEqual([...SPEC_PRIMITIVES, ...SPATIAL_PRIMITIVES].sort());",
+   "existing_code": "    expect(SPEC_PRIMITIVES).toHaveLength(27);\n    expect(SPATIAL_PRIMITIVES).toHaveLength(23);",
+   "start_line": 10,
+   "end_line": 11,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/primitives.test.ts",
+   "content": "The `checkFixtureRate` gate uses `rateHz < meta.needsFixtureRateHz`, but the exact boundary value (24 Hz) and the `null` fixture-rate case are never tested. An off-by-one regression (e.g. switching to `<=`) or a change that lets a `null` rate silently pass would not be caught. Add boundary cases.",
+   "suggestion_code": "    expect(checkFixtureRate(\"StrobeBurst\", 24)).toBeNull();\n    expect(checkFixtureRate(\"StrobeBurst\", 30)).toBeNull();",
+   "existing_code": "    expect(checkFixtureRate(\"StrobeBurst\", 30)).toBeNull();",
+   "start_line": 40,
+   "end_line": 40,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/primitives.test.ts",
+   "content": "`checkTopology` also rejects `point` and `vertical-line` for closed-or-independent primitives (see the source), but the test only exercises `split-mirrored` and `closed-loop`. A regression in the `point`/`vertical-line` branches would pass unnoticed. Add coverage for the other gated topologies.",
+   "suggestion_code": "    expect(checkTopology(\"Orbit\", \"closed-loop\")).toBeNull();\n    expect(checkTopology(\"Orbit\", \"point\")).toMatch(/closed loop/);\n    expect(checkTopology(\"Orbit\", \"vertical-line\")).toMatch(/closed loop/);",
+   "existing_code": "    expect(checkTopology(\"Orbit\", \"closed-loop\")).toBeNull();",
+   "start_line": 37,
+   "end_line": 37,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/venue/src/index.test.ts": [
+  {
+   "path": "packages/venue/src/index.test.ts",
+   "content": "This assertion cannot distinguish sorting by position from sorting by fixture id: the fixture ids `\"left\"`/`\"right\"` happen to sort alphabetically in the same order as their x values (0.1 < 0.9). A regression where `globalCellOrder` sorted by `fixtureId` (or by anything correlated with the ids) would still pass. Use ids whose alphabetical order is intentionally different from their x order so the test actually locks in the x-based ordering.",
+   "suggestion_code": "    const b = mk(\"a-first\", [0.9]);\n    const a = mk(\"z-last\", [0.1]);\n    expect(globalCellOrder([b, a]).map((c) => c.fixtureId)).toEqual([\"z-last\", \"a-first\"]);",
+   "existing_code": "    expect(globalCellOrder([mk(\"right\", [0.9]), mk(\"left\", [0.1])]).map((c) => c.fixtureId)).toEqual([\"left\", \"right\"]);",
+   "start_line": 13,
+   "end_line": 13,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/venue/src/index.test.ts",
+   "content": "Only the `\"reverse\"` branch of `applyOrientation` is exercised. The `\"forward\"` (identity) path is never asserted, so a regression that mutates the input array in place or reorders on `forward` would go undetected. Add an assertion that `applyOrientation(cells, \"forward\")` preserves the original order (and ideally does not mutate `cells`).",
+   "suggestion_code": "    const cells = [{ fixtureId: \"f\", cellIndex: 0 }, { fixtureId: \"f\", cellIndex: 1 }];\n    expect(applyOrientation(cells, \"reverse\").map((c) => c.cellIndex)).toEqual([1, 0]);\n    expect(applyOrientation(cells, \"forward\").map((c) => c.cellIndex)).toEqual([0, 1]);",
+   "existing_code": "    const cells = [{ fixtureId: \"f\", cellIndex: 0 }, { fixtureId: \"f\", cellIndex: 1 }];\n    expect(applyOrientation(cells, \"reverse\").map((c) => c.cellIndex)).toEqual([1, 0]);",
+   "start_line": 16,
+   "end_line": 17,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/venue/src/index.test.ts",
+   "content": "The selected cases are unambiguous: 10fps is clearly below the 24 target and 30fps is clearly above it, so an off-by-one error (e.g. `>` instead of `>=`, or comparing against `targetFps - 1`) would not be caught. Add a boundary case where `stableFps === targetFps` (which must be accepted by the `>=` filter) and a tie case with two candidates at the same `zones` to lock in tie-break behavior.",
+   "suggestion_code": "    expect(selectResolution([{ zones: 200, stableFps: 10 }, { zones: 40, stableFps: 30 }], 24)).toBe(40);\n    // exact boundary: stableFps equal to targetFps must be accepted\n    expect(selectResolution([{ zones: 55, stableFps: 24 }], 24)).toBe(55);\n    // clearly unstable only\n    expect(selectResolution([{ zones: 200, stableFps: 10 }], 24)).toBeNull();",
+   "existing_code": "    expect(selectResolution([{ zones: 200, stableFps: 10 }, { zones: 40, stableFps: 30 }], 24)).toBe(40);",
+   "start_line": 20,
+   "end_line": 20,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/venue/src/index.test.ts",
+   "content": "`LEFT` (positional selection) and `PRIMARY` (group selection) both happen to resolve to the same `left` fixture, so a misrouted target mapping (e.g. treating a group selector as positional or vice-versa) would still satisfy these assertions. Use fixtures whose groups do not overlap their positional role (assign the group to the fixture that is NOT on the left) and add a case where a name is both a valid group and a positional target to verify precedence.",
+   "suggestion_code": "    expect(resolveTarget([left, right], \"LEFT\").map((c) => c.fixtureId)).toEqual([\"left\"]);\n    expect(resolveTarget([right, left], \"PRIMARY\").map((c) => c.fixtureId)).toEqual([\"right\"]);",
+   "existing_code": "    expect(resolveTarget([left, right], \"LEFT\").map((c) => c.fixtureId)).toEqual([\"left\"]);\n    expect(resolveTarget([left, right], \"PRIMARY\").map((c) => c.fixtureId)).toEqual([\"left\"]);",
+   "start_line": 33,
+   "end_line": 34,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/venue/src/index.test.ts",
+   "content": "The `mk` helper always produces single-cell fixtures with a fixed `y: 0`, so `globalCellOrder`'s intra-fixture ordering and its `a.y - b.y` tie-break (used when two cells share the same x) are never exercised, and multi-cell / null-calibration paths are untested. Parameterize the cell positions (distinct x and y values) or allow multiple cells so these code paths are actually covered.",
+   "suggestion_code": "  cells: xs.map((x, i) => ({ index: i, position: { x, y: i }, order: i, tags: [] })),",
+   "existing_code": "  cells: xs.map((x, i) => ({ index: i, position: { x, y: 0 }, order: i, tags: [] })),",
+   "start_line": 7,
+   "end_line": 7,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/venue/src/placement.test.ts": [
+  {
+   "path": "packages/venue/src/placement.test.ts",
+   "content": "This assertion only proves the rotated table *differs* from the original. Because `rotateLogicalZero` computes `logicalIndex = (logicalIndex + n - shift) % n`, a wrong shift amount (e.g. +1 instead of +2) or the opposite direction would still satisfy `not.toEqual`, so the test passes even if rotation is broken. Assert the exact expected mapping (and ideally a no-op case) instead. Note the expected values depend on the hardcoded `midS`/`ordered` inputs.",
+   "suggestion_code": "    expect(logicalToPhysical(rotated)).toEqual(Uint32Array.from([4, 5, 6, 7, 0, 1, 2, 3]));\n    expect(logicalToPhysical(rotateLogicalZero(ordered, 8))).toEqual(table);",
+   "existing_code": "    expect(logicalToPhysical(rotated)).not.toEqual(table);",
+   "start_line": 46,
+   "end_line": 46,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/venue/src/placement.test.ts",
+   "content": "`midS` is a hand-written normalized array that is not derived from the fitted `cells`. Consequently the test never exercises the relationship between a cell's real measured position and its logical order, so a mis-association in `applyLogicalOrder` (wrong cell \u2194 wrong S) would still pass. Derive the S values from `cells` (e.g. normalize `cellMidM` by `runLength(run)`) or assert the resulting `logicalIndex` per physical cell explicitly.",
+   "existing_code": "    const midS = [0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875];",
+   "start_line": 41,
+   "end_line": 41,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/venue/src/placement.test.ts",
+   "content": "The `orderLogical` check only inspects index 2 and only confirms the zero anchor landed at logical 0. It does not validate the full ordering nor the clockwise vs counterclockwise sense, so an inverted direction or partial reordering passes. Assert the complete returned array and add a `counterclockwise` case to pin the sense.",
+   "suggestion_code": "    expect(orderLogical(midS, 0.25, \"clockwise\")).toEqual([6, 7, 0, 1, 2, 3, 4, 5]);\n    expect(orderLogical(midS, 0.25, \"counterclockwise\")).toEqual([2, 1, 0, 7, 6, 5, 4, 3]);",
+   "existing_code": "    expect(orderLogical(midS, 0.25, \"clockwise\")[2]).toBe(0);",
+   "start_line": 47,
+   "end_line": 47,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/venue/src/placement.test.ts",
+   "content": "`fitRunMapping` is only checked for its output length. The interpolation between the anchors at cells 0/10/19 (and the exact-anchor/rounding boundaries) is never verified, so a broken interpolation or wrap-around would still pass. Assert concrete positions, e.g. `cellMidM(cells[10])` \u2248 10 and `cellMidM(cells[0])` \u2248 0.25, using the exported `cellMidM`.",
+   "suggestion_code": "    expect(cells).toHaveLength(20);\n    expect(cellMidM(cells[10])).toBeCloseTo(10, 9);\n    expect(cellMidM(cells[0])).toBeCloseTo(0.25, 9);",
+   "existing_code": "    expect(cells).toHaveLength(20);",
+   "start_line": 29,
+   "end_line": 29,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/venue/src/placement.test.ts",
+   "content": "Topology coverage omits the empty-run case (`topologyForRuns([])` returns `\"point\"`) and only exercises the multi-run branch via a hardcoded `mirroredOf: \"loop\"` literal. The literal also means a dangling `mirroredOf` reference is treated identically to a valid one, so reference-resolution changes would go undetected. Add the single/empty-run cases and assert the documented reference semantics.",
+   "existing_code": "    expect(topologyForRuns([square(), { ...square(), id: \"b\", mirroredOf: \"loop\" }])).toBe(\"split-mirrored\");",
+   "start_line": 53,
+   "end_line": 53,
+   "category": "test",
+   "severity": "low"
+  }
+ ]
+}

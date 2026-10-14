@@ -1,0 +1,221 @@
+{
+ "apps/desktop/src/components/ui/command.tsx": [
+  {
+   "path": "apps/desktop/src/components/ui/command.tsx",
+   "content": "The injected `CheckIcon` is permanently invisible: it starts at `opacity-0` and only becomes visible via `group-data-[checked=true]/command-item:opacity-100`, but cmdk's `CommandPrimitive.Item` (cmdk ^1.1.1) never sets a `data-checked` attribute on the item element (it only renders `data-selected` / `data-disabled` / `data-value`). No caller in this repo passes `data-checked` either (`command-palette.tsx` renders plain `<CommandItem>`s), so the `command-item` group never matches `[data-checked=true]` and the checkmark can never be shown. Either gate it on a state cmdk actually emits (e.g. `data-selected`) or accept an explicit checked prop/attribute so the indicator is reachable; otherwise this is dead UI.",
+   "existing_code": "      <CheckIcon className=\"ml-auto opacity-0 group-has-data-[slot=command-shortcut]/command-item:hidden group-data-[checked=true]/command-item:opacity-100\" />",
+   "start_line": 162,
+   "end_line": 162,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/components/ui/command.tsx",
+   "content": "Slot mismatch with `InputGroup`: `InputGroup`'s interactive styling (focus ring, `border-ring` on focus, disabled and aria-invalid handling) is keyed on a descendant with `data-slot=\"input-group-control\"` (see `input-group.tsx`, applied by `InputGroupInput`). `CommandPrimitive.Input` here is tagged `data-slot=\"command-input\"`, so none of those `has-[[data-slot=input-group-control]:focus-visible]:*` rules ever match and the search field renders with no visible focus indicator (its own class also sets `outline-hidden`). Tag the control with `data-slot=\"input-group-control\"` (or add the equivalent focus-visible classes) so the group's focus styling applies.",
+   "suggestion_code": "        <CommandPrimitive.Input\n          data-slot=\"input-group-control\"",
+   "existing_code": "        <CommandPrimitive.Input\n          data-slot=\"command-input\"",
+   "start_line": 73,
+   "end_line": 74,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "apps/desktop/src/components/ui/dialog.tsx": [
+  {
+   "path": "apps/desktop/src/components/ui/dialog.tsx",
+   "content": "`DialogContent` unconditionally renders its own `DialogPortal` + `DialogOverlay` and forwards no props to either. As a result consumers cannot style/suppress the overlay (no `overlayClassName`), pass a custom `container`/`forceMount` to the portal, and if a caller renders `<DialogOverlay />` themselves next to `<DialogContent />` two overlays stack (double darkening/blur). Consider exposing props for the portal/overlay (e.g. `overlayClassName`, `portalContainer`, `overlayProps`).",
+   "existing_code": "    <DialogPortal>\n      <DialogOverlay />",
+   "start_line": 57,
+   "end_line": 58,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/components/ui/dialog.tsx",
+   "content": "Two distinct nodes declare `data-slot=\"dialog-close\"`: the standalone `DialogClose` wrapper (line 29) and this built-in close button. Because the value is passed through `asChild` -> `Button`, the resulting element ends up with `data-slot=\"dialog-close\"` for both cases, so any `querySelector('[data-slot=\"dialog-close\"]')`/test selector becomes ambiguous and may target the wrong control. Use a distinct slot name (e.g. `dialog-content-close`) for the built-in button to keep selectors unambiguous.",
+   "existing_code": "          <DialogPrimitive.Close data-slot=\"dialog-close\" asChild>",
+   "start_line": 69,
+   "end_line": 69,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "apps/desktop/src/components/ui/dialog.tsx",
+   "content": "`DialogFooter` hardcodes negative margins (`-mx-4 -mb-4`, `rounded-b-xl`) that only line up because `DialogContent` uses exactly `p-4` and `rounded-xl`. Any caller that overrides the content padding/radius (a legitimate `className` override) makes the footer's top border and bottom corners visibly misalign/overflow. Consider deriving this from content padding, exposing it via a variable, or documenting the coupling.",
+   "existing_code": "        \"-mx-4 -mb-4 flex flex-col-reverse gap-2 rounded-b-xl border-t bg-muted/50 p-4 sm:flex-row sm:justify-end\",",
+   "start_line": 108,
+   "end_line": 108,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "apps/desktop/src/components/ui/dialog.tsx",
+   "content": "`DialogContent` renders neither a default `DialogTitle`/`DialogDescription` nor any requirement for them. Radix requires a `DialogTitle` (and warns for a missing `Description`/`aria-describedby`) to wire `aria-labelledby`/`aria-describedby`; a consumer that only passes body content gets an unlabelled dialog plus runtime console errors. Consider documenting the requirement (or providing an accessible default) so callers don't silently ship an inaccessible dialog.",
+   "existing_code": "        {children}\n        {showCloseButton && (",
+   "start_line": 67,
+   "end_line": 68,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/src/features/setup/rkbx-setup-panel.tsx": [
+  {
+   "path": "apps/desktop/src/features/setup/rkbx-setup-panel.tsx",
+   "content": "`Number(e.target.value)` yields `0` for an empty field and `NaN` for non-numeric/partial input. `updateHz` is rendered via `snapshot.packets.updateHz.toFixed(1)` (shows \"NaN Hz\"), and `received` feeds `packetsReceived > 0` where `NaN > 0` is `false`, so the assistant silently reports \"no packets\". Validate/clamp the conversion so these fields can never carry non-finite values.",
+   "suggestion_code": "            <Input aria-label=\"Packets observed\" type=\"number\" min={0} value={received} onChange={(e) => setReceived(Number.isFinite(Number(e.target.value)) ? Math.max(0, Number(e.target.value)) : 0)} className=\"w-24\" />\n            <Input aria-label=\"Packet rate Hz\" type=\"number\" min={0} value={updateHz} onChange={(e) => setUpdateHz(Number.isFinite(Number(e.target.value)) ? Math.max(0, Number(e.target.value)) : 0)} className=\"w-24\" />",
+   "existing_code": "            <Input aria-label=\"Packets observed\" type=\"number\" value={received} onChange={(e) => setReceived(Number(e.target.value))} className=\"w-24\" />\n            <Input aria-label=\"Packet rate Hz\" type=\"number\" value={updateHz} onChange={(e) => setUpdateHz(Number(e.target.value))} className=\"w-24\" />",
+   "start_line": 0,
+   "end_line": 0,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/features/setup/rkbx-setup-panel.tsx",
+   "content": "The mount effect unconditionally writes the IPC-loaded value into state, and `cancelled` only guards unmount \u2014 it does not guard against staleness. If the user edits the folder field before the async `config/get` for `live.rkbx.oscBind` resolves, their typed value is silently overwritten by the persisted one. Consider seeding once and skipping the update when the field has been edited (e.g., track dirtiness with a ref), which also removes the race for the configPath field above.",
+   "existing_code": "    void invoke(\"config/get\", { version: 1, key: \"live.rkbx.oscBind\" }).then((raw: unknown) => {\n      if (cancelled) return;\n      const envelope = raw as { ok?: boolean; value?: unknown } | null;\n      if (envelope && envelope.ok !== false && typeof envelope.value === \"string\" && envelope.value.length > 0) {\n        setOscBind(envelope.value);\n      }\n    });",
+   "start_line": 83,
+   "end_line": 89,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "apps/desktop/src/features/setup/rkbx-setup-panel.tsx",
+   "content": "This block and the `live.rkbx.oscBind` block below are identical invoke + envelope-unwrap logic, issued as two independent sequential calls. Extract a small typed helper (e.g. `readConfigString(key)`), and if both reads are independent, use `Promise.all` to fetch them together instead of duplicating the unwrap logic twice.",
+   "existing_code": "    void invoke(\"config/get\", { version: 1, key: \"live.rkbx.configPath\" }).then((raw: unknown) => {\n      if (cancelled) return;\n      const envelope = raw as { ok?: boolean; value?: unknown } | null;\n      if (envelope && envelope.ok !== false && typeof envelope.value === \"string\" && envelope.value.length > 0) {\n        setConfigPath(envelope.value);\n      }\n    });",
+   "start_line": 76,
+   "end_line": 82,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "apps/desktop/src/features/setup/rkbx-setup-panel.tsx",
+   "content": "This ternary sends `\"\"` (not `null`) when a folder is set but no config text has been pasted. In `summarizeRKBXAssistant`, `configFound = configPath.length > 0 && configText !== null`, so `\"\"` flips `configFound` to true and the report proceeds to the OSC check (state `osc-disabled`, \"0 OSC line(s)\") instead of the not-installed path \u2014 despite `RkbxAssistantInput.configText` being documented as \"null when the folder has none to read\". Confirm the `\"\"` branch is intended; if the snapshot should reflect \"no config available\", pass `null` for this case.",
+   "existing_code": "    configText: configText.length > 0 ? configText : (configPath.trim().length > 0 ? \"\" : null),",
+   "start_line": 95,
+   "end_line": 95,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/src/routes/settings/simulator-mode.test.ts": [
+  {
+   "path": "apps/desktop/src/routes/settings/simulator-mode.test.ts",
+   "content": "The intent assertion is too weak: `toMatchObject({ enabled: true })` only validates the `enabled` field. A broken `simulatorIntent` that omits/drops `scenario`, drops `version`, or returns the wrong `channel` (protocol mismatch) would still pass this test. Assert the full payload and channel.",
+   "suggestion_code": "    const intent = simulatorIntent({ scenario: \"normal-night\", enabled: true });\n    expect(intent).toEqual({ channel: \"simulator/mode\", payload: { version: 1, enabled: true, scenario: \"normal-night\" } });",
+   "existing_code": "    expect(simulatorIntent({ scenario: \"normal-night\", enabled: true }).payload).toMatchObject({ enabled: true });",
+   "start_line": 10,
+   "end_line": 10,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/routes/settings/simulator-mode.test.ts",
+   "content": "The scenario registry is only verified by length (5) plus a single valid/invalid id. A malformed registry \u2014 duplicate entries, a renamed/removed scenario id that keeps the count at 5, or wrong ordering \u2014 would still pass while `SIMULATOR_SCENARIOS` is actually broken. Assert the exact set of ids instead of just the count.",
+   "suggestion_code": "    expect(SIMULATOR_SCENARIOS).toEqual([\n      \"normal-night\",\n      \"pitch-loops\",\n      \"two-deck-transition\",\n      \"device-loss\",\n      \"source-loss\",\n    ]);",
+   "existing_code": "    expect(SIMULATOR_SCENARIOS).toHaveLength(5);",
+   "start_line": 7,
+   "end_line": 7,
+   "category": "test",
+   "severity": "medium"
+  }
+ ],
+ "apps/desktop/src/routes/venue/scan-targets.test.ts": [
+  {
+   "path": "apps/desktop/src/routes/venue/scan-targets.test.ts",
+   "content": "The test name promises verifying the scan-targets input *with save*, but no assertion checks that the save control exists or that saving has any effect. The `Save` button (venue-view.tsx:114) and its `saveScanTargets` handler can be deleted, or `config/set` dropped entirely, and this test still passes \u2014 the core feature is left untested. Assert the save control is rendered and, ideally, add a behavior test that triggers the save handler and asserts the parsed target list is persisted.",
+   "suggestion_code": "    expect(html).toContain(\">Save<\");",
+   "existing_code": "    expect(html).toContain(\"Targets\");",
+   "start_line": 12,
+   "end_line": 12,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/routes/venue/scan-targets.test.ts",
+   "content": "These assertions only check for substrings anywhere in the static HTML, so they pass even if the input is disabled or unbound from `scanTargets`. `toContain(\"Targets\")` is also redundant \u2014 that text comes from the same control whose aria-label is already asserted on the line above. Assert the actual rendered `<input>` (aria-label plus value/placeholder binding) rather than loose copy, so a broken/unwired input is caught.",
+   "existing_code": "    expect(html).toContain(\"Scan targets (IPs or hostnames)\");",
+   "start_line": 10,
+   "end_line": 10,
+   "category": "test",
+   "severity": "medium"
+  }
+ ],
+ "apps/desktop/src/styles/globals.css": [
+  {
+   "path": "apps/desktop/src/styles/globals.css",
+   "content": "`app-region` is used without the vendor prefix here and on `.app-no-drag`. The unprefixed `app-region` property is only honored by recent Chromium (129+); older Chromium/Electron builds (and many tooling pipelines) only understand `-webkit-app-region`. Because `chrome.tsx` relies on these classes for the frameless-window title bar, if the prefix is ever unsupported the region silently stops being draggable (no error, no fallback). Since the project pins Electron `^41.10.6` it currently works, but declaring both keeps it robust and self-documenting.",
+   "suggestion_code": "  -webkit-app-region: drag;\n  app-region: drag;",
+   "existing_code": "  app-region: drag;",
+   "start_line": 163,
+   "end_line": 163,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/styles/globals.css",
+   "content": "`--ok`, `--warn`, `--bad` are the only color tokens that are not re-exported through `@theme inline` (compare `--color-accent: var(--accent)` etc.). As a result Tailwind generates no `text-ok` / `bg-warn` / `text-bad` utilities and none of the opacity-modifier support (`text-bad/60`) that the other tokens enjoy; consumers are forced to fall back to raw `var(--ok)` inline styles (see `tokens.statusOk` in `app/tokens.ts`). Mapping them keeps the token vocabulary consistent and usable from class names.",
+   "suggestion_code": "  --color-accent: var(--accent);\n  --color-ok: var(--ok);\n  --color-warn: var(--warn);\n  --color-bad: var(--bad);",
+   "existing_code": "  --color-accent: var(--accent);",
+   "start_line": 121,
+   "end_line": 121,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "apps/desktop/src/styles/globals.css",
+   "content": "Every other theme token (`--background`, `--border`, `--chart-*`, sidebar tokens, \u2026) is re-declared in `.dark`, but the semantic status colors `--ok` / `--warn` / `--bad` are only declared in `:root`. Since the app always renders with `.dark` on `<html>` (`src/index.html`), the status dots in `kit.tsx` (`StatusDot`, `tokenForTone`) resolve to the light-theme values. Either add dark-tuned values here or document that these tokens are intentionally theme-independent, so a future light/dark toggle doesn't silently reuse the wrong palette.",
+   "existing_code": "  --accent: oklch(0.269 0 0);",
+   "start_line": 66,
+   "end_line": 66,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "apps/desktop/src/styles/globals.css",
+   "content": "`body` is declared twice: this top-level (unlayered) rule and again inside `@layer base` with `@apply bg-background text-foreground`. Unlayered rules always win over layered rules regardless of specificity, so the `@layer base` body declaration is effectively dead and the two rules now define the same `background`/`color`. This is confusing for future edits (changing the layered one would appear to have no effect). Consolidate the base body styling into a single rule.",
+   "existing_code": "body {\n  background: var(--background);\n  color: var(--foreground);\n  font-size: 0.875rem;\n  line-height: 1.45;\n}",
+   "start_line": 155,
+   "end_line": 160,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "capabilities.yaml": [
+  {
+   "path": "capabilities.yaml",
+   "content": "Completed items are reported as gaps: several entries annotated `done` are listed under the `missing` key, whose semantics are outstanding work \u2014 `T-ARC-02` (24 channels typed), `T-CFG-01/05` (240 keys visible), `T-TRU-02` (renderer toggle plus badge), and `T-CFG-05` (Settings added). Because the README table is rendered from this file, these will surface as false gaps. Move completed items out of `missing` (e.g. to a `done`/`notes` field) or drop them.",
+   "existing_code": "    - 24 channels typed (T-ARC-02 done)",
+   "start_line": 98,
+   "end_line": 98,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "capabilities.yaml",
+   "content": "Evidence path diverges from every other capability, which all point at `docs/finish/evidence/T-TRU-05/README.md`. If `T-ANA-12/README.md` is stale or missing this link will be broken in the generated output; if the divergence is intentional it should be justified. Verify the target exists.",
+   "existing_code": "  evidence: docs/finish/evidence/T-ANA-12/README.md",
+   "start_line": 40,
+   "end_line": 40,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "capabilities.yaml",
+   "content": "Spec section 104 is also claimed by the `verification` capability (line 205), and spec 148 by both `ble` (line 149) and `matter` (line 157). Reusing the same spec ID across unrelated capabilities will double-count/inflate coverage attribution in the generated truth table. Confirm the mapping is correct or split the IDs.",
+   "existing_code": "  spec: [104]",
+   "start_line": 121,
+   "end_line": 121,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "capabilities.yaml",
+   "content": "`storage` is declared `status: PARTIAL`, but its sole `missing` note ('Store exists, never opened by app') describes a non-operational capability, which is closer to `MISSING`/`IMPLEMENTED_UNQUALIFIED`. The status label and the missing note disagree; reconcile them so the rendered status matches the described state.",
+   "existing_code": "  status: PARTIAL\n  missing:\n    - Store exists, never opened by app (T-DATA-01)",
+   "start_line": 175,
+   "end_line": 177,
+   "category": "bug",
+   "severity": "low"
+  }
+ ]
+}

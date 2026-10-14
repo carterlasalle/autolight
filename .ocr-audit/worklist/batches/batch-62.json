@@ -1,0 +1,231 @@
+{
+ "packages/matter/package.json": [
+  {
+   "path": "packages/matter/package.json",
+   "content": "This ESM-only package (`\"type\": \"module\"`) declares `main`/`types` but no `exports` map, unlike the sibling workspace packages (`@autolight/config`, `@autolight/controller-flx4`, `@autolight/rekordbox-live` all define `exports`). Without `exports`, resolution relies solely on legacy `main`, all internal files become publicly importable, and consumers that resolve through the `exports`/conditional field or attempt a CommonJS `require('@autolight/matter')` will fail (ERR_PACKAGE_PATH_NOT_EXPORTED / ERR_REQUIRE_ESM). Add an `exports` entry for `.` with `types` + `default` to make the public surface explicit and consistent.",
+   "suggestion_code": "  \"main\": \"./dist/index.js\",\n  \"types\": \"./dist/index.d.ts\",\n  \"exports\": {\n    \".\": {\n      \"types\": \"./dist/index.d.ts\",\n      \"default\": \"./dist/index.js\"\n    }\n  },",
+   "existing_code": "  \"main\": \"./dist/index.js\",\n  \"types\": \"./dist/index.d.ts\",",
+   "start_line": 5,
+   "end_line": 6,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/matter/package.json",
+   "content": "There is no `files` whitelist and no `prepare`/`prepublishOnly` build hook. A `npm publish` of this package would include `src/` (including `*.test.ts`), `tsconfig.json` and `vitest.config.ts`, and \u2014 because `dist/` is only produced by the root orchestrated `build` script \u2014 the declared `main`/`types` (`./dist/index.js`, `./dist/index.d.ts`) can be missing/stale in the tarball, producing a broken package. Add a `files` array limited to `dist` and a `prepublishOnly` (or `prepare`) script that runs the build.",
+   "suggestion_code": "    \"build\": \"tsc -p tsconfig.json\",\n    \"prepublishOnly\": \"tsc -p tsconfig.json\",",
+   "existing_code": "    \"build\": \"tsc -p tsconfig.json\",",
+   "start_line": 8,
+   "end_line": 8,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/matter/package.json",
+   "content": "`--passWithNoTests` makes the test task exit 0 whenever the vitest `include` glob (`src/**/*.test.ts`) matches nothing \u2014 e.g. if a test file is renamed/moved or the vitest config regresses, CI stays green with zero tests executed. The package does contain tests today, so this only hides future test-suite breakage; consider removing the flag (or gating it behind a package that genuinely has no tests) so the suite must actually run.",
+   "suggestion_code": "    \"test\": \"vitest run\",",
+   "existing_code": "    \"test\": \"vitest run --passWithNoTests\",",
+   "start_line": 9,
+   "end_line": 9,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/rekordbox-library/src/anlz.test.ts": [
+  {
+   "path": "packages/rekordbox-library/src/anlz.test.ts",
+   "content": "This test codifies acceptance of an ANLZ path that is absolute and lives *outside* the configured share. `resolveAnlzSet` (line 92 of anlz.ts) deliberately falls back to the stored absolute path when the share-relative form does not exist, and that value comes straight from the `djmdContent.AnalysisDataPath` column in master.db with no share containment check. If that DB value is ever attacker/corruption controlled (e.g. a crafted or shared library file), the resolver will happily report facts (path/size/mtime) for arbitrary filesystem locations, and any downstream reader that opens `dat.path` would read outside the share directory. Please confirm this behaviour is intended; if not, the resolver should confine the result to `sharePath`, and this test should assert that an out-of-share absolute path is rejected rather than treated as `anlz-ok`.",
+   "existing_code": "    const resolved = resolveAnlzSet({ analysisDataPath: join(outside, \"ANLZ0000.DAT\") }, { sharePath: share });\n    expect(resolved.statuses).toEqual([\"anlz-ok\"]);\n    expect(resolved.anlzDir).toBe(outside);",
+   "start_line": 85,
+   "end_line": 87,
+   "category": "security",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-library/src/anlz.test.ts",
+   "content": "The injected `stat` seam returns facts only for paths ending in `.DAT`. This means the test cannot prove the seam is actually used for the audio existence check: the assertion `[\"audio-missing\", \"anlz-partial\"]` would still hold if `resolveAnlzSet` ignored `statFile` for the audio path and ran the real `fs.statSync` against the non-existent `/virtual/share/a.mp3`. The test also never asserts that the injected size/mtime are propagated (`dat?.sizeBytes`/`mtimeMs` are unchecked here). Make the seam cover the audio path as well and assert the propagated facts so the test fails if the seam is bypassed, e.g. `const stat: StatFile = (p) => /\\.(DAT|mp3)$/.test(p) ? { sizeBytes: 10, mtimeMs: 5 } : undefined;` then assert `resolved.audio?.exists` and `resolved.dat?.sizeBytes`.",
+   "existing_code": "    const stat: StatFile = (path) => (path.endsWith(\".DAT\") ? { sizeBytes: 10, mtimeMs: 5 } : undefined);",
+   "start_line": 92,
+   "end_line": 92,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-library/src/anlz.test.ts",
+   "content": "The only combined status case exercised with `audio-ok` is `audio-ok` + `anlz-ok`. The combinations `audio-ok` + `anlz-missing` and `audio-ok` + `anlz-partial` are never tested (all missing/partial cases pass no `audioPath`, so audio is `null` and its status is omitted). These are realistic states (audio present but a half-written or removed ANLZ set) and are exactly where an ordering/precedence bug or a crash in sibling derivation would hide. Add at least one case with a real audio file plus an absent/partial ANLZ set and assert the ordered statuses.",
+   "existing_code": "    expect(resolved.statuses).toEqual([\"audio-ok\", \"anlz-ok\"]);",
+   "start_line": 36,
+   "end_line": 36,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/rekordbox-library/src/db.test.ts": [
+  {
+   "path": "packages/rekordbox-library/src/db.test.ts",
+   "content": "This assertion depends on row ordering that the queried SQL does not guarantee. `songPlaylistRows` executes `... WHERE PlaylistID = :id ORDER BY TrackNo`, but the fixture inserts both p1 membership rows with `TrackNo: 1` (see test-fixtures.ts membership). With equal sort keys, SQLite's tie order is unspecified (it happens to be rowid order for a plain table scan today), so this can become flaky if an index/plan changes. Either make the fixture use distinct TrackNo values for p1, or assert on a set/ordered-by-id result rather than an exact sequence.",
+   "existing_code": "      expect(reader.songPlaylistRows(\"p1\").map((entry) => entry.rekordboxId)).toEqual([\"101\", \"102\"]);",
+   "start_line": 48,
+   "end_line": 48,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-library/src/db.test.ts",
+   "content": "The write-rejection check is too permissive to prove the write was actually refused. `toMatch(/readonly|read-only|query_only/i)` can be satisfied by incidental driver wording, and `counts().tracks` would be unchanged even if `CREATE TABLE autolight_write_probe` had partially succeeded (creating a table does not change the djmdContent count). Strengthen it by asserting the probe table was never created, e.g. query `sqlite_master` for `autolight_write_probe` (and expect no row), or assert `probe.error` matches the specific read-only error code rather than a broad regex.",
+   "existing_code": "      expect(probe.error).toMatch(/readonly|read-only|query_only/i);\n      expect(reader.counts().tracks).toBe(4);",
+   "start_line": 65,
+   "end_line": 66,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-library/src/db.test.ts",
+   "content": "This branch cannot actually distinguish the intended cipher failure path. When the module is present, `openWithCipher` still swallows a constructor/decrypt failure and returns `undefined`, so `openReadOnly` throws the same `cipher-module-missing` error as when the module is absent; asserting only `toBeInstanceOf(LibraryDbError)` therefore passes for either case and gives no real coverage of the cipher-present path. Assert the concrete code (or otherwise exercise a real cipher-open failure) so a regression in `openWithCipher` is not silently accepted.",
+   "existing_code": "    const withKey = openReadOnly(junk, \"402fd482\");\n    if (cipherAvailable) await expect(withKey).rejects.toBeInstanceOf(LibraryDbError);\n    else await expect(withKey).rejects.toMatchObject({ code: \"cipher-module-missing\" });",
+   "start_line": 131,
+   "end_line": 133,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/rekordbox-library/src/options.test.ts": [
+  {
+   "path": "packages/rekordbox-library/src/options.test.ts",
+   "content": "This test is named \"reads db-path and dp out of options.json\" and even writes a `dp` entry, but nothing ever asserts it \u2014 a regression in reading the `dp` key would go undetected. Add an assertion for it. Note also that passing `key: \"explicit-key\"` makes `resolveLibraryConfig` short-circuit the dp branch (`key === undefined ? optionValue(options, \"dp\") : undefined` in options.ts), so the `keySource: \"options-dp\"` path is never exercised by any test here either.",
+   "suggestion_code": "    expect(optionValue(options, \"db-path\")).toBe(dbPath);\n    expect(optionValue(options, \"dp\")).toBe(\"not-a-real-password\");",
+   "existing_code": "    expect(optionValue(options, \"db-path\")).toBe(dbPath);",
+   "start_line": 75,
+   "end_line": 75,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-library/src/options.test.ts",
+   "content": "`pythonProbe` swallows every failure (uv/interpreter missing, non-zero exit, timeout, Python traceback on stderr) and collapses them all to `undefined`. Callers then fail with opaque assertion errors (or split an empty string), so an environment/interpreter problem is indistinguishable from a real product defect. Capture and surface the underlying cause (e.g. include the exit code / stderr in a thrown error) to keep these parity checks diagnosable.",
+   "existing_code": "    }).trim();\n  } catch {\n    return undefined;\n  }",
+   "start_line": 40,
+   "end_line": 43,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/rekordbox-library/src/options.test.ts",
+   "content": "`UV` is evaluated once at module load. A transient `uv` failure at import time (cold start, PATH not yet populated) permanently disables the only two tests that prove the key derivation and base85 decoder match pyrekordbox, with no signal at all. Consider probing availability inside each test, or at minimum failing/skipping loudly so verification can't be silently dropped.",
+   "existing_code": "const UV = uvAvailable();",
+   "start_line": 29,
+   "end_line": 29,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/rekordbox-library/src/options.test.ts",
+   "content": "Only the prefix `/^402fd/` of the derived key is asserted. A decoder/XOR/inflate regression that keeps the prefix but changes the tail would still pass, and the exact-equality check that would catch it is uv-gated and may be skipped (see the `UV` probe above). Assert the full expected key literal (or at least the expected length) rather than the prefix alone.",
+   "existing_code": "    expect(config.key).toMatch(/^402fd/);",
+   "start_line": 96,
+   "end_line": 96,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/rekordbox-library/src/options.test.ts",
+   "content": "The loop asserts each line that is returned but never asserts how many lines were returned. If `pythonProbe` yields fewer than the 8 expected lines, the test still passes over whatever it got, silently narrowing coverage. Assert `lines.length === 8` before iterating.",
+   "existing_code": "    lines.forEach((line, index) => {",
+   "start_line": 125,
+   "end_line": 125,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/rekordbox-live/src/manager.test.ts": [
+  {
+   "path": "packages/rekordbox-live/src/manager.test.ts",
+   "content": "The entire test only ever asserts `fieldSources.playheadSeconds` (the winning provider label), never the merged value `fused.playheadSeconds`. This is a real gap in `FusionEngine`: a regression where `recompute()` labels `lighting-ipc` as the source but copies the challenger's `playheadSeconds` into the fused state (sources/quality and the value are resolved from different code paths, lines 172-181 vs 191) would still make every assertion here pass. Additionally, the switch-event check only verifies `reason` + `to`, so a wrong `field`, `deckId`, or `from` would go unnoticed. Assert the concrete value during the stale-hold steps (expect 10, i.e. lighting's value, not composite's 10.2/10.3) and after takeover (expect 10.4), and tighten the event assertion to include `from === 'lighting-ipc'` and `field === 'playheadSeconds'`.",
+   "existing_code": "    now += 300n * 1_000_000n;\n    emit(composite, 10.4);\n    expect(engine.fused(1)?.fieldSources.playheadSeconds).toBe(\"composite-flx4\");",
+   "start_line": 44,
+   "end_line": 46,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/manager.test.ts",
+   "content": "The \"Lighting wins\" priority claim is never actually isolated from ingestion order: `lighting-ipc` is always ingested before `composite-flx4` in both cases (here and in the second `it`). Because the first candidate fed to `pick()` becomes the initial holder when both are fresh (fusion.ts:226-231), a regression that resolved priority by first-seen order instead of `rank()` would still pass. Add a case that ingests `composite-flx4` first (or emits composite then lighting in the same tick) and asserts lighting still wins, which is what proves rank-based priority.",
+   "existing_code": "    emit(lighting, 10);\n    emit(composite, 10.05);",
+   "start_line": 28,
+   "end_line": 29,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/manager.test.ts",
+   "content": "The fixed 300 ms steps only bracket the `staleMs + switchHoldMs` window loosely (fresh at 300 ms, stale at 600 ms, takeover somewhere in (900, 1200] ms); they never pin the exact thresholds. An off-by-one or mis-set timeout still passes as long as it lands inside these coarse buckets \u2014 e.g. `staleMs` anywhere in (300, 600] or `switchHoldMs` in [300, 600] satisfies this sequence. Since `isFresh()` uses an inclusive `<=` (fusion.ts:74) and `pick()` switches at `>= holdNs` (fusion.ts:243), the boundary semantics are exactly what needs covering: assert freshness at age == staleMs and staleness at staleMs + 1 ns, and assert no takeover at switchHoldMs - 1 ns but takeover at switchHoldMs.",
+   "existing_code": "    now += 300n * 1_000_000n;\n    emit(composite, 10.1);",
+   "start_line": 34,
+   "end_line": 35,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/rekordbox-live/src/setup-assistant.ts": [
+  {
+   "path": "packages/rekordbox-live/src/setup-assistant.ts",
+   "content": "Unbounded prefix match produces false positives. `startsWith(prefix)` accepts any version that merely begins with a supported string, e.g. `7.2.100` matches the Windows entry `7.2.10`, and `7.2.180` matches the macOS entry `7.2.18`, so an unsupported Rekordbox build is reported as supported (PASS). The build-tag case (`7.2.10.0333`) only needs the match to be followed by a `.` boundary, so require that.",
+   "suggestion_code": "  return supported.some((prefix) => trimmed === prefix || trimmed.startsWith(`${prefix}.`));",
+   "existing_code": "  return supported.some((prefix) => trimmed.startsWith(prefix));",
+   "start_line": 41,
+   "end_line": 41,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/setup-assistant.ts",
+   "content": "This re-implements the prefix search already provided by `isRKBXVersionSupported` (which is otherwise only exercised by tests), so the two can drift and both share the unbounded-prefix false-positive bug noted above. In addition, substituting `prefix ?? installed` for the real version means the report's version step (and its detail text) always prints the truncated prefix (e.g. `7.2.10`) instead of the actual installed build (`7.2.10.0333`), hiding the real version in diagnostics. Consider reusing `isRKBXVersionSupported` and/or making `checkRkbxSetup` accept the raw installed version with prefix-aware matching.",
+   "existing_code": "  const prefix = supportedVersions.find((entry) => installed.startsWith(entry));",
+   "start_line": 106,
+   "end_line": 106,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/setup-assistant.ts",
+   "content": "`??` only falls back for null/undefined, so a caller that passes an empty (or whitespace-only) `expectedDestination` \u2014 e.g. an unset `live.rkbx.oscBind` \u2014 bypasses the default. `checkRkbxSetup` then compares `config.destination === \"\"`, always fails the destination step, and reports a spurious `wrong-destination`. Treat empty/whitespace as unset.",
+   "suggestion_code": "  const requestedDestination = input.expectedDestination?.trim() ?? \"\";\n  const expectedDestination = requestedDestination.length > 0 ? requestedDestination : RKBX_DEFAULT_DESTINATION;",
+   "existing_code": "  const expectedDestination = input.expectedDestination ?? RKBX_DEFAULT_DESTINATION;",
+   "start_line": 103,
+   "end_line": 103,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "packages/renderer/src/regions.ts": [
+  {
+   "path": "packages/renderer/src/regions.ts",
+   "content": "The mapped branch clears the whole buffer with `buf.fill(0)` before scattering (to reset unmapped cells), but the null-mapping branch does not clear anything. Since the `frames` map buffers are reused across writes, if `logicalRgb` is shorter than `buf` (or a previous frame used the mapped branch), the trailing bytes keep stale RGB values, producing a partially outdated frame. Make the two branches consistent by zero-filling first.",
+   "suggestion_code": "  if (!logicalToPhysical) {\n    buf.fill(0);\n    buf.set(logicalRgb.subarray(0, Math.min(buf.length, logicalRgb.length)));\n    return;\n  }",
+   "existing_code": "  if (!logicalToPhysical) {\n    buf.set(logicalRgb.subarray(0, Math.min(buf.length, logicalRgb.length)));\n    return;\n  }",
+   "start_line": 28,
+   "end_line": 31,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/renderer/src/regions.ts",
+   "content": "`Number()` is far too lenient for parsing the cell index. Malformed ids resolve to valid integers instead of returning null: `\"a:\"` -> `Number(\"\")` === 0 (reads cell 0), `\"a:0x10\"` -> 16, `\"a:1e2\"` -> 100, `\"a: 3 \"` -> 3 (whitespace trimmed). This can silently read/address the wrong cell. Validate that the suffix is purely digits before converting.",
+   "suggestion_code": "  const raw = cellId.slice(sep + 1);\n  if (!/^\\d+$/.test(raw)) return null;\n  const index = Number(raw);\n  if (!Number.isSafeInteger(index)) return null;",
+   "existing_code": "  const index = Number(cellId.slice(sep + 1));\n  if (!Number.isInteger(index) || index < 0) return null;",
+   "start_line": 77,
+   "end_line": 78,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/renderer/src/regions.ts",
+   "content": "Cache invalidation is driven solely by the numeric `version`; entries persist for the lifetime of the version, so if `compute()` depends on inputs that can change without a `version` bump, a stale array is returned. This is likely intentional (version must change whenever inputs change), but the contract is implicit \u2014 add a comment documenting that callers must bump `version` on any change affecting selector resolution.",
+   "existing_code": "    if (version !== this.version) {\n      this.version = version;\n      this.entries = {};\n    }",
+   "start_line": 52,
+   "end_line": 55,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ]
+}

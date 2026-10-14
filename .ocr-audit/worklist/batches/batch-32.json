@@ -1,0 +1,282 @@
+{
+ "analysis/src/autolight_analysis/features.py": [
+  {
+   "path": "analysis/src/autolight_analysis/features.py",
+   "content": "The first term is multiplied by `0.0`, so the whole 43-tap `dyn` computation (`dyn` is only read here) is dead and contributes nothing. `dynamic_range` therefore only reflects the smoothed absolute-derivative term, silently discarding the intended dynamic-range logic (max-minus-current smoothed dB / 60). Remove the `* 0.0` factor (and the now-unused `dyn` line) or actually combine both terms as intended.",
+   "suggestion_code": "    dynamic_range = np.clip(",
+   "existing_code": "    dyn = np.convolve(20.0 * np.log10(env / env.max()), np.ones(43) / 43.0, mode=\"same\")\n    dynamic_range = np.clip((dyn.max() - dyn) / 60.0, 0.0, 1.0) * 0.0 + np.clip(",
+   "start_line": 166,
+   "end_line": 167,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/features.py",
+   "content": "When the passed `frames` dict is empty (or every series is length 0), `n_frames` becomes 0, so `frame_times` is empty. For any `n_beats > 0` the window `mask` is empty and `mask.any()` is `False`, then `np.argmin(np.abs(frame_times - start))` raises `ValueError: attempt to get argmin of an empty sequence` instead of degrading gracefully. Guard the `n_frames == 0` / empty-`frame_times` case before this fallback (append a default per feature and continue).",
+   "existing_code": "            nearest = int(np.argmin(np.abs(frame_times - start)))",
+   "start_line": 233,
+   "end_line": 233,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/features.py",
+   "content": "The module docstring states features are aggregated to \"sub-beat, beat, bar and phrase\", but `aggregate_to_beats` only returns `beat`, `subbeat` and `bar`. Phrase-level aggregation is never produced here. Either implement/include the phrase key or correct the docstring so downstream consumers don't assume phrase evidence exists.",
+   "existing_code": "    return {\"beat\": beat_means, \"subbeat\": subbeat, \"bar\": bars}",
+   "start_line": 248,
+   "end_line": 248,
+   "category": "documentation",
+   "severity": "low"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/features.py",
+   "content": "`edges` and the sub-beat window mask `sm` depend only on `start`/`end` (from the outer beat loop) and `subdivisions`, not on the feature `k`, yet they are recomputed for every feature inside `for k, series in frames.items()`. With 22 features x subdivisions x beats this is redundant work; compute `edges` once per beat (outside the feature loop) and reuse the masks across features.",
+   "existing_code": "            edges = np.linspace(start, end, subdivisions + 1)",
+   "start_line": 238,
+   "end_line": 238,
+   "category": "performance",
+   "severity": "low"
+  }
+ ],
+ "analysis/src/autolight_analysis/schema.py": [
+  {
+   "path": "analysis/src/autolight_analysis/schema.py",
+   "content": "`model.get(\"identity\", {})` returns the raw value, so a JSON `\"identity\": null` yields `None` and `identity.get(\"id\")` raises `AttributeError`, breaking the documented `-> list[str]` contract. The same pattern occurs a few lines below with `model.get(\"beatGrid\", {}).get(\"beats\", [])` (null `beatGrid` -> `AttributeError`; null `beats` -> `enumerate(None)` `TypeError`), and later with `b.get(\"bpm\", 0) > 0` (null `bpm` -> `TypeError`). Apply the same `isinstance(..., dict)` guard already used for `analysisCoverage2` so malformed-but-parseable artifacts return problems instead of crashing.",
+   "suggestion_code": "    identity = model.get(\"identity\") or {}\n    if not isinstance(identity, dict) or not identity.get(\"id\"):\n        problems.append(\"identity.id missing\")",
+   "existing_code": "    identity = model.get(\"identity\", {})\n    if not identity.get(\"id\"):\n        problems.append(\"identity.id missing\")",
+   "start_line": 57,
+   "end_line": 59,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/schema.py",
+   "content": "`sourceTimeMs` is required and non-negative per the contract (`nativeBeatSchema`), but defaulting to 0 here both masks a genuinely missing field and can emit a spurious `beats not strictly increasing` error \u2014 e.g. beat 0 at 1000ms followed by a beat whose `sourceTimeMs` was omitted becomes 0, so `0 <= 1000` is flagged. Validate presence/type of `sourceTimeMs` explicitly rather than silently substituting 0.",
+   "existing_code": "    times = [b.get(\"sourceTimeMs\", 0) for b in beats]\n    if any(t2 <= t1 for t1, t2 in itertools.pairwise(times)):\n        problems.append(\"beats not strictly increasing\")",
+   "start_line": 112,
+   "end_line": 114,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/schema.py",
+   "content": "Because `semantic_problems` runs before the missing-key loop below, a section that omits `endBeat` gets its key defaulted to 0 and is reported here as `section endBeat before startBeat` (misleading), while the later loop also emits `section missing endBeat` for the same section \u2014 duplicated and inaccurate diagnostics. Check key presence before comparing, or run semantic checks only after the shape checks confirm all required keys exist.",
+   "existing_code": "    for s in model.get(\"sections\", []):\n        if s.get(\"endBeat\", 0) < s.get(\"startBeat\", 0):\n            problems.append(\"section endBeat before startBeat\")",
+   "start_line": 122,
+   "end_line": 124,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/schema.py",
+   "content": "`analysisCoverage2` (with `level` and `inputs`) is required by the Zod contract, but when it is absent or not an object this guard makes `inputs` None and readiness verification is skipped entirely, so a model missing the required readiness block passes with no problem reported \u2014 contradicting the module's stated strictness (a missing field should surface). Consider appending a problem when `analysisCoverage2` is missing/invalid instead of silently skipping.",
+   "existing_code": "    inputs = (\n        (model.get(\"analysisCoverage2\") or {}).get(\"inputs\")\n        if isinstance(model.get(\"analysisCoverage2\"), dict)\n        else None\n    )\n    if inputs is not None:",
+   "start_line": 87,
+   "end_line": 92,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "analysis/tests/test_schema.py": [
+  {
+   "path": "analysis/tests/test_schema.py",
+   "content": "Tautological assertion. `json.dumps(json.loads(json.dumps(model, sort_keys=True)), sort_keys=True)` is by construction identical to `json.dumps(model, sort_keys=True)` for any JSON-serializable object, so this comparison can never fail. Despite the test name (`..._parses_both_sides`), it verifies nothing about cross-side parity \u2014 a serialization/schema mismatch would still pass. Compare the fixture against a canonical artifact produced by the TS side (or round-trip through the actual Python model) instead.",
+   "existing_code": "    assert json.dumps(model, sort_keys=True) == json.dumps(\n        json.loads(json.dumps(model, sort_keys=True)), sort_keys=True\n    )",
+   "start_line": 65,
+   "end_line": 67,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "analysis/tests/test_schema.py",
+   "content": "Count-only assertion. `len(problems) >= 5` passes as long as enough problems are produced, but never checks that the specific invalid values are reported (schemaVersion=99, beatInBar=5, bpm=0, unknown section kind, unknown event type, coverage=\"nope\"). A regression that silently drops one of these checks (while still flagging others) would not be caught. Assert on the expected problem contents, e.g. `assert any(\"schemaVersion=99\" in p for p in problems)` and similarly for the other fields.",
+   "existing_code": "    assert len(problems) >= 5",
+   "start_line": 42,
+   "end_line": 42,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/tests/test_schema.py",
+   "content": "Hardcoded vocabulary size couples this contract check to an exact implementation count: it will fail on any benign addition to EVENT_TYPES while still not verifying the event types the test cares about. If an exact count is a real contract requirement, consider asserting it against a shared/exported constant rather than a magic number; otherwise validate membership of the relevant types instead.",
+   "existing_code": "    assert len(EVENT_TYPES) == 19",
+   "start_line": 50,
+   "end_line": 50,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "analysis/tests/test_schema.py",
+   "content": "Fragile fixture resolution: the path assumes a fixed three-level parent layout from `__file__`. If the test is moved/relocated, this silently raises an unhandled `FileNotFoundError` rather than a meaningful parity failure. Prefer a repo-root discovery (e.g. a search upward for the `test-fixtures` dir or a pytest rootdir-relative fixture) and surface a clear assertion message when the fixture is absent.",
+   "existing_code": "    path = (\n        pathlib.Path(__file__).parent.parent.parent\n        / \"test-fixtures\"\n        / \"analysis\"\n        / \"trackmodel-v2.fixture.json\"\n    )",
+   "start_line": 57,
+   "end_line": 62,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/electron-builder.cjs": [
+  {
+   "path": "apps/desktop/electron-builder.cjs",
+   "content": "`mac.extendInfo` omits `NSAppleEventsUsageDescription`, yet the hardened-runtime entitlements shipped with this build (`build/entitlements.mac.plist`) grant `com.apple.security.automation.apple-events` for the AX provider that scripts System Events. Since macOS 10.14 an app that sends Apple Events without a corresponding usage string in Info.plist is terminated by TCC (\"...privacy-sensitive data without a usage description\"). The AX/System Events path will therefore crash at runtime on the packaged macOS app. Add the missing usage description.",
+   "suggestion_code": "      NSMicrophoneUsageDescription:\n        \"Autolight can listen to the DJ mix for the live reactive overlay.\",\n      NSAppleEventsUsageDescription:\n        \"Autolight uses System Events automation to deliver the accessibility overlay.\",",
+   "existing_code": "      NSMicrophoneUsageDescription:\n        \"Autolight can listen to the DJ mix for the live reactive overlay.\",",
+   "start_line": 64,
+   "end_line": 65,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/electron-builder.cjs",
+   "content": "The vendor resource filter is `[\"**/*\", \"!**/.gitkeep\"]`, i.e. \"ship everything\". Because `extraResources` copies the whole tree verbatim, any stray file dropped into `vendor/` by the fetch step or a developer (`.env`, credentials, `.git` metadata, logs, wrong-platform binaries) is bundled into the installer. Prefer allow-listing the expected payload (e.g. `\"manifest.json\"`, `\"**/manifest.json\"`, the platform sidecar files) instead of a blanket `**/*`.",
+   "existing_code": "      filter: [\"**/*\", \"!**/.gitkeep\"],",
+   "start_line": 33,
+   "end_line": 33,
+   "category": "security",
+   "severity": "low"
+  },
+  {
+   "path": "apps/desktop/electron-builder.cjs",
+   "content": "This target requests an NSIS build for both `x64` and `arm64` (and likewise `mac.target` requests both `arm64` and `x64`), but the CI job only fetches sidecars for a single platform per job (`node scripts/fetch-vendor.mjs --platform=${{ matrix.platform }}`) while `extraResources.from: \"vendor\"` copies the whole tree. The additional-architecture installers will therefore either fail during native-addon rebuild or ship vendor payload for the wrong architecture. Either restrict the arch lists to the platform actually provisioned, or fetch both arches for each OS in the packaging job.",
+   "existing_code": "      { target: \"nsis\", arch: [\"x64\", \"arm64\"] },",
+   "start_line": 70,
+   "end_line": 70,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron-builder.cjs",
+   "content": "This `asarUnpack` glob never matches anything: `@julusian/midi` is not declared as a (optional) dependency in any `package.json` in the repo, even though `packages/controller-flx4` `require()`s it for the native backend. As written the entry is dead config and the addon is never unpacked/packaged, so the native FLX4 MIDI backend cannot load in the released app. Confirm the module is a dependency before relying on this entry.",
+   "existing_code": "    \"node_modules/@julusian/midi*/**\",",
+   "start_line": 45,
+   "end_line": 45,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/src/app/store.ts": [
+  {
+   "path": "apps/desktop/src/app/store.ts",
+   "content": "Direct in-place mutation of store state bypasses `set()`. This line (and line 29, the preload-missing branch) writes `useShell.getState().diagnostics[...] = ...` on the object Zustand holds. Because the reference never changes and `set` is not called, subscribers are not notified: components that subscribe with `useShell((s) => s.diagnostics)` (e.g. DiagnosticsView) will not re-render when an IPC error is recorded, and selectors relying on reference/shallow equality may treat the mutated object as unchanged. Mutating state outside `set` also breaks the store's update contract and time-travel/devtools tracing. Use `set` with a merged copy instead.",
+   "suggestion_code": "  } catch (err) {\n    const message = err instanceof Error ? err.message : String(err);\n    try {\n      const state = useShell.getState();\n      state.set({ diagnostics: { ...state.diagnostics, [`ipc:${channel}`]: message } });",
+   "existing_code": "  } catch (err) {\n    const message = err instanceof Error ? err.message : String(err);\n    try {\n      useShell.getState().diagnostics[`ipc:${channel}`] = message;",
+   "start_line": 33,
+   "end_line": 36,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/src/app/store.ts",
+   "content": "This inner try/catch is effectively dead code and masks failures. `useShell` is created at module scope via `create(...)`, so `useShell.getState()` is always available and will not throw \"store not ready\". The catch therefore swallows any real write error (and the accompanying comment is inaccurate). Either remove the try/catch, or if the concern is genuine, surface the failure somewhere observable instead of silently discarding it.",
+   "existing_code": "    } catch { /* store not ready: error still propagates */ }",
+   "start_line": 37,
+   "end_line": 37,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "apps/desktop/src/app/store.ts",
+   "content": "`invoke` returns `null` for both a failed IPC call (this line) and a call that legitimately resolves to `null`, so callers cannot distinguish an error from an intentional empty result \u2014 which contradicts the T-ARC-02 comment claiming IPC errors are never swallowed. Additionally, `Promise<unknown | null>` is a no-op: `unknown | null` collapses to `unknown`, so the annotation gives callers no signal at all. Consider returning a discriminated result (e.g. `{ ok: true; value: unknown } | { ok: false; error: string }`) or re-throwing so failures are explicit. Also note the diagnostic written on failure is never cleared on a later success, so a stale error entry can persist indefinitely.",
+   "existing_code": "export async function invoke(channel: string, payload: unknown): Promise<unknown | null> {",
+   "start_line": 26,
+   "end_line": 26,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/app/store.ts",
+   "content": "The deck shape is duplicated verbatim for `deckA` and `deckB`. Extracting a shared `DeckState` interface removes the duplication and ensures both decks can never drift apart during future edits.",
+   "suggestion_code": "  deckA: DeckState;",
+   "existing_code": "  deckA: { title: string; artist: string; readiness: \"READY\" | \"NEEDS ANALYSIS\"; bpm: number | null; section: string | undefined; countdown: string | undefined };",
+   "start_line": 11,
+   "end_line": 11,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/src/components/issue-7.test.ts": [
+  {
+   "path": "apps/desktop/src/components/issue-7.test.ts",
+   "content": "Test name/assertion mismatch: the test claims the setup action \"fires\", but the body never triggers the button's onClick \u2014 it only asserts that `onSetup` was NOT called during render. Since `InspectorEmpty` wires `onSetup` exclusively through the Button's `onClick` (inspector-view.tsx:67), this test still passes if that `onClick` is removed or replaced with a no-op, giving false confidence that the empty-state action works. Either simulate the click and assert `onSetup` was called once, or rename the test to reflect that it only checks the button is rendered and not auto-invoked.",
+   "existing_code": "  it(\"inspector empty state fires the setup action\", () => {\n    const onSetup = vi.fn();\n    const html = renderToStaticMarkup(createElement(InspectorEmpty, { onSetup }));\n    expect(html).toContain(\"Open Setup\");\n    expect(onSetup).not.toHaveBeenCalled();\n  });",
+   "start_line": 26,
+   "end_line": 31,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/src/components/issue-7.test.ts",
+   "content": "Despite the name \"keep each deck on its own tempo\", the tempo/`fallbackBpm` argument is passed as `null` and never exercised; the assertions only prove per-row bpm passthrough. Because the only null-bpm deck in this suite (the \"\u2014\" entry in the first test) is dropped by the title guard, the `fallbackBpm` branch in `liveDeckRows` is never covered \u2014 a bug such as applying one deck's bpm to another when a snapshot bpm is missing would go undetected. Add a case with a null deck bpm plus a non-null `fallbackBpm` and assert the fallback is applied per deck.",
+   "existing_code": "  it(\"live deck rows keep each deck on its own tempo\", () => {\n    const rows = liveDeckRows([\n      { title: \"A\", artist: \"\", readiness: \"READY\", bpm: 120 },\n      { title: \"B\", artist: \"\", readiness: \"READY\", bpm: 140 },\n    ], null, \"\");\n    expect(rows.map((r) => r.bpm)).toEqual([120, 140]);\n  });",
+   "start_line": 59,
+   "end_line": 65,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/components/issue-7.test.ts",
+   "content": "Only the `null` boundary is asserted for `deckBpm`, so the numeric branch is completely untested. A faulty fallback such as treating a falsy/0 BPM as \"unmeasured\" (or formatting incorrectly) would go undetected. Add assertions for 0 and a positive value, e.g. `expect(deckBpm(0)).toBe(\"0.0\")` and `expect(deckBpm(128)).toBe(\"128.0\")`.",
+   "existing_code": "  it(\"null bpm reads unmeasured through deckBpm\", () => {\n    expect(deckBpm(null)).toBe(\"unmeasured\");\n  });",
+   "start_line": 37,
+   "end_line": 39,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "apps/desktop/src/components/issue-7.test.ts",
+   "content": "This only asserts the label substrings appear somewhere in the markup, so it does not verify the two tabs are real, selectable tabs (role=\"tab\", aria-selected) nor that selecting \"Room mapping\" actually exposes the room editor. Since venue-view.tsx renders both labels unconditionally in the tablist regardless of which tab is active, a broken tab switch would still pass. Consider asserting the tab markup and/or exercising the tab selection.",
+   "existing_code": "  it(\"venue exposes lights and room mapping tabs\", () => {\n    const html = renderToStaticMarkup(createElement(Routes, { route: \"venue\", live: null }));\n    expect(html).toContain(\"Lights\");\n    expect(html).toContain(\"Room mapping\");\n  });",
+   "start_line": 32,
+   "end_line": 36,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/controller-flx4/src/integration.test.ts": [
+  {
+   "path": "packages/controller-flx4/src/integration.test.ts",
+   "content": "This assertion encodes a fail-open path that contradicts the test name (\"only when both sources agree\") and `confirmAudible`'s doc (\"both sources must agree the deck is live\"). With a `null` controller fader the helper returns `djWeight > 0` (see packages/controller-flx4/src/index.ts:63), so an unknown/missing controller level is treated as audible and a silent/closed deck can be masked. Either assert the documented fail-open explicitly with an explanatory comment, or \u2014 if the contract really is \"both sources agree\" \u2014 fix the helper and expect `false` here. The mixer-side null case is also never covered.",
+   "existing_code": "    expect(confirmControllerAudible(null, 0.5)).toBe(true);",
+   "start_line": 146,
+   "end_line": 146,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/controller-flx4/src/integration.test.ts",
+   "content": "The overflow check only asserts `droppedCount() > 0`, so it passes for any eviction policy \u2014 even one that drops the newest bucket or evicts the wrong key. Assert the concrete post-conditions instead: the exact `droppedCount()` (2 here), the final `depth()` (2), and that `drain()` yields the two latest channel-fader values (1 -> 0.9, 2 -> 0.8) with the tempo buckets gone.",
+   "existing_code": "    expect(feed.droppedCount()).toBeGreaterThan(0);",
+   "start_line": 106,
+   "end_line": 106,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/controller-flx4/src/integration.test.ts",
+   "content": "Despite the test name (\"keeps unknown messages with raw bytes\"), the raw bytes are never asserted \u2014 a regression that discards or truncates `raw` still passes. Assert the retained tuple directly, e.g. `expect(feed.unknownEvents()[0]).toMatchObject({ type: \"unknown\", raw: [0xb0, 0x77, 0x01] })` (and ideally `receivedAtNs`).",
+   "existing_code": "    expect(feed.unknownEvents()[0]).toMatchObject({ type: \"unknown\" });",
+   "start_line": 94,
+   "end_line": 94,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/controller-flx4/src/integration.test.ts",
+   "content": "The service/model/deriver/composite mocks are all `never`-cast stubs, so they bypass the `Flx4ServiceLike`/`Flx4ModelLike`/`Flx4DeriverLike` contracts: an interface or event-shape mismatch between service, model, deriver and composite can never fail this test (the deriver is a hardcoded constant too). Additionally `wiring.stop()` is invoked but listener cleanup is never verified \u2014 add an assertion after `stop()` that the listener set is empty / no further events are delivered. Prefer the real types (drop the `never` casts).",
+   "existing_code": "    const listeners = new Set<(event: never) => void>();",
+   "start_line": 120,
+   "end_line": 120,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/controller-flx4/src/integration.test.ts",
+   "content": "The drain result is only checked for existence (`drained > 0` plus `some(...)` membership), so duplicated, missing, or misordered composite events still pass. Also `toHaveLength(3)` hardcodes the assumption that partial 14-bit MSBs surface as `unknown` rather than being paired, so a pairing/protocol regression silently changes the count. Assert the exact drained sequence/values (ordered by `atNs`) and document why 3 unknowns is the expected pairing behavior.",
+   "existing_code": "    expect(feed.unknownEvents()).toHaveLength(3);",
+   "start_line": 79,
+   "end_line": 79,
+   "category": "test",
+   "severity": "medium"
+  }
+ ]
+}

@@ -1,0 +1,318 @@
+{
+ "packages/config/src/registry-validation.property.test.ts": [
+  {
+   "path": "packages/config/src/registry-validation.property.test.ts",
+   "content": "Vacuous assertion: for `type === \"boolean\"`, `defaultFor` returns `def.defaultRaw === \"true\"` (registry.ts:274), which is *always* a boolean. So `typeof v === \"boolean\"` can never fail regardless of the raw default. A malformed boolean default such as `\"yes\"`, `\"1\"`, `\"TRUE\"`, or `\"\"` silently evaluates to `false` and this test still passes, which defeats the stated goal (\"a default that does not parse to its declared type ... fail below\"). Assert on the raw string instead (or additionally check `defaultFor(k.key) === (k.defaultRaw === \"true\")`).",
+   "suggestion_code": "      if (k.type === \"boolean\") expect(k.defaultRaw).toMatch(/^(true|false)$/);",
+   "existing_code": "      if (k.type === \"boolean\") expect(typeof v).toBe(\"boolean\");",
+   "start_line": 19,
+   "end_line": 19,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/config/src/registry-validation.property.test.ts",
+   "content": "Vacuous assertion: `JSON.parse(JSON.stringify(v))` cannot throw for any value `defaultFor` can return (it either returns a parsed value or, on parse failure, the raw string \u2014 registry.ts:276). Worse, `defaultFor` swallows `JSON.parse` errors, so a `json`-typed key whose default is not valid JSON is never detected. Concretely, `mixer.owner.factorWeights` (line 58), `planner.sectionEnergy` (line 69) and `analysis.bands` (line 113) use unquoted keys, and `govee.lan.interfaces` (line 130) / `live.prolink.interfaces` (line 191) are `\"[] (all eligible)\"`; all fail `JSON.parse` and silently become strings, yet this test passes. Validate the raw default directly instead.",
+   "suggestion_code": "      } else if (k.type === \"json\") {\n        expect(() => JSON.parse(k.defaultRaw)).not.toThrow();",
+   "existing_code": "      } else if (k.type === \"json\") {\n        expect(() => JSON.parse(JSON.stringify(v))).not.toThrow();",
+   "start_line": 23,
+   "end_line": 24,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/config/src/registry-validation.property.test.ts",
+   "content": "Also vacuous: for `string`-typed keys `defaultFor` returns `def.defaultRaw` verbatim (registry.ts:277), so `typeof v === \"string\"` is always true and can never catch a wrong literal type. Only the non-empty check has teeth. Consider asserting on `k.defaultRaw` directly.",
+   "existing_code": "        expect(typeof v).toBe(\"string\");\n        expect((v as string).length).toBeGreaterThan(0);",
+   "start_line": 26,
+   "end_line": 27,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "packages/rekordbox-live/src/osc.test.ts": [
+  {
+   "path": "packages/rekordbox-live/src/osc.test.ts",
+   "content": "The malformed-path test claims to prove `decodeOscDatagram` \"reports malformed datagrams instead of throwing\", but both negative inputs are shorter than 8 bytes, so they never reach the unguarded `readPaddedString(bytes, 0)` call in `decodeOscDatagram` (osc.ts:173, `bytes.length >= 8 ? readPaddedString(...) : \"\"`). That call sits OUTSIDE the internal try/catch, so a datagram of >= 8 bytes with no NUL terminator (e.g. `new Uint8Array([1,2,3,4,5,6,7,8])`) is still thrown at the caller, contradicting the documented contract. Add such a vector so the no-throw guarantee is actually exercised.",
+   "existing_code": "    expect(decodeOscDatagram(new Uint8Array([0x01, 0x02, 0x03, 0x04])).malformed.length).toBeGreaterThan(0);",
+   "start_line": 68,
+   "end_line": 68,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-live/src/osc.test.ts",
+   "content": "`notAnAddress` is misleading and the case is ineffective. The value is a valid OSC message whose address does begin with `/ok`, so decoding it just repeats the happy path and never covers the intended \"non-address\" malformed case. Also, this third assertion does not check `malformed` (it could be non-empty) and does not verify the decoded arg. Make the intent explicit and assert the full result, e.g. decode a datagram whose first token is not an address payload (`decodeOscDatagram(new Uint8Array([0x6f,0x6b,0x00,0x00])).malformed.length).toBeGreaterThan(0)`).",
+   "existing_code": "    const notAnAddress = encodeOscMessage({ address: \"/ok\", args: [1] });\n    expect(decodeOscDatagram(notAnAddress).messages[0]?.address).toBe(\"/ok\");",
+   "start_line": 69,
+   "end_line": 70,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/osc.test.ts",
+   "content": "The args assertion is only executed when `vector.address !== undefined`. The bundle vector in the fixture (`timetag: 1`, `addresses: [\"/a\"]`, `args: [1]`) has no `address`, so its decoded argument is never validated at all \u2014 only the addresses are checked. A decoder that drops or corrupts a bundle element's arguments would still pass. Validate the args of every decoded message (e.g. iterate `decoded.messages` and compare their `args` against the vector), not just `messages[0]`.",
+   "existing_code": "      if (vector.address !== undefined) {",
+   "start_line": 35,
+   "end_line": 35,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/osc.test.ts",
+   "content": "Numeric args are asserted with `toBeCloseTo(Number(expected), 5)`, and the `argKinds` field declared in `OscVector` is never read. This makes the test blind to the OSC type-tag distinction (`i` vs `f`) and to string (`s`) arguments entirely \u2014 a decoder that emits floats for int tags, or mishandles `s`/`b` args, still passes since the fixture only carries numeric args and the int/float bytes are only checked for the two `roundTrip` vectors. Either assert `argKinds` against the decoded type tags or add string/typed vectors so the `s` encode/decode paths are covered.",
+   "existing_code": "        for (const [index, expected] of (vector.args ?? []).entries()) {\n          expect(message?.args[index], vector.name).toBeCloseTo(Number(expected), 5);\n        }",
+   "start_line": 38,
+   "end_line": 40,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/osc.test.ts",
+   "content": "The round-trip test unconditionally re-encodes EVERY `roundTrip` vector with `encodeOscMessage`, ignoring the `timetag`/`addresses` fields the interface allows. If a future `roundTrip` vector describes a bundle (the codec exposes `encodeOscBundle`), it would be encoded as a bare message and never validated as a bundle. Gate on the vector shape and call `encodeOscBundle` for bundle vectors.",
+   "existing_code": "      const bytes = encodeOscMessage({ address: vector.address ?? \"\", args: vector.args ?? [] });",
+   "start_line": 51,
+   "end_line": 51,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/rekordbox-live/src/osc.test.ts",
+   "content": "The fixture is resolved by three hardcoded `\"..\"` segments relative to the test file, and `readFileSync` runs at module load. Any package layout change makes the whole suite fail at import time with a raw ENOENT instead of a targeted assertion. Consider resolving via the package root (e.g. `import.meta.dirname` + a computed repo root, or a vitest alias/`import.meta.resolve`) so the failure is localized and the path is not coupled to the current directory depth.",
+   "existing_code": "const fixturePath = join(dirname(fileURLToPath(import.meta.url)), \"..\", \"..\", \"..\", \"protocol-fixtures\", \"rekordbox\", \"golden\", \"osc-vectors.json\");",
+   "start_line": 19,
+   "end_line": 19,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/rekordbox-live/src/version-registry.ts": [
+  {
+   "path": "packages/rekordbox-live/src/version-registry.ts",
+   "content": "The caller-supplied `record.result` is unconditionally overwritten by `replayPassed`. A qualification record explicitly marked `result: \"fail\"` is persisted as `\"pass\"` whenever `replayPassed` is true, silently certifying a version whose own record declares it failed (the inverse also loses a genuine `pass` when `replayPassed` is false). Since `QualificationRecord` carries `result`, there are two conflicting sources of truth. Either drive `result` solely from one source, or reject/derive when the two disagree instead of silently overriding.",
+   "existing_code": "    if (!replayPassed) return { ...def, qualification: { ...record, result: \"fail\" as const } };\n    return { ...def, qualification: { ...record, result: \"pass\" as const } };",
+   "start_line": 177,
+   "end_line": 178,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-live/src/version-registry.ts",
+   "content": "When `provider`/`versionRange`/`platform` do not match any definition, this silently returns the array unchanged. A caller that commits a qualification with a typo'd range or wrong platform gets back a registry with no error and no signal that the qualification was dropped, so the version stays unverified with no indication of failure. Return a result that reports whether a definition matched (or throw on a miss) so the loss is observable.",
+   "existing_code": "    if (def.provider !== provider || def.versionRange !== versionRange || def.platform !== platform) return def;",
+   "start_line": 176,
+   "end_line": 176,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/version-registry.ts",
+   "content": "`definitionSchema` validates `provider` only as `z.string().min(1)`, then `parseRegistry` blindly casts it to `ProviderId`. Corrupted or hand-authored registry JSON containing an unknown provider id (e.g. a typo) passes validation and flows into `qualifyProvider`/`registryStatus`/`unverifiedBanner` as a bogus provider, rather than being rejected at the boundary. Validate against the known provider ids (e.g. `z.enum([...])`) so an invalid id fails parsing instead of silently propagating.",
+   "existing_code": "    provider: def.provider as ProviderId,",
+   "start_line": 63,
+   "end_line": 63,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/version-registry.ts",
+   "content": "`candidates.find(...)` takes the first range that matches, so overlapping ranges are order-dependent. If a broad range (e.g. `7.2.x`) is listed before a specifically qualified range (e.g. `7.2.19`) for the same provider/platform, the broader entry shadows the qualified one and a supported version is reported as `unverified`/`unsupported`. Prefer the most specific match (e.g. select the longest/most specific matching range) instead of relying on array order.",
+   "existing_code": "  const matching = candidates.find((def) => versionInRange(version, def.versionRange));",
+   "start_line": 101,
+   "end_line": 101,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/version-registry.ts",
+   "content": "The doc comment states exact versions match exactly, but this branch performs `version === range || version.startsWith(range + \".\")`, so a range like `7.2.19` also matches `7.2.19.0012`. The `.x` branch and the non-`.x` branch therefore treat the same conceptual range differently (`7.2` vs `7.2.x`), making qualification outcomes depend on how the range string is literally written. Align the implementation with the documented semantics (or update the comment/schema if prefix matching is intended for both forms).",
+   "existing_code": "  return version === range || version.startsWith(range + \".\");",
+   "start_line": 91,
+   "end_line": 91,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "packages/rekordbox-live/src/version-registry.ts",
+   "content": "Version detection relies on a single exact-tag regex. Any other valid Info.plist formatting (attributes on the key/value elements, XML comments, single or double quotes, escaped entities, or whitespace/extraneous tags between the key and value) yields `null`, which is then fed into qualification and can cause a running, supported version to be misreported as `unsupported`/`unverified`. Consider a tolerant plist parse (or at least handling quoted/attribute forms) and surface parse failure distinctly from an unsupported version.",
+   "existing_code": "  const match = /<key>CFBundleShortVersionString<\\/key>\\s*<string>([^<]+)<\\/string>/.exec(plist);",
+   "start_line": 155,
+   "end_line": 155,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "packages/renderer/src/goldens.ts": [
+  {
+   "path": "packages/renderer/src/goldens.ts",
+   "content": "This table is a verbatim copy of the authoritative `PRIMITIVE_DEFAULTS` in `packages/show-planner/src/primitives.ts`, but it is typed as `Record<PrimitiveName, Record<string, unknown>>` instead of the strongly-typed mapped form. This loses all compile-time guarantees: a misspelled key (e.g. `tails` vs `tailCells`), a wrong value domain, or a renamed/added field will compile silently and only fail at render time. It also creates a second source of truth: if the authority changes (a default value or field rename), this table will not be updated, so goldens can drift from real render behavior while tests still pass. `primitive-params.ts` already exports `PrimitiveParams`/`PrimitiveName`; reuse the mapped type (or import the shared defaults) so keys and value types are enforced.",
+   "suggestion_code": "const DEFAULT_PARAMS: { [K in PrimitiveName]: PrimitiveParams[K] } = {",
+   "existing_code": "const DEFAULT_PARAMS: Record<PrimitiveName, Record<string, unknown>> = {",
+   "start_line": 10,
+   "end_line": 10,
+   "category": "maintainability",
+   "severity": "high"
+  },
+  {
+   "path": "packages/renderer/src/goldens.ts",
+   "content": "Two problems on this return: (1) `params` is the module-level `DEFAULT_PARAMS[name]` object returned by reference, so any caller that mutates `frame.params` (a natural thing for per-beat golden tweaks) permanently corrupts the defaults for every later call in the process \u2014 return a deep copy instead. (2) `?? {}` is unreachable given `name` is always a valid `PrimitiveName` key of a fully-populated table; worse, if an entry were ever missing it would silently emit an empty (no-op) param bag and mask the gap rather than failing. Drop the fallback or validate exhaustively.",
+   "suggestion_code": "  return { primitive: name, roomId, beat, params: structuredClone(DEFAULT_PARAMS[name]) };",
+   "existing_code": "  return { primitive: name, roomId, beat, params: DEFAULT_PARAMS[name] ?? {} };",
+   "start_line": 64,
+   "end_line": 64,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/renderer/src/goldens.ts",
+   "content": "The default `roomId` (\"square-loop\") and `beat` (1) are hardcoded domain identifiers that must stay in sync with the venue reference rooms (`REFERENCE_ROOMS`/`referenceById`). If the room is renamed or the downstream beat indexing becomes 0-based, golden frames will silently point at a non-existent room or an off-by-one beat with no error. Consider centralizing the reference room id and base beat as exported constants.",
+   "existing_code": "export function referenceFrames(name: PrimitiveName, roomId = \"square-loop\", beat = 1): ReferenceFrame {",
+   "start_line": 63,
+   "end_line": 63,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/serato/src/remote-provider.test.ts": [
+  {
+   "path": "packages/serato/src/remote-provider.test.ts",
+   "content": "`next()` searches the entire accumulated `seen` buffer, which contains every state emitted since the watcher was created, not just states produced after the call. A predicate that a past state already satisfies (including the default `() => true`) therefore resolves immediately with a stale, pre-action state. The helper should only match states recorded after the caller initiated the action it is waiting on \u2014 e.g. capture a cursor at call time and search only states appended after it, or let the caller pass a start marker.",
+   "suggestion_code": "      const hit = seen.find((state) => state.deckId === deckId && predicate(state));\n      if (hit) return Promise.resolve(hit);\n      // NOTE: `seen` must be scoped to states emitted after the triggering\n      // action; otherwise a stale state satisfies the predicate.",
+   "existing_code": "      const hit = seen.find((state) => state.deckId === deckId && predicate(state));\n      if (hit) return Promise.resolve(hit);",
+   "start_line": 64,
+   "end_line": 65,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/serato/src/remote-provider.test.ts",
+   "content": "Because `next` matches against the full `seen` history, `next(1, () => true)` resolves on the very first deck-1 state ever seen (from `load-deck-1`) and returns instantly on every later iteration. The loop therefore never waits for the action under test to produce state, so a regression where `play`/`pause`/`seek`/`loop-roll` emit no deck state would still pass. It also means `expect(provider.getStats().rejected).toBe(before)` runs before the action's trailing frames have been processed, so a malformed frame in an action script would slip through. Use a predicate that matches the action's distinct effect (or a post-action cursor) so the await actually observes the new state.",
+   "existing_code": "      await emulator.playAction(action, 20);\n      await watcher.next(1, () => true);",
+   "start_line": 288,
+   "end_line": 289,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/serato/src/remote-provider.test.ts",
+   "content": "This assertion only verifies the emulator helper (`seratoActionScript`) returns a non-empty script; it exercises no provider behavior and is effectively tautological. Combined with the test name 'plays every Remote-expressible action script', it overpromises: the loop only covers `load-deck-1`, `play`, `pause`, `seek`, `loop-1-beat`, `loop-roll`, `two-decks` and omits the other Remote-expressible actions (`load-deck-2`, `loop-4-beat`, `pitch-plus-8`, `crossfader`, `upfader`, `replace-track`). Either drive all of `SERATO_ACTIONS` here or rename the test to the subset it actually covers.",
+   "existing_code": "      expect(seratoActionScript(action).length).toBeGreaterThan(0);",
+   "start_line": 291,
+   "end_line": 291,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/storage/src/validation.ts": [
+  {
+   "path": "packages/storage/src/validation.ts",
+   "content": "The switch is exhaustive over the `BoundaryKind` union, so TypeScript accepts it, but at runtime `kind` comes from untrusted IPC/caller input. An unrecognized value falls through every case and the function returns `undefined` while being typed as `ValidationIssue[]`, so callers doing `issues.length`/`issues.some(...)` will throw or silently treat validation as passed. Add an explicit default that fails safe (return an issue or throw).",
+   "suggestion_code": "  switch (kind) {\n    case \"track-model\":",
+   "existing_code": "  switch (kind) {\n    case \"track-model\":",
+   "start_line": 258,
+   "end_line": 259,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/storage/src/validation.ts",
+   "content": "`validateAtBoundary` calls `validateFixture(value)` with no device count, so the default `deviceSegmentCount = null` disables the `device.segmentCount` agreement check (in `validateFixtureCells`) for every boundary-driven fixture validation. Mismatched device data therefore passes through this trust boundary unnoticed. The boundary signature must accept and forward the device segment count.",
+   "suggestion_code": "    case \"fixture\":\n      return validateFixture(value, deviceSegmentCount ?? null);",
+   "existing_code": "    case \"fixture\":\n      return validateFixture(value);",
+   "start_line": 263,
+   "end_line": 264,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/storage/src/validation.ts",
+   "content": "Gap/overlap detection compares against the immediately preceding sorted interval's `end` (`prev.end`) instead of a running maximum end. For partially nested covers such as [0,10],[5,6],[7,12] this reports the correct overlap for [5,6] but then emits a spurious `section cover has gap: starts 7 after 6` for [7,12], which actually overlaps [0,10]. Track the running max end so containment is handled correctly.",
+   "suggestion_code": "    if (cur.start < runningEnd) {\n      issues.push({\n        path: `sections[${cur.i}].startBeat`,\n        message: `section overlaps previous: starts ${cur.start} before ${runningEnd}`,\n      });\n    } else if (cur.start > runningEnd) {\n      issues.push({\n        path: `sections[${cur.i}].startBeat`,\n        message: `section cover has gap: starts ${cur.start} after ${runningEnd}`,\n      });\n    }\n    runningEnd = Math.max(runningEnd, cur.end);",
+   "existing_code": "    if (cur.start < prev.end) {\n      issues.push({\n        path: `sections[${cur.i}].startBeat`,\n        message: `section overlaps previous: starts ${cur.start} before ${prev.end}`,\n      });\n    } else if (cur.start > prev.end) {\n      issues.push({\n        path: `sections[${cur.i}].startBeat`,\n        message: `section cover has gap: starts ${cur.start} after ${prev.end}`,\n      });\n    }",
+   "start_line": 91,
+   "end_line": 101,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/storage/src/validation.ts",
+   "content": "`validateBeats` parses with `beatGridSchema`, which requires `beats.min(1)`. However `trackModelSchema.beatGrid` is a union that also permits `adaptiveBeatGridSchema` (which forces an EMPTY beats array when `analysisCoverage === \"adaptive\"`). A valid adaptive TrackModel therefore always yields a spurious `beatGrid.beats` issue here and is wrongly rejected at the trust boundary. Skip the strictly-increasing check for empty grids (or validate against the adaptive schema too).",
+   "suggestion_code": "    ...validateBeats(model.beatGrid),",
+   "existing_code": "    ...validateBeats(model.beatGrid),",
+   "start_line": 169,
+   "end_line": 169,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/storage/src/validation.ts",
+   "content": "`Math.min(...arr)` / `Math.max(...arr)` spread every section start/end as function arguments. For large section arrays (tens of thousands of entries) this overflows the call stack and throws a RangeError, turning a validation call into a crash. Iterate to compute the bounds instead.",
+   "suggestion_code": "    let minStart = Infinity;\n    let maxEnd = -Infinity;\n    for (const r of rows) {\n      if (r.start < minStart) minStart = r.start;\n      if (r.end > maxEnd) maxEnd = r.end;\n    }",
+   "existing_code": "    const minStart = Math.min(...rows.map((r) => r.start));\n    const maxEnd = Math.max(...rows.map((r) => r.end));",
+   "start_line": 104,
+   "end_line": 105,
+   "category": "performance",
+   "severity": "low"
+  },
+  {
+   "path": "packages/storage/src/validation.ts",
+   "content": "The segment-count agreement compares `count` against the raw `cells.length`, which still counts entries that were skipped as malformed (non-object) above. A fixture containing an invalid cell can therefore report a bogus `segmentCount` disagreement (or mask a real one). Compare against the number of well-formed cells actually collected.",
+   "existing_code": "    if (count !== null && count !== cells.length) {",
+   "start_line": 229,
+   "end_line": 229,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ ".dependency-cruiser.cjs": [
+  {
+   "path": ".dependency-cruiser.cjs",
+   "content": "Several ownership/boundary rules match on `packages/<name>` paths, but every cross-package import in this repo uses the `@autolight/*` workspace specifier and this file's own NOTE states depcruise does not resolve those to `packages/...`. These rules are therefore inert for real imports: e.g. `packages/show-runtime/src/fastpath.ts` imports `@autolight/storage` but the recorded path never contains `packages/storage`, so the `packages/storage` `error`-severity ownership rule is not flagged; likewise the mixed alternatives `(show-runtime|show-mixer|packages/renderer|packages/govee)` miss `@autolight/renderer`/`@autolight/govee` edges from `apps/desktop/src/features/live/live.ts` and `apps/desktop/src/routes/venue/room-preview.tsx`. Match both path forms consistently (and verify against real `yarn depcruise` CI output).",
+   "suggestion_code": "      to: { path: \"(@autolight/|packages/)storage\" },",
+   "existing_code": "      to: { path: \"packages/storage\" },",
+   "start_line": 47,
+   "end_line": 47,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": ".dependency-cruiser.cjs",
+   "content": "Scope does not match the stated intent: the comment says \"main services never import the show runtime\", but `from.path: \"apps/desktop\"` also covers the renderer (`apps/desktop/src`) and the whole desktop app, and unlike the sibling `ownership-*` rules it carries no `pathNot` exemption for the owner. A renderer\u2192show-runtime edge thus becomes a hard `error` here, while `renderer-no-show-internals` deliberately keeps the same class of violation at `warn` (accepted deviation) \u2014 an inconsistent combination that can fail CI for an edge the other rule says is tolerated. Narrow `from` to the owning services.",
+   "suggestion_code": "      from: { path: \"apps/desktop/electron\", pathNot: \"\\\\.test\\\\.ts$\" },",
+   "existing_code": "      from: { path: \"apps/desktop\", pathNot: \"\\\\.test\\\\.ts$\" },",
+   "start_line": 39,
+   "end_line": 39,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": ".dependency-cruiser.cjs",
+   "content": "Two issues with this rule. (1) The comment claims \"no other module opens UDP\", but `from.path` only covers `apps/desktop/electron`, so package code is never checked \u2014 `packages/govee/src/engines/native-ts.ts` and `packages/simulator/src/govee-lan.ts` import `node:dgram` with no exemption required; either widen `from` (with explicit owner exemptions) or correct the comment. (2) `to.path: \"dgram$\"` is anchored only at the end, so it also matches any module id whose name merely ends in `dgram`; anchor both ends.",
+   "suggestion_code": "      to: { path: \"^(node:)?dgram$\" },",
+   "existing_code": "      to: { path: \"dgram$\" },",
+   "start_line": 68,
+   "end_line": 68,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": ".dependency-cruiser.cjs",
+   "content": "The comment asserts \"CI counts this as 1 known error, ratcheted\", which is inconsistent with the rule as written: `severity: \"warn\"` is not an error, and the ratchet counter in `tools/ratchet.json` records `renderer-no-show-internals: 2`, not 1. A warning-only, count-mismatched deviation cannot enforce the intended ratchet and lets new violations in this boundary accumulate unnoticed. Reconcile the count and either promote the rule to `error` with an explicit baseline or reword the comment.",
+   "existing_code": "      severity: \"warn\",\n      from: { path: \"apps/desktop/src\" },",
+   "start_line": 7,
+   "end_line": 8,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": ".dependency-cruiser.cjs",
+   "content": "This exemption uses an unanchored `\\.test`, while every other rule uses `\\.test\\.ts$`. The unanchored form also exempts any file whose path merely contains `.test` (e.g. `simulator-show.testing.ts`, `foo.test-utils.ts`), silently widening the simulator exemption beyond test files. Use a consistent, anchored test pattern.",
+   "suggestion_code": "      from: { path: \"apps/desktop/(src|electron)\", pathNot: \"(services/simulator-show|\\\\.test\\\\.(ts|tsx)$)\" },",
+   "existing_code": "      from: { path: \"apps/desktop/(src|electron)\", pathNot: \"(services/simulator-show|\\\\.test)\" },",
+   "start_line": 15,
+   "end_line": 15,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ]
+}

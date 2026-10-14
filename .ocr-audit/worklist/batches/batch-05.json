@@ -1,0 +1,417 @@
+{
+ "apps/desktop/src/components/kit.tsx": [
+  {
+   "path": "apps/desktop/src/components/kit.tsx",
+   "content": "`span` can be zero: when `points.length > 1` but every point shares the same `at` (e.g. a duration-0 series or repeated timestamps), `maxAt === minAt`, so `span = 0` and `x()` returns `0/0 = NaN`. The polyline points and the playhead `x1`/`x2` then become `NaN`, producing a broken/empty SVG. Guard the span (the sibling lanes all use `Math.max(1, ...)` for the same reason).",
+   "suggestion_code": "  const span = Math.max(1e-6, maxAt - minAt);\n  const x = (at: number): number => ((at - minAt) / span) * w;",
+   "existing_code": "  const span = maxAt - minAt;\n  const x = (at: number): number => ((at - minAt) / span) * w;",
+   "start_line": 103,
+   "end_line": 104,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/src/components/kit.tsx",
+   "content": "Bar detection uses `(t.at - startBeat) % beatsPerBar === 0`. Because `barTicks` only emits integral beats, any non-integral `startBeat` (a zoomed/offset window) makes every difference fractional, so `% beatsPerBar` is never exactly 0 and no tick is ever styled as a bar \u2014 the downbeat emphasis silently disappears for the whole ruler. Detect bars against integer beat positions instead of the window origin.",
+   "suggestion_code": "        const isBar = Math.abs(t.at % beatsPerBar) < 1e-6;",
+   "existing_code": "        const isBar = (t.at - startBeat) % beatsPerBar === 0;",
+   "start_line": 130,
+   "end_line": 130,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/components/kit.tsx",
+   "content": "Key `kind-at` collides when two marks of the same `kind` share the same `at` (possible for `musicalEvents`), which makes React drop/merge a row during reconciliation. Include the array index to keep keys unique.",
+   "existing_code": "          <span key={`${m.kind}-${m.at}`} title={m.label} aria-hidden\n            className=\"absolute top-1/2 size-2 -translate-y-1/2\"",
+   "start_line": 194,
+   "end_line": 195,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/components/kit.tsx",
+   "content": "This is a nested ternary. The project rules forbid nested ternaries; extract a small tone-lookup map/helper for the kind \u2192 colour mapping.",
+   "existing_code": "        const tone = m.kind === \"cue\" ? tokens.statusWarn : m.kind === \"event\" ? tokens.statusOk : tokens.accent;",
+   "start_line": 192,
+   "end_line": 192,
+   "category": "style",
+   "severity": "low"
+  },
+  {
+   "path": "apps/desktop/src/components/kit.tsx",
+   "content": "`key={s.start}` collides when two section bands start on the same beat (e.g. overlapping sections), causing React to drop/merge a band. Use a key that also includes `end` (or the index).",
+   "existing_code": "          <span key={s.start} aria-hidden className=\"absolute top-0 h-6 bg-muted\" style={{ left: `${left}%`, width: `${width}%` }}>",
+   "start_line": 172,
+   "end_line": 172,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/components/kit.tsx",
+   "content": "Key `startBeat-target` collides when the plan contains two cues with the same start beat and target (different `type`), which will drop/merge a cue row. Include the array index (or `type`) in the key.",
+   "existing_code": "        <li key={`${row.cue.startBeat}-${row.cue.target}`} className={tokens.panel + \" \" + tokens.space.paddingTight}>",
+   "start_line": 318,
+   "end_line": 318,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/components/kit.tsx",
+   "content": "`onSelect` is declared on `CueRow` but `CueList` never calls it and the rendered `<li>` has no click handler, so a cue can never be selected. Either wire the callback to the row or remove it to avoid a dead API.",
+   "existing_code": "  onSelect?: (cue: ShowCue) => void;",
+   "start_line": 305,
+   "end_line": 305,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/components/kit.tsx",
+   "content": "`String(tile.latencyMs)` renders a fabricated measurement for unmeasured values. In this codebase `latencyMs: 0` is the \"no measurement\" sentinel (see `venue-view.tsx` scan tiles and the `latencySource: \"unmeasured\"` mapping in `device-screens.ts`), and a `NaN` would render as `latency: NaNms`. Contrast with the `segments` handling on the next lines, which explicitly treats `0` as unmeasured. Apply the same S6 guard here.",
+   "existing_code": "        <MetricBadge metric={{ label: \"latency\", value: String(tile.latencyMs), unit: \"ms\" }} />",
+   "start_line": 250,
+   "end_line": 250,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/components/kit.tsx",
+   "content": "Nested ternary; the project rules forbid nested ternaries. Extract a `Record<DeviceTile[\"health\"], StatusTone>` lookup.",
+   "existing_code": "  const healthTone: StatusTone = tile.health === \"online\" ? \"ok\" : tile.health === \"degraded\" ? \"warn\" : \"bad\";",
+   "start_line": 242,
+   "end_line": 242,
+   "category": "style",
+   "severity": "low"
+  },
+  {
+   "path": "apps/desktop/src/components/kit.tsx",
+   "content": "For a `SERATO` source `info.verified === false`, this renders e.g. `SERATO serato-remote UNVERIFIED REKORDBOX VERSION` \u2014 the Rekordbox-specific spec 145 wording is applied to Serato, telling the user the wrong product is unverified. Branch the unverified copy on `info.source`.",
+   "existing_code": "  const quality = info.verified ? \"verified\" : UNVERIFIED_REKORDBOX_COPY;",
+   "start_line": 453,
+   "end_line": 453,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/components/kit.tsx",
+   "content": "The comment claims events and cues are mapped to marks, but only `track.musicalEvents` is used \u2014 cues are never rendered (and `TrackModel` carries no `cues` field; cues live on `ShowPlan`). Either render deck/plan cues or fix the comment so the inspector's actual behavior is documented.",
+   "existing_code": "  const marks: LaneMark[] = track.musicalEvents.map((e) => ({ at: e.beat, label: e.type, kind: \"event\" }));",
+   "start_line": 276,
+   "end_line": 276,
+   "category": "documentation",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/components/kit.tsx",
+   "content": "`beatsPerBar` is hard-coded to 4 rather than derived from the model (the beat grid already encodes `beatInBar`), and the per-beat readout below is capped at `slice(0, 16)`. Both are show/grid-specific constants baked into the component, which will render incorrect bars for non-4/4 tracks. Derive the bar length from `track.beatGrid` and pass it in.",
+   "existing_code": "      <BeatRuler ticks={barTicks(startBeat, endBeat)} startBeat={startBeat} endBeat={endBeat} beatsPerBar={4} />",
+   "start_line": 283,
+   "end_line": 283,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/components/kit.tsx",
+   "content": "`role=\"img\"` with `aria-label=\"Playhead\"` is contradictory: `aria-hidden` removes the element (and its label) from the accessibility tree, so the role/label never reach assistive tech. Drop the redundant role/label or drop `aria-hidden` if the playhead should be announced.",
+   "existing_code": "  return <span role=\"img\" aria-label=\"Playhead\" aria-hidden className=\"absolute top-0 bottom-0 w-px bg-primary\" style={{ left }} />;",
+   "start_line": 298,
+   "end_line": 298,
+   "category": "style",
+   "severity": "low"
+  },
+  {
+   "path": "apps/desktop/src/components/kit.tsx",
+   "content": "Nested ternary; the project rules forbid nested ternaries. Use a status \u2192 tone map/helper instead (the same pattern recurs in `DeviceTile`, `EventLane`, and `ConfigField`'s `receiptTone`).",
+   "existing_code": "  const tone: StatusTone = status === \"PASS\" ? \"ok\" : status === \"PARTIAL\" || status === \"IMPLEMENTED_UNQUALIFIED\" ? \"warn\" : \"bad\";",
+   "start_line": 439,
+   "end_line": 439,
+   "category": "style",
+   "severity": "low"
+  }
+ ],
+ "packages/cloud/src/client.ts": [
+  {
+   "path": "packages/cloud/src/client.ts",
+   "content": "`JSON.parse(res.body)` is called without a try/catch (unlike `apiError`, which guards its own parse). If the API returns a non-JSON body (HTML error page, empty/truncated response after a 200), this throws a raw `SyntaxError` with no status context, bypassing the client's error contract (`CloudApiError`) and leaking an unexpected exception type to callers. Wrap the parse and rethrow as `CloudApiError`/a dedicated parse error.",
+   "suggestion_code": "    let parsed: { data?: RawDeviceEntry[] };\n    try {\n      parsed = JSON.parse(res.body) as { data?: RawDeviceEntry[] };\n    } catch {\n      throw new CloudApiError(res.status, \"Device list response was not valid JSON.\");\n    }",
+   "existing_code": "    const parsed = JSON.parse(res.body) as { data?: RawDeviceEntry[] };",
+   "start_line": 245,
+   "end_line": 245,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/cloud/src/client.ts",
+   "content": "Same unguarded `JSON.parse(res.body)` as `listDevices`: a non-JSON / truncated scene response throws a raw `SyntaxError` instead of the intended `CloudApiError`, breaking the consistent error handling the class provides elsewhere.",
+   "suggestion_code": "    let parsed: { data?: Array<{ id?: string; name?: string; sceneId?: string }> };\n    try {\n      parsed = JSON.parse(res.body) as { data?: Array<{ id?: string; name?: string; sceneId?: string }> };\n    } catch {\n      throw new CloudApiError(res.status, \"Scene list response was not valid JSON.\");\n    }",
+   "existing_code": "    const parsed = JSON.parse(res.body) as { data?: Array<{ id?: string; name?: string; sceneId?: string }> };",
+   "start_line": 261,
+   "end_line": 261,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/cloud/src/client.ts",
+   "content": "`raw.supportCmds` is spread without a null check. The OpenAPI entry is typed as required, but a real payload may omit it; `[...undefined]` throws a `TypeError` that aborts the entire `listDevices` mapping rather than degrading gracefully for that one device. Use a nullish fallback.",
+   "suggestion_code": "      instances: [...(raw.supportCmds ?? [])],",
+   "existing_code": "      instances: [...raw.supportCmds],",
+   "start_line": 156,
+   "end_line": 156,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/cloud/src/client.ts",
+   "content": "Hits are recorded in `guard` BEFORE the awaited `fetchFn` resolves. Any request that subsequently fails, throws/aborts, or is rejected (including a server 429) still permanently consumes the device-minute and account-day budget for its window, causing spurious local throttling. Reserve the slot only after the request actually completes (or release it on failure).",
+   "existing_code": "    hits.push(at);\n    day.push(at);",
+   "start_line": 293,
+   "end_line": 294,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/cloud/src/client.ts",
+   "content": "When the local device-minute budget is exhausted, `retryAfterMs` is reported as the full window (`MINUTE_MS`) instead of the time until the oldest recorded hit ages out. This over-throttles callers: a request made 59s into the window is told to wait a further 60s though the slot frees in ~1s. Compute the remaining time from `hits[0] + MINUTE_MS - at` (and likewise `DAY_MS` for the account-day branch).",
+   "suggestion_code": "      throw new CloudRateLimitError(\n        \"device-minute\",\n        hits.length > 0 ? Math.max(0, hits[0] + MINUTE_MS - at) : MINUTE_MS,",
+   "existing_code": "      throw new CloudRateLimitError(\n        \"device-minute\",\n        MINUTE_MS,",
+   "start_line": 279,
+   "end_line": 281,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/cloud/src/client.ts",
+   "content": "`deviceMinuteUsed` is computed as a SUM of window usage across ALL device keys, yet the field name suggests a single device's minute usage. A caller treating it as the per-device budget counter (the natural reading of the name) will see an inflated value and may believe a specific device is throttled when it is not. Either rename to a clearly aggregate field (e.g. `deviceMinuteUsedTotal`) or expose per-device usage.",
+   "existing_code": "    for (const hits of this.deviceHits.values()) deviceMinuteUsed += this.prune(hits, at, MINUTE_MS).length;",
+   "start_line": 222,
+   "end_line": 222,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "packages/cloud/src/client.ts",
+   "content": "The `accounting` getter mutates internal state: `prune` filters in place and rewrites the stored `deviceHits`/`accountHits` arrays as a side effect of reading. A read-only accessor (and property getter) with side effects is surprising and can interleave with `guard`'s own accounting. Prune with a non-mutating count of the window instead of reusing the destructive helper.",
+   "existing_code": "      accountDayUsed: this.prune(this.accountHits, at, DAY_MS).length,",
+   "start_line": 227,
+   "end_line": 227,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/cloud/src/client.ts",
+   "content": "`minuteRemaining` falls back to the generic `x-ratelimit-remaining` header when the minute-specific one is absent. If that generic header actually reports a different scope/bucket (e.g. daily or account level), the client records a wrong minute budget and may either throttle prematurely or fail to throttle. Confirm the vendor header semantics before reusing it across scopes; if the scope is ambiguous, do not map it to `minuteRemaining`.",
+   "existing_code": "  const minuteRemaining =\n    asCount(h[\"x-ratelimit-remaining-minute\"]) ?? asCount(h[\"x-ratelimit-remaining\"]);",
+   "start_line": 184,
+   "end_line": 185,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/rekordbox-live/src/fusion.ts": [
+  {
+   "path": "packages/rekordbox-live/src/fusion.ts",
+   "content": "The disagreement check filters providers only by `isFresh`, never by whether the field is actually supplied. For the `playheadSeconds` group there is also no null guard (unlike the explicit `effectiveBpm` guard below), so a provider that emits `playheadSeconds === null` is still compared: `beatsBetween` computes `Math.abs(a.playheadSeconds - b.playheadSeconds)` and JS coerces `null` to `0`, producing spurious large-spread diagnostics (or masking the real pair when the spurious pair dominates `spread`). Filter the `fresh` set per field by `supplied(...)` (or bail when either `playheadSeconds` is null).",
+   "suggestion_code": "    const fresh = perProvider.filter((c) =>\n      c.state.playheadSeconds !== null &&\n      isFresh(c.state, \"playheadSeconds\", atNs, this.options.staleMs),\n    );",
+   "existing_code": "    const fresh = perProvider.filter((c) => isFresh(c.state, \"playheadSeconds\", atNs, this.options.staleMs));",
+   "start_line": 275,
+   "end_line": 275,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-live/src/fusion.ts",
+   "content": "`Number(atNs - receivedAtNs)` assumes provider and engine clocks are synchronized. A future `receivedAtNs` (clock skew, or provider timestamp ahead of the engine) yields a negative delta that always satisfies `<= staleMs`, so an out-of-date value is treated as fresh forever. Also note `ingest` silently drops any packet whose `receivedAtNs` is lower than the stored one, so genuine out-of-order updates are discarded and never become the authority. Clamp the age to `>= 0` and/or reconcile clocks explicitly.",
+   "suggestion_code": "  if (state.quality[field] === \"stale\") return false;\n  const ageMs = Number(atNs - state.receivedAtNs) / 1e6;\n  return ageMs >= 0 && ageMs <= staleMs;",
+   "existing_code": "  if (state.quality[field] === \"stale\") return false;\n  return Number(atNs - state.receivedAtNs) / 1e6 <= staleMs;",
+   "start_line": 73,
+   "end_line": 74,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/fusion.ts",
+   "content": "`start()` awaits each provider sequentially inside the loop; a provider whose `start()` never settles will block every later provider from starting and will hang the caller indefinitely. Starting providers is independent work, so await them with `Promise.all` (or at least race each with a timeout) to avoid one bad provider stalling the whole manager.",
+   "existing_code": "      try {\n        await provider.start();\n        this.statuses.set(provider.id, provider.getStatus());\n      } catch (err) {",
+   "start_line": 404,
+   "end_line": 407,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/fusion.ts",
+   "content": "`stop()` tears down subscriptions and stops providers but does not cancel timers already queued through `schedule` (nor does `restart` consult `this.started`). A restart scheduled before shutdown still fires afterwards, calling `provider.stop().then(() => provider.start())` \u2014 resurrecting a provider and mutating `statuses`/`restarts` after the manager is stopped, which leaks resources and produces invalid state transitions. Track scheduled timer handles/handlers and cancel or no-op them in `stop()` (e.g. guard the callback with `if (!this.started) return;`).",
+   "existing_code": "  async stop(): Promise<void> {\n    if (!this.started) return;\n    this.started = false;\n    for (const off of this.unsubscribes.splice(0)) off();\n    for (const provider of this.providers) await provider.stop();\n  }",
+   "start_line": 414,
+   "end_line": 419,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-live/src/fusion.ts",
+   "content": "`restart()` has no per-provider in-flight guard. Two `failed` statuses arriving before the scheduled callback runs (or the recursive `this.restart(provider)` in the `.catch` below firing while a prior attempt is still pending) will each increment `restarts`, schedule duplicate timers, and consume the restart budget twice for a single failure. Track an in-flight flag/set keyed by `provider.id` and ignore re-entrant restart requests until the current attempt settles.",
+   "existing_code": "    this.restarts.set(provider.id, attempts + 1);\n    const attempt = Promise.withResolvers<void>();\n    this.restartsInFlight.add(attempt.promise);",
+   "start_line": 465,
+   "end_line": 467,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-live/src/fusion.ts",
+   "content": "`Promise.all([...this.restartsInFlight])` snapshots the set once. A restart chained from a failure `.catch` (which calls `this.restart` \u2192 adds a new promise + schedules a new timer) is added *after* the snapshot, so `settleRestarts` can resolve while a recursively scheduled restart is still pending \u2014 tests/shutdown will observe incomplete failover. Loop until the set is empty (draining newly added entries) instead of awaiting a single snapshot.",
+   "existing_code": "  async settleRestarts(): Promise<void> {\n    await Promise.all([...this.restartsInFlight]);\n  }",
+   "start_line": 422,
+   "end_line": 424,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/fusion.ts",
+   "content": "The `reason` union declares `\"quality\"` but no code path ever emits it; `pick()`/`emitSwitch` only ever pass `acquired`, `higher-authority`, or `stale-takeover`. Consumers matching on `\"quality\"` switches will never fire. Either implement the quality-driven switch (e.g. when the holder's quality degrades relative to a challenger) or drop the unused member to keep the contract accurate.",
+   "existing_code": "  reason: \"acquired\" | \"higher-authority\" | \"stale-takeover\" | \"quality\";",
+   "start_line": 35,
+   "end_line": 35,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/rekordbox-live/src/fusion.ts",
+   "content": "`this.options` is built by spreading the whole `opts` object (typed `{ now } & Partial<FusionOptions>`), so the non-`FusionOptions` `now` callback is copied into `options` and then leaked by `getOptions()` (`{ ...this.options, authority: [...] }`), returning an object with an unexpected `now` property. Destructure `now` out before spreading, or spread only the known option keys.",
+   "existing_code": "    this.options = { ...DEFAULT_FUSION_OPTIONS, ...opts, authority: opts.authority ?? DEFAULT_FUSION_AUTHORITY };",
+   "start_line": 103,
+   "end_line": 103,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "packages/rekordbox-live/src/ax.ts": [
+  {
+   "path": "packages/rekordbox-live/src/ax.ts",
+   "content": "Play state is inferred from the *presence* of a node mentioning pause/play/cue, in tree order, with `pause`/`cue` tested before `play`. A tree that always contains a \"Pause\" (or \"Cue\") control, or a single transport toggle whose label lists both, forces `playing=false` even while a deck is playing. This does not read the toggle's actual state (AX/UIA checked/selected/TogglePattern). Prefer the toggle's checked state, and avoid treating mere presence of a \"Pause\"/\"Cue\" label as \"not playing\".",
+   "existing_code": "    if (/\\bpause\\b/i.test(text)) return false;",
+   "start_line": 84,
+   "end_line": 84,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-live/src/ax.ts",
+   "content": "`timeToSeconds` applies a negative sign, so a remaining-time string like \"-2:48\" becomes `remainingSeconds = -168` instead of `168`. Because `isRemaining` also matches unsigned labeled remaining nodes, `remainingSeconds` has an inconsistent sign depending on how the UI renders it. Two concrete consequences: (a) the field no longer represents a remaining-time magnitude, and (b) it inverts `refineAxReading`'s \"remaining decreases\" checks \u2014 a signed countdown goes -168 -> -167 (i.e. numerically *increases*), so playing is never inferred from remaining for signed values. Downstream consumers that treat it as a magnitude (e.g. `ax-provider` using `remainingSeconds` as an elapsed fallback) then pass a negative value on. Normalize remaining to a positive magnitude and align the comparison direction, or make the sign explicit in the field semantics.",
+   "existing_code": "  const sign = m[1] === \"-\" ? -1 : 1;",
+   "start_line": 57,
+   "end_line": 57,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-live/src/ax.ts",
+   "content": "`all` is the fully flattened tree, so every node whose role matches `/deck|player/` \u2014 including a nested `role='player'` descendant of a deck container \u2014 becomes its own container, and the `/group|pane/` fallback matches many unrelated panels. The same deck can therefore produce multiple readings whose time nodes overlap, with colliding or renumbered `deckId`s (see `deckIndexOf`). Identify deck containers at one well-defined level (e.g. direct children of the deck area) and de-duplicate before reading.",
+   "existing_code": "  const deckContainers = all.filter((n) => (/deck|player/i.test(n.role) && !/button/i.test(n.role)) || /deck\\s*[1-4]/i.test(n.label ?? \"\"));",
+   "start_line": 101,
+   "end_line": 101,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-live/src/ax.ts",
+   "content": "The fallback derives deck identity from positional index in the container list. Since that list can contain nested/extra containers (see the container filter above), any such node shifts the numbering and produces incorrect `deckId`s and sort order rather than a stable identity. Additionally, `indexOf` returns -1 when the node is absent, silently yielding `deckId === 0`. Derive the deck number from an explicit label/attribute, and guard against a missing sibling instead of emitting a bogus id.",
+   "existing_code": "  return siblings.indexOf(node) + 1;",
+   "start_line": 96,
+   "end_line": 96,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/ax.ts",
+   "content": "When both fields are present but no motion is observed (or `previous` is undefined), this returns `readable: true` while `playing` is left as whatever `current.playing` was \u2014 often `null`. That produces an inconsistent `{ readable: true, playing: null }` reading that callers treat as authoritative (the provider emits it and labels `playing` as only \"estimated\"). Either explicitly fall back to `current.playing`, or keep `readable` false when play/remaining state cannot be determined.",
+   "existing_code": "  return { ...current, readable: true };",
+   "start_line": 156,
+   "end_line": 156,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/ax.ts",
+   "content": "The binary search assumes `grid` is sorted ascending by `sourceTimeMs` and free of duplicate/gap entries, but nothing validates that. With an unsorted or duplicated grid the search silently returns a plausible-looking beat number (or 1 at the boundary) instead of `null`, corrupting the playhead mapping. Validate monotonicity (bail to `null`) or document/enforce the precondition at the call sites.",
+   "existing_code": "  let lo = 0;\n  let hi = grid.length - 1;",
+   "start_line": 174,
+   "end_line": 175,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/ax.ts",
+   "content": "`m[2] ?? 0` and `m[3] ?? 0` are dead: groups 2 and 3 are mandatory in the regex, so they are always defined after a successful match. (Relatedly, `isElapsed`'s `total played` alternative is fully subsumed by `played`.) Remove the redundant fallbacks to avoid implying these groups can be absent.",
+   "existing_code": "  const a = Number(m[2] ?? 0);\n  const b = Number(m[3] ?? 0);",
+   "start_line": 58,
+   "end_line": 59,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/venue/src/fields.ts": [
+  {
+   "path": "packages/venue/src/fields.ts",
+   "content": "`runPointAt` mixes two different parameterizations: `total` comes from `runLength(run)`, which samples the **curved** geometry (`polylineLength` \u2192 `samplePath` with `run.geom`), but the loop below walks the straight control-point polyline and accumulates **chord** lengths via `Math.hypot`. For any run with `geom` set (e.g. `curvedRoom()` in reference.ts does `runs[0]!.geom = { kind: \"catmull-rom\" }`), the curved total exceeds the chord total, so `d <= acc + seg` is usually false and the loop falls through to the `i === pts.length - 2` branch. There `t = (d - acc) / seg` is **never clamped**, so `t > 1` and the returned point is extrapolated past the last vertex. Callers (reference.ts, `fitRunMapping` startM/endM) pass arc distances derived from the curved `runLength`, so all such positions are misplaced. Either sample the polyline consistently with `runLength` (`samplePath`) or clamp `t` into [0,1] and use a chord-based total.",
+   "existing_code": "  const total = Math.max(1e-9, runLength(run));\n  const d = run.closed ? (((arcM % total) + total) % total) : Math.min(Math.max(0, arcM), total);",
+   "start_line": 134,
+   "end_line": 135,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/venue/src/fields.ts",
+   "content": "Silent wrong-run fallback: when a mapped cell references a `run` id that is not present in the run map, the cell is silently attached to `runs[0]` and `runId: run.id` records `runs[0].id`. Downstream consumers therefore see a valid-looking run id and cannot detect that the geometry is wrong (and in `computeFields` the cell's arc distance `c.arcM` is then interpreted against a completely different polyline). This drops real geometry on a data mismatch with no error signal. Consider returning/leaving `runId: null` (or throwing) instead of guessing `runs[0]`.",
+   "existing_code": "    const run = runById[p.run] ?? runs[0];",
+   "start_line": 297,
+   "end_line": 297,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/venue/src/fields.ts",
+   "content": "Silent origin collapse: when `positions[0]` is absent (or no run is resolvable) the cell is placed at `{0,0,z}` with `runId: null`. This maps a real fixture to the room origin without any error/log, producing fields that look valid but are geometrically meaningless (and `{0,0}` may be outside the outline, distorting `maxDist`, centroid distances, etc.). At minimum this should surface an error or be excluded from the field set rather than fabricated at the origin.",
+   "existing_code": "    const p = c.positions[0];\n    if (!p) {",
+   "start_line": 289,
+   "end_line": 290,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/venue/src/fields.ts",
+   "content": "Degenerate polyline handling: if `run.polyline` is empty (or, for a closed run, a single point), `pts` becomes `[undefined]`, the segment loop never runs, and `last` is `undefined`; `{ ...last }` yields `{}` (no `x/y/z`, silently \u2014 no throw). The caller `fieldCellsFromMap` then builds `{ x: pt.x, y: pt.y, z: pt.z }` from missing values, writing `NaN`/`undefined` into the `pos`/`extent` Float32Arrays. Add an explicit guard/early return for polylines with fewer than the required points.",
+   "existing_code": "  const last = pts[pts.length - 1]!;\n  return { p: { ...last }, tangent: { x: 1, y: 0 } };",
+   "start_line": 151,
+   "end_line": 152,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/venue/src/fields.ts",
+   "content": "`projectToOutline` and `outlinePointAt` each rebuild the cumulative-length array (`outlineCum`) and its `total` on every call, and both are called once per cell inside `computeFields` (plus an O(cells \u00d7 outline) `maxDist` scan). This is O(cells \u00d7 outline) with a fresh array allocation per cell. Hoist `outlineCum(outline)` once in `computeFields` and pass the precomputed `{ cum, total }` into these helpers (or memoize it) to remove redundant work and allocation on large fixtures/outlines.",
+   "existing_code": "  const { cum, total } = outlineCum(outline);\n  const safe = Math.max(1e-9, total);",
+   "start_line": 72,
+   "end_line": 73,
+   "category": "performance",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/venue/src/fields.ts",
+   "content": "Nested ternary expression, which is disallowed by the project rules. Please expand to explicit `if`/`else` branches for readability.",
+   "suggestion_code": "    if (lx < -half) f.side[i] = SIDE_LEFT;\n    else if (lx > half) f.side[i] = SIDE_RIGHT;\n    else f.side[i] = SIDE_CENTER;",
+   "existing_code": "    f.side[i] = lx < -half ? SIDE_LEFT : lx > half ? SIDE_RIGHT : SIDE_CENTER;",
+   "start_line": 267,
+   "end_line": 267,
+   "category": "style",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/venue/src/fields.ts",
+   "content": "The `front-center` zero is found by hardcoding 64 equally spaced samples along the perimeter, and `k / 64` is returned as the zero offset. On long or geometrically detailed perimeters one step can span several meters, so the true front-most point can be missed and every normalized `s` value is shifted by that error. Consider sampling adaptively (e.g. dense sampling plus local refinement around the max-Y candidate, or projecting the real front-most vertex) instead of a fixed 64-sample sweep.",
+   "existing_code": "    for (let k = 0; k < 64; k++) {\n      const p = outlinePoint(o, k / 64);",
+   "start_line": 340,
+   "end_line": 341,
+   "category": "bug",
+   "severity": "low"
+  }
+ ]
+}

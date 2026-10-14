@@ -1,0 +1,383 @@
+{
+ "packages/track-identity/src/alias.ts": [
+  {
+   "path": "packages/track-identity/src/alias.ts",
+   "content": "Alias-ownership conflict is silently dropped, leaving the two maps inconsistent. When `record.aliasId` is already owned by a *different* `trackId`, the record is still appended to `byTrack[record.trackId]`, but `byAlias` keeps the original owner. After that, `aliasesOf(record.trackId)` reports the alias while `trackIdForAlias(record.aliasId)` returns the other track, so the graph is non-injective and `resolveTrackId` can attach the same alias to two TrackIds. Detect the conflict before mutating `byTrack` and either reject the insert or reconcile the owners explicitly.",
+   "suggestion_code": "      const owner = this.byAlias.get(record.aliasId);\n      if (owner !== undefined && owner !== record.trackId) {\n        // alias already owned by another track: do not let byTrack/byAlias diverge\n        return;\n      }\n      existing.push(record);\n      this.byTrack.set(record.trackId, existing);\n      this.byAlias.set(record.aliasId, record.trackId);",
+   "existing_code": "      existing.push(record);\n      this.byTrack.set(record.trackId, existing);\n      const owner = this.byAlias.get(record.aliasId);\n      if (owner === undefined || owner === record.trackId) this.byAlias.set(record.aliasId, record.trackId);",
+   "start_line": 38,
+   "end_line": 41,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/track-identity/src/alias.ts",
+   "content": "Conflicting strong aliases are not detected. The loop takes the first strong match (e.g. a pcm-hash mapping to track A) and then, in the fill-in loop, silently skips any alias already owned by someone else. If the file-hash of the same identity maps to track B, B keeps that alias, the mismatch is never surfaced, and one of the two identities is lost/merged arbitrarily. Before returning, gather the distinct owners of all strong aliases and reconcile (merge) or reject the conflicting resolution instead of taking the first arbitrarily.",
+   "existing_code": "  const strong = aliases.filter((a) => a.source === \"pcm-hash\" || a.source === \"file-hash\");\n  for (const alias of [...strong, ...aliases]) {\n    const owner = store.trackIdForAlias(alias.aliasId);\n    if (owner !== null) {",
+   "start_line": 92,
+   "end_line": 95,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/track-identity/src/alias.ts",
+   "content": "The `attached` flag does not reliably indicate that this call attached a new alias / performed a rename-move migration. It returns true whenever the resolved owner historically has more than one alias (even when nothing new was inserted this call), and returns false when resolving to an existing owner that had only the single matched alias. Callers using it to detect migration will get false positives and negatives. Compute it from whether the fill-in loop actually inserted any new alias for this resolution.",
+   "existing_code": "      return { trackId: owner, attached: aliases.some((a) => store.trackIdForAlias(a.aliasId) === owner && a.aliasId !== alias.aliasId) || store.aliasesOf(owner).length > 1 };",
+   "start_line": 102,
+   "end_line": 102,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/track-identity/src/alias.ts",
+   "content": "Lowercasing the whole path conflates distinct files on case-sensitive filesystems: `/Music/A.mp3` and `/Music/a.mp3` are different tracks but normalize to the same alias, so two distinct tracks can be falsely merged. It also does not trim whitespace or collapse a trailing separator, so paths that should be identical can miss an alias match. If case folding is required for cross-platform matching, keep the original-case path as an additional alias rather than discarding it, and trim/normalize separators.",
+   "existing_code": "export function normalizePath(path: string): string {\n  return path.replace(/\\\\/g, \"/\").toLowerCase();\n}",
+   "start_line": 69,
+   "end_line": 71,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/track-identity/src/alias.ts",
+   "content": "The multi-alias writes are not atomic and have no error handling. Each alias is written with a separate `store.insert` call; with the SQL-backed implementation an insert that throws mid-loop (or a concurrent caller interleaving) leaves the alias set partially written, so the same track can later resolve to two different TrackIds. Provide a transactional/batch insert seam on `TrackAliasStore` and wrap the fill-in loop so a failure rolls back rather than leaving partial state.",
+   "existing_code": "  const trackId = makeId();\n  const now = new Date().toISOString();\n  for (const alias of aliases) store.insert({ trackId, aliasId: alias.aliasId, source: alias.source, createdAt: now });",
+   "start_line": 105,
+   "end_line": 107,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "scripts/golden-update.mjs": [
+  {
+   "path": "scripts/golden-update.mjs",
+   "content": "The `--reason` value is never validated. If `--reason` is omitted, `reason` becomes `\"\"`; if `--reason` is the last argument, `process.argv[reasonIdx + 1]` is `undefined` and the changelog line literally records `undefined`. In both cases the golden is still overwritten, directly violating the stated \"never silent / deliberate update\" guarantee. Reject the run when no non-empty reason is supplied.",
+   "suggestion_code": "const reasonIdx = process.argv.indexOf(\"--reason\");\nconst reason = reasonIdx >= 0 ? (process.argv[reasonIdx + 1] ?? \"\") : \"\";\nif (!reason.trim()) {\n  console.error('missing --reason \"<why the plan changed>\"; refusing to update goldens silently');\n  process.exit(1);\n}",
+   "existing_code": "const reasonIdx = process.argv.indexOf(\"--reason\");\nconst reason = reasonIdx >= 0 ? process.argv[reasonIdx + 1] : \"\";",
+   "start_line": 9,
+   "end_line": 10,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "scripts/golden-update.mjs",
+   "content": "The golden file is overwritten here before the CHANGELOG entry is appended. If `appendFileSync` later throws (read-only dir, ENOSPC, permissions), the golden has already changed but no provenance entry is written \u2014 an untracked, silent update. Compute and validate everything (including the changelog line) before mutating, or write the changelog first / roll back on failure, so the two changes cannot diverge.",
+   "existing_code": "writeFileSync(join(dir, \"planner-golden.json\"), JSON.stringify(plan, null, 2) + \"\\n\");",
+   "start_line": 22,
+   "end_line": 22,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "scripts/golden-update.mjs",
+   "content": "`reason` is interpolated verbatim into CHANGELOG.md. A value containing newlines (e.g. `--reason \"x\\n\\n## forged entry\"`) can inject arbitrary headings/sections and forge changelog history, corrupting the audit trail. Sanitize the reason (strip/replace newlines, collapse whitespace) or record it in a fenced/escaped form before writing.",
+   "suggestion_code": "const safeReason = String(reason).replace(/\\s+/g, \" \").trim();\nappendFileSync(join(logDir, \"CHANGELOG.md\"), `\\n## ${stamp}\\n\\n- planner-golden.json regenerated (planner ${PLANNER_VERSION}): ${safeReason}\\n`);",
+   "existing_code": "appendFileSync(join(logDir, \"CHANGELOG.md\"), `\\n## ${stamp}\\n\\n- planner-golden.json regenerated (planner ${PLANNER_VERSION}): ${reason}\\n`);",
+   "start_line": 27,
+   "end_line": 27,
+   "category": "security",
+   "severity": "medium"
+  },
+  {
+   "path": "scripts/golden-update.mjs",
+   "content": "The dynamic `import`, the `JSON.parse` calls for the reference files, and `planShow` can all throw. None of this is guarded, so a missing dist build, malformed reference JSON, or planner error aborts the script with a raw stack trace and non-obvious exit code instead of an actionable diagnostic. Wrap the work in try/catch (or a top-level `.catch`) and report a clear message with a controlled non-zero exit.",
+   "existing_code": "const { planShow, PLANNER_VERSION } = await import(join(root, \"packages/show-planner/dist/index.js\"));",
+   "start_line": 12,
+   "end_line": 12,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "scripts/golden-update.mjs",
+   "content": "There is no locking around the update. Two concurrent invocations can interleave: `writeFileSync` on `planner-golden.json` is not atomic (a reader or parallel run may observe a truncated/partial file) and the two `appendFileSync` calls can duplicate or conflict, yielding a corrupted golden and/or inconsistent changelog. Guard with an exclusive lock file (or write-temp-then-rename) to serialize runs.",
+   "existing_code": "mkdirSync(logDir, { recursive: true });",
+   "start_line": 25,
+   "end_line": 25,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/ble/src/qualify.ts": [
+  {
+   "path": "packages/ble/src/qualify.ts",
+   "content": "Fabricated measurement values are written into the calibration record as if they were measured. `recoveryMs` is always the constant 2000 (both branches), and when no candidate rate in `BUDGET_SWEEP_HZ` stalls, `ceilingHz` is invented as `sustained * 2` rather than reported as unmeasured. These land in `BleQualificationRecord.recoveryMs`/`burstCeilingHz` and feed `device_calibrations`, so the record implies a real measurement that never happened. Either derive these from the actual sweep/device, or leave them null and record them in `unmeasured`.",
+   "existing_code": "  if (sustained === null) return { sustainedHz: null, ceilingHz: ceiling, recoveryMs: ceiling === null ? null : 2000 };\n  return { sustainedHz: sustained, ceilingHz: ceiling ?? sustained * 2, recoveryMs: 2000 };",
+   "start_line": 221,
+   "end_line": 222,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/ble/src/qualify.ts",
+   "content": "`measureWriteDrain` returns the hardcoded constant 300 whenever the read-back merely matched (`kept`), so `writeDrainMs` is not a measurement at all. It also disconnects immediately after the write rather than 'after n ms' as the file header describes, so it never actually exercises a drain window. Return a value derived from the sim timing / options, or return null and mark the field unmeasured.",
+   "existing_code": "  return kept ? 300 : null;",
+   "start_line": 239,
+   "end_line": 239,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/ble/src/qualify.ts",
+   "content": "The budget benchmark builds a brand-new synthetic `SimPeripheral` at a fixed address (AA:BB:CC:00:BE:01, zones: 8) for every candidate rate instead of exercising the peripheral actually under qualification. Only `budgetHz` is forwarded, so any other device state that influences write behaviour is ignored, and the reported sustained/ceiling/recovery values are attributed to the unit even though a different object was probed. Pass the real peripheral (or its full options) into the sweep so the benchmark reflects the device being qualified.",
+   "existing_code": "  const probe = new SimPeripheral({ address: \"AA:BB:CC:00:BE:01\", zones: 8, budgetHz });",
+   "start_line": 198,
+   "end_line": 198,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/ble/src/qualify.ts",
+   "content": "`runBleQualification` has no try/catch/finally around the awaited user callbacks (`confirmMaskedWrite`, `readLatencyMs`) or the peripheral mutations. If a user callback rejects, or `peripheral.handleConnect()` throws (e.g. `failConnect`), the function aborts mid-wizard leaving the peripheral connected (`handleDisconnect()` at the end is never reached) and no partially-filled record is returned. Wrap the body in try/finally so the peripheral is always disconnected and the caller gets a defined outcome on failure.",
+   "existing_code": "  if (peripheral.connected) peripheral.handleDisconnect();\n  peripheral.handleConnect();",
+   "start_line": 119,
+   "end_line": 120,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/ble/src/qualify.ts",
+   "content": "Nested ternary for `encryptedHandshake` obscures the three-way protocol mapping. Use an explicit if/else chain.",
+   "suggestion_code": "  let handshake: BleQualificationRecord[\"encryptedHandshake\"] = \"plain\";\n  if (need.protocolV2) handshake = \"v2\";\n  else if (need.encoded) handshake = \"seed\";\n  record.encryptedHandshake = handshake;",
+   "existing_code": "  record.encryptedHandshake = need.protocolV2 ? \"v2\" : need.encoded ? \"seed\" : \"plain\";",
+   "start_line": 179,
+   "end_line": 179,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/ble/src/qualify.ts",
+   "content": "`readState` is typed `number[] | string | null`, but these two reads are blind-cast to `string | null` while the segment/IC reads below defensively use `Array.isArray`. If the characteristic ever answers with a byte array, `versionsOk` becomes true on a non-string and invalid version data is silently stored. Guard with `typeof ... === \"string\"` for consistency and type safety.",
+   "suggestion_code": "  const hard = peripheral.readState(0x20);\n  const soft = peripheral.readState(0x21);\n  record.hardVersion = typeof hard === \"string\" ? hard : null;\n  record.softVersion = typeof soft === \"string\" ? soft : null;",
+   "existing_code": "  record.hardVersion = peripheral.readState(0x20) as string | null;\n  record.softVersion = peripheral.readState(0x21) as string | null;",
+   "start_line": 123,
+   "end_line": 124,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/renderer/src/index.test.ts": [
+  {
+   "path": "packages/renderer/src/index.test.ts",
+   "content": "Tautological assertion: both sides invoke the exact same expression with identical inputs, so this test only compares a value to itself. It passes even if `frameHash` returns a constant (e.g. always `\"00000000\"`) or ignores its input entirely, giving false confidence about hash stability. Either assert against a concrete literal hash or delete this test since the \u00a7127 golden test below already covers determinism.",
+   "suggestion_code": "    expect(frameHash(renderFrame(plan, 257, [mkFixture(\"f1\", null)]))).toBe(\"a0357d48\");",
+   "existing_code": "    expect(frameHash(renderFrame(plan, 257, [mkFixture(\"f1\", null)]))).toBe(\n      frameHash(renderFrame(plan, 257, [mkFixture(\"f1\", null)])));",
+   "start_line": 24,
+   "end_line": 25,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "packages/renderer/src/index.test.ts",
+   "content": "This test does not exercise blackout precedence. The plan's blackout window is [256, 257) and the impact window is [257, 259) \u2014 they are adjacent and never overlap, so at beat 256.5 the blackout is the *only* active cue. `renderFrame` already filters/sorts by priority (index.ts:110-112), but with a single active cue the priority ordering and replace behavior are never exercised. A regression that made `impact` win over `blackout` in an overlapping frame would still leave this test green. Use a beat where a lower-priority look cue also overlaps the blackout (or move the impact to start at 256) so precedence is actually tested.",
+   "existing_code": "  it(\"blackout wins at beat 256\", () => {\n    const f = renderFrame(plan, 256.5, [mkFixture(\"f1\", null)]);\n    expect([...f.get(\"f1\")!]).toEqual([0, 0, 0]);\n  });",
+   "start_line": 19,
+   "end_line": 22,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "packages/renderer/src/index.test.ts",
+   "content": "Weak positive assertion: `some((v) => v > 0)` passes for any fixture that is merely non-zero, so a PRIMARY fixture rendered with the wrong colour, wrong intensity, wrong cell, or wrong count would still pass. Assert the exact expected frame (byte-for-byte, as done in the \u00a7127 test) instead of a non-emptiness check. Also, `out.get(\"a\")!` will throw a confusing `TypeError` rather than a clear failure if the renderer omits the fixture key; prefer an explicit null check or `expect(out.has(\"a\")).toBe(true)`.",
+   "existing_code": "    expect([...out.get(\"a\")!].some((v) => v > 0)).toBe(true);",
+   "start_line": 44,
+   "end_line": 44,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/renderer/src/index.test.ts",
+   "content": "The ramp test only proves a monotonic increase in summed bytes; it passes for any increasing curve regardless of the actual `build-ramp` formula (`intensity * min(1, progress + 0.2)` in index.ts:55) and never pins the curve shape or the clamping/boundary behaviour at the cue's end. Assert concrete per-beat values (e.g. the exact intensity at 0.5 and 7.5) so an incorrect ramp slope or a missing clamp would be caught.",
+   "existing_code": "    expect(sum(late)).toBeGreaterThan(sum(early));",
+   "start_line": 54,
+   "end_line": 54,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/renderer/src/index.test.ts",
+   "content": "The golden frame's magic numbers (`[224, 224, 224]` and hash `\"a0357d48\"`) have no documented derivation, so future legitimate renderer tuning will register as an opaque failure and no one can tell whether the new value is correct or a regression. Add a comment describing how these were produced (inputs, palette, beat) and how to regenerate them.",
+   "existing_code": "    expect([...f.get(\"f1\")!]).toEqual([224, 224, 224]);\n    expect(frameHash(f)).toBe(\"a0357d48\");",
+   "start_line": 29,
+   "end_line": 30,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/renderer/src/index.test.ts",
+   "content": "The `as ShowPlan` cast bypasses type checking on the literal, so a schema mismatch against the real `ShowPlan` contract (missing/renamed required fields, wrong enum values) would not be caught by tsconfig. Prefer annotating the literal (`const plan: ShowPlan = { ... }`) so it is validated against the contract; use `satisfies ShowPlan` if you need the literal type preserved.",
+   "existing_code": "]} as ShowPlan;",
+   "start_line": 8,
+   "end_line": 8,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/show-planner/src/corrections.test.ts": [
+  {
+   "path": "packages/show-planner/src/corrections.test.ts",
+   "content": "The test only asserts that cues outside [32,64) are preserved with the same startBeat. In `regenerateWithLocks` those cues are kept by the `!inside` branch regardless of `lockedRegions`, so this passes even with `lockedRegions: []` or a completely no-op regeneration. It never verifies that the middle section was actually regenerated (the `fresh` cues with intensity 0.1 replacing the originals), nor that `before` is non-empty. Add assertions that the returned `cues` contain the fresh middle-section cues (e.g. intensity 0.1) and that the loop actually runs (`expect(before.size).toBeGreaterThan(0)`).",
+   "existing_code": "    const { cues } = regenerateWithLocks({ plan, sectionStart: 32, sectionEnd: 64, fresh, edits: { ...EMPTY_EDITS, lockedRegions: [{ startBeat: 0, endBeat: 32 }, { startBeat: 64, endBeat: 96 }] } });",
+   "start_line": 62,
+   "end_line": 62,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "packages/show-planner/src/corrections.test.ts",
+   "content": "This deletion assertion is vacuous. `victim` lies inside [32,64), is not covered by the locked region [{0,32}], and `fresh: []`, so it is dropped by the section regeneration whether or not `deletedCueIds` is honored. A regression that ignores deletion entirely would still pass. Pass a `fresh` list that re-adds `victim` (same id), so that only the deletion logic can remove it, and then assert it is gone.",
+   "existing_code": "    const r = regenerateWithLocks({ plan, sectionStart: 32, sectionEnd: 64, fresh: [], edits });\n    expect(r.cues.some((c) => c.id === victim.id)).toBe(false);",
+   "start_line": 73,
+   "end_line": 74,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "packages/show-planner/src/corrections.test.ts",
+   "content": "Only the `section` argument is varied between the two calls. A `cueId` implementation that ignored `level`, `ordinal`, or even the `seed` would still satisfy both assertions, leaving those parameters untested. Add negative cases that vary `level`, `ordinal`, and `seed` so the documented \"seed, section, level and ordinal\" uniqueness contract is actually covered.",
+   "existing_code": "    expect(cueId(\"seed\", 1, \"beat\", 3)).not.toBe(cueId(\"seed\", 2, \"beat\", 3));",
+   "start_line": 56,
+   "end_line": 56,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/corrections.test.ts",
+   "content": "Neither this call nor any other in the suite populates `edits.pinnedCues`, so the pinned-cue reconciliation path in `applyEdits` is never exercised (the test suite title claims to cover edits reconciliation). A defect in that branch would go undetected. Add a case with a pinned cue that is present in `cues` and one that is absent, and assert the reported `applied`/`noLongerApply` values.",
+   "existing_code": "    const rep = applyEdits(r.cues, { ...edits, lockedRegions: [{ startBeat: 500, endBeat: 600 }] });",
+   "start_line": 76,
+   "end_line": 76,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/corrections.test.ts",
+   "content": "Matching the literal substring \"covers no cues\" couples the test to internal message wording rather than behavior: any reword silently breaks the test, and the assertion would pass for any unrelated entry containing that text. Prefer asserting on the structured outcome (e.g. that an entry for the 500-600 region is reported) or export the message template for reuse.",
+   "existing_code": "    expect(rep.noLongerApply.some((x) => x.includes(\"covers no cues\"))).toBe(true);",
+   "start_line": 77,
+   "end_line": 77,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-planner/src/corrections.test.ts",
+   "content": "The hand-built object is force-cast with `as TrackModel`, bypassing structural type checking. Schema drift (a new/renamed required field) would compile silently and the mock could diverge from the real contract without any test failing. Consider validating the fixture with `trackModelSchema.parse(...)` or typing the object literal without the cast so mismatches fail at compile time.",
+   "existing_code": "  } as TrackModel;",
+   "start_line": 50,
+   "end_line": 50,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/storage/src/fastpath.ts": [
+  {
+   "path": "packages/storage/src/fastpath.ts",
+   "content": "The `lru` map is process-global while the cache key is derived only from the request parts (neither `planKey` nor `artifactKey` carries store identity \u2014 see cache.ts:96-109, which also omit trackId). Two different `Store` instances backed by different databases (a reopened DB, a second workspace, or per-test temp DBs) that receive the same trackId/analyzerVersion/styleId/fingerprint will produce identical keys, so a lookup against store B can silently return store A's cached `TrackModel`/`ShowPlan`. Include a store identity (e.g. the DB path) in the key or scope the cache to the `Store` instance.",
+   "existing_code": "  const key = `${planKey(request)}::${artifactKey(request)}`;",
+   "start_line": 116,
+   "end_line": 116,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/storage/src/fastpath.ts",
+   "content": "On a cache hit a missing plan is always reported as `no-plan`. But entries only store `{ track, plan }`, so an entry cached after an `invalid-plan` (corrupt plan row or key mismatch) is indistinguishable from a truly absent plan once hit \u2014 the caller loses the original miss reason and the generic detail below overwrites the specific diagnosis. Store the miss kind/detail in `CacheEntry` and return the cached values.",
+   "existing_code": "      miss: cached.plan ? null : \"no-plan\",\n      detail: cached.plan ? null : \"cached plan is absent; compile from cached features\",",
+   "start_line": 125,
+   "end_line": 126,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/storage/src/fastpath.ts",
+   "content": "Entries with `plan === null` are cached with no TTL or invalidation. If a plan is written after this entry is created, subsequent lookups keep returning `no-plan` from cache and the newly available plan stays invisible until the entry is evicted or the cache is cleared. Consider not caching negative plan results, or adding invalidation/TTL keyed on plan availability.",
+   "existing_code": "  lruSet(key, { track, plan }, options.capacity ?? DEFAULT_CAPACITY);",
+   "start_line": 192,
+   "end_line": 192,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/storage/src/fastpath.ts",
+   "content": "`recordTiming` is invoked on the cache-hit path too, and `fastPathBudget` computes p95 over this same shared 512-sample window. In a warm workload dominated by sub-millisecond hits, p95 can pass the spec-138 budget even when cold loads (file read + JSON.parse + schema validation) exceed it, masking the exact regression the budget is meant to catch. Record timings only for the cold path or keep hit/cold samples separate.",
+   "existing_code": "    const cached = lruGet(key);\n    if (cached) {\n      const totalMs = now() - started;\n      recordTiming(totalMs);",
+   "start_line": 118,
+   "end_line": 121,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/storage/src/fastpath.ts",
+   "content": "`(error as Error).message` assumes the thrown value is an `Error`. A thrown string/non-Error (or a throw without `.message`) yields `undefined` in the detail, and all failure modes (IO error from `readFileSync`, JSON syntax error, schema validation error) collapse into one opaque string, hurting diagnosability. Use a safe error-message helper and distinguish IO vs. parse failures.",
+   "existing_code": "    detail = `artifact ${artifact.artifact_path} did not parse to a TrackModel: ${(error as Error).message}`;",
+   "start_line": 158,
+   "end_line": 158,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "packages/storage/src/fastpath.ts",
+   "content": "Nested ternary expressions are disallowed by the project rules. Compute `miss` with an explicit if/else chain (plan present -> null; planRow present -> \"invalid-plan\"; else -> \"no-plan\") for readability. Note this branch also labels a plan-row key mismatch as \"invalid-plan\" rather than a distinct state.",
+   "existing_code": "    miss: plan ? null : planRow ? \"invalid-plan\" : \"no-plan\",",
+   "start_line": 198,
+   "end_line": 198,
+   "category": "style",
+   "severity": "low"
+  }
+ ],
+ "packages/venue/src/room.ts": [
+  {
+   "path": "packages/venue/src/room.ts",
+   "content": "Closed-path seam is broken. For `closed=true` the ring is `[...points, points[0]]` (length n+1) but the neighbour lookup wraps by `ring.length`, so:\n- at `i=0`: `p0 = ring[n] = points[0]` and `p1 = ring[0] = points[0]` \u2192 `p0 === p1`;\n- at `i=n-1`: `p2 = ring[n] = points[0]` and `p3 = ring[0] = points[0]` \u2192 `p2 === p3`.\nThe real neighbours `points[n-1]` / `points[1]` are never used, so the tangent at the seam is wrong (C1 discontinuity \u2192 visible kink at the closing vertex), and the appended `out.push(ring[0])` duplicates the first sample (`out[0]` is also `points[0]` at t=0) creating a degenerate zero-length segment. Note the circle arc-length test still passes because the seam error is small at 12 samples and the 0.15 tolerance, so this is not covered by tests.\nThe same wrap-around is also applied to open paths (`p0 = points[n-1]` at the first segment), which gives a wrong tangent at the open endpoints instead of the usual clamped duplicate.",
+   "suggestion_code": "  const n = points.length;\n  const out: Point3[] = [];\n  const segs = closed ? n : n - 1;\n  for (let i = 0; i < segs; i++) {\n    const p1 = points[i]!;\n    const p2 = points[(i + 1) % n]!;\n    const p0 = closed ? points[(i - 1 + n) % n]! : points[Math.max(0, i - 1)]!;\n    const p3 = closed ? points[(i + 2) % n]! : points[Math.min(n - 1, i + 2)]!;",
+   "existing_code": "  const ring = closed ? [...points, points[0]!] : points;",
+   "start_line": 220,
+   "end_line": 220,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/venue/src/room.ts",
+   "content": "`geom.kind` and `geom.tension` are never used: after this guard the function unconditionally calls `catmullPoint`, so a `{ kind: \"cubic-bezier\" }` spline is silently sampled as a Catmull-Rom curve and `tension` is ignored (wrong geometry for all bezier/tension paths). Additionally `geom.kind === undefined` is dead code \u2014 `SplineGeom.kind` is a required, non-optional field, so the condition is never true. Either dispatch on `geom.kind` (and honour `tension`) or narrow `SplineKind` so it no longer advertises an unimplemented mode.",
+   "existing_code": "  if (!geom || geom.kind === undefined || points.length < 3) return points.map((p) => ({ ...p }));",
+   "start_line": 219,
+   "end_line": 219,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/venue/src/room.ts",
+   "content": "Wall labels do not match the generated outline. `normalizeOutline` leaves this outline clockwise, i.e. edge 0 runs along `x=-w`, edge 1 along `y=+l`, edge 2 along `x=+w`, edge 3 along `y=-l`. Labelling edge 0 \"Front\" makes the wall *behind* the DJ (who faces `+x`, `facingRad: 0`) the front wall and the wall in front of the DJ \"Back\", so `wallNames`, `openings.wall` and any per-wall data map to the wrong physical walls. Also `id: \"room-square\"` is hardcoded (multiple rooms built through this factory get duplicate ids) and the default name \"Square room\" is used for arbitrary width/length rectangles.",
+   "existing_code": "    id: \"room-square\",\n    name,\n    units: \"m\",\n    outline: normalizeOutline(outline),\n    ceilingHeight: 2.6,\n    wallNames: [\"Front\", \"Right\", \"Back\", \"Left\"],",
+   "start_line": 183,
+   "end_line": 188,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/venue/src/room.ts",
+   "content": "`normalizeOutline` silently reverses vertex order, which changes every wall/edge index and direction, but the `Room` keeps `wallNames`, `openings.wall` and perimeter offsets indexed by the original order. `rectangleRoom` normalizes *before* attaching `wallNames`, and `fields.ts`/`venue.ts` re-normalize at use time, so any caller-supplied Room whose `outline` is counter-clockwise ends up with wall-indexed data silently pointing at different walls (no error, just wrong results). Consider returning the vertex permutation alongside the normalized outline (or documenting that normalization must happen before wall-indexed data is attached) so callers can remap their arrays.",
+   "existing_code": "  if (copy.length >= 3 && !isClockwiseFromAbove(copy)) copy.reverse();",
+   "start_line": 79,
+   "end_line": 79,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/venue/src/room.ts",
+   "content": "`Opening.kind` (a `\"door\" | \"window\" | \"gap\"` union) is never validated, and `room.units` is never checked against `\"m\" | \"ft\"`. Data coming from persisted/imported JSON can therefore carry an unknown `kind` or unit and still pass `validateRoom`, after which downstream code treats the unknown value as whatever its default branch happens to be. Add explicit membership checks so invalid discriminated values are rejected here.",
+   "existing_code": "  for (const o of room.openings) {\n    if (o.wall < 0 || o.wall >= n) problems.push(`opening wall ${o.wall} out of range`);\n    if (!(o.from >= 0 && o.to <= 1 && o.from < o.to)) problems.push(\"opening from/to must satisfy 0 <= from < to <= 1\");\n  }",
+   "start_line": 151,
+   "end_line": 154,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "packages/venue/src/room.ts",
+   "content": "When `geom` is undefined (or there are < 3 points) `samplePath` ignores the `closed` flag and returns the points unchanged, so `polylineLength(..., closed=true)` without a spline never adds the last\u2192first segment \u2014 a closed polygon is under-measured by exactly one edge (inconsistent with the `closed` path that does add it). Close the ring here (or make `samplePath` honour `closed` for the non-spline case).",
+   "existing_code": "export function polylineLength(points: Point3[], geom?: SplineGeom, toleranceM = 0.005, closed = false): number {\n  const sampled = samplePath(points, geom, toleranceM, closed);",
+   "start_line": 237,
+   "end_line": 238,
+   "category": "bug",
+   "severity": "low"
+  }
+ ]
+}

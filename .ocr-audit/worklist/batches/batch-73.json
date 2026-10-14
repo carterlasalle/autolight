@@ -1,0 +1,146 @@
+{
+ "analysis/tests/test_stems.py": [
+  {
+   "path": "analysis/tests/test_stems.py",
+   "content": "Flawed assertion with inverted semantics and a misleading rationale. `spectral_novelty` returns the positive log-magnitude change **normalized by its own peak** (stems.py:102-104). For the one-onset `struck` signal, a single frame dominates the diff, so dividing by that peak drives every other frame toward 0 and the `.mean()` collapses to ~1/n_frames. For the stationary `quiet` tone, the per-frame diffs are small but near-uniform, so after normalization their mean stays close to 1. The assertion therefore passes only because steady tones are *not* quiet after peak normalization \u2014 it enshrines behavior opposite to the module's documented intent ('Log domain keeps steady tones quiet: only genuine onsets move', stems.py:96) and to the test name. The comment is also factually wrong: `quiet` is a pure 440 Hz sine, not 'steady hiss'. Comparing `.mean()` of a peak-normalized array does not validate onset detection, so a broken novelty implementation could still satisfy this. Prefer asserting localization of the onset, e.g. that `spectral_novelty(struck).argmax()` corresponds to the injected frame, or that the onset frame's value grossly exceeds the median.",
+   "existing_code": "    # Onset concentrates change at one frame; steady hiss spreads it everywhere.\n    assert spectral_novelty(struck).mean() < spectral_novelty(quiet).mean()",
+   "start_line": 52,
+   "end_line": 53,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/tests/test_stems.py",
+   "content": "Weak assertion for the injected-stems path. `select_stems(noise, rate, \"fusion\", fake)` is expected to return the caller-provided `allinone_stems` dict verbatim (stems.py:168-169), but the test only checks the source label and never asserts the returned envelopes are `fake`. A regression that returned freshly generated proxies (or any other dict) while still labelling them `ml.stems` would pass unnoticed. Assert the returned mapping equals/contains the injected `fake` (and that its content is unchanged).",
+   "existing_code": "    _, source = select_stems(noise, rate, \"fusion\", fake)\n    assert source == \"ml.stems\"",
+   "start_line": 42,
+   "end_line": 43,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/electron/services/audit-log.test.ts": [
+  {
+   "path": "apps/desktop/electron/services/audit-log.test.ts",
+   "content": "The test asserts `lines` has length 2 but only parses/validates `lines[0]`. The second record emitted by `audit(\"lifecycle\", \u2026)` is never checked, so a regression that serializes the second line incorrectly (truncated/torn JSON, wrong `kind`, missing `detail`) would still pass. Parse and assert every line, or at minimum validate `lines[1]` too.",
+   "suggestion_code": "    const parsed = lines.map((l) => JSON.parse(l) as AuditRecord);\n    expect(parsed).toHaveLength(2);\n    const first = parsed[0]!;\n    expect(first.kind).toBe(\"ipc\");\n    expect(first.detail[\"channel\"]).toBe(\"master/blackout\");\n    expect(parsed[1]!.kind).toBe(\"lifecycle\");",
+   "existing_code": "    const first = JSON.parse(lines[0]!) as AuditRecord;\n    expect(first.kind).toBe(\"ipc\");\n    expect(first.detail[\"channel\"]).toBe(\"master/blackout\");",
+   "start_line": 23,
+   "end_line": 25,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/services/audit-log.test.ts",
+   "content": "Cleanup relies on `initAuditLog(null)` on the last line of each test body and the temp directories created by `mkdtempSync` are never removed. If any assertion throws earlier, the global sink (`dir`/`dropped`) keeps pointing at the leaked temp dir and the directory is never reclaimed, making the suite order-dependent and leaking resources. Move reset + removal into an `afterEach` (or `try/finally`) with `rmSync(dir, { recursive: true, force: true })`.",
+   "suggestion_code": "    const dir = mkdtempSync(join(tmpdir(), \"audit-\"));\n    initAuditLog(dir);\n    // afterEach: initAuditLog(null); rmSync(dir, { recursive: true, force: true });",
+   "existing_code": "    const dir = mkdtempSync(join(tmpdir(), \"audit-\"));\n    initAuditLog(dir);",
+   "start_line": 9,
+   "end_line": 10,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/src/app/shortcuts.test.ts": [
+  {
+   "path": "apps/desktop/src/app/shortcuts.test.ts",
+   "content": "Coverage gap that hides real regressions. `SHORTCUTS` defines four bindings (b\u2192master/blackout, w\u2192master/full, f\u2192master/freeze, a\u2192master/resume), but this suite only asserts `b` (plus the `B` case) and one unmapped key. If `w`/`f`/`a` were removed or their channel names changed, every test here would still pass.\n\nAlso missing: a guard test for prototype-inherited keys. Because `SHORTCUTS` is a plain object literal, `shortcutFor(\"constructor\")`/`shortcutFor(\"toString\")` return a function (not `null`), which the shell then forwards to `invoke()` as a channel name. No assertion here exercises that branch. Add cases for the remaining bindings and for keys like `constructor`/`__proto__`/empty string.",
+   "existing_code": "    expect(shortcutFor(\"q\")).toBeNull();",
+   "start_line": 8,
+   "end_line": 8,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/app/shortcuts.test.ts",
+   "content": "The bare `true`/`false` literals obscure the parameter's meaning. `isModalAllowed` takes `liveActive`, so `isModalAllowed(true)` means \"Live is active\". As written the assertion only restates `!liveActive`, so if the parameter semantics were inverted later, these lines would still pass unchanged and give false confidence. Name the values or add a clarifying comment (e.g. `const liveActive = true;`).",
+   "existing_code": "  it(\"forbids modals during Live\", () => {\n    expect(isModalAllowed(true)).toBe(false);\n    expect(isModalAllowed(false)).toBe(true);",
+   "start_line": 10,
+   "end_line": 12,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/src/features/venue/venue.ts": [
+  {
+   "path": "apps/desktop/src/features/venue/venue.ts",
+   "content": "Duplicate source of truth: this list (and `nextSetupStep` below) re-declares the exact same ten setup steps already canonical in `routes/setup/setup-model.ts` (`SETUP_EVIDENCE_STEPS` + `setupProgress`, explicitly re-exported through `routes/venue/device-screens.ts` for the Venue screen to share). Two independently maintained copies will silently diverge (e.g. adding/reordering a step in only one) and desync the Setup wizard from this helper. Import and reuse the canonical `SETUP_EVIDENCE_STEPS` / `setupProgress` instead of redefining them here. Note also that `SETUP_STEPS`/`nextSetupStep` currently have no production consumer \u2014 only `screens.test.ts` references them.",
+   "suggestion_code": "import { SETUP_EVIDENCE_STEPS as SETUP_STEPS } from \"../../routes/setup/setup-model.js\";\n// (or re-export `setupProgress` and drop `nextSetupStep`)",
+   "existing_code": "export const SETUP_STEPS = [\n  \"dj\", \"controller\", \"library\", \"lights\", \"identify\",",
+   "start_line": 21,
+   "end_line": 22,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/features/venue/venue.ts",
+   "content": "Misleading/stale comment: this module contains none of the described venue-screen canvas operations (drag/rotate/reverse/resize/tag/identify/preview/calibrate) and no per-tile IDENTIFY/TEST CHASE/RECALIBRATE handling \u2014 it only builds a `DeviceTile` from a `Fixture` plus runtime stats and defines the setup-step list/helper. Callers and reviewers searching here for the \u00a798 canvas logic will be misled; the canvas logic lives in `features/venue/venue-view.tsx`. Update the header to describe what the file actually provides.",
+   "existing_code": "// Venue screen (\u00a798): 2D canvas ops \u2014 drag/rotate/reverse/resize/tag/identify/preview/calibrate.",
+   "start_line": 3,
+   "end_line": 3,
+   "category": "documentation",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/tsconfig.json": [
+  {
+   "path": "apps/desktop/tsconfig.json",
+   "content": "The `@/*` \u2192 `./src/*` alias is inert and misleading in this config. This file sets `rootDir: \"electron\"` and `include: [\"electron\"]`, and no `electron/**` source uses an `@/` import (verified: the only aliases in play are `@autolight/*`, resolved to package `dist/index.d.ts`, plus a `@/` alias used in the *renderer* `src`/`tsconfig.typecheck.json`). Because esbuild's `alias` in `scripts/build-main.mjs`/`build-preload.mjs` does not map `@/` either, this declaration affects only type checking. If a developer adds an `@/\u2026` import here (expecting parity with `tsconfig.typecheck.json`), tsc will resolve it to a file under `./src`, which is outside `rootDir: \"electron\"`, producing TS6059 (\"File is not under 'rootDir'\") and corrupting the outDir layout. Remove the alias from this emit config (it is already defined where it is actually usable, in `tsconfig.typecheck.json`).",
+   "existing_code": "    \"paths\": { \"@/*\": [\"./src/*\"] }",
+   "start_line": 12,
+   "end_line": 12,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/tsconfig.json",
+   "content": "`include: [\"electron\"]` also matches the co-located test files (`electron/services/*.test.ts`, `electron/updater/index.test.ts`). Since this config has no `noEmit` and is run in the production `build` script (`tsc -p tsconfig.json`), those tests are compiled and written into `dist/electron-tmp/\u2026` (relying on a later external `rm -rf dist/electron-tmp` to clean up) and the production build now depends on test-only devDependencies such as `vitest`. Type checking of tests is already covered by `tsconfig.typecheck.json`. Recommend excluding tests, e.g. add `\"exclude\": [\"electron/**/*.test.ts\"]`, or make this config `\"noEmit\": true` for the type-check step.",
+   "existing_code": "  \"include\": [\n    \"electron\"\n  ]",
+   "start_line": 14,
+   "end_line": 16,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/tsconfig.typecheck.json": [
+  {
+   "path": "apps/desktop/tsconfig.typecheck.json",
+   "content": "The `include` list misses the directory that actually holds the Playwright suite. `playwright.config.ts` sets `testDir: \"./journeys\"` with `testMatch: \"**/*.journey.ts\"`, so the runtime tests are `journeys/*.journey.ts` (and the `e2e/normal-night.spec.ts` listed here is not even collected by Playwright). Only `journeys/_harness.ts` gets pulled in transitively via the spec's import; the sibling journey specs (`night.journey.ts`, `soak.journey.ts`, `m1-slice.journey.ts`, `live-session.journey.ts`) are never included and therefore escape `yarn typecheck`, allowing broken imports/type errors in the E2E suite to ship undetected. Add `journeys` to the include set.",
+   "suggestion_code": "  \"include\": [\n    \"electron\",\n    \"src\",\n    \"e2e\",\n    \"journeys\"\n  ]",
+   "existing_code": "  \"include\": [\n    \"electron\",\n    \"src\",\n    \"e2e\"\n  ]",
+   "start_line": 14,
+   "end_line": 18,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/tsconfig.typecheck.json",
+   "content": "`moduleResolution: \"bundler\"` is applied to the whole program, including the `electron`/`e2e` code that is Node-executed (the Playwright specs and their `journeys/_harness.ts`, which import `node:fs`/`node:path` and rely on explicit `.js` ESM specifiers). Bundler resolution does not enforce Node's ESM extension/`exports` rules, so an extensionless or mis-resolved import can pass `tsc --noEmit` yet fail at runtime under Playwright. The current specs happen to use `.js` extensions, but the config cannot catch a regression. Consider a separate NodeNext config for the Node-executed sources instead of a single bundler-mode config which is only correct for the (esbuild/Vite-bundled) `electron` main and `src` renderer.",
+   "existing_code": "    \"moduleResolution\": \"bundler\",",
+   "start_line": 7,
+   "end_line": 7,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "docs/finish/evidence/T-MAT-02/measurement.json": [
+  {
+   "path": "docs/finish/evidence/T-MAT-02/measurement.json",
+   "content": "Derived value inconsistency: `timerFloorMsPerTick` is 1.1, but the recorded sample average `timerFloorSampleMs / timerFloorIterations` = 1134.5 / 1000 = 1.1345 ms/tick. If `timerFloorMsPerTick` is meant to represent the measured per-tick floor, storing 1.1 understates it by ~3%; a downstream consumer sampling this as the observed floor could configure a tick interval (1.1 ms \u2192 ~909 Hz) below what the hardware actually sustains (1.1345 ms \u2192 ~881 Hz), producing overruns. Either reconcile the two fields (use the same derivation/precision) or document that 1.1 is an intentionally rounded/conservative floor distinct from the raw sample.",
+   "existing_code": "\"timerFloorMsPerTick\":1.1,\"timerFloorSampleMs\":1134.5,\"timerFloorIterations\":1000",
+   "start_line": 0,
+   "end_line": 0,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "docs/finish/evidence/T-MAT-02/measurement.json",
+   "content": "Status integrity: both `sustainablePerDeviceHz` and `receipt` explicitly declare the primary metric as unmeasured, while the record still carries concrete timer-floor numbers and a \"default\" command rate. Any consumer/aggregator that scans evidence files for presence rather than reading `receipt` could mistakenly treat this as a completed T-MAT-02 measurement (e.g., assert default-rate conformity). Consider adding an explicit status/verdict field (e.g., `\"status\":\"blocked\"`/`\"pending-hardware\"`) so the unmeasured state is machine-detectable rather than only encoded in free-text values.",
+   "existing_code": "\"sustainablePerDeviceHz\":\"unmeasured, waits on hardware\",\"receipt\":\"govee.matter.commandRateHz stays unmeasured\"",
+   "start_line": 0,
+   "end_line": 0,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ]
+}

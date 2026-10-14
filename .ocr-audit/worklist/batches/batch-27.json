@@ -1,0 +1,280 @@
+{
+ "docs/finish/tools/make-status.mjs": [
+  {
+   "path": "docs/finish/tools/make-status.mjs",
+   "content": "Summary counts scan the whole preserved row, not the Status cell. `prev.get(t.id)` is `m[2]` from the preserve regex, i.e. the entire row content (Title | File | Milestone | Status | Evidence | Notes). So the substring tests below match text in Evidence/Notes too: a task whose evidence/notes mention `BLOCKED-HARDWARE`/`DONE-VERIFIED` (or whose title contains one of these words) is counted in the wrong bucket, and the `DONE-VERIFIED`-first ordering silently wins over the real status. The row-regeneration code below correctly uses `cells[3]` as the status; the counting should do the same.",
+   "suggestion_code": "    const statusCell = (prev.get(t.id) ?? \"\").split(\"|\").map((c) => c.trim())[3] ?? \"\";\n    if (statusCell.includes(\"DONE-VERIFIED\")) done++;",
+   "existing_code": "    const cell = prev.get(t.id) ?? \"\";\n    if (cell.includes(\"DONE-VERIFIED\")) done++;",
+   "start_line": 135,
+   "end_line": 136,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "docs/finish/tools/make-status.mjs",
+   "content": "Emitted Findings columns are shifted relative to the declared header. The register rows are `| ID | Finding | Sources | Ver | Closed by |`, so after stripping the leading id and trailing pipe `cells` is `[Finding, Sources, Ver, Closed by]`. Emitting `cells[0]` under the \"Verification\" header, `cells[length-2]` (the `Ver` code, e.g. `V`) under \"Closed by\", and `cells[length-1]` (the closed-by task list) under \"State\" mismatches the header `| Finding | Verification | Closed by | State |`. The result (see STATUS.md lines 299+) puts the whole finding description in \"Verification\", the `V/U/C` code in \"Closed by\", and the task list in \"State\" \u2014 yet the prose above states a finding is closed only when the tasks listed in \"Closed by\" are DONE-VERIFIED. Fix the header to match the data (`| Finding | Description | Verification | Closed by |`) or map the cells by name so `Ver` lands under \"Verification\" and the task list under \"Closed by\".",
+   "existing_code": "  out += `| ${f.id} | ${cells[0] ?? \"\"} | ${cells[cells.length - 2] ?? \"\"} | ${cells[cells.length - 1] ?? \"\"} |\\n`;",
+   "start_line": 169,
+   "end_line": 169,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "docs/finish/tools/make-status.mjs",
+   "content": "Unknown task prefixes silently fall back to M0. With only the hardcoded maps as the source of truth, any new/mis-typed task (e.g. `T-NEW-01`, or a renamed `T-XXX` prefix, or a task placed in a file that was never added to `MILESTONE_BY_PREFIX`) is filed under M0 with no diagnostic, inflating the M0 counts and hiding the gap. Fail loudly (throw listing the unknown id) or at least warn, so a missing mapping cannot pass unnoticed.",
+   "suggestion_code": "  if (!(prefix in MILESTONE_BY_PREFIX)) throw new Error(`No milestone mapping for task prefix ${prefix} (id ${id}); add it to MILESTONE_BY_ID or MILESTONE_BY_PREFIX`);\n  return MILESTONE_BY_PREFIX[prefix];",
+   "existing_code": "  return MILESTONE_BY_PREFIX[prefix] ?? \"M0\";",
+   "start_line": 91,
+   "end_line": 91,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "docs/finish/tools/make-status.mjs",
+   "content": "Restoring preserved cells by fixed positional index is fragile. Titles and file names are written into the row verbatim (`m[2].trim()`, `t.file`), so a title containing a literal `|` (or any future change to the column set) shifts every cell: `cells[3]/[4]/[5]` then read the wrong columns and status/evidence/notes are silently lost or misassigned on the next run, and the emitted markdown table itself breaks. Escape/replace `|` in title and file before emitting, and prefer keying the preserved values by column header rather than by hardcoded index.",
+   "existing_code": "      const cells = old.split(\"|\").map((c) => c.trim());",
+   "start_line": 152,
+   "end_line": 152,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "package.json": [
+  {
+   "path": "package.json",
+   "content": "Root-workspace self-recursion. `--all` includes the root workspace (this is exactly why `build` and `.github/workflows/*.yml` pass `--exclude autolight`), yet the root package itself defines `test`/`lint`/`typecheck`. Running `yarn test` / `yarn lint` / `yarn typecheck` at the repo root therefore matches the root workspace and re-invokes the very same script, spawning an unbounded recursion of `yarn` processes (the same applies to `verify:phase1` on line 14). Add `--exclude autolight` to match `build`.",
+   "suggestion_code": "    \"test\": \"yarn workspaces foreach --all --exclude autolight run test\",\n    \"lint\": \"yarn workspaces foreach --all --exclude autolight run lint\",\n    \"typecheck\": \"yarn workspaces foreach --all --exclude autolight run typecheck\",",
+   "existing_code": "    \"test\": \"yarn workspaces foreach --all run test\",\n    \"lint\": \"yarn workspaces foreach --all run lint\",\n    \"typecheck\": \"yarn workspaces foreach --all run typecheck\",",
+   "start_line": 11,
+   "end_line": 13,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "package.json",
+   "content": "`test:count` masks failures. In a pipeline the exit status is that of the last command (`tail`), and `2>/dev/null` discards vitest's stderr, so a crashing/failing test run still exits 0 and emits a bogus count (e.g. the last partial JSON line). Propagate vitest's status, e.g. via `set -o pipefail`.",
+   "suggestion_code": "    \"test:count\": \"sh -c 'set -o pipefail; vitest run --reporter=json | tail -1'\",",
+   "existing_code": "    \"test:count\": \"vitest run --reporter=json 2>/dev/null | tail -1\",",
+   "start_line": 17,
+   "end_line": 17,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "package.json",
+   "content": "Two issues in the `analyze` gate: (1) the hard-coded `node_modules/.bin/oxlint` bypasses yarn's binary resolution and breaks when the script runs from anywhere but the repo root; use `yarn oxlint` instead. (2) The `yarn knip && \u2026 && uv run \u2026 vulture` chain short-circuits, so the first failing gate skips every remaining gate and only one failure is reported per run, hiding subsequent regressions. Run the gates independently (or aggregate their exit codes) so all failures surface.",
+   "existing_code": "    \"analyze\": \"node_modules/.bin/oxlint; OXLINT_EXIT=$?; yarn knip && yarn depcruise --config .dependency-cruiser.cjs packages apps/desktop/src apps/desktop/electron && node tools/unwired-service.mjs && yarn tsc --noEmit -p apps/desktop/tsconfig.typecheck.json --noUnusedLocals --noUnusedParameters --noImplicitReturns --noFallthroughCasesInSwitch && yarn madge --circular packages/*/src apps/desktop/src apps/desktop/electron && uv run --project analysis ruff check analysis/src analysis/tests && uv run --project analysis pyright analysis/src/autolight_analysis && uv run --project analysis --with vulture vulture analysis/src --min-confidence 80; GATE_EXIT=$?; if [ $OXLINT_EXIT -ne 0 ]; then echo \\\"analyze: oxlint found findings (see above)\\\"; exit $OXLINT_EXIT; fi; exit $GATE_EXIT\",",
+   "start_line": 21,
+   "end_line": 21,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "package.json",
+   "content": "This gate depends on an external `uv` + Python toolchain (pytest/ruff/pyright/vulture) that is not declared or pinned anywhere in this manifest \u2014 `devDependencies` only covers the JS tooling. On a machine/CI runner without a matching `uv`/Python setup the gate silently errors out or, worse, drifts from the pinned versions used elsewhere. Pin it (e.g. `uv.lock` plus a documented `uv sync` prerequisite) so `verify:phase1`/`analyze` are reproducible.",
+   "existing_code": "    \"verify:phase1\": \"yarn workspaces foreach --all run typecheck && uv run --project analysis pytest -q\",",
+   "start_line": 14,
+   "end_line": 14,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/analysis-client/src/index.test.ts": [
+  {
+   "path": "packages/analysis-client/src/index.test.ts",
+   "content": "`expect(p).rejects.toThrow(\"boom\")` is not awaited. The assertion runs as a detached promise, so the test can pass even if `p` resolves instead of rejecting, or if the rejection carries a different message/type. Assign/await the assertion so a failed expectation actually fails the test.",
+   "suggestion_code": "    await expect(p).rejects.toThrow(\"boom\");",
+   "existing_code": "    expect(p).rejects.toThrow(\"boom\");",
+   "start_line": 18,
+   "end_line": 18,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "packages/analysis-client/src/index.test.ts",
+   "content": "This assertion codifies a defect. `handleMessage({type:\"failed\"})` clears the pending entry but does not remove the job from `queue`; because `start()` was never called, `drain()` is a no-op and the job queued by `analyze()` stays queued. `requeue()` then adds a second entry, so `queuedCount()` becomes 2 and the same work is queued twice \u2014 a duplicate-processing hazard. A test that locks in `queuedCount() === 2` will keep the bug from being fixed. Prefer asserting the failed job is no longer queued (e.g. `queuedCount()` reflects only the explicit requeue) and let the implementation drop the stale entry.",
+   "existing_code": "    c.requeue({ trackId: \"t2\", audioPath: \"/m/b.mp3\" });\n    expect(c.queuedCount()).toBe(2);",
+   "start_line": 19,
+   "end_line": 20,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/analysis-client/src/index.test.ts",
+   "content": "The success case only checks the resolved payload and never verifies that the pending entry was released. Since `handleMessage` -> `routeFrame` -> `clearEntry` should delete the entry from `pending`, assert `pendingCount()` drops back to 0 after resolution so a leaked/stale pending entry (or a failure to remove it) is caught.",
+   "suggestion_code": "    await expect(p).resolves.toEqual({ type: \"complete\", trackId: \"t1\", artifactPath: \"/cache/t1.json\" });\n    expect(c.pendingCount()).toBe(0);",
+   "existing_code": "    await expect(p).resolves.toEqual({ type: \"complete\", trackId: \"t1\", artifactPath: \"/cache/t1.json\" });",
+   "start_line": 10,
+   "end_line": 10,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/analysis-client/src/index.test.ts",
+   "content": "Coverage gap: `handleMessage` has distinct routing branches for unknown/duplicate ids (e.g. `findEntry` returning undefined returns silently, and a second `complete`/`failed` for an already-cleared entry is ignored). None of this is exercised, so state-corruption paths (a late duplicate frame mutating a released entry, or an unmatched trackId leaving a promise pending forever) go undetected. Add cases for an unknown trackId and a duplicate terminal message, asserting the promise neither resolves twice nor leaks a pending entry.",
+   "existing_code": "  it(\"rejects on failure and requeues manually\", () => {",
+   "start_line": 12,
+   "end_line": 12,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/controller-flx4/src/index.ts": [
+  {
+   "path": "packages/controller-flx4/src/index.ts",
+   "content": "`NOTE` from `./consts.js` is a runtime `const` object (`export const NOTE = {...} as const`), but here it is imported with the `type` modifier and then used in a *value* position on line 13 (`keyof typeof NOTE_TYPE`). A type-only import binding cannot be referenced in a value query, so TypeScript emits TS1361 (\"'NOTE' cannot be used as a value because it was imported using 'import type'\") and this module fails to compile \u2014 the transport `control` key union is never actually derived from `NOTE`. Import it as a real (value) binding instead; the re-export on line 8 does not create a local name so there is no conflict.",
+   "suggestion_code": "import { CC as CC_VAL, NOTE as NOTE_TYPE } from \"./consts.js\";",
+   "existing_code": "import { CC as CC_VAL, type NOTE as NOTE_TYPE } from \"./consts.js\";",
+   "start_line": 9,
+   "end_line": 9,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/controller-flx4/src/index.ts",
+   "content": "`CC_VAL.CHANNEL_FADER_1` and `CC_VAL.CHANNEL_FADER_2` are both `0x13` (see ./consts.js: the legacy channel-blind view cannot express the MIDI channel, so both decks share Data 1). Consequently the first condition always matches and this second branch is unreachable dead code, and *every* channel-fader CC is classified as `channel: 1` \u2014 deck-2 fader hints are silently misattributed to deck 1, which then feeds the director's introduction-stage logic. Either remove the unreachable branch and document the limitation, or obtain deck separation from the deck-aware decoder (`decodeMessage`/`FLX4_CONTROLS`) rather than the value.",
+   "existing_code": "  if (cc === CC_VAL.CHANNEL_FADER_1) return { kind: \"fader-rise\", channel: 1, value: normalized };\n  if (cc === CC_VAL.CHANNEL_FADER_2) return { kind: \"fader-rise\", channel: 2, value: normalized };",
+   "start_line": 21,
+   "end_line": 22,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/controller-flx4/src/index.ts",
+   "content": "The function's stated contract (library identity + MIDI transport hints + native beatgrid) is not met by the returned object: `receivedAtNs`, `playRate`, `rekordboxId` and `canonicalPath` are all supplied in `CompositeDeckInput` but silently discarded here. Downstream composite consumers therefore cannot judge staleness/time-sync (`receivedAtNs`), compute motion (`playRate`), or match the track by `rekordboxId`/`canonicalPath` \u2014 the identity fields the input contract requires are lost. Include the fields the downstream provider needs, or document why they are intentionally dropped.",
+   "existing_code": "  return {\n    deckId: input.deckId,\n    trackId: input.track?.id ?? null,\n    playing: input.playingHint,\n    channelFader: input.channelFader,\n    crossfader: input.crossfader,\n    playheadSeconds: input.playheadSeconds,\n  };",
+   "start_line": 50,
+   "end_line": 57,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/controller-flx4/src/index.ts",
+   "content": "`0.02` is an unexplained magic business threshold for \"fader is physically up\"; extract it to a named constant. The two paths also have inconsistent semantics: an *unknown* MIDI fader (`null`) makes the deck audible whenever `djWeight > 0`, whereas a *present but tiny* fader (e.g. `0.01`) with the same `djWeight` is not \u2014 the unknown case is more permissive than the known-quiet case. Confirm this failover is intended and make the intent explicit.",
+   "existing_code": "  if (midiFader === null) return djWeight > 0;\n  return midiFader > 0.02 && djWeight > 0;",
+   "start_line": 63,
+   "end_line": 64,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/govee/src/index.ts": [
+  {
+   "path": "packages/govee/src/index.ts",
+   "content": "`discover()` silently ignores the `fps` argument when the device already exists. After `backoff()` halves a device's FPS (e.g. 30 -> 15) and `markOffline()`, a reconnect via `discover(identity, 30)` only resets `health` to \"online\" but leaves `fps` at the stale degraded value. There is no other recovery path in this class (`backoff()` only ever decreases FPS), so a reconnected device is permanently stuck at the reduced rate while reporting \"online\" \u2014 an inconsistent state with no signal to callers. The existing test at index.test.ts:93 even passes `dev.fps` expecting a clean reconnect but only asserts `health`, so it cannot catch this. Restore the requested FPS on re-discovery.",
+   "suggestion_code": "    if (existing) {\n      existing.identity = identity;\n      existing.health = \"online\";\n      existing.fps = fps;\n      return existing;\n    }",
+   "existing_code": "    if (existing) {\n      existing.identity = identity;\n      existing.health = \"online\";\n      return existing;\n    }",
+   "start_line": 151,
+   "end_line": 155,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/govee/src/index.ts",
+   "content": "Buffer size and loop bound disagree: the array is sized with `Math.max(0, segmentCount) * 3` (clamped), but the loop runs `i < segmentCount` on the raw value. With a fractional `segmentCount` the typed-array constructor throws `RangeError: Invalid typed array length` before the loop, and with a negative value the two bounds diverge from the (intended) zeroing. Normalize once with an integer clamp and use it for both allocation and iteration; the same guard should be applied to `blackoutPayload`.",
+   "suggestion_code": "  const segments = Math.max(0, Math.floor(segmentCount));\n  const out = new Uint8Array(segments * 3);\n  const w = scaleChannel(255, intensity);\n  for (let i = 0; i < segments; i++) { out[i * 3] = w; out[i * 3 + 1] = w; out[i * 3 + 2] = w; }",
+   "existing_code": "  for (let i = 0; i < segmentCount; i++) { out[i * 3] = w; out[i * 3 + 1] = w; out[i * 3 + 2] = w; }",
+   "start_line": 79,
+   "end_line": 79,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/govee/src/index.ts",
+   "content": "The single-color fallback samples only the middle segment instead of aggregating the frame. For a multi-zone frame whose center segment happens to be dark (e.g. symmetric gradients or off-center hits), this drives a solid black color on the BLE/cloud last-resort path, defeating the intent of collapsing to one representative color. Consider averaging across segments (or explicitly documenting that the center sample is intentional).",
+   "existing_code": "  const mid = Math.floor(n / 2) * 3;\n  return [frame[mid] ?? 0, frame[mid + 1] ?? 0, frame[mid + 2] ?? 0];",
+   "start_line": 132,
+   "end_line": 133,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/govee/src/index.ts",
+   "content": "Buffer size and loop bound disagree: the array is sized with `Math.max(0, segmentCount) * 3` (clamped) while the loop runs `i < segmentCount` on the raw value. A fractional `segmentCount` makes the typed-array constructor throw `RangeError: Invalid typed array length` before the loop runs, and a negative value leaves the two bounds inconsistent. Normalize once with an integer clamp and reuse it for both allocation and iteration (apply the same guard to `blackoutPayload`).",
+   "suggestion_code": "  const segments = Math.max(0, Math.floor(segmentCount));\n  const out = new Uint8Array(segments * 3);\n  const w = scaleChannel(255, intensity);\n  for (let i = 0; i < segments; i++) { out[i * 3] = w; out[i * 3 + 1] = w; out[i * 3 + 2] = w; }",
+   "existing_code": "  const out = new Uint8Array(Math.max(0, segmentCount) * 3);\n  const w = scaleChannel(255, intensity);\n  for (let i = 0; i < segmentCount; i++) { out[i * 3] = w; out[i * 3 + 1] = w; out[i * 3 + 2] = w; }",
+   "start_line": 77,
+   "end_line": 79,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/rekordbox-library/src/pssi.ts": [
+  {
+   "path": "packages/rekordbox-library/src/pssi.ts",
+   "content": "`isLabelTable` validates only a subset of the required fields: `moods`, `unknownTemplate` and `unknownSection` are never checked (nor is the shape of any `highVariants` entry). A table missing these passes the guard, defeating the fail-fast intent, and then fails later in ways that are hard to trace:\n- `phraseLabel` does `t.moods[String(mood)]` -> `TypeError: Cannot read properties of undefined`;\n- `labelOrUnknown` runs `table().unknownTemplate.replace(...)` -> `undefined.replace` TypeError;\n- `normalizeSection` returns `t.unknownSection` typed as `string` but actually `undefined` (silent wrong value).\nAdd explicit checks for these fields (and reject arrays, since `typeof [] === \"object\"`).",
+   "suggestion_code": "    typeof t.schema === \"string\" &&\n    typeof t.moods === \"object\" && !Array.isArray(t.moods) && t.moods !== null &&\n    typeof t.unknownTemplate === \"string\" &&\n    typeof t.unknownSection === \"string\" &&",
+   "existing_code": "    typeof t.schema === \"string\" &&",
+   "start_line": 67,
+   "end_line": 67,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-library/src/pssi.ts",
+   "content": "The cached table is process-wide and never keyed by path nor invalidated, while `table()` always calls `loadPssiLabels()` with the default (env/default) path. Consequences:\n- The exported `loadPssiLabels(customPath)` result is never used by `phraseLabel`/`highPhraseLabel`/`normalizeSection`, so a custom table loaded by a caller is silently ignored.\n- Setting `AUTOLIGHT_PSSI_LABELS` after the first lookup has no effect, and tests that vary the env var per case see stale labels (cross-test contamination) \u2014 e.g. `index.test.ts` and `pssi.test.ts` share the same module-level cache.\nCache per resolved path, or thread the path through the lookups and expose an explicit reset for tests.",
+   "existing_code": "  cached ??= loadPssiLabels();",
+   "start_line": 80,
+   "end_line": 80,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-library/src/pssi.ts",
+   "content": "The template-vs-rules discrimination and the flag/rule evaluation assume a perfectly well-formed `highVariants` entry. If an entry has neither `template` nor `rules`/`fallback`, or is missing `nWhenSet`/`nWhenClear`/`flag`, this yields labels like `\"undefined\"` / `\"NaN\"` (or a rules entry that happens to contain a `template` key is misclassified), and the documented `fallback` never runs. Since the shape is not validated in `isLabelTable`, validate `highVariants` entries (at least require exactly one of `template` + `flag` + counts, or `rules` + `fallback`) so malformed data fails fast instead of producing corrupt labels.",
+   "existing_code": "  if (\"template\" in variant) {",
+   "start_line": 95,
+   "end_line": 95,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-library/src/pssi.ts",
+   "content": "`split(\" \")` always returns at least one element (for `\"\"` it returns `[\"\"]`), so `[0]` is never nullish and the `?? \"\"` fallback is dead code. More importantly, splitting on a single space mishandles leading/irregular whitespace: `\" Up 1\"` yields `first === \"\"`, so the label falls through to `unknownSection`. Trim and split on whitespace runs.",
+   "suggestion_code": "  const first = rawLabel.trim().split(/\\s+/)[0] ?? \"\";",
+   "existing_code": "  const first = rawLabel.split(\" \")[0] ?? \"\";",
+   "start_line": 117,
+   "end_line": 117,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "packages/rekordbox-live/src/composite.test.ts": [
+  {
+   "path": "packages/rekordbox-live/src/composite.test.ts",
+   "content": "The test name promises a lock \"below the 15 ms target\", but the only assertion is the quality label. `stateFor` sets `playheadSeconds` quality to `\"derived\"` whenever `state.locked` is true, independent of the residual error, so a correlation that locks with a large playhead error (or that merely flips the label) still passes \u2014 the 15 ms contract is never verified.\n\nWorse, the pushed audio is systematically misaligned with the provider timebase: `end` is derived from the previously emitted `playheadSeconds` *before* `now += 100_000_000n`, but `tick(now)` then advances the clock, so `correctByAudio`/`referenceWindow` builds its reference window one tick (~100 ms = 5 samples at 50 Hz) ahead of the live slice that was just pushed. The lock therefore tests a shifted reference, not the real alignment.\n\nAlso `* 50` and `128` duplicate `envelopeRateHz` and the window size; if those options change the test silently breaks. Suggest aligning the slice to the tick timestamp (or computing it after advancing `now`) and asserting the actual residual error against `lockThresholdMs`/confidence instead of only the label.",
+   "existing_code": "    expect(deck()?.quality.playheadSeconds).toBe(\"derived\");",
+   "start_line": 127,
+   "end_line": 127,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-live/src/composite.test.ts",
+   "content": "`quality.channelFader` is statically `\"exact\"` in `stateFor` for every deck, and this test never ingests a `channel-fader` event, so the assertion only re-checks a constant and would not catch a broken channel-fader path. Ingest a `channel-fader` event and assert the resulting `deck.channelFader` value (and its label) so the fader path is actually exercised.",
+   "existing_code": "    expect(deck?.quality.channelFader).toBe(\"exact\");",
+   "start_line": 71,
+   "end_line": 71,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/composite.test.ts",
+   "content": "`resolveTrack` ignores the `query` argument and `listOpenFiles` returns a constant path, so the LOAD + open-files resolution path under test never exercises the `matchLibraryAudio` + query-driven resolution (canonicalPath/title/artist) that production uses. A regression where the resolver keys off the wrong query field, or where the open-file filter drops the path, would still pass this test. Consider driving the mock off `query.path` and asserting the resolved track fields.",
+   "existing_code": "      resolveTrack: () => resolution(resolveId, false),\n      listOpenFiles: () => [\"/music/first.mp3\"],",
+   "start_line": 79,
+   "end_line": 80,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/composite.test.ts",
+   "content": "`live` and `ref` are the same array, so `correlateEnvelopes` yields 1 whether or not the normalization is applied (an un-normalized dot product of an identical vector is also > 0.99). This assertion therefore cannot detect a missing or incorrect normalization. Use non-identical vectors (e.g. `ref.map((v) => v * 3)`) and assert the expected coefficient to actually validate the normalization.",
+   "existing_code": "    const { lagSamples, confidence } = correlateEnvelopes(live, ref, 8);",
+   "start_line": 241,
+   "end_line": 241,
+   "category": "test",
+   "severity": "low"
+  }
+ ]
+}

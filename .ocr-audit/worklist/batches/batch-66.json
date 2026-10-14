@@ -1,0 +1,236 @@
+{
+ "devices/H6076.yaml": [
+  {
+   "path": "devices/H6076.yaml",
+   "content": "`max_hz_by_zones` carries concrete values (40/25/20 Hz) whose `source` is `toolkit-measured-other-sku`: they were measured on an H61A0, not on any H6076. `defaultRateHz()` (packages/govee/src/profiles.ts:339) takes this table whenever it is non-null and prefers it over `fallback_hz`, so an unqualified H6076 is capped by another SKU's ceiling rather than the 10 Hz fallback. If the real H6076 ceiling is lower (plausible: this is a floor lamp with a different LED count/PSU from the H61A0 strip), the pre-qualification default overdrives the unit until the wizard's step-13 sweep replaces it. Because `Measured.value` has no per-SKU guard in the loader/lint (profiles.ts only rejects `capabilities.segmented === true` from a non-hardware source), nothing stops this cross-SKU table from being applied as an H6076 value. Consider leaving the table null (`source: unmeasured`) until the H6076 sweep exists, or gating its use on qualification.",
+   "existing_code": "    value:\n      \"20\": 40\n      \"60\": 25\n      \"120\": 20\n    source: toolkit-measured-other-sku",
+   "start_line": 69,
+   "end_line": 73,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "devices/H6076.yaml",
+   "content": "`product_material_segments.value` is `null` while `source` is `product-material` in both `devices/H6076.yaml` and `devices/H1A45.yaml`, contradicting the convention that a missing value uses `source: unmeasured` (as with `length_m`, `segment_chain`, `native_pixels_per_meter`, and the capability probes). The loader (`measured()` in profiles.ts:184) accepts any source with a null value, so this passes validation, but the `Measured` model documents source as provenance, so a null value has none. A consumer that branches on `measured.source !== 'unmeasured'` will treat these nulls as known values. For H6076, either record the claim as a value or set `source: unmeasured`. For H1A45, the receipt says spec 43 records no published segment count for the 20 m strip, so `source: unmeasured` is the correct label.",
+   "existing_code": "  value: null\n  source: product-material\n  receipt: spec 42 records that Govee product material describes 14 segmented controls for the H6076. That is a claim about the product line, not a count of any unit, and the app must not assume it: wizard step 9 counts bands per unit.",
+   "start_line": 23,
+   "end_line": 25,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "devices/H6076.yaml",
+   "content": "Same provenance mismatch as `product_material_segments`: `answers_status_while_armed.value` is `null` but `source` is `toolkit-default`. A null value means nothing was measured and no default is recorded, so the source should be `unmeasured` (the receipt itself says \"Wizard steps 8 and 15 record what this unit does\"). Note the sibling `devices/H1A45.yaml` uses the identical row, so fixing one without the other leaves the two profiles inconsistent.",
+   "existing_code": "  answers_status_while_armed:\n    value: null\n    source: toolkit-default",
+   "start_line": 83,
+   "end_line": 85,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "devices/H6076.yaml",
+   "content": "The `modes` identifiers do not line up with the capability keys below them or with the transport mode vocabulary used elsewhere in the repo. `capabilities` exposes `segmented`, `lan_json_control` and `ble`, while `modes` lists `rgb-segmented`, `lan-json-colorwc` and `ble-single`; `rgb-segmented` matches neither the failover transports (`lan-razer`, `ble-segmented`, `lan-json`, `ble-single`, `matter` \u2013 packages/failover/src/transports.ts) nor the probe's `FallbackMode`/`AlternativeTransport` unions. Any code that maps `profile.modes` onto capability gates or a transport order will fail to associate these entries. Use the canonical transport mode names or document the mapping.",
+   "existing_code": "  - rgb-segmented\n  - lan-json-colorwc\n  - ble-single",
+   "start_line": 19,
+   "end_line": 21,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/analysis-client/vitest.config.ts": [
+  {
+   "path": "packages/analysis-client/vitest.config.ts",
+   "content": "`readdirSync(packages)` returns every entry in `packages/`, not just package directories. Non-package entries (e.g. `.DS_Store`, `README.md`, `.gitignore`, any file or stray folder) each become an `@autolight/<name>` alias pointing at a non-existent `<name>/src/index.ts`. This can mask genuine \"module not found\" errors with a confusing resolution attempt into a bogus path. The root `vitest.config.ts` guards against this with `readdirSync(workspaceSrc, { withFileTypes: true }).filter((e) => e.isDirectory())`; do the same here.",
+   "suggestion_code": "  readdirSync(packages, { withFileTypes: true })\n    .filter((entry) => entry.isDirectory())\n    .map((entry) => [",
+   "existing_code": "  readdirSync(packages).map((name) => [",
+   "start_line": 9,
+   "end_line": 9,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/analysis-client/vitest.config.ts",
+   "content": "Vitest/Vite alias `find` values are prefix-matched, so the plain string alias `@autolight/foo` also rewrites deep imports like `@autolight/foo/subpath` to `<foo>/src/index.ts/subpath`, producing a wrong (non-existent) module path. The root `vitest.config.ts` deliberately places a regex subpath alias (`/^@autolight\\/([^/]+)\\/([^/]+)$/`) before the barrel aliases (\"T-TRU-04 spine fix\") so barrels never swallow `/subpath` imports. Mirror that ordering here, or use an exact-match regex for the barrel alias.",
+   "existing_code": "    `@autolight/${name}`,\n    join(packages, name, \"src\", \"index.ts\"),",
+   "start_line": 10,
+   "end_line": 11,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/ble/package.json": [
+  {
+   "path": "packages/ble/package.json",
+   "content": "With `\"type\": \"module\"`, the package only exposes `main`/`types` and has no conditional `exports` map. Node/bundlers prefer `exports` when present, and its absence prevents any subpath or explicit ESM/CJS condition resolution for consumers of this scoped package. Sibling `@autolight/config` already declares an `exports` map; add one here for consistency and future-proof resolution.",
+   "suggestion_code": "  \"exports\": {\n    \".\": {\n      \"types\": \"./dist/index.d.ts\",\n      \"default\": \"./dist/index.js\"\n    }\n  },\n  \"types\": \"./dist/index.d.ts\",",
+   "existing_code": "  \"types\": \"./dist/index.d.ts\",",
+   "start_line": 15,
+   "end_line": 15,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/ble/package.json",
+   "content": "There is no `files` allowlist, and `dist/` is listed in the repo `.gitignore`. With no `.npmignore` and no `files` field, npm falls back to `.gitignore` when packing, which would exclude `dist/` from the published tarball \u2014 leaving `main`/`types` pointing at non-existent files. Conversely, without the fallback the build output plus `src`/`tsconfig` would be published wholesale (TS config has no test exclusion, so compiled `*.test.js` land in `dist/`). Declare a `files` allowlist (or add an explicit `.npmignore`) so the published surface matches the build output.",
+   "suggestion_code": "  \"files\": [\n    \"dist\"\n  ],\n  \"main\": \"./dist/index.js\",",
+   "existing_code": "  \"main\": \"./dist/index.js\",",
+   "start_line": 6,
+   "end_line": 6,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/config/src/secrets.test.ts": [
+  {
+   "path": "packages/config/src/secrets.test.ts",
+   "content": "The `calls` fixture and this push are never read by any test (every test only destructures `{ port }`), so the fake encrypt/decrypt call log is dead code and provides no verification that encryption was actually invoked with the expected plaintext. Either assert on `calls` (e.g. that `encrypt:<len>` was recorded for the persistent key and never for the memory-only token) or remove the array entirely.",
+   "existing_code": "        calls.push(`encrypt:${plain.length}`);",
+   "start_line": 16,
+   "end_line": 16,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/config/src/secrets.test.ts",
+   "content": "This test only exercises the memory-only token in isolation. A vault bug that serializes `agent.apiToken` into the blob *only when a persistent secret is also present* (e.g. flush serializing the whole `memory` map instead of the filtered `persist` subset) would still pass here, because with no persistent secret `persist` is empty and no blob is written. Add a case that sets both secrets and asserts the blob contains only the cloud key (and that the agent token is absent after reopening).",
+   "existing_code": "    vault.set(\"agent.apiToken\", \"AGENT-TOKEN-1\");\n    expect(vault.get(\"agent.apiToken\")).toBe(\"AGENT-TOKEN-1\");\n    expect(blobs.saved).toHaveLength(0);",
+   "start_line": 71,
+   "end_line": 73,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/config/src/secrets.test.ts",
+   "content": "The fake decrypt hard-codes the vault's JSON-envelope implementation detail (`{`). If the envelope format ever changes, this test would throw `not our envelope` (an opaque error) instead of failing on the assertion, hiding the real cause. Return the shifted plaintext unconditionally, or make the fake format-agnostic so the round-trip test fails cleanly.",
+   "existing_code": "        if (!raw.startsWith(\"{\")) throw new Error(\"not our envelope\");",
+   "start_line": 24,
+   "end_line": 24,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/config/src/secrets.test.ts",
+   "content": "Redaction is only exercised with an alphanumeric value. Real API keys frequently contain regex/format metacharacters such as `.`, `[`, `*`, `$` and multiple/overlapping occurrences; add cases with such characters and boundary conditions to confirm they are redacted correctly (e.g. `containsSecretText`/`redactSecretText` with a key like `a.b[c]*`).",
+   "existing_code": "    expect(redactSecretText(\"a GOVEE-SECRET-1 b GOVEE-SECRET-1\", [\"GOVEE-SECRET-1\"])).toBe(\"a [redacted] b [redacted]\");",
+   "start_line": 106,
+   "end_line": 106,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/dj-core/src/beat-mapping.property.test.ts": [
+  {
+   "path": "packages/dj-core/src/beat-mapping.property.test.ts",
+   "content": "The seek property loop can pass with a broken millisecond-threshold path. It only asserts `got === true` when the beat error alone exceeds the beat threshold (`errBeats > 0.5`), and only asserts `false` for the narrow region `errBeats < 0.4 && errorMs < 140`. There is no case that must be tripped by the ms branch (i.e. `errBeats <= 0.5` but `errorMs > 150`), so an `exceedsSeekThreshold` that drops the `beatsPerSecond`/ms check, or sets `seekThresholdMs` far too high, still satisfies every assertion. In addition, the 0.4\u20130.5 'dead zone' and the literal `140` (vs the real default 150) let up to ~20% error in `seekThresholdBeats`/`seekThresholdMs` slip through. Reference the defaults instead of magic literals and add a case that must trip the ms branch.",
+   "suggestion_code": "      const got = exceedsSeekThreshold(predicted, observed, beats);\n      const errorMs = (errBeats / beats) * 1000;\n      if (errBeats > 0.5 * (1 + 1e-9)) expect(got).toBe(true);\n      // ms branch: below the beat threshold but clearly over the 150 ms limit\n      if (errBeats < 0.4 && errorMs > 200) expect(got).toBe(true);\n      if (errBeats < 0.4 && errorMs < 100) expect(got).toBe(false);",
+   "existing_code": "      const got = exceedsSeekThreshold(predicted, observed, beats);\n      if (errBeats > 0.5 * (1 + 1e-9)) expect(got).toBe(true);\n      if (errBeats < 0.4 && (errBeats / beats) * 1000 < 140) expect(got).toBe(false);",
+   "start_line": 88,
+   "end_line": 90,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/dj-core/src/beat-mapping.property.test.ts",
+   "content": "The monotonicity property only asserts non-decreasing output, so a degenerate/constant implementation of `sourceSecondsToBeat` (e.g. always returning `grid.beats[0].index`) satisfies it. To make this test actually catching for the 'non-monotonic map' class it claims to guard, also assert strict growth (the output must span the grid, e.g. `b[last] > b[first]`).",
+   "existing_code": "      const b = sourceSecondsToBeat(g, s);\n      expect(b).toBeGreaterThanOrEqual(prev);\n      prev = b;",
+   "start_line": 55,
+   "end_line": 57,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/dj-core/src/beat-mapping.property.test.ts",
+   "content": "The test name claims the two detectors 'agree at the boundary', but `isSeek` (a seconds threshold, 0.25 here) and `exceedsSeekThreshold` (a beats + ms threshold) are exercised completely independently and never compared. Either add a cross-check of their documented relationship or rename the test, otherwise the coverage claim is misleading.",
+   "existing_code": "  it(\"seek detectors agree at the boundary and never invert\", () => {",
+   "start_line": 79,
+   "end_line": 79,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/dj-core/src/beat-mapping.property.test.ts",
+   "content": "`dtNs` is always non-negative (`Math.floor(rand() * 5e9)`), so the `Math.max(0, dt)` clamp in `estimatePosition`, which exists to absorb out-of-order observations where `nowNs < receivedAtNs`, is never exercised. Add a case with a later `receivedAtNs` (or a negative delta) to lock in the clamp behaviour under time skew.",
+   "existing_code": "      const dtNs = BigInt(Math.floor(rand() * 5e9));",
+   "start_line": 72,
+   "end_line": 72,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/failover/src/machine.test.ts": [
+  {
+   "path": "packages/failover/src/machine.test.ts",
+   "content": "Tautological assertion: `transports` is just a shallow copy of the imported `DEFAULT_TRANSPORT_ORDER`, so `transports[0] === \"lan-razer\"` and `not.toContain(\"cloud-metadata\")` re-check the constant against itself and verify nothing about the failover machine or its ordering behavior. If the machine ignored `order` (or the order were mis-wired somewhere), this test would still pass. Either drop it or drive a real machine and assert on observable behavior (e.g. `machine.selection?.transport` under a degraded config so the order actually decides the selection).",
+   "existing_code": "    const transports: TransportId[] = [...DEFAULT_TRANSPORT_ORDER];\n    expect(transports[0]).toBe(\"lan-razer\");\n    expect(transports).not.toContain(\"cloud-metadata\");",
+   "start_line": 168,
+   "end_line": 170,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/failover/src/machine.test.ts",
+   "content": "The test is named \u201cstrict policy rides the outage dark instead of switching\u201d, but it never asserts that no switch actually occurred. It only checks the returned `Selection` (transport + banner). Add explicit assertions on the machine's state to make the intent verifiable, e.g. `expect(events).toHaveLength(0)` and `expect(machine.switches).toBe(0)` (and `expect(machine.machineState).toBe(\"on-preferred\")`), so a regression that emits a switch event or flips `machineState` under strict policy is caught.",
+   "existing_code": "    const sel = machine.tick(\"lan-silent\", false);\n    expect(sel.transport).toBe(\"lan-razer\");\n    expect(sel.banner).toContain(\"never switches\");",
+   "start_line": 154,
+   "end_line": 156,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/failover/src/machine.test.ts",
+   "content": "Banner assertions rely on loose substring matching (`toContain(\"ble-segmented\")`, `toContain(\"matter\")`, `toContain(\"never switches\")`). These pass even if the banner text or the underlying reason is wrong, and they are brittle to any wording change elsewhere (e.g. any banner that merely mentions the transport id satisfies the check). Assert the exact banner/`cause` (or at least the discriminating phrase) instead of a transport id that can appear incidentally.",
+   "existing_code": "    expect(events[0]?.banner).toContain(\"ble-segmented\");",
+   "start_line": 75,
+   "end_line": 75,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/failover/src/machine.test.ts",
+   "content": "The failover setup here (machine.select(); mark lan-razer/lan-json unreachable; advance 4000ms; tick(\"lan-silent\") and assert ble-segmented) is duplicated verbatim from the previous test. Extract a small local helper (e.g. `failToBle(machine, reach, at, \"lan-silent\")`) so the two scenarios only differ in the reclaim step and future threshold changes are updated in one place.",
+   "existing_code": "  it(\"holds the reclaim off the bar boundary until the bar arrives\", () => {",
+   "start_line": 110,
+   "end_line": 110,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/govee/src/index.test.ts": [
+  {
+   "path": "packages/govee/src/index.test.ts",
+   "content": "Test-validity flaw: the toolkit side of this \"parity\" proof is `StubBindingStream`, a hand-written reimplementation of the exact same arm-settle / newest-wins / no-resend / supersede-counting logic that `PacingStream` (NativeStreamEngine) implements. Because both sides are written from the same spec in the same process, the equality assertions (`toolkitSink.datagrams === nativeSink.datagrams`, matching `framesSent`/`framesSuperseded`) hold unconditionally even if the *real* `govee_toolkit` binding behaves differently (e.g. re-sends unchanged frames, doesn't coalesce, or orders arm/paint differently). The test therefore cannot detect divergence from the artifact it claims to compare against, and would still pass with a broken native engine as long as the stub copies the same bug. Consider asserting against independently recorded golden datagrams / the real binding (as the simulator test attempts), or at minimum add a case that the stub is deliberately configured to violate, so a regression in either side fails.",
+   "existing_code": "class StubBindingStream implements BindingStream {",
+   "start_line": 230,
+   "end_line": 230,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/govee/src/index.test.ts",
+   "content": "Weak assertion: the test is named \"white hit scales in linear light\" but only checks 0 < value < 255. A regression of `whiteHitPayload` to a plain linear scale (`intensity * 255` = 77) or to any other curve would still satisfy both bounds, so the linear-light contract (\u00a749) is not actually verified. Assert the concrete scaled value (e.g. compare against `scaleChannel(255, 0.3)`, or a golden byte such as 148) and also check the green/blue channels so a per-channel bug is caught.",
+   "existing_code": "    const dim = whiteHitPayload(1, 0.3);\n    expect(dim[0]!).toBeGreaterThan(0);\n    expect(dim[0]!).toBeLessThan(255);",
+   "start_line": 65,
+   "end_line": 67,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/govee/src/index.test.ts",
+   "content": "Weak assertion: only `toContain(\"H6076\")` is checked, so the test would still pass if `qualificationKey` dropped `hardwareId` or `firmwareVersion` (the two fields that distinguish two units of the same SKU). Assert the full composed key (e.g. `toBe(\"h+H6076+1\")`) or verify that changing each of the three fields changes the key.",
+   "existing_code": "    expect(qualificationKey(id)).toContain(\"H6076\");",
+   "start_line": 75,
+   "end_line": 75,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/govee/src/index.test.ts",
+   "content": "This branch never executes at runtime: when `SimClass === null` the whole test is already skipped by `it.skipIf(SimClass === null)`, and when it is non-null the condition is always false. It exists only to narrow `SimClass` for TypeScript, so it provides no runtime protection while reading as a safety net (the message \"simulator build missing\" can never be observed). If the intent is purely narrowing, a `!`/local narrowed alias would make that explicit; if it is intended as a runtime guard, it is ineffective and should be removed.",
+   "existing_code": "    if (SimClass === null) throw new Error(\"simulator build missing\");",
+   "start_line": 549,
+   "end_line": 549,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ]
+}

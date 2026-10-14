@@ -1,0 +1,254 @@
+{
+ "packages/show-planner/src/recurrence.test.ts": [
+  {
+   "path": "packages/show-planner/src/recurrence.test.ts",
+   "content": "Dead code: `rand` is constructed and then immediately discarded via `void rand;`, so it has no effect on any assertion. The apparent intent \u2014 verifying that a seeded PRNG produces a deterministic motif assignment \u2014 is never actually checked. Note that even if it were used, the seed here (`\"seed\"`) does not match the seed `planRecurrence` derives internally (`motif-${seedHex}`), so it could not reproduce the planner's draws. Remove both lines (or assert determinism against the real planner output).",
+   "existing_code": "    const rand = mulberry32(\"seed\");\n    void rand;",
+   "start_line": 95,
+   "end_line": 96,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/recurrence.test.ts",
+   "content": "The non-null assertion masks a missing motif. If `motif(1)` is `null` (or no motif carries that id), `Array.find` returns `undefined` and `entry.sections` throws an opaque `TypeError: Cannot read properties of undefined` rather than a meaningful assertion failure that pinpoints the regression. Assert the lookup result explicitly (e.g. `expect(entry).toBeDefined()`) before dereferencing.",
+   "existing_code": "    const entry = plan.recurrence.motifs.find((m) => m.id === motif(1))!;",
+   "start_line": 68,
+   "end_line": 68,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/recurrence.test.ts",
+   "content": "These `!` assertions assume the planner emitted a variation for both occurrences; if variations stop being produced (the very regression this test targets), the test fails with a `TypeError` on `v1.direction`/`v3.direction` instead of a clear expectation failure. The same applies to `looks[0]!`/`looks[1]!`, where `find` can return `undefined`. Assert existence (`expect(v1).toBeDefined()`, `expect(looks[0]).toBeDefined()`) before reading fields so failures report the actual contract violation.",
+   "existing_code": "    const v1 = entry.variations[1]!;\n    const v3 = entry.variations[3]!;",
+   "start_line": 70,
+   "end_line": 71,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-planner/src/recurrence.test.ts",
+   "content": "Sorting the two directions before comparison only proves the pair is `{forward, reverse}`; it does not bind a direction to a specific occurrence, so a swapped mapping (first chorus `reverse`, second `forward`) would still pass. Since the occurrence\u2192direction mapping is deterministic (`occ % 2`), assert each value directly.",
+   "suggestion_code": "    expect(v1.direction).toBe(\"forward\");\n    expect(v3.direction).toBe(\"reverse\");",
+   "existing_code": "    expect([v1.direction, v3.direction].sort()).toEqual([\"forward\", \"reverse\"]);",
+   "start_line": 72,
+   "end_line": 72,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/storage/src/migrate.test.ts": [
+  {
+   "path": "packages/storage/src/migrate.test.ts",
+   "content": "The forced-failure scenario depends on the hardcoded temp-table name `analysis_artifacts_v2` colliding with migration 2's internal table. This couples the test to an implementation detail: a pure refactor that renames that internal table (e.g. to `analysis_artifacts_new`) makes migration 2 succeed, so `migrate()` no longer throws and `expect(() => migrate(...)).toThrow(...)` fails for a reason unrelated to rollback \u2014 the guarantee that a failed migration rolls back is no longer actually being exercised. Additionally, the only rollback assertion is that `rooms` is absent; it does not verify that the `ALTER TABLE ... ADD COLUMN` statements (on tracks/venues/sessions) that ran before the failure were also reverted. Prefer an explicitly injected failure (e.g. a migration whose SQL is deliberately invalid, or a spy) and assert the pre-failure DDL is undone.",
+   "existing_code": "      opened.driver.exec(\"CREATE TABLE analysis_artifacts_v2 (track_id TEXT)\");",
+   "start_line": 162,
+   "end_line": 162,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/storage/src/migrate.test.ts",
+   "content": "`MIGRATIONS[0]?.sql ?? \"\"` silently no-ops if the array is ever empty or reordered. In that case `seedPreviousVersion` then fails with a misleading `no such table: tracks` error instead of a clear assertion that the baseline migration exists/where it is. The adoption test is meant to prove the legacy baseline is detected, but with an empty SQL it is not actually setting up a \"database written before migrations existed\". Assert the baseline migration is present (and matches version 1) rather than defaulting to empty SQL.",
+   "existing_code": "      opened.driver.exec(MIGRATIONS[0]?.sql ?? \"\");",
+   "start_line": 120,
+   "end_line": 120,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/storage/src/migrate.test.ts",
+   "content": "`tempDb()` creates the temp directory eagerly, but every caller (e.g. `migrates a database at the previous version`, `adopts a database ...`, `rolls a failed migration back`) calls `openDatabase({ path: file })` *before* entering the `try`/`finally` that does `rmSync(dir, ...)`. If `openDatabase` throws (driver load failure, invalid pragma, etc.), `opened` is never assigned, the `finally` never runs, and the temp directory is leaked for the rest of the run. Move the `openDatabase` call inside the `try` (guarding `opened.driver.close()`), or wrap the open in its own `try/finally` that removes the directory.",
+   "existing_code": "function tempDb(): { dir: string; file: string } {\n  const dir = mkdtempSync(join(tmpdir(), \"autolight-migrate-\"));\n  return { dir, file: join(dir, \"autolight.db\") };\n}",
+   "start_line": 19,
+   "end_line": 22,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/storage/src/migrate.test.ts",
+   "content": "`schemaShape` only captures per-column name/type/notnull/default/pk and then `.sort()`s them, so the parity test cannot detect drift in foreign keys, UNIQUE constraints, indexes, CHECK constraints, or column ordering between `schema.sql` and the migrations \u2014 even though the comment claims the snapshot and migrations \"cannot drift apart unnoticed\". A schema.sql that silently drops `REFERENCES ... ON DELETE CASCADE` or a UNIQUE constraint would still pass. Consider also comparing `PRAGMA foreign_key_list`, `PRAGMA index_list`, and/or the normalized `sql` from `sqlite_master` so structural drift is actually caught.",
+   "existing_code": "    shape[table] = columnsOf(db, table)\n      .map((column) => `${column.name}:${column.type}:${column.notnull}:${column.dflt_value ?? \"\"}:${column.pk}`)\n      .sort();",
+   "start_line": 29,
+   "end_line": 31,
+   "category": "test",
+   "severity": "medium"
+  }
+ ],
+ "packages/storage/src/replay.test.ts": [
+  {
+   "path": "packages/storage/src/replay.test.ts",
+   "content": "Flawed assertion: only `stampsOne.length` is checked. `stampsTen.forEach` iterates only the entries that exist and `stampsOne[index] ?? 0` masks missing entries, so a 10x replay that returns fewer (or zero) states still passes this test. Assert the 10x length too and compare aligned indices.",
+   "suggestion_code": "    expect(stampsOne.length).toBe(events.length);\n    expect(stampsTen.length).toBe(events.length);\n    stampsOne.forEach((value, index) => {\n      expect(stampsTen[index] ?? 0).toBeCloseTo(value / 10, 9);\n    });",
+   "existing_code": "    expect(stampsOne.length).toBe(events.length);\n    stampsTen.forEach((value, index) => {\n      expect(value).toBeCloseTo((stampsOne[index] ?? 0) / 10, 9);\n    });",
+   "start_line": 115,
+   "end_line": 118,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/storage/src/replay.test.ts",
+   "content": "Fixture discovery silently drops any file that does not expose string `base64`/`opcode` (a typo like `opCode`, or a newly added non-frame fixture). The `>=18` assertion does not prove the intended coverage set was actually replayed, so a malformed or wrongly-shaped fixture can be skipped without failing. Assert that only the known non-frame fixture (`status-armed.json`) is dropped.",
+   "suggestion_code": "  const frames = rows.filter(({ fixture }) => typeof fixture.base64 === \"string\" && typeof fixture.opcode === \"string\");\n  const nonFrames = new Set([\"status-armed.json\"]);\n  const dropped = rows.filter(({ name }) => !nonFrames.has(name) && !frames.some((f) => f.name === name)).map(({ name }) => name);\n  if (dropped.length > 0) throw new Error(`unexpected non-frame fixture(s): ${dropped.join(\", \")}`);\n  return frames;",
+   "existing_code": "  return rows.filter(({ fixture }) => typeof fixture.base64 === \"string\" && typeof fixture.opcode === \"string\");",
+   "start_line": 43,
+   "end_line": 43,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/storage/src/replay.test.ts",
+   "content": "Mutation test only asserts `length > 0` at 1x. It never proves the mutation actually changed the decoded output, so a harness that reports an unrelated single mismatch (or a decoder that no-ops on empty payloads) still passes while the mutation goes undetected for most frames. Compare the mutated states against the baseline and/or check every speed.",
+   "suggestion_code": "    const baseline = runReplayAllSpeeds(events, decodeRazer);\n    expect(mutatedPayload[\"1x\"].states).not.toEqual(baseline[\"1x\"].states);\n    expect(compareSequences(expected, mutatedPayload[\"1x\"].states).length).toBeGreaterThan(0);",
+   "existing_code": "    expect(compareSequences(expected, mutatedPayload[\"1x\"].states).length).toBeGreaterThan(0);",
+   "start_line": 139,
+   "end_line": 139,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/storage/src/replay.test.ts",
+   "content": "The same `events`/`status.json` payload objects are shared across `runReplayAllSpeeds` (all four speeds) and across multiple tests. The `Decoder` contract does not forbid mutating `event.payload`; if a decoder mutates in place, the 1x/2x/10x/step runs and later tests would consume contaminated data (flaky/order-dependent results). Pass a clone per run (or freeze payloads) so cross-run/cross-test contamination is impossible.",
+   "suggestion_code": "    const statusEvents: CaptureEvent[] = [{ atMs: 250, kind: \"status\", payload: structuredClone(status.json) }];",
+   "existing_code": "    const statusEvents: CaptureEvent[] = [{ atMs: 250, kind: \"status\", payload: status.json }];",
+   "start_line": 153,
+   "end_line": 153,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/venue/src/room.test.ts": [
+  {
+   "path": "packages/venue/src/room.test.ts",
+   "content": "The 0.15 tolerance is looser than the error of a plain 12-gon polyline. The chord perimeter is `12 * 2 * sin(\u03c0/12) \u2248 6.2117`, which is already only `|6.2117 - 2\u03c0| \u2248 0.0716` away from the expected `2\u03c0`. So this test still passes if Catmull-Rom sampling is replaced by straight segments (or otherwise broken), meaning it does not guard against a broken integrator. Tighten the bound and/or assert the curve actually bulges beyond the chord polyline.",
+   "suggestion_code": "    const chordPerimeter = 12 * 2 * Math.sin(Math.PI / 12);\n    const len = polylineLength(pts, { kind: \"catmull-rom\" }, 0.001, true);\n    expect(len).toBeGreaterThan(chordPerimeter);\n    expect(Math.abs(len - Math.PI * 2)).toBeLessThan(0.05);",
+   "existing_code": "    const len = polylineLength(pts, { kind: \"catmull-rom\" }, 0.001, true);\n    expect(Math.abs(len - Math.PI * 2)).toBeLessThan(0.15);",
+   "start_line": 38,
+   "end_line": 39,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/venue/src/room.test.ts",
+   "content": "This assertion only confirms the DJ anchor is not exactly `{x:0,y:0}`, and it never references the centroid or the seam position. It happens to pass only because `rectangleRoom()` is centered on the origin (so the centroid is coincidentally `{0,0}`); the stated guarantee \"centroid is kept separate from the DJ anchor\" is not actually verified. Any change that ties the DJ anchor to the centroid for a non-origin-centered room, or conflates the seam with the DJ anchor, would go undetected. Assert the relationship explicitly against the computed centroid.",
+   "suggestion_code": "    expect(room.anchors.dj.position).not.toEqual(polygonCentroid(room.outline));\n    expect(room.anchors.center).toBeNull();\n    expect(room.logicalZeroS).toBe(0);",
+   "existing_code": "    expect(room.anchors.dj.position).not.toEqual({ x: 0, y: 0 });\n    expect(room.logicalZeroS).toBe(0);",
+   "start_line": 29,
+   "end_line": 30,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/venue/src/room.test.ts",
+   "content": "The `includes(\"self-intersects\")` check is wording-dependent. Note that this bowtie also has zero signed area, so `validateRoom` additionally emits the area message; a substring match cannot distinguish the self-intersection branch from a coincidental match, and it would silently pass if the message wording changed. Assert the exact message (including the crossing edge indices) instead.",
+   "suggestion_code": "    expect(problems).toContain(\"outline self-intersects: edge 0 crosses edge 2\");",
+   "existing_code": "    expect(problems.some((p) => p.includes(\"self-intersects\"))).toBe(true);",
+   "start_line": 17,
+   "end_line": 17,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/venue/src/room.test.ts",
+   "content": "Matching only the `\"area\"` substring is brittle and does not prove the correct validation branch fired. For this collinear outline `validateRoom` also emits `wallNames has 4 entries for 3 walls` (since `wallNames` was left at length 4), and any future message containing \"area\" would make the assertion pass for the wrong reason. Assert the exact expected message (and consider setting `wallNames` to `[]` so only the intended rule fires).",
+   "suggestion_code": "    room.outline = [{ x: 0, y: 0 }, { x: 1, y: 1 }, { x: 2, y: 2 }];\n    expect(validateRoom(room)).toContain(\"outline area must be positive\");",
+   "existing_code": "    room.outline = [{ x: 0, y: 0 }, { x: 1, y: 1 }, { x: 2, y: 2 }];\n    expect(validateRoom(room).some((p) => p.includes(\"area\"))).toBe(true);",
+   "start_line": 22,
+   "end_line": 23,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "analysis/src/autolight_analysis/fusion.py": [
+  {
+   "path": "analysis/src/autolight_analysis/fusion.py",
+   "content": "`fused` mode does not actually produce the \"union of boundaries\" the docstring/comment promises. Any ML section that overlaps a PSSI span is silently discarded here, so ML boundary/timing information that extends beyond a PSSI span is lost (e.g. PSSI 1-33 + ML 17-49 \u2192 the ML section is dropped and the fused output stops at 33). `feature_boundaries` are also only used to nudge confidence (`near_feature`), never emitted as section boundaries. Consider keeping the non-overlapping portion(s) of partially-overlapping ML spans (splitting at the PSSI boundary) or emitting the boundary union, so the DS-11 \"union of boundaries\" contract holds.",
+   "existing_code": "        if not any(_spans_overlap(s, p) for p in pssi_sections):\n            out.append(\n                {**s, \"evidence\": [*s.get(\"evidence\", []), \"fused:ml-only-span\"]}\n            )",
+   "start_line": 101,
+   "end_line": 104,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/fusion.py",
+   "content": "This schema-parity comment claims sections carry \"no evidence field\", but the code below conditionally emits `evidence` on every section (line ~155) and on every musical event (line ~166). It also directly contradicts the earlier comment block on this module (which states evidence is kept per T-ANA-12). Since the comment asserts the TS trackModelSchema owns truth and requires field-by-field parity, one of the two is wrong: either the emitted `evidence` field breaks schema parity, or this comment is stale. Reconcile the comment with the actual emitted shape.",
+   "existing_code": "# sections: kind/rawLabel/startBeat/endBeat/confidence (no evidence field).",
+   "start_line": 125,
+   "end_line": 125,
+   "category": "documentation",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/fusion.py",
+   "content": "The module docstring states confidence \"comes from agreement and source probabilities, not constants\", yet every confidence adjustment here (and in `_with` / the ML-only branch) is a fixed \\u00b10.05/\\u00b10.1/\\u00b10.15 nudge that is independent of the actual PSSI/ML `confidence` values \u2014 a source with confidence 0.05 and one with 0.95 receive the same boost. The fused confidence therefore does not reflect the DS-11 weighting the docstring describes. Either implement a probability-aware combination (e.g. weighted/agreement-based fusion of the source confidences) or correct the docstring so the documented behavior matches the code.",
+   "existing_code": "            s.get(\"confidence\", 0.5)\n            + (0.15 if agree else 0.0)\n            + (0.05 if near_feature else 0.0),",
+   "start_line": 94,
+   "end_line": 96,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "analysis/tests/owner/test_owner_library.py": [
+  {
+   "path": "analysis/tests/owner/test_owner_library.py",
+   "content": "This assertion only checks the beat count, so the test passes on a real decode AND on garbage that still yields >100 grid entries (e.g. NaN/zero positions, wrong BPM). It gives false confidence that `extract_anlz` produced a usable grid. Also `got[\"beatGrid\"]` will surface an opaque `KeyError` if the extractor schema changes, which is harder to diagnose than an explicit assertion. Consider validating the entries themselves, e.g.:",
+   "suggestion_code": "    got = extract_anlz(str(subs[0]))\n    grid = got.get(\"beatGrid\")\n    assert isinstance(grid, list), f\"unexpected beatGrid: {type(grid)}\"\n    assert len(grid) > 100\n    assert all(isinstance(b, (int, float)) for b in grid[:100])",
+   "existing_code": "    got = extract_anlz(str(subs[0]))\n    assert len(got[\"beatGrid\"]) > 100",
+   "start_line": 23,
+   "end_line": 24,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/tests/owner/test_owner_library.py",
+   "content": "`len(mono) > rate * 10` passes for a decode that returns the right number of samples but all zeros (silent) or NaN \u2014 exactly the failure mode a decode smoke-test should catch. Add a check that the samples carry real signal (finite and non-constant).",
+   "suggestion_code": "    mono, rate = load_mono_pcm(str(p))\n    assert len(mono) > rate * 10\n    assert np.isfinite(mono).all(), \"decoded PCM contains NaN/inf\"\n    assert np.abs(mono).max() > 0.0, \"decoded PCM is silent\"",
+   "existing_code": "    mono, rate = load_mono_pcm(str(p))\n    assert len(mono) > rate * 10",
+   "start_line": 33,
+   "end_line": 34,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/tests/owner/test_owner_library.py",
+   "content": "When the hardcoded `135` subdirectory is absent, `base.exists()` is False so `subs` is empty and the failure message reads \"no ANLZ cache entries on this owner machine\" \u2014 misattributing a missing/moved base path as an empty cache. Guard on `base.is_dir()` and report the actual path in the message so the owner can diagnose layout drift.",
+   "suggestion_code": "    assert base.is_dir(), f\"ANLZ cache dir not found: {base}\"\n    subs = sorted(p for p in base.iterdir() if p.is_dir())\n    assert subs, f\"no ANLZ cache entries under {base}\"",
+   "existing_code": "    subs = sorted([p for p in base.iterdir() if p.is_dir()]) if base.exists() else []\n    assert subs, \"no ANLZ cache entries on this owner machine\"",
+   "start_line": 21,
+   "end_line": 22,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "analysis/tests/test_allinone.py": [
+  {
+   "path": "analysis/tests/test_allinone.py",
+   "content": "This test claims to cover the \"optional dep absent\" path, but `assert isinstance(allinone_available(), bool)` only checks the return type. It passes whether `allin1_infer` is installed or not, and cannot detect a regression where `allinone_available()` unconditionally returns `True` (or unconditionally `False`) \u2014 exactly the behavior this test is named after. Force the ImportError branch (e.g. monkeypatch `builtins.__import__` to raise for `allin1_infer`) and assert the concrete result.",
+   "suggestion_code": "def test_allinone_absent_without_optional_dep(monkeypatch):\n    import builtins\n\n    real_import = builtins.__import__\n\n    def fake_import(name, *args, **kwargs):\n        if name == \"allin1_infer\":\n            raise ImportError(name)\n        return real_import(name, *args, **kwargs)\n\n    monkeypatch.setattr(builtins, \"__import__\", fake_import)\n    assert allinone_available() is False",
+   "existing_code": "def test_allinone_absent_without_optional_dep():\n    assert isinstance(allinone_available(), bool)",
+   "start_line": 43,
+   "end_line": 44,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/tests/test_allinone.py",
+   "content": "Only `out[0]` (the intro segment) is verified. The second output \u2014 the `verse` segment \u2014 is never inspected, so a defect in label mapping, beat anchoring, or evidence/rawLabel for any non-first segment would go undetected even though `len(out) == 2`. Add assertions for `out[1]` (e.g. `kind == \"verse\"`, `startBeat == 17`, `endBeat == 49`, `rawLabel == \"allin1:verse\"`).",
+   "existing_code": "    assert len(out) == 2\n    assert out[0][\"kind\"] == \"intro\"",
+   "start_line": 29,
+   "end_line": 30,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/tests/test_allinone.py",
+   "content": "The zero-length `drop` segment (24.0\u201324.0) is only validated via `len(out) == 2`. Because the implementation skips it on `end <= start` (not on its label), an incorrect filter \u2014 e.g. one that drops any segment whose label contains 'drop' \u2014 would still produce `len == 2` and pass. Assert the surviving kinds/labels explicitly so the skip is attributable to the empty range rather than the label.",
+   "existing_code": "    out = ml_sections(segs, beat_times)\n    assert len(out) == 2",
+   "start_line": 28,
+   "end_line": 29,
+   "category": "test",
+   "severity": "low"
+  }
+ ]
+}

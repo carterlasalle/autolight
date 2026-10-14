@@ -1,0 +1,84 @@
+{
+ "apps/desktop/components.json": [
+  {
+   "path": "apps/desktop/components.json",
+   "content": "`aliases.utils` points to `@/app/utils`. With the repo's alias (`tsconfig.json` \u2192 `\"@/*\": [\"./src/*\"]`, and Vite `\"@\" \u2192 src`), this resolves to `apps/desktop/src/app/utils.ts`, which does not exist anywhere in the project. Meanwhile every existing UI component imports `cn` from the bare `\"cn\"` package (e.g. `src/components/ui/button.tsx:3 import { cn } from \"cn\"`). As written, any `shadcn add <component>` will scaffold `import { cn } from \"@/app/utils\"`, producing an unresolved-module/TS error and a build failure. Either create `src/app/utils.ts` exporting `cn`, or set this alias so it matches the project's actual `cn` source.",
+   "existing_code": "    \"utils\": \"@/app/utils\",",
+   "start_line": 17,
+   "end_line": 17,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "apps/desktop/src/app/shell.test.ts": [
+  {
+   "path": "apps/desktop/src/app/shell.test.ts",
+   "content": "These assertions are coupled to incidental literal UI copy rather than to behavior/structure. `AutoLight` is just the app-name string from the titlebar and `No show loaded` is a placeholder heading; any legitimate copy change breaks the test while real regressions remain invisible (e.g., the Statusbar/Titlebar regions or the workspace could be dropped/misplaced and the test still passes, since only one sidebar marker is checked). The file comment claims it proves \"the default route shows its screen\", but nothing asserts the default route (`live`) actually mounted its screen beyond the placeholder text. Prefer structural/semantic markers per region (titlebar `<header>`, sidebar `aria-label=\"Routes\"`, workspace route screen, statusbar `<footer>`), or query by role with a testing-library render, so a regression that removes a whole region fails the test instead of a copy edit doing so.",
+   "suggestion_code": "    const html = renderToStaticMarkup(createElement(Shell));\n    // Assert each shell region structurally, independent of incidental copy.\n    expect(html).toContain(\"<header\");               // titlebar\n    expect(html).toContain(\"aria-label=\\\"Routes\\\"\"); // sidebar\n    expect(html).toContain(\"<footer\");               // statusbar\n    expect(html).toContain(\"No show loaded\");        // default (live) route screen",
+   "existing_code": "    const html = renderToStaticMarkup(createElement(Shell));\n    expect(html).toContain(\"AutoLight\");",
+   "start_line": 11,
+   "end_line": 12,
+   "category": "test",
+   "severity": "medium"
+  }
+ ],
+ "apps/desktop/src/components/ui/card.tsx": [
+  {
+   "path": "apps/desktop/src/components/ui/card.tsx",
+   "content": "`Card` applies its own horizontal padding (`px-4`, and `data-[size=sm]:px-3`) while every slot also applies `px-4` (`CardHeader`, `CardContent`, `CardFooter`). Because all existing consumers render through those slots (`audio-sync.tsx`, `chrome.tsx`, `rkbx-setup-panel.tsx`), content ends up inset by 16px (Card) + 16px (slot) = 32px from the card border, i.e. doubled padding.\n\nIt also defeats the full-bleed footer intent: `has-data-[slot=card-footer]:pb-0` removes the card's bottom padding so the footer (`border-t` + `bg-muted/50`) is flush, but the card's `px-4` still insets that band by 16px on both sides, so it does not span the card width.\n\nPick a single owner for padding: either drop `px-4`/`data-[size=sm]:px-3` from `Card` (matching the per-slot padding model), or remove `px-4` from the slots. In either case the `sm` variant must be propagated consistently (e.g. `group-data-[size=sm]/card:px-3` on the slots); today `size=\"sm\"` only shrinks the card's own padding while the slots stay at `px-4`, so the variant is inconsistent.",
+   "existing_code": "        \"group/card flex flex-col gap-3 overflow-hidden rounded-xl bg-card px-4 py-3 text-sm text-card-foreground ring-1 ring-foreground/10 has-data-[slot=card-footer]:pb-0 has-[>img:first-child]:pt-0 data-[size=sm]:gap-2.5 data-[size=sm]:px-3 data-[size=sm]:py-2.5 data-[size=sm]:has-data-[slot=card-footer]:pb-0 *:[img:first-child]:rounded-t-xl *:[img:last-child]:rounded-b-xl\",",
+   "start_line": 14,
+   "end_line": 14,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "apps/desktop/src/components/ui/dropdown-menu.ts": [
+  {
+   "path": "apps/desktop/src/components/ui/dropdown-menu.ts",
+   "content": "This className mixes two different Radix state-selector conventions: the rest of the file (and the whole `components/ui` directory) relies on the newer `data-open:` / `data-closed:` variants, but this rule still uses the legacy `data-[state=closed]:`. If the installed `radix-ui` version no longer emits `data-state` on the content, `data-[state=closed]:overflow-hidden` is dead and the closed-state overflow is never applied (the `data-closed:` animation will animate an element whose overflow was never hidden). Align this selector with the rest of the file.",
+   "suggestion_code": "data-closed:overflow-hidden data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95\", className )}",
+   "existing_code": "data-[state=closed]:overflow-hidden data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95\", className )}",
+   "start_line": 0,
+   "end_line": 0,
+   "category": "maintainability",
+   "severity": "medium"
+  }
+ ],
+ "apps/desktop/src/components/ui/textarea.tsx": [
+  {
+   "path": "apps/desktop/src/components/ui/textarea.tsx",
+   "content": "In both `Textarea` and `Switch`, `ref` is never forwarded to the underlying element. This app pins React 18 (`react: ^18.3.1`), where `ref` is a reserved prop that React strips before it reaches a function component, so it never appears in `props`; yet `React.ComponentProps<...>` advertises a `ref` prop (via `JSX.IntrinsicElements`/the primitive's own props), so `<Textarea ref={r} />` and `<Switch ref={r} />` type-check but silently leave `r.current` as `null` (React logs \"Function components cannot be given refs\"). Wrap each component in `React.forwardRef` and pass `ref` to the inner element, or drop `ref` from the accepted prop type so callers cannot pass one that is silently ignored.",
+   "suggestion_code": "const Textarea = React.forwardRef<\n  HTMLTextAreaElement,\n  React.ComponentProps<\"textarea\">\n>(function Textarea({ className, ...props }, ref) {",
+   "existing_code": "function Textarea({ className, ...props }: React.ComponentProps<\"textarea\">) {",
+   "start_line": 4,
+   "end_line": 4,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/analysis-client/tsconfig.json": [
+  {
+   "path": "packages/analysis-client/tsconfig.json",
+   "content": "`include: [\"src\"]` globs the entire source directory, which also matches `src/index.test.ts`. The `build` script (`tsc -p tsconfig.json`) will therefore type-check and emit test artifacts (`dist/index.test.js` / `dist/index.test.d.ts`) into the published output. This is undesirable because: (1) the package's `main`/`types` publish `dist`, so consumers receive compiled tests, and (2) the emitted `.js` imports `vitest` (a devDependency) that will not be present in consumer installs. Exclude test files from the build program (vitest picks up tests via its own config, so this does not affect testing).",
+   "suggestion_code": "  \"include\": [\n    \"src\"\n  ],\n  \"exclude\": [\n    \"node_modules\",\n    \"dist\",\n    \"src/**/*.test.ts\"\n  ]",
+   "existing_code": "  \"include\": [\n    \"src\"\n  ]",
+   "start_line": 7,
+   "end_line": 9,
+   "category": "maintainability",
+   "severity": "medium"
+  }
+ ],
+ "packages/config/vitest.config.ts": [
+  {
+   "path": "packages/config/vitest.config.ts",
+   "content": "`readdirSync(packages)` returns every entry, including plain files and non-package directories (e.g. a stray `README.md`, `.DS_Store`, `node_modules`, or a future cache dir). Each such entry is turned into a `@autolight/<name>` alias pointing at a nonexistent `src/index.ts`, producing broken/ambiguous aliases that can silently shadow or fail resolution. The root `vitest.config.ts` avoids this by using `withFileTypes: true` and filtering `isDirectory()`; mirror that here.",
+   "suggestion_code": "const workspaceAlias = Object.fromEntries(\n  readdirSync(packages, { withFileTypes: true })\n    .filter((entry) => entry.isDirectory())\n    .map((entry) => [\n      `@autolight/${entry.name}`,\n      join(packages, entry.name, \"src\", \"index.ts\"),\n    ]),\n);",
+   "existing_code": "const workspaceAlias = Object.fromEntries(\n  readdirSync(packages).map((name) => [\n    `@autolight/${name}`,\n    join(packages, name, \"src\", \"index.ts\"),\n  ]),\n);",
+   "start_line": 8,
+   "end_line": 13,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ]
+}

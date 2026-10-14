@@ -1,0 +1,348 @@
+{
+ "apps/desktop/src/routes/venue/index.tsx": [
+  {
+   "path": "apps/desktop/src/routes/venue/index.tsx",
+   "content": "`rescaleOutline` only transforms `anchors.dj`; `anchors.center`, `anchors.audience` and `anchors.custom` are copied unchanged via `...room.anchors`. After a size change (e.g., shrinking 10 m -> 4 m) these anchors keep their old absolute coordinates and end up outside the new outline, contradicting the comment that \"anchors ... survive the change\". Apply the same `shift` transform to the other anchors (or explicitly clear/flag them).",
+   "suggestion_code": "      ...room.anchors,\n      dj: { ...room.anchors.dj, position: djInside ? shiftedDj : { x: cx, y: cy - depthM / 2 + Math.min(0.5, depthM / 2) } },\n      center: room.anchors.center ? shift(room.anchors.center) : null,\n      audience: room.anchors.audience ? shift(room.anchors.audience) : null,\n      custom: room.anchors.custom.map((a) => ({ ...a, position: { ...a.position, ...shift(a.position) } })),",
+   "existing_code": "      ...room.anchors,\n      dj: { ...room.anchors.dj, position: djInside ? shiftedDj : { x: cx, y: cy - depthM / 2 + Math.min(0.5, depthM / 2) } },",
+   "start_line": 41,
+   "end_line": 42,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/src/routes/venue/index.tsx",
+   "content": "`djInside` and the fallback assume an axis-aligned bounding box centered at (cx, cy). For non-rectangular outlines (e.g. an L-shape, which the codebase supports) the scaled point can be inside the bounding box yet outside the actual polygon, and the fallback `{ x: cx, y: cy - depthM/2 + min(0.5, depthM/2) }` places the DJ 0.5 m from the bbox top edge, which may be outside the room or behind a wall. Use a point-in-polygon containment test against `room.outline` instead of the bbox check.",
+   "existing_code": "  const djInside = Math.abs(shiftedDj.x - cx) <= widthM / 2 && Math.abs(shiftedDj.y - cy) <= depthM / 2;",
+   "start_line": 36,
+   "end_line": 36,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/routes/venue/index.tsx",
+   "content": "The field value is derived from the outline (`roomWidth(room)`) while every keystroke immediately rescales the outline, so the displayed value never matches what the user is typing; a multi-digit value cannot be entered (after the first digit the field is overwritten). Clearing the field yields `Number(\"\") || 5` -> forces width to 5, wiping the previous value. Keep transient text in local state and commit/clamp the parsed number on blur/Enter.",
+   "existing_code": "              onChange={(e) => {\n                const w = Math.min(30, Math.max(1, Number(e.target.value) || 5));\n                setRoom(rescaleOutline(room, w, roomDepth(room)));\n              }}",
+   "start_line": 71,
+   "end_line": 74,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/routes/venue/index.tsx",
+   "content": "Unlike the width input, the ceiling value is not clamped: `min`/`max` only constrain the spinner, so typing `-3` or `100` is accepted into `room.ceilingHeight`. `Number(e.target.value) || room.ceilingHeight` also silently ignores a legitimate `0` (and empty). Clamp and validate like the width field, e.g.:",
+   "suggestion_code": "              onChange={(e) => {\n                const v = Number(e.target.value);\n                if (Number.isFinite(v)) setRoom({ ...room, ceilingHeight: Math.min(6, Math.max(2, v)) });\n              }}",
+   "existing_code": "              onChange={(e) => setRoom({ ...room, ceilingHeight: Number(e.target.value) || room.ceilingHeight })}",
+   "start_line": 87,
+   "end_line": 87,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/routes/venue/index.tsx",
+   "content": "Controlled/uncontrolled mismatch: `room` is `roomProp ?? localRoom`, but `setRoom` is `onRoom ?? setLocalRoom`. If a caller passes `onRoom` without `roomProp`, `room` always resolves to `localRoom` (which is never updated) so the editor appears frozen and edits are silently dropped. If a caller passes `roomProp` without `onRoom`, edits are lost because `localRoom` is discarded. Require the pair (derive controlled-ness from `roomProp` presence) or resync local state.",
+   "existing_code": "  const room = roomProp ?? localRoom;\n  const setRoom = onRoom ?? setLocalRoom;",
+   "start_line": 52,
+   "end_line": 53,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/src/routes/venue/index.tsx",
+   "content": "Same divergence for the saved flag: the indicator reads `savedProp ?? localSaved` while the Save button writes through `onSaved ?? setLocalSaved`. If only `onSaved` is supplied, clicking \"Save room\" notifies the parent but the local `saved` state never flips, so the \"Saved in memory\" message never appears; if only `savedProp` is supplied the click has no visible effect. Keep the flag and its setter paired.",
+   "existing_code": "  const saved = savedProp ?? localSaved;\n  const setSaved = onSaved ?? setLocalSaved;",
+   "start_line": 54,
+   "end_line": 55,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/routes/venue/index.tsx",
+   "content": "`RoomPreview` resolves `roomId` via `referenceById`, i.e. it renders a fixed reference fixture (\"square-loop\"), not the room being edited. The preview therefore never reflects edits made above and can show a stale/unrelated room. If the intent is a live preview, pass the edited room's data/id instead of a hardcoded id.",
+   "existing_code": "      <RoomPreview roomId=\"square-loop\" />",
+   "start_line": 119,
+   "end_line": 119,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "packages/storage/src/netaudit.ts": [
+  {
+   "path": "packages/storage/src/netaudit.ts",
+   "content": "Incomplete loopback detection. `isLoopback` only recognizes the exact literals `127.0.0.1`, `::1`, and `localhost`, so other addresses in the 127.0.0.0/8 loopback range (e.g. `127.0.0.2`, `127.1.1.1`) and bracketed/whitespaced IPv6 forms (`[::1]`, ` ::1 `) are treated as non-loopback. This causes legitimate local listeners to be denied by `auditListeners` and makes `oscMustRefuseRemote` incorrectly refuse local-only OSC binds. Match the whole 127.0.0.0/8 block and normalize the input.",
+   "suggestion_code": "  const n = host.trim().toLowerCase().replace(/^\\[|\\]$/g, \"\");\n  return n === \"::1\" || n === \"localhost\" || /^127\\./.test(n);",
+   "existing_code": "  return h === \"127.0.0.1\" || h === \"::1\" || h === \"localhost\";",
+   "start_line": 18,
+   "end_line": 18,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/storage/src/netaudit.ts",
+   "content": "The port allowlist matches on port only, ignoring the host. Any non-loopback listener on 4001/4002/4003 is auto-allowed regardless of the bound interface, so a listener on a public IP or an unintended NIC (or the intentionally wide `0.0.0.0`) passes the audit. This defeats the module's stated requirement to \"bind only necessary interfaces\" and effectively whitelists those ports on every interface. Validate that the host is an explicitly permitted interface/broadcast address in addition to the port.",
+   "suggestion_code": "    const portRule = ALLOWED_NON_LOOPBACK.find(\n      (r) => r.port === l.port && isPermittedInterface(l.host),\n    );",
+   "existing_code": "    const portRule = ALLOWED_NON_LOOPBACK.find((r) => r.port === l.port);",
+   "start_line": 50,
+   "end_line": 50,
+   "category": "security",
+   "severity": "high"
+  },
+  {
+   "path": "packages/storage/src/netaudit.ts",
+   "content": "Substring match on the discovery name is an allowlist bypass. Because `includes` is used, any listener whose name merely contains \"prolink\", \"serato-bonjour\", or \"os2l\" (e.g. \"xprolink\", \"os2l-proxy\", \"not-prolink\") is approved without any port or interface validation. Use an exact match against the known discovery names (or a Set lookup) so only the intended services are whitelisted.",
+   "suggestion_code": "    const discovery = ALLOWED_DISCOVERY.find((r) => l.name.toLowerCase() === r.name);",
+   "existing_code": "    const discovery = ALLOWED_DISCOVERY.find((r) => l.name.toLowerCase().includes(r.name));",
+   "start_line": 55,
+   "end_line": 55,
+   "category": "security",
+   "severity": "high"
+  },
+  {
+   "path": "packages/storage/src/netaudit.ts",
+   "content": "The audit trusts every caller-supplied field of `ListenerDecl` without cross-checking it. In particular `reason` is never verified against the matched allowlist entry, and the host is never checked against a permitted interface list, so a forged declaration (correct port/name plus an arbitrary host and fabricated reason) passes the audit. Consider validating that the declared reason matches the rule that authorized the listener, or derive the reason from the matched rule instead of trusting the caller.",
+   "existing_code": "export function auditListeners(listeners: readonly ListenerDecl[]): NetworkAuditResult {",
+   "start_line": 38,
+   "end_line": 38,
+   "category": "security",
+   "severity": "medium"
+  }
+ ],
+ "apps/desktop/electron/services/matter-bridge.ts": [
+  {
+   "path": "apps/desktop/electron/services/matter-bridge.ts",
+   "content": "`stop()` kills the process and nulls `this.port`, but the port's `onExit` handler (registered in `start()`) fires asynchronously and unconditionally calls `this.start()`. Because there is no `stopped`/lifecycle flag, a `stop()` issued while a running controller is killed will respawn the utility process right after intentional shutdown, leaving an orphaned/zombie process that the service no longer tracks. Add a `stopped` flag (set in `stop()`, cleared in `start()`) or a generation token that `onExit` checks before restarting.",
+   "existing_code": "  stop(): ServiceStatus {\n    try {\n      this.port?.kill();\n    } catch { /* teardown never throws */ }\n    this.port = null;\n    this.tracker.set(\"stopped\");",
+   "start_line": 70,
+   "end_line": 75,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/electron/services/matter-bridge.ts",
+   "content": "The exit closure is not bound to the specific `port` instance, so an exit event from a previously replaced or killed port will null out `this.port` (which may already point to a freshly started port) and then call `this.start()`, spawning a duplicate controller while orphaning the live one. Capture `port` in the closure and guard with `if (this.port !== port) return;` before clearing/restarting.",
+   "existing_code": "      port.onExit((code) => {\n        this.tracker.count(\"exits\");\n        this.port = null;",
+   "start_line": 50,
+   "end_line": 52,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/electron/services/matter-bridge.ts",
+   "content": "`this.restarts` is never reset, so it accumulates across the entire process lifetime. After `maxRestarts` crashes spread over months (even with long healthy runs in between), the bridge is permanently pinned to `degraded` with no way to recover. Reset the counter after a healthy uptime window (e.g. the process stayed alive for N seconds) or expose an explicit reset so transient crashes don't cause permanent degradation.",
+   "existing_code": "        const limit = this.opts.maxRestarts ?? 3;\n        if (this.restarts >= limit) {",
+   "start_line": 53,
+   "end_line": 54,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/services/matter-bridge.ts",
+   "content": "`postMessage` is called with no error handling. If the controller process has crashed but `onExit` hasn't run yet (the exit is asynchronous), `this.port` is still non-null and `postMessage` throws a raw exception to the caller, contradicting the `boolean` contract that implies `false` on failure. Wrap the call in try/catch and return `false` on failure.",
+   "existing_code": "    if (this.port === null) return false;\n    this.port.postMessage(msg);",
+   "start_line": 86,
+   "end_line": 87,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/services/matter-bridge.ts",
+   "content": "A throwing listener aborts delivery to the remaining listeners and propagates the exception into the port's message callback (potentially killing message dispatch entirely). Wrap each invocation in try/catch so one faulty subscriber cannot break message relay for others.",
+   "existing_code": "        for (const listener of this.listeners) listener(msg);",
+   "start_line": 48,
+   "end_line": 48,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/services/matter-bridge.ts",
+   "content": "Options are only applied on the first invocation (`instance ??= new MatterBridge(opts)`). Any later caller passing `spawn` or `maxRestarts` is silently ignored, which can yield a non-functional bridge that never wires the utility process. Document that options are first-call-only, or merge/override options on subsequent calls.",
+   "existing_code": "export function getMatterBridge(opts: MatterBridgeOptions = {}): MatterBridge {\n  instance ??= new MatterBridge(opts);\n  return instance;\n}",
+   "start_line": 106,
+   "end_line": 109,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/govee/src/profiles.ts": [
+  {
+   "path": "packages/govee/src/profiles.ts",
+   "content": "Comment stripping cuts the line at the first `#` unconditionally, even inside a quoted scalar. A receipt or value such as `receipt: \"see docs #3\"` or a URL with a fragment (`https://host/p#sec`) is truncated, corrupting the very provenance text this module promises to preserve; an unbalanced-quote string then parses as a plain scalar without error. Strip `#` only when it is outside quotes \u2014 and reuse the same helper in `nextIsList` below (which has the identical bug).",
+   "suggestion_code": "    const line = stripComment(raw);\n    if (line.trim().length === 0) continue;\n    const indent = line.length - line.trimStart().length;",
+   "existing_code": "    const line = hash >= 0 ? raw.slice(0, hash) : raw;\n    if (line.trim().length === 0) continue;\n    const indent = line.length - line.trimStart().length;",
+   "start_line": 122,
+   "end_line": 124,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/govee/src/profiles.ts",
+   "content": "`nextIsList` duplicates the naive `#` stripping, so a `key:` whose following value line begins with a quoted `#` (or any line with an inline `#` in quotes) is misclassified as a list vs map. Apply the same quote-aware stripping helper here as in the main loop to keep list/map detection consistent.",
+   "suggestion_code": "    const line = stripComment(raw);\n    if (line.trim().length === 0) continue;\n    return line.trim().startsWith(\"- \");",
+   "existing_code": "    const line = hash >= 0 ? raw.slice(0, hash) : raw;\n    if (line.trim().length === 0) continue;\n    return line.trim().startsWith(\"- \");",
+   "start_line": 162,
+   "end_line": 164,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/govee/src/profiles.ts",
+   "content": "These readers silently coerce a wrong-typed value to `null` instead of throwing. Combined with `measured()`, a typo like `value: \"50\"` (quoted number), a boolean where a number is expected, or a malformed zone-table entry becomes a silent `null`. That null then falls through `defaultRateHz` to the fallback ceiling, yielding an unvalidated rate rather than the loud profile error the module's design (and `readStringList`) promises. Throw on a type mismatch so malformed profiles fail loudly.",
+   "suggestion_code": "function readNumber(value: YamlNode): number | null {\n  if (typeof value === \"number\") return value;\n  throw new Error(\"profile: expected a number value\");\n}",
+   "existing_code": "function readNumber(value: YamlNode): number | null {\n  return typeof value === \"number\" ? value : null;\n}",
+   "start_line": 202,
+   "end_line": 204,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/govee/src/profiles.ts",
+   "content": "`schema` is overwritten on every iteration, so the catalog silently returns whatever the last sorted file declared. A `devices/` directory mixing profile schema versions is accepted instead of failing, masking a schema mismatch between profiles. Track the schema once and reject a mismatch.",
+   "suggestion_code": "    if (schema === \"\") schema = profile.schema;\n    else if (schema !== profile.schema) {\n      throw new Error(`profile ${entry}: schema ${profile.schema} does not match catalog schema ${schema}`);\n    }",
+   "existing_code": "    schema = profile.schema;",
+   "start_line": 319,
+   "end_line": 319,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/govee/src/profiles.ts",
+   "content": "URL base resolution is asymmetric: string dirs are normalised with a trailing slash via `pathToFileURL(join(dir, \"/\"))`, but a `URL` argument is used as-is. If a caller passes a directory URL without a trailing slash, `readdirSync(dir)` still reads the correct folder while `new URL(entry, base)` resolves the entry against the *parent* directory, producing a spurious ENOENT. Normalise the URL form too.",
+   "suggestion_code": "  const base =\n    typeof dir === \"string\"\n      ? pathToFileURL(join(dir, \"/\"))\n      : new URL(dir.href.endsWith(\"/\") ? dir.href : `${dir.href}/`);",
+   "existing_code": "  const base = typeof dir === \"string\" ? pathToFileURL(join(dir, \"/\")) : dir;",
+   "start_line": 307,
+   "end_line": 307,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/govee/src/profiles.ts",
+   "content": "Two fragility problems here: (1) when `fallback_hz` is absent, a hardcoded `10` is used regardless of SKU while `lintDeviceProfile` never requires `fallback_hz`, so a profile with no measured fallback silently streams at an arbitrary rate; require `fallback_hz` in lint (or derive it from the table) instead of a magic number. (2) A non-finite `targetHz` (e.g. `NaN` from an upstream computation) propagates through `Math.floor`/`Math.min`/`Math.max` and is returned as `NaN`, which callers may cast to a timer delay. Validate `targetHz` before computing.",
+   "suggestion_code": "  if (!Number.isFinite(targetHz)) {\n    throw new Error(`defaultRateHz: targetHz must be a finite number, got ${targetHz}`);\n  }\n  let ceiling = profile.measurements.fallbackHz.value ?? 10;",
+   "existing_code": "  let ceiling = profile.measurements.fallbackHz.value ?? 10;",
+   "start_line": 341,
+   "end_line": 341,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/rekordbox-library/src/options.ts": [
+  {
+   "path": "packages/rekordbox-library/src/options.ts",
+   "content": "`optionValue` assumes every element of `options.options` is a 2-element `[key, value]` tuple and blindly indexes `entry[0]`/`entry[1]`. `readOptionsFile` only validates that `options` is an array, so a malformed `options.json` (e.g. `[{\"db-path\": ...}]` or `[[\"db-path\"]]`) silently yields a wrong/`undefined` result instead of a controlled error. Validate the tuple shape before indexing.",
+   "suggestion_code": "  const entry = options.options.find((candidate) => Array.isArray(candidate) && candidate[0] === key);\n  return Array.isArray(entry) ? entry[1] : undefined;",
+   "existing_code": "  return options.options.find((entry) => entry[0] === key)?.[1];",
+   "start_line": 100,
+   "end_line": 100,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-library/src/options.ts",
+   "content": "`detected` is documented as \"True when every path came from detection rather than a config override\", but it only checks `overrides.dbPath`. If the caller overrides `optionsPath` or `sharePath` while leaving `dbPath` unset, `detected` is reported as `true` even though a path came from a config override, contradicting the contract and any downstream logic that trusts the flag.",
+   "suggestion_code": "  let detected =\n    overrides.dbPath === undefined && overrides.optionsPath === undefined && overrides.sharePath === undefined;",
+   "existing_code": "  let detected = overrides.dbPath === undefined;",
+   "start_line": 130,
+   "end_line": 130,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-library/src/options.ts",
+   "content": "`readOptionsFile` performs `readFileSync` + `JSON.parse` without catching, and this call is not wrapped. `existsSync` only guarantees the file exists: a permission error, an empty/partially-written file, or invalid JSON makes `resolveLibraryConfig` reject with a raw exception instead of failing over to the blob/sidecar path. Wrap the read in try/catch so a broken `options.json` degrades gracefully.",
+   "existing_code": "    const options = readOptionsFile(optionsPath);",
+   "start_line": 136,
+   "end_line": 136,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-library/src/options.ts",
+   "content": "When `dbPath` is taken from the detected `db-path` option, `dbDir` is left at `paths.dbDir` (the platform default), so `dbDir` no longer matches the directory that actually holds the resolved `dbPath`. Callers relying on `dbDir` (documented as \"Directory holding master.db\") would operate on the wrong directory. Derive `dbDir` from the resolved `dbPath` (e.g. set `dbDir = join(dbPath, \"..\")`), which requires making `dbDir` a `let`.",
+   "existing_code": "    if (dbPath === undefined && optionDbPath !== undefined && existsSync(optionDbPath)) {\n      dbPath = optionDbPath;\n      detected = true;\n    }",
+   "start_line": 138,
+   "end_line": 141,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-library/src/options.ts",
+   "content": "`deobfuscateKey()` runs `inflateSync`, which throws on a corrupt/truncated blob, and this call is not guarded. A corrupted fallback then rejects `resolveLibraryConfig` with a raw zlib error rather than allowing the documented failover (e.g. an explicit key or the pyrekordbox sidecar reader). Catch and handle the failure explicitly, keeping `keySource` consistent with the actual key returned.",
+   "existing_code": "  key ??= deobfuscateKey();",
+   "start_line": 154,
+   "end_line": 154,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-library/src/options.ts",
+   "content": "This mutates the global `process.env` and never restores it. Using `??=` means that once set, a subsequent `resolveLibraryConfig` call with a *different* `optionsPath` will keep the stale value, so `getRekordboxConfig` can resolve against the wrong file and derive the wrong password. In concurrent calls the env is also shared/raced. Pass the path through the call (or save/restore around it) instead of leaking global state.",
+   "suggestion_code": "    const previous = process.env[\"REKORDBOX_OPTIONS_PATH\"];\n    process.env[\"REKORDBOX_OPTIONS_PATH\"] = optionsPath;\n    try {\n      return mod.getRekordboxConfig(overrides.dbPath, overrides.key)?.password;\n    } finally {\n      if (previous === undefined) delete process.env[\"REKORDBOX_OPTIONS_PATH\"];\n      else process.env[\"REKORDBOX_OPTIONS_PATH\"] = previous;\n    }",
+   "existing_code": "    process.env[\"REKORDBOX_OPTIONS_PATH\"] ??= optionsPath;",
+   "start_line": 177,
+   "end_line": 177,
+   "category": "bug",
+   "severity": "high"
+  }
+ ],
+ "packages/rekordbox-live/src/agent-api.ts": [
+  {
+   "path": "packages/rekordbox-live/src/agent-api.ts",
+   "content": "Premature failover abort: a candidate that returns HTTP 200 with a body that has no path key (e.g. `/api/data/{id}` returning a generic track data object) yields `malformed` and returns immediately, so the remaining candidates like `/api/data/{id}/path` are never tried. A later endpoint that would resolve the content is skipped, silently turning a resolvable ID into a failure. Only the malformed *last* candidate should be reported as `malformed`; intermediate candidates should fall through to the next endpoint.",
+   "suggestion_code": "      const path = parsePathBody(response.body);\n      if (path === null) continue;",
+   "existing_code": "      const path = parsePathBody(response.body);\n      if (path === null) return { ok: false, path: null, endpoint, reason: \"malformed\" };",
+   "start_line": 127,
+   "end_line": 128,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-live/src/agent-api.ts",
+   "content": "Server/protocol failures are swallowed as a definitive negative. A 5xx (or other non-401/403/404 error) hits `continue`; if no endpoint succeeds the caller receives `not-found` (and when every request times out, `not-present`), masking an agent/server failure as a conclusive \"content does not exist\". Track the last error status and surface a distinct reason (e.g. `error`/`server-error`) instead of collapsing everything into `not-found`.",
+   "suggestion_code": "      if (response.status === 404) continue;\n      if (response.status >= 400) { lastErrorStatus = response.status; continue; }",
+   "existing_code": "      if (response.status === 404) continue;\n      if (response.status >= 400) continue;",
+   "start_line": 125,
+   "end_line": 126,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/rekordbox-live/src/agent-api.ts",
+   "content": "Node's `timeout` option is a socket *inactivity* timeout, not a total deadline. A slow drip-fed response keeps resetting the inactivity timer, so a hung server can hold the request open indefinitely; combined with the unbounded `body += chunk` accumulation below there is no cap on bytes or wall-clock time. Add an overall deadline (e.g. `AbortSignal.timeout`) and cap the accumulated body size, aborting once exceeded.",
+   "existing_code": "        timeout: this.timeoutMs,",
+   "start_line": 144,
+   "end_line": 144,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/agent-api.ts",
+   "content": "Response body is accumulated with no size limit. A misbehaving or malicious local agent (or a large/near-infinite stream) can grow `body` without bound and exhaust memory before the socket inactivity timeout ever fires. Enforce a maximum body length and destroy the request/response once exceeded.",
+   "suggestion_code": "        res.on(\"data\", (chunk: string) => {\n          body += chunk;\n          if (body.length > MAX_RESPONSE_BYTES) {\n            req.destroy();\n            resolve(null);\n          }\n        });",
+   "existing_code": "        res.on(\"data\", (chunk: string) => {\n          body += chunk;\n        });",
+   "start_line": 150,
+   "end_line": 152,
+   "category": "performance",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/agent-api.ts",
+   "content": "The chosen token source is never reconciled with the token actually loaded in the client. `pickAgentTokenSource` may report `memory-cleanroom` as available (consent path) while the client holds a token adopted from a different source (e.g. `manual`); the check only verifies `hasToken()`. This makes the report misleading and can use a token without the recorded consent path. Compare the origin: `client.tokenOrigin() === source`.",
+   "suggestion_code": "  if (!client.hasToken() || client.tokenOrigin() !== source) {\n    return { path: null, source: \"none\", report: `agent API: no token loaded from ${source} (${report.join(\"; \")})` };\n  }",
+   "existing_code": "  if (!client.hasToken()) {\n    return { path: null, source: \"none\", report: `agent API: no token loaded from ${source} (${report.join(\"; \")})` };\n  }",
+   "start_line": 198,
+   "end_line": 200,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/agent-api.ts",
+   "content": "TOCTOU on the mutable token field: the guard checks `this.token`, but `this.token` is re-read at each `this.get(endpoint, this.token)` call, and there are `await` boundaries between iterations. A concurrent `forgetToken()` (or `adoptToken`) between the check and a later request sends an unauthenticated request, which the server answers with 401 and is then misreported as `denied` rather than `no-token`. Capture the token in a local `const` at the top and use that throughout `resolveContent`.",
+   "suggestion_code": "    const token = this.token;\n    if (token === null) return { ok: false, path: null, endpoint: null, reason: \"no-token\" };",
+   "existing_code": "    if (this.token === null) return { ok: false, path: null, endpoint: null, reason: \"no-token\" };",
+   "start_line": 117,
+   "end_line": 117,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ]
+}

@@ -1,0 +1,257 @@
+{
+ "packages/serato/src/remote-provider.ts": [
+  {
+   "path": "packages/serato/src/remote-provider.ts",
+   "content": "Off-by-one/collision in the deck-index decode. The wire index is 0-based: `emulator.ts` `deckIndex()` (comment \"serato-connect maps 0..3 to decks 1..4\") and the tests both send `deckId - 1`, so valid raw indices are 0..NUM_REMOTE_DECKS-1 (0..3 \u2192 decks 1..4). Here `raw === NUM_REMOTE_DECKS` (4) is accepted and mapped to deck 4, which collides with `raw === 3` (also deck 4), and an out-of-range index is silently routed to deck 4 instead of being rejected. Tighten the bound and drop the special case.",
+   "suggestion_code": "    if (raw === null || raw < 0 || raw >= NUM_REMOTE_DECKS) return null;\n    const deckId = raw + 1;",
+   "existing_code": "    if (raw === null || raw < 0 || raw > NUM_REMOTE_DECKS) return null;\n    const deckId = raw === NUM_REMOTE_DECKS ? NUM_REMOTE_DECKS : raw + 1;",
+   "start_line": 259,
+   "end_line": 260,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/serato/src/remote-provider.ts",
+   "content": "Unreachable dead code: `publishedId === null && nextId === null` already satisfies `nextId === publishedId`, so the preceding `if (nextId === publishedId) return;` returns for that case first. The second guard can never execute; remove it.",
+   "existing_code": "    if (nextId === publishedId) return;\n\n    if (publishedId === null && nextId === null) return;",
+   "start_line": 436,
+   "end_line": 438,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/serato/src/remote-provider.ts",
+   "content": "`this.now()` is sampled several times within a single event (twice here plus a third time in `publish(payload.deckId, this.now())`; `onDeckChange` likewise calls it twice). Each read can return a different value, so `playheadAtNs` (used by the coalescing window) can disagree with the rate-window sample `atMs` and with the `atNs` used by the generation mapper, making `updateHz` and coalescing non-deterministic. Read the clock once per event and reuse it.",
+   "suggestion_code": "      const atNs = this.now();\n      acc.playheadAtNs = atNs;\n      const atMs = Number(atNs / 1_000_000n);",
+   "existing_code": "      acc.playheadAtNs = this.now();\n      const atMs = Number(this.now() / 1_000_000n);",
+   "start_line": 352,
+   "end_line": 353,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "packages/serato/src/remote-provider.ts",
+   "content": "Synthetic track identity can collide. When no file path is present the id becomes `serato:<title>:<artist>`, so two different tracks sharing title+artist (or both missing, e.g. only `/Status/Deck/Song/Valid` was seen \u2192 `serato:unknown:unknown`) get the same id. `DeckGenerationMapper.update` only bumps the generation when the id changes, so the second track is treated as the same generation and its state (including loop/playhead) is attributed to the previous track, and `noteTrackFieldsChanged` will not clear the old track's track-scoped state. Consider disambiguating the fallback (or returning null when there is no file path) so distinct tracks cannot share an id.",
+   "existing_code": "    const id = filePath ?? `serato:${track.title ?? \"unknown\"}:${track.artist ?? \"unknown\"}`;",
+   "start_line": 500,
+   "end_line": 500,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/serato/src/remote-provider.ts",
+   "content": "`accumulatorFor` is invoked before the `switch`, so an OSC message whose address this provider does not handle (the `default` branch) still creates an empty accumulator as a side effect. Those phantom entries are then published/reported: `onMixer` publishes every deck for which `this.accumulators.has(deckId)` is true, and `getDecks()`/`setupSnapshot()` enumerate them, so an ignored `/Status/...` message on an otherwise-empty deck produces spurious empty deck states on the next mixer change. Resolve the address before creating the accumulator (or move the lookup into the handled cases).",
+   "existing_code": "    const acc = this.accumulatorFor(deckId);",
+   "start_line": 261,
+   "end_line": 261,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/track-identity/src/hash.ts": [
+  {
+   "path": "packages/track-identity/src/hash.ts",
+   "content": "`SAMPLED_MAX_BYTES` is exported but never referenced anywhere in the repository (only defined here), so the documented \"sampled cap\" is not enforced by any code. This is dead/unwired logic: either the cap must actually be applied (e.g. skip/limit hashing for files beyond the cap, or read only the windows for large files) or the constant should be removed so callers do not rely on a guarantee that does not exist.",
+   "existing_code": "export const SAMPLED_MAX_BYTES = 256 * 1024 * 1024;",
+   "start_line": 17,
+   "end_line": 17,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/track-identity/src/hash.ts",
+   "content": "Any value other than the literal \"full\" falls through to the sampled branch. Because the runtime value may come from config, an unexpected/mistyped strategy (e.g. \"Full\", \"FULL\", or a future strategy name) is silently treated as \"sampled\", degrading matching strength to the intentionally-weak path with no error or warning. Validate the input and fail fast (or default explicitly) instead of implicitly treating every unknown value as sampled.",
+   "existing_code": "  const strategy = input.strategy ?? DEFAULT_FILE_HASH_STRATEGY;",
+   "start_line": 33,
+   "end_line": 33,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/track-identity/src/hash.ts",
+   "content": "`fileHashOfPath` always reads the entire file into memory before any sampling, so the sampled strategy provides no I/O or memory savings on large files (the very case it exists for) and defeats `SAMPLED_MAX_BYTES`. For a >256 MiB file this allocates the whole file plus a full copy. Consider opening the file and reading only the first/middle/last windows (with stat for the size header) when strategy is \"sampled\".",
+   "existing_code": "  const bytes = options.readFile !== undefined ? options.readFile(path) : new Uint8Array(readFileSync(path));",
+   "start_line": 59,
+   "end_line": 59,
+   "category": "performance",
+   "severity": "high"
+  },
+  {
+   "path": "packages/track-identity/src/hash.ts",
+   "content": "The ternary is redundant: `fileHashOf` already applies `input.strategy ?? DEFAULT_FILE_HASH_STRATEGY`, so the undefined case and the explicit case produce identical results. Since `strategy` is not narrowed here, this duplicates the branching logic in two places and risks the two defaults diverging. Pass `strategy: options.strategy` unconditionally.",
+   "suggestion_code": "  return fileHashOf({ bytes, sizeBytes: bytes.length, strategy: options.strategy });",
+   "existing_code": "  return options.strategy === undefined ? fileHashOf({ bytes, sizeBytes: bytes.length }) : fileHashOf({ bytes, sizeBytes: bytes.length, strategy: options.strategy });",
+   "start_line": 60,
+   "end_line": 60,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/track-identity/src/hash.ts",
+   "content": "For files only slightly larger than one window (w < length < 2w), `mid` clamps to 0, so the middle window (`bytes.slice(0, w)`) is byte-for-byte identical to the first window and the same 64 KiB is hashed twice. This wastes work on exactly the mid-sized files the path is meant to make fast. Compute a distinct middle offset (or skip the middle window when it overlaps the first) so the three windows sample different regions.",
+   "existing_code": "  const windows: Uint8Array[] = [bytes.slice(0, w)];\n  if (bytes.length > w) {\n    const mid = Math.max(0, Math.floor(bytes.length / 2) - Math.floor(w / 2));",
+   "start_line": 41,
+   "end_line": 43,
+   "category": "performance",
+   "severity": "low"
+  }
+ ],
+ "analysis/src/autolight_analysis/allinone.py": [
+  {
+   "path": "analysis/src/autolight_analysis/allinone.py",
+   "content": "Hardcoded per-segment confidence (0.7) is fabricated rather than derived from the model, contradicting both this function's docstring ('segments with probabilities') and fusion.py's contract ('Confidence comes from agreement and source probabilities, not constants'). Since `ml_sections` reads this value for `min_confidence` filtering and fusion adds agreement boosts on top of it, every section ends up with identical confidence, making confidence-based filtering/scoring meaningless. Use the model's real per-segment probability when available (and only fall back to a constant if the field is genuinely absent).",
+   "suggestion_code": "            # Prefer the model's own per-segment probability; 0.7 is only a fallback.\n            \"confidence\": float(getattr(s, \"confidence\", 0.7)),",
+   "existing_code": "            \"confidence\": 0.7,",
+   "start_line": 179,
+   "end_line": 179,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/allinone.py",
+   "content": "`_load_count` is checked (`first = _load_count == 0`) and mutated (`_load_count += 1`) outside `_session_lock`, so concurrent `analyze_full` calls (the module is explicitly designed for batch/worker use) can race: two threads both see 0 and increment, or the non-atomic read-modify-write is lost, breaking the documented 'model load count == 1' invariant. State is protected in `ensure_session` but not here. Also note `ensure_session` merely records a dict and never loads weights, so it is not a real pre-warm \u2014 the counter is the only thing being tracked, and it must be updated atomically. Note `_session_lock` is a non-reentrant `threading.Lock`, so do not call `ensure_session` while already holding it. Consider centralizing the check-and-increment inside a single locked helper.",
+   "existing_code": "    global _load_count\n    first = _load_count == 0\n    ensure_session(device)\n    if first:\n        _load_count += 1",
+   "start_line": 158,
+   "end_line": 162,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/allinone.py",
+   "content": "The offline guard is bypassed whenever an explicit `config_dir` is supplied: the function returns `Path(config_dir)` before the `AUTOLIGHT_OFFLINE` check, so a caller-provided cache path skips offlineOnly and can permit weight downloads during Live, defeating the stated policy ('prevents any download during Live'). Move the offline check ahead of the early return so it applies regardless of `config_dir`.",
+   "suggestion_code": "    if os.environ.get(\"AUTOLIGHT_OFFLINE\") == \"1\":\n        raise RuntimeError(\"offlineOnly: weight download blocked during Live\")\n    if config_dir and config_dir != \"<userData>/models\":\n        return Path(config_dir)",
+   "existing_code": "    if config_dir and config_dir != \"<userData>/models\":\n        return Path(config_dir)\n    if os.environ.get(\"AUTOLIGHT_OFFLINE\") == \"1\":\n        raise RuntimeError(\"offlineOnly: weight download blocked during Live\")",
+   "start_line": 206,
+   "end_line": 209,
+   "category": "security",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/allinone.py",
+   "content": "`UNKNOWN_KINDS` is defined but never referenced anywhere in the codebase, and the `'unknown'` kind produced by `normalize_ml_label` is never filtered or handled specially. Either remove this dead constant or actually apply it (e.g., to drop/special-case unknown-labeled sections), otherwise it is misleading dead code.",
+   "existing_code": "UNKNOWN_KINDS = {\"unknown\"}",
+   "start_line": 95,
+   "end_line": 95,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/e2e/normal-night.spec.ts": [
+  {
+   "path": "apps/desktop/e2e/normal-night.spec.ts",
+   "content": "`invokeTestChannel` is typed `Promise<unknown>` and its result is cast here without any validation. If the channel returns `null`/`undefined` (method not yet registered, handler returns nothing, or a serialization edge case), then `state.pass` / `state.detail` throw a `TypeError` instead of producing the intended readable per-row failure, and any rejection from the channel is likewise unreported. Validate the payload before dereferencing so a malformed/empty response fails with a clear, row-scoped message.",
+   "suggestion_code": "        const raw = await harness.invokeTestChannel(\"normal-night-row\", { row });\n        expect(raw, `test channel returned no state for: ${row}`).toBeTruthy();\n        const state = raw as { pass: boolean; detail?: string };\n        expect(typeof state.pass, `malformed test-channel response for: ${row}`).toBe(\"boolean\");",
+   "existing_code": "        const state = (await harness.invokeTestChannel(\"normal-night-row\", { row })) as {\n          pass: boolean;\n          detail?: string;\n        };",
+   "start_line": 41,
+   "end_line": 44,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/e2e/normal-night.spec.ts",
+   "content": "The entire acceptance criterion for every row is collapsed into one opaque `pass` boolean produced by the very channel under test. A stub or buggy channel that always answers `pass: true` turns all 17 rows green while the underlying behaviour is broken, and none of the measured budgets named in the rows (startup `ops.startup.budgetMs`, fast-path install budget, `qa.sync.maxBeatErrorMs`, re-arm budget, the 5 ms p99 tick jitter) is ever measured or asserted in this spec. Prefer asserting the concrete values the channel returns (elapsed ms, beat error, jitter, palette/ownership ordering) against these budgets instead of a single flag, so the assertions can actually detect a regression.",
+   "existing_code": "        expect(state.pass, state.detail ?? row).toBe(true);",
+   "start_line": 45,
+   "end_line": 45,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/e2e/normal-night.spec.ts",
+   "content": "All 17 rows execute serially against a single shared harness with no per-row isolation or reset. The rows mutate rig state (row 14 unplugs a lamp, row 17 disarms streams), so a partial mutation or failure in an early row leaves the rig dirty and makes subsequent rows fail spuriously; additionally, the first failing `test.step` aborts the loop, so an early failure silently prevents the remaining rows from ever being exercised. Consider an explicit reset/re-arm between rows (or documenting the intended ordering dependency) so failures are attributable to a single row.",
+   "existing_code": "    for (const row of ROWS) {",
+   "start_line": 37,
+   "end_line": 37,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/e2e/normal-night.spec.ts",
+   "content": "`launchAutolight()` already awaits `waitForReady()` internally and returns a ready `window` (see `apps/desktop/journeys/_harness.ts`), so this second call is redundant and its returned page is discarded. Drop it, or use the returned page for an explicit readiness assertion, to avoid implying the harness is not ready on return.",
+   "existing_code": "    await harness.waitForReady();",
+   "start_line": 36,
+   "end_line": 36,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/electron/services/audit-log.ts": [
+  {
+   "path": "apps/desktop/electron/services/audit-log.ts",
+   "content": "The 10MB cap is not actually enforced. `statSync(file).size` is in **bytes**, but `line.length` counts UTF-16 code units. For non-ASCII detail values (track titles, file paths, artist names in non-Latin scripts) the real byte length can be 2-4x `line.length`, so the file can grow well past `AUDIT_MAX_BYTES` before this triggers. Additionally the `existsSync(file) && ...` guard means when the file does not yet exist the check is skipped entirely, so the very first (potentially large) line is always written unconditionally. Compute the byte length explicitly and treat a missing file as size 0.",
+   "suggestion_code": "    const size = existsSync(file) ? statSync(file).size : 0;\n\n    if (size + Buffer.byteLength(line, \"utf8\") > AUDIT_MAX_BYTES) {",
+   "existing_code": "    if (existsSync(file) && statSync(file).size + line.length > AUDIT_MAX_BYTES) {",
+   "start_line": 61,
+   "end_line": 61,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/electron/services/audit-log.ts",
+   "content": "Two independent `new Date()` calls are used: this one stamps the record's `t`, while `dayFile(new Date())` below picks the destination file. A call that crosses a UTC midnight boundary between the two statements will stamp the record with the previous day's timestamp but append it to the next day's file (or vice-versa), corrupting day-based correlation. Capture a single `now` and reuse it for both the timestamp and `dayFile(now)`.",
+   "existing_code": "    line = `${JSON.stringify({ t: new Date().toISOString(), kind, detail })}\\n`;",
+   "start_line": 53,
+   "end_line": 53,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/services/audit-log.ts",
+   "content": "`auditTail` only ever reads today's file (`dayFile(new Date())`). Immediately after UTC midnight it returns an empty/short tail even though prior-day audit data still exists on disk, which can mislead diagnostics that assume the tail reflects recent activity. Consider walking back over prior day files until `n` records are collected, or documenting this limitation.",
+   "suggestion_code": "    if (!existsSync(file)) return [];\n\n    // NOTE: only today's file is read; prior-day lines are not included.",
+   "existing_code": "    if (!existsSync(file)) return [];",
+   "start_line": 78,
+   "end_line": 78,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/services/audit-log.ts",
+   "content": "The outer `catch` collapses every failure (including a `readFileSync` error such as EACCES or a partial read) into `return []`, which is indistinguishable from the legitimate \"no entries\" result. Callers relying on `auditTail` for diagnostics cannot tell \"no audit data\" from \"audit read failed\", masking the error path. At minimum distinguish/log the failure, or return a sentinel so the two cases are separable.",
+   "existing_code": "  } catch {\n    return [];\n  }\n}",
+   "start_line": 92,
+   "end_line": 95,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/src/components/ui/progress.tsx": [
+  {
+   "path": "apps/desktop/src/components/ui/progress.tsx",
+   "content": "`value` is destructured out of props but never forwarded back to `ProgressPrimitive.Root`. Radix uses `value` on the Root to derive `aria-valuenow`, `data-state` (`loading`/`complete`/`indeterminate`) and `data-value`. Since it is stripped from `...props`, the Root always renders as indeterminate with no `aria-valuenow`, so screen readers report the progress incorrectly even though the visual fill is driven by `value`. Pass `value` (and let `max` flow through) to the Root.",
+   "suggestion_code": "    <ProgressPrimitive.Root\n      data-slot=\"progress\"\n      value={value}",
+   "existing_code": "    <ProgressPrimitive.Root\n      data-slot=\"progress\"",
+   "start_line": 11,
+   "end_line": 12,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/src/components/ui/progress.tsx",
+   "content": "The fill percentage is hardcoded to a max of 100 (`100 - value`), ignoring Radix's supported `max` prop. If a caller passes e.g. `value={50} max={200}`, the Root (via `...props`) will compute 25% for ARIA while the indicator visual shows 50%, producing a mismatch between the accessibility value and what is rendered. Compute the percentage against `max` (defaulting to 100).",
+   "existing_code": "        style={{ transform: `translateX(-${100 - (value || 0)}%)` }}",
+   "start_line": 22,
+   "end_line": 22,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/components/ui/progress.tsx",
+   "content": "`value || 0` coerces the indeterminate signal to 0. When a caller omits `value` (Radix's indeterminate/loading state), the indicator is translated by `-100%` and fully hidden instead of showing the loading animation \u2014 the component can never render an indeterminate state. Handle `value == null` separately rather than defaulting to 0.",
+   "existing_code": "        style={{ transform: `translateX(-${100 - (value || 0)}%)` }}",
+   "start_line": 22,
+   "end_line": 22,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/components/ui/progress.tsx",
+   "content": "Out-of-range values are not clamped. A `value` below 0 or above 100 (e.g. from async/estimated data) yields a transform beyond the track, silently misrepresenting progress. Clamp the computed percentage to 0..100.",
+   "existing_code": "        style={{ transform: `translateX(-${100 - (value || 0)}%)` }}",
+   "start_line": 22,
+   "end_line": 22,
+   "category": "bug",
+   "severity": "low"
+  }
+ ]
+}

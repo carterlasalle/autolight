@@ -1,0 +1,150 @@
+{
+ "docs/finish/evidence/T-QA-05/measurement.json": [
+  {
+   "path": "docs/finish/evidence/T-QA-05/measurement.json",
+   "content": "Two rows in this file use `pass: false` for states that are not real gate failures: `ui.frameTimeLive` is recorded as unmeasured (its statistic is p95 with p95 0 vs threshold 50.1, which numerically passes), and `showHost.tickJitterWith20msStall` is a deliberate fault-injection negative control that fails by construction (p99 18.42 ms > 15 ms). Both conflate \"not measured\"/\"intentionally red\" with \"failed\", so any consumer that counts or ANDs `pass === false` (the stated CI-evidence use) will report a regression for metrics that were skipped or designed to fail \u2014 even though this repo's own `failedMeasurements` happens to filter out the unmeasured one. Encode the intent explicitly: represent a skipped metric as `pass: null` (updating the `Measurement` schema) or omit the flag, and add a `negativeControl`/`gating: false` field for intentional controls, so neither can be aggregated as a failure.",
+   "existing_code": "      \"statistic\": \"p95\",\n      \"pass\": false",
+   "start_line": 149,
+   "end_line": 150,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "docs/finish/evidence/T-QA-05/measurement.json",
+   "content": "`queue.maxDepth` is recorded from a single sample (`samples: 1`) whose `max` equals the threshold exactly (`max: 1`, `threshold: 1`). With only one data point at the boundary there is zero margin and no distributional evidence, so this row cannot demonstrate that the queue stays bounded under load or that headroom exists. Consider recording a distribution (e.g. depth sampled after many push/take cycles) or at least multiple samples so the gate has a detectable margin rather than a single equality check.",
+   "existing_code": "      \"samples\": 1,\n      \"p50\": 1,\n      \"p95\": 1,\n      \"p99\": 1,\n      \"max\": 1,\n      \"mean\": 1,\n      \"threshold\": 1,\n      \"statistic\": \"max\",\n      \"pass\": true",
+   "start_line": 127,
+   "end_line": 135,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "jscpd.json": [
+  {
+   "path": "jscpd.json",
+   "content": "`$schema` points at the jscpd GitHub repository homepage, which is not a JSON Schema document, so editor/CI schema validation of this file silently does nothing. jscpd publishes the config schema under `.../packages/jscpd/schema.json` in that repo; point `$schema` at the raw schema URL (or remove the key if no schema is used).",
+   "suggestion_code": "  \"$schema\": \"https://raw.githubusercontent.com/kucherenko/jscpd/master/packages/jscpd/schema.json\",",
+   "existing_code": "  \"$schema\": \"https://github.com/kucherenko/jscpd\",",
+   "start_line": 2,
+   "end_line": 2,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "jscpd.json",
+   "content": "These ignore globs are root-anchored (no leading `**/`) and require a path segment after the directory name, so they do not match the actual fixture source files that fall inside the scanned path `packages/*/src/**/*.ts`: `packages/serato/src/test-fixtures.ts` and `packages/rekordbox-library/src/test-fixtures.ts` are still analyzed. That defeats the stated intent of excluding fixtures and can produce false duplication reports from the large synthetic-fixture generators. Meanwhile the root `test-fixtures/` and `protocol-fixtures/` trees contain only .json/.md and are never in the scanned set, so those two entries are redundant. Match the fixture files explicitly instead.",
+   "suggestion_code": "    \"**/test-fixtures*\",\n    \"**/*.fixture.*\",",
+   "existing_code": "    \"test-fixtures/**\",\n    \"protocol-fixtures/**\",",
+   "start_line": 11,
+   "end_line": 12,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/analysis-client/src/readiness.ts": [
+  {
+   "path": "packages/analysis-client/src/readiness.ts",
+   "content": "`describeInputs` diverges from the Python mirror `describe_inputs` (readiness.py:107-112), which returns `{\"key\": key, **inputs.get(key, input_entry(ABSENT, \"unknown\"))}`. Two concrete differences that consumers of the Inspector rows can observe:\n1. Missing keys: Python injects a default `reason: \"unknown\"` (via `input_entry(ABSENT, \"unknown\")`); the TS version emits no `reason` at all, so a row for an absent input renders without the \"unknown\" placeholder.\n2. The Python spread copies every entry field, so rows carry `version` and `durationMs`; the TS return type/impl strips them, silently dropping data that the input map provides.\nBecause the drift test only checks `INPUT_KEYS` ordering, this parity gap is not caught by CI. Consider mirroring the Python row shape (default `reason` + spread of all entry fields) and widening the return type accordingly.",
+   "suggestion_code": "  return INPUT_KEYS.map((key) => {\n    const entry = inputs[key] ?? { status: \"absent\", reason: \"unknown\" };\n    return { key, ...entry };\n  });",
+   "existing_code": "  return INPUT_KEYS.map((key) => {\n    const reason = inputs[key]?.reason;\n    return reason === undefined ? { key, status: statusOf(inputs, key) } : { key, status: statusOf(inputs, key), reason };\n  });",
+   "start_line": 65,
+   "end_line": 68,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/analysis-client/src/readiness.ts",
+   "content": "`statusOf(inputs, key)` is evaluated twice for every key (once for the `reason === undefined` test branch, once more inside each returned object). Besides the redundant lookups, having two independent call sites means the `status` and `reason` of a row are resolved separately, which is easy to make inconsistent during future edits. Resolve the entry once and reuse it (see the spread suggestion above), which also preserves `reason`/`version`/`durationMs` and matches the Python `describe_inputs` semantics.",
+   "existing_code": "    const reason = inputs[key]?.reason;",
+   "start_line": 66,
+   "end_line": 66,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/diagnostics/vitest.config.ts": [
+  {
+   "path": "packages/diagnostics/vitest.config.ts",
+   "content": "`readdirSync(workspaceSrc)` returns **every** entry of the parent directory, not just packages: regular files (e.g. `.DS_Store`, `README.md`, stray scripts), symlinks, and directories that are not packages all get an alias. The generated alias `@autolight/<name>` -> `<name>/src/index.ts` is emitted unconditionally, so any entry whose `src/index.ts` does not exist silently registers a dangling alias. Imports of that specifier then fail only at runtime with an opaque resolution error (`Failed to resolve import`), which is hard to trace back to the config. It also runs at module-load time with no error handling, so a renamed/missing packages directory aborts the config with a raw `ENOENT` instead of a clear diagnostic.\n\nFilter to real package directories that actually contain `src/index.ts` (import `existsSync` from `node:fs`, or build the map from each `package.json` `name`).",
+   "suggestion_code": "const workspaceAlias = Object.fromEntries(\n  readdirSync(workspaceSrc, { withFileTypes: true })\n    .filter(\n      (entry) =>\n        entry.isDirectory() &&\n        existsSync(join(workspaceSrc, entry.name, \"src\", \"index.ts\")),\n    )\n    .map((entry) => [\n      `@autolight/${entry.name}`,\n      join(workspaceSrc, entry.name, \"src\", \"index.ts\"),\n    ]),\n);",
+   "existing_code": "const workspaceAlias = Object.fromEntries(\n  readdirSync(workspaceSrc).map((name) => [\n    `@autolight/${name}`,\n    join(workspaceSrc, name, \"src\", \"index.ts\"),\n  ]),\n);",
+   "start_line": 8,
+   "end_line": 13,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/diagnostics/vitest.config.ts",
+   "content": "Declaring `exclude` replaces Vitest's entire default exclusion list (which contains `**/node_modules/**`, `**/.{idea,git,cache,output,temp}/**`, `**/*.{karma,rollup,webpack,vite,vitest,jest,ava,babel,nyc,cypress,tsup,build,eslint,prettier}.config.*`, etc.) rather than extending it. The replacement patterns also omit the leading `**/`, so `node_modules/**` / `dist/**` only match at the package root, not nested locations. A `.test.ts` file under a nested `node_modules` inside `src/` would therefore be collected by the `src/**/*.test.ts` include. Prefer preserving the defaults, e.g. `exclude: [...configDefaults.exclude, \"dist/**\"]`.",
+   "suggestion_code": "    include: [\"src/**/*.test.ts\"],\n    exclude: [...configDefaults.exclude, \"**/dist/**\"],",
+   "existing_code": "    include: [\"src/**/*.test.ts\"],\n    exclude: [\"node_modules/**\", \"dist/**\"],",
+   "start_line": 18,
+   "end_line": 19,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "packages/dj-core/vitest.config.ts": [
+  {
+   "path": "packages/dj-core/vitest.config.ts",
+   "content": "`readdirSync(workspaceSrc)` returns **every** entry in the workspace root, not just package directories. Any stray file or non-package folder (e.g. `.DS_Store`, `README.md`, `tsconfig.json`, `.github/`, a future `packages/docs/`) will register a bogus alias such as `@autolight/.DS_Store` / `@autolight/.github` pointing at a non-existent `<entry>/src/index.ts`. There is also no check that the resolved `src/index.ts` actually exists, so a real mis-configured workspace package fails only later at import time with an opaque resolution error. Sibling configs in this repo (e.g. `packages/renderer/vitest.config.ts`, `packages/show-*/vitest.config.ts`) already use `withFileTypes: true` + `isDirectory()`; this config should do the same.",
+   "suggestion_code": "  readdirSync(workspaceSrc, { withFileTypes: true })\n    .filter((entry) => entry.isDirectory())\n    .map((entry) => [\n      `@autolight/${entry.name}`,\n      join(workspaceSrc, entry.name, \"src\", \"index.ts\"),\n    ]),",
+   "existing_code": "  readdirSync(workspaceSrc).map((name) => [\n    `@autolight/${name}`,\n    join(workspaceSrc, name, \"src\", \"index.ts\"),\n  ]),",
+   "start_line": 9,
+   "end_line": 12,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/dj-core/vitest.config.ts",
+   "content": "The alias-resolution logic (path setup + `readdirSync` mapping to `<pkg>/src/index.ts`) is duplicated verbatim across ~30 package `vitest.config.ts` files. Divergences are already visible (some use `withFileTypes: true`, some do not). Consider extracting a shared helper (e.g. `@autolight/config/vitest`) that computes the workspace alias map, so a fix only needs to be applied once.",
+   "existing_code": "const root = dirname(fileURLToPath(import.meta.url));\nconst workspaceSrc = join(root, \"..\");",
+   "start_line": 6,
+   "end_line": 7,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/failover/package.json": [
+  {
+   "path": "packages/failover/package.json",
+   "content": "`--passWithNoTests` makes the test command exit 0 even when no test file is discovered (e.g. a broken `vitest.config.ts` include glob, a moved/renamed test file, or a CI checkout that drops `src/**/*.test.ts`). Since the failover machine/transport behavior is the point of this package, a green test run that executed zero assertions is a false signal. Prefer failing on zero tests (drop the flag, or gate it behind an explicit opt-in env var) so silent test loss is caught.",
+   "suggestion_code": "    \"test\": \"vitest run\",",
+   "existing_code": "    \"test\": \"vitest run --passWithNoTests\",",
+   "start_line": 11,
+   "end_line": 11,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/failover/package.json",
+   "content": "`typecheck` is byte-for-byte identical to the `lint` script above (`tsc --noEmit -p tsconfig.json`). Two names for the same command means they will drift apart as soon as one is changed, and CI may run the same type check twice. Keep a single canonical type-check script and have the other alias it (e.g. `\"lint\": \"yarn typecheck\"`), or remove the duplicate.",
+   "existing_code": "    \"typecheck\": \"tsc --noEmit -p tsconfig.json\"",
+   "start_line": 12,
+   "end_line": 12,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/govee/src/qualification.test.ts": [
+  {
+   "path": "packages/govee/src/qualification.test.ts",
+   "content": "This assertion bakes in a wall-clock-dependent result. In `stepArmSettle` the sweep grid is 20 ms (0/20/40/60) and the fake only lets a paint land once `Date.now() - armedAt >= 55` (see `lan-fake.test-support.ts:281`). The test therefore relies on the 40 ms iteration completing in under ~55 ms (a 15 ms margin) so the first landing is 60. Under CI/parallel-worker scheduling jitter `await this.wait(40)` can overshoot 55 ms, the paint lands at 40, and the recorded `armSettleMs` becomes 40 \u2014 failing this test spuriously. Because the whole sweep uses real timers (no shared virtual clock between `FakeLamp` and the session), the discovered value is not deterministic. Consider asserting the settle within one sweep step of the unit's real settle (e.g. `toBeGreaterThanOrEqual(55)` / `toBeLessThanOrEqual(60)`), or making the fixture clock-injectable so the sweep is virtual.",
+   "existing_code": "    expect(state.calibration?.armSettleMs).toBe(60);",
+   "start_line": 101,
+   "end_line": 101,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/govee/src/qualification.test.ts",
+   "content": "The `?? \"{}\"` fallback silently converts a missing store row (or a `null` `calibrationJson`, which `MemoryCalibrationStore` allows) into an empty object. Every persistence assertion in this suite reads through this helper, so a regression where the wizard stops persisting would surface as a confusing `undefined` mismatch (`saved.key`, `saved.status`) rather than a clear failure. Prefer failing fast on a missing record.",
+   "suggestion_code": "  const json = store.rows.get(MAC)?.calibrationJson;\n  if (json === undefined || json === null) throw new Error(`no persisted calibration for ${MAC}`);\n  return JSON.parse(json) as StoredState;",
+   "existing_code": "  return JSON.parse(store.rows.get(MAC)?.calibrationJson ?? \"{}\") as StoredState;",
+   "start_line": 84,
+   "end_line": 84,
+   "category": "test",
+   "severity": "low"
+  }
+ ]
+}

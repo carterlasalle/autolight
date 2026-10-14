@@ -1,0 +1,223 @@
+{
+ "packages/govee/vitest.config.ts": [
+  {
+   "path": "packages/govee/vitest.config.ts",
+   "content": "Alias generation blindly maps every entry returned by `readdirSync` to `@autolight/<name> -> <dir>/src/index.ts`. There is no check that the entry is a directory or that `src/index.ts` actually exists, so stray files (e.g. `.DS_Store`, `README.md`, editor temp files) or any sibling folder that does not use `src/index.ts` as its entry produce aliases that point at non-existent files. Because Vite treats a string alias as a prefix match (`importee === find || importee.startsWith(find + '/')`), such a broken alias also wins over subpath specifiers and rewrites them to `<dir>/src/index.ts/<sub>`, i.e. it fails in a confusing way instead of falling back to normal resolution. Filter to entries whose `src/index.ts` exists.",
+   "suggestion_code": "  readdirSync(workspaceSrc)\n    .map((name) => [name, join(workspaceSrc, name, \"src\", \"index.ts\")] as const)\n    .filter(([, entry]) => existsSync(entry))\n    .map(([name, entry]) => [`@autolight/${name}`, entry]),",
+   "existing_code": "  readdirSync(workspaceSrc).map((name) => [\n    `@autolight/${name}`,\n    join(workspaceSrc, name, \"src\", \"index.ts\"),\n  ]),",
+   "start_line": 9,
+   "end_line": 12,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/govee/vitest.config.ts",
+   "content": "`readdirSync(workspaceSrc)` is executed while the config is loaded and has no error handling. If `../` (the workspace `packages/` directory) is missing or unreadable, config evaluation throws a bare `ENOENT`/`EACCES` before any test starts, giving no indication that the failure comes from this alias generation. Consider guarding the read with a descriptive error so the cause is obvious.",
+   "suggestion_code": "const workspaceSrc = join(root, \"..\");\nif (!existsSync(workspaceSrc)) {\n  throw new Error(`govee vitest: workspace source dir not found at ${workspaceSrc}`);\n}",
+   "existing_code": "const workspaceSrc = join(root, \"..\");",
+   "start_line": 7,
+   "end_line": 7,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "packages/govee/vitest.config.ts",
+   "content": "The alias only rewrites the package root (`@autolight/<name>`); sibling subpath specifiers such as `@autolight/simulator/dist/govee-lan.js` (used in `src/index.test.ts`) are not covered and would be rewritten to `<dir>/src/index.ts/<sub>` by the prefix match if they were ever imported without `/* @vite-ignore */`. Other configs in this repo add a regex subpath alias; without it any future non-ignored subpath import in this package will silently resolve to a bogus path. Add a subpath alias or document the constraint.",
+   "existing_code": "  resolve: { alias: workspaceAlias },",
+   "start_line": 16,
+   "end_line": 16,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "packages/govee/vitest.config.ts",
+   "content": "This alias-building block plus the identical `include`/`exclude` test config is duplicated verbatim across nearly every `packages/*/vitest.config.ts` (and similar copies in `apps/desktop`). Any fix to the alias logic has to be applied in ~28 places, which is prone to drift. Extract the shared workspace-alias/config helper into a single module and import it here.",
+   "existing_code": "const workspaceAlias = Object.fromEntries(",
+   "start_line": 8,
+   "end_line": 8,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/ipc/vitest.config.ts": [
+  {
+   "path": "packages/ipc/vitest.config.ts",
+   "content": "`readdirSync(workspaceSrc)` returns *every* entry in `packages/` (files, dotfiles like `.DS_Store`, and any non-package directory) and blindly maps each to `<entry>/src/index.ts`. This produces bogus aliases such as `@autolight/.DS_Store` and, more importantly, silently emits broken aliases for any entry that is not a package or whose entry point is not `src/index.ts` (e.g. `index.tsx`, a `package.json#exports` subpath) \u2014 which fails confusingly at import time rather than at config load. The repo's root `vitest.config.ts` guards against this with `readdirSync(workspaceSrc, { withFileTypes: true }).filter((e) => e.isDirectory())`; mirror that here (and ideally only register an alias when `src/index.ts` actually exists).",
+   "suggestion_code": "const workspaceAlias = Object.fromEntries(\n  readdirSync(workspaceSrc, { withFileTypes: true })\n    .filter((e) => e.isDirectory())\n    .map((e) => [`@autolight/${e.name}`, join(workspaceSrc, e.name, \"src\", \"index.ts\")]),\n);",
+   "existing_code": "const workspaceAlias = Object.fromEntries(\n  readdirSync(workspaceSrc).map((p) => [`@autolight/${p}`, join(workspaceSrc, p, \"src\", \"index.ts\")]),\n);",
+   "start_line": 8,
+   "end_line": 10,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/ipc/vitest.config.ts",
+   "content": "The exclude patterns lack the `**/` prefix, so they only match a top-level `node_modules`/`dist` directly under the config root, not nested ones (e.g. `src/node_modules/**`). Additionally, specifying `exclude` here *replaces* Vitest's built-in defaults instead of merging with them, dropping the default `**/node_modules/**`, `**/dist/**`, `.idea`/`.cache` dirs, and `*.config.*` file exclusions. The root `vitest.config.ts` correctly uses the `**/` form \u2014 align this config with it.",
+   "suggestion_code": "    exclude: [\"**/node_modules/**\", \"**/dist/**\"],",
+   "existing_code": "    exclude: [\"node_modules/**\", \"dist/**\"],",
+   "start_line": 16,
+   "end_line": 16,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/reactive-audio/vitest.config.ts": [
+  {
+   "path": "packages/reactive-audio/vitest.config.ts",
+   "content": "`readdirSync(workspaceSrc)` enumerates every entry in `packages/` with no filtering: regular files (e.g. a stray `.DS_Store`, `README`, or `node_modules`) and directories that do not expose `src/index.ts` are all mapped to `@autolight/<name>` -> `<dir>/src/index.ts`. This produces aliases that point to non-existent files, which can silently break (or mis-resolve) module resolution at test time if such a specifier is ever imported. Additionally, the `@autolight/` scope is hardcoded from the directory name, so the alias is wrong whenever a package's real `package.json` `name` differs from its folder name. Consider restricting to real directories that actually contain the entry file (and, ideally, deriving the alias key from the package's `name`).",
+   "suggestion_code": "  readdirSync(workspaceSrc, { withFileTypes: true })\n    .filter((entry) =>\n      entry.isDirectory() &&\n      existsSync(join(workspaceSrc, entry.name, \"src\", \"index.ts\")),\n    )\n    .map((entry) => [`@autolight/${entry.name}`, join(workspaceSrc, entry.name, \"src\", \"index.ts\")]),",
+   "existing_code": "  readdirSync(workspaceSrc).map((p) => [`@autolight/${p}`, join(workspaceSrc, p, \"src\", \"index.ts\")]),",
+   "start_line": 9,
+   "end_line": 9,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/reactive-audio/vitest.config.ts",
+   "content": "The alias map is built from every entry returned by readdirSync with no filtering. Regular files in packages/ (e.g. a stray .DS_Store/README) and directories that do not expose src/index.ts are all mapped to @autolight/<name> -> <dir>/src/index.ts, yielding aliases that point at non-existent files and can silently break or mis-resolve imports at test time. The @autolight/ scope is also hardcoded from the folder name, so the alias is wrong if a package's package.json name differs from its directory name. Suggest filtering to real directories that actually contain the entry file (ideally deriving the key from the package's name).",
+   "existing_code": "  readdirSync(workspaceSrc).map((p) => [`@autolight/${p}`, join(workspaceSrc, p, \"src\", \"index.ts\")]),",
+   "start_line": 9,
+   "end_line": 9,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/show-planner/src/config.ts": [
+  {
+   "path": "packages/show-planner/src/config.ts",
+   "content": "`resolveConfig` hands out the module-level `DEFAULT_CONFIG` singleton by reference whenever no partial is supplied. Since `DEFAULT_CONFIG` is also re-exported (`index.ts`) and its nested containers (`dropStages`, the arrays inside `evaluationBounds`, `sectionEnergy`, `eventMinConfidence`) are only typed `readonly`, any consumer that normalises the returned snapshot in place (sorting stages, clamping bounds, memoized mutation) silently corrupts the global default for every later call. Return a fresh, array-cloned copy (or deep-`Object.freeze(DEFAULT_CONFIG)` and return it) so the default cannot be mutated.",
+   "suggestion_code": "  if (!partial) {\n    return {\n      ...DEFAULT_CONFIG,\n      dropStages: [...DEFAULT_CONFIG.dropStages],\n      evaluationBounds: Object.fromEntries(\n        Object.entries(DEFAULT_CONFIG.evaluationBounds).map(([k, v]) => [k, [...v] as [number, number]]),\n      ),\n    };\n  }",
+   "existing_code": "  if (!partial) return DEFAULT_CONFIG;",
+   "start_line": 60,
+   "end_line": 60,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/config.ts",
+   "content": "The merge is only one level deep. `dropStages` (top-level spread) and the array values inside `evaluationBounds` are copied by reference from `DEFAULT_CONFIG`, so even the resolved object produced here still aliases the default's arrays. Any in-place mutation of `config.dropStages`/`config.evaluationBounds[k]` therefore leaks back into the shared default. Clone the derived arrays when resolving rather than reusing the default references.",
+   "existing_code": "    evaluationBounds: { ...DEFAULT_CONFIG.evaluationBounds, ...(partial.evaluationBounds ?? {}) },",
+   "start_line": 66,
+   "end_line": 66,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/show-planner/src/index.ts": [
+  {
+   "path": "packages/show-planner/src/index.ts",
+   "content": "`seedHex` is explicitly discarded (`void seedHex`), so hues are derived solely from `rand()`. The signature/name imply a seed-stable identity, and callers relying on determinism across runs (same track/seed) will instead get different `coreHues`/`accentHue` each call. Either derive the hues from `seedHex`, or rename/verify so the nondeterminism is explicit.",
+   "existing_code": "export function trackIdentity(seedHex: string, rand: () => number): TrackIdentity2 {\n  void seedHex;",
+   "start_line": 161,
+   "end_line": 162,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/index.ts",
+   "content": "The range check only inspects `startBeat`: a cue starting inside range but ending past the track (`startBeat + durationBeats > durationBeats`) is never flagged, and a cue starting exactly at `durationBeats` passes although it is out of the valid beat range. Validate the cue end and the exclusive upper bound.",
+   "suggestion_code": "    if (c.startBeat < 0 || c.startBeat >= durationBeats || c.startBeat + c.durationBeats > durationBeats)\n      problems.push(`out-of-range ${c.type}@${c.startBeat}`);",
+   "existing_code": "    if (c.startBeat < 0 || c.startBeat > durationBeats) problems.push(`out-of-range ${c.type}@${c.startBeat}`);",
+   "start_line": 202,
+   "end_line": 202,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-planner/src/index.ts",
+   "content": "`paletteChanges` counts section-look cues, but it is compared against `durationBeats` (a duration, not a count). For any realistic track duration this condition can never become true, so the rule is effectively dead and gives false confidence that palette density is validated. Compare like with like (e.g. section-look count vs. section count, or cue spacing in beats).",
+   "existing_code": "  if (paletteChanges > durationBeats) problems.push(`palette change every beat (${paletteChanges})`);",
+   "start_line": 205,
+   "end_line": 205,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-planner/src/index.ts",
+   "content": "Locking is positional against the original `plan.cues` array. After cues are added/removed/reordered, any previously captured index set refers to different cues, so `kept` silently keeps the wrong cues or drops them; `fresh` is also concatenated without any check that it does not overlap a locked region, which can duplicate cues. Since new code is expected to use `regenerateWithLocks`, either drop this or validate indices/overlaps explicitly.",
+   "existing_code": "  const locked = new Set(lockedIndices);",
+   "start_line": 177,
+   "end_line": 177,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "packages/show-planner/src/layertags.test.ts": [
+  {
+   "path": "packages/show-planner/src/layertags.test.ts",
+   "content": "Tautological assertion: this can never fail. `compile.ts` (makeCue, lines 65-67) sets `c.layer` from the exact same `layerForCueName(init.type)` helper, so `c.layer` always equals `layerForCueName(c.type)` by construction. The test therefore cannot detect a genuine spec-33 spelling mismatch between the planner tag and the renderer fallback \u2014 the very thing the comment claims to guard. Assert against an explicit, independent expected mapping (or a fixed literal per cue type) instead of re-invoking the production helper.",
+   "existing_code": "      expect(c.layer).toBe(layerForCueName(c.type));",
+   "start_line": 61,
+   "end_line": 61,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/layertags.test.ts",
+   "content": "Incomplete layer coverage: only `base` and `exclusive` are asserted present. The spec-33 layer set also includes `spatial`, `rhythm` and `accents` (see `PLAN_LAYERS` in types.ts), which this fixture definitely produces (spatial looks, build-ramp, etc.). As written, a regression that collapses all spatial/rhythm/accents cues into one layer would still pass. Assert the full set of layers this fixture is expected to emit, or at least compare the produced set against an explicit expected set.",
+   "existing_code": "    const layers = new Set(plan.cues.map((c) => c.layer));\n    expect(layers.has(\"base\")).toBe(true);\n    expect(layers.has(\"exclusive\")).toBe(true);",
+   "start_line": 63,
+   "end_line": 65,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-planner/src/layertags.test.ts",
+   "content": "These invariants are trivially true and test nothing meaningful: `compile.ts` hardcodes `introBeats: 8` and `outroBeats: 8` for every section, and `incomingPalette: core.slice(0, 2)` is non-empty whenever the palette has entries. The test title claims per-section \"intro/outro regions\", but no assertion ties the hints to actual section boundaries (e.g. last/first section, or short sections shorter than the intro/outro window). Either assert the expected concrete values/relationship to section length, or drop the misleading checks.",
+   "existing_code": "      expect(s.mixHints.introBeats).toBeGreaterThan(0);\n      expect(s.mixHints.outroBeats).toBeGreaterThan(0);\n      expect(s.mixHints.incomingPalette.length).toBeGreaterThan(0);",
+   "start_line": 70,
+   "end_line": 72,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-planner/src/layertags.test.ts",
+   "content": "Undocumented magic constant: `64` is only meaningful as the `drop` beat in the fixture at line 21, but the literal has no explanation and no linkage to the fixture. If the fixture's beat grid or impact logic changes, this fails for an unrelated reason (or could pass for the wrong section). Assert the impact beat in terms of the fixture (e.g. reference the drop event's beat) and also verify it is attached to the expected section (chorus, 64-128) rather than merely anywhere in the flattened list.",
+   "existing_code": "    expect(plan.sections.flatMap((s) => s.mixHints.exclusiveImpactBeats)).toContain(64);",
+   "start_line": 74,
+   "end_line": 74,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/show-planner/src/schema.test.ts": [
+  {
+   "path": "packages/show-planner/src/schema.test.ts",
+   "content": "The determinism check only compares the derived `seed`, which is a pure FNV hash of the five inputs (`hashValue([fp.value, PLANNER_VERSION, sHash, vHash, cHash])`). It therefore cannot detect nondeterministic plan generation: if `compileShow` produced different cue sets on each call (e.g. via `Math.random`, `Date.now`, `Set`/`Map` iteration order, or in-place array mutation), the seed would still be identical and this test would still pass. It is also weakened because both `a` and `b` reuse the exact same `track`/`venue`/`style`/`config` object references, so the hash input is identical by reference as well. Assert on the resulting plan content instead (using freshly built, structurally-equal inputs).",
+   "suggestion_code": "    const a = compile(model());\n    const b = compile(model());\n    expect(a.cues).toEqual(b.cues);\n    expect(a.seed).toBe(b.seed);",
+   "existing_code": "    const a = compile(track).seed;\n    const b = compile(track).seed;\n    expect(a).toBe(b);",
+   "start_line": 107,
+   "end_line": 109,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/schema.test.ts",
+   "content": "These assertions only verify cardinality (`> 0`, `>= 2`, `toHaveLength(2)`), so a degenerate plan still passes. For example a single placeholder cue and a single trivial motif satisfy `cues.length > 0` and `motifs.length > 0`, while `sections` is just copied verbatim from the fixture. Assert concrete expected content (e.g. presence of a `section-look`, a `white-hit` on the drop, and motif section membership) so broken cue/design/recurrence generation is actually caught.",
+   "existing_code": "    expect(plan.recurrence.motifs.length).toBeGreaterThan(0);\n    expect(plan.cues.length).toBeGreaterThan(0);",
+   "start_line": 85,
+   "end_line": 86,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-planner/src/schema.test.ts",
+   "content": "The \"no device IDs / no seconds fields\" scan is partial: it only inspects `target`, `selector`, and three named fields (`seconds`/`startSeconds`/`durationMs`). Device refs or time-in-seconds values hidden in other cue properties (`reason`, `id`, `paletteRef`, `capability`, `justification`, `params`, or a nested envelope/color object) would not be detected, so the invariant this test claims to guard can silently regress. Consider recursively scanning all string/number fields of each cue (or at least the remaining top-level fields).",
+   "existing_code": "      expect(stringHasDeviceRef(c.target)).toBe(false);\n      if (c.selector) expect(selectorHasDeviceRef(c.selector)).toBe(false);\n      expect(\"seconds\" in c).toBe(false);",
+   "start_line": 147,
+   "end_line": 149,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/show-planner/src/schema.test.ts",
+   "content": "The planner version is duplicated as a hard-coded string here (and again on `plan.determinism.plannerVersion`). compile.ts already exports `PLANNER_VERSION`, so these literals must be kept in sync manually and will fail spuriously on any version bump. Import and assert against `PLANNER_VERSION` instead.",
+   "suggestion_code": "    expect(plan.plannerVersion).toBe(PLANNER_VERSION);",
+   "existing_code": "    expect(plan.plannerVersion).toBe(\"0.2.0\");",
+   "start_line": 77,
+   "end_line": 77,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ]
+}

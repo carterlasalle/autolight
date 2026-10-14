@@ -1,0 +1,278 @@
+{
+ "packages/failover/src/transports.test.ts": [
+  {
+   "path": "packages/failover/src/transports.test.ts",
+   "content": "This test only asserts that `selectFrameTransport` does not return `\"cloud-metadata\"` and inspects the static `FRAME_CLASS` map; it never calls `routeFrame` and supplies no cloud sink. A regression that actually dispatched frames onto the cloud path would therefore go undetected despite the test's name. Exercise the real routing path here (e.g., pass a cloud sink that fails the test if invoked) so the \"never routes frames to cloud\" claim is actually validated.",
+   "existing_code": "  it(\"never routes frames to cloud under any policy\", () => {",
+   "start_line": 100,
+   "end_line": 100,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/failover/src/transports.test.ts",
+   "content": "`sinks()` creates a sink for every transport except `cloud-metadata` and ignores each transport's verified/reachable status. Consequently the routing tests cannot detect a selection that targets an unreachable transport, and there is no cloud sink to prove cloud is never used as a frame path (`routeFrame` will happily send to whatever `sel.transport` is). Add a cloud sink that fails if invoked, and derive sink usability from status so the byte-carrying assertions actually constrain routing.",
+   "existing_code": "  const list: FrameSink[] = TRANSPORTS.filter((t) => t !== \"cloud-metadata\").map((t) => ({",
+   "start_line": 41,
+   "end_line": 41,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/failover/src/transports.test.ts",
+   "content": "The auto/hybrid availability cases only assert `.enabled`; `reason` is never checked. A wrong or missing \"No frame transport qualified on this unit.\" / \"Qualified frame transport present.\" message (or incorrect partial-qualification handling) would still pass. Assert the reason too, as is done for the BLE case.",
+   "existing_code": "    expect(modeAvailability(\"hybrid\", {}).enabled).toBe(false);",
+   "start_line": 242,
+   "end_line": 242,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/failover/src/transports.test.ts",
+   "content": "The all-verified transport status block is duplicated in `cfg()` and then re-declared wholesale inside many tests, and banner/reason assertions rely on loose substrings (\"dark\", \"never switches\", \"show tick\"). This risks silent divergence from the real messages and makes tests pass on incidental wording. Extract shared status fixtures and assert the exact (or a stable, exported) banner/reason text.",
+   "existing_code": "      \"lan-json\": { verified: true, reachable: true },\n      \"ble-single\": { verified: true, reachable: true },",
+   "start_line": 28,
+   "end_line": 29,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/ipc/src/index.test.ts": [
+  {
+   "path": "packages/ipc/src/index.test.ts",
+   "content": "`z` is imported but never referenced anywhere in this file (dead code). Remove the unused import, or add the intended assertion that required it.",
+   "existing_code": "import { z } from \"zod\";",
+   "start_line": 2,
+   "end_line": 2,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/ipc/src/index.test.ts",
+   "content": "The test is titled \"response schemas accept ok and typed error shapes\" but it only ever parses the `{ ok: false, error }` branch. Because the response schemas are `z.union([ok(...), errorSchema])`, a broken/missing success shape (e.g. `ok(z.object({}))` or a wrong payload schema) would still pass this test. Add a positive assertion that a valid `{ ok: true, ... }` payload parses for at least the channels with known payloads.",
+   "existing_code": "      expect(() => ch.response.parse({ ok: false, error: { code: \"E_X\", message: \"x\" } }), name).not.toThrow();",
+   "start_line": 19,
+   "end_line": 19,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/ipc/src/index.test.ts",
+   "content": "Despite the test name (\"request plus response schemas with a version\"), only `ch.request.shape` is inspected; the response schemas are never checked for a `version` field. If a response version is part of the contract this gap lets a response schema without `version` pass. Additionally, the `as unknown as { shape?: ... }` cast plus `shape ?? {}` fallback bypasses typing and only asserts key presence, not the version's type/value. Assert the value/type explicitly (e.g. `expect(shape.version.parse(1)).toBe(1)`) and align the test name with what is actually verified.",
+   "existing_code": "      const shape = (ch.request as unknown as { shape?: Record<string, unknown> }).shape;",
+   "start_line": 11,
+   "end_line": 11,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/ipc/src/index.test.ts",
+   "content": "This test only exercises rejection paths for the hardcoded `master/freeze` channel; there is no positive case proving a valid request parses. An over-strict request schema (e.g. an accidental required field) would go undetected. Add `expect(() => channels[\"master/freeze\"].request.parse({ version: 1, frozen: true })).not.toThrow()` so both acceptance and rejection are covered.",
+   "existing_code": "    expect(() => channels[\"master/freeze\"].request.parse({ version: 1 })).toThrow();",
+   "start_line": 23,
+   "end_line": 23,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/matter/src/controller.ts": [
+  {
+   "path": "packages/matter/src/controller.ts",
+   "content": "`commands` returns the internal `recorded` array by reference. The `readonly` modifier is a compile-time annotation only \u2014 at runtime any caller (tests, simulator, future adapters) can `push`/`pop`/`splice`/`length = 0` on it and silently corrupt the ordered command log that assertions depend on. Return a shallow copy so the adapter owns its history.",
+   "suggestion_code": "  get commands(): readonly MatterCommand[] {\n    return [...this.recorded];\n  }",
+   "existing_code": "  get commands(): readonly MatterCommand[] {\n    return this.recorded;\n  }",
+   "start_line": 103,
+   "end_line": 105,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/matter/src/controller.ts",
+   "content": "Lifecycle after `close()` is inconsistent. `close()` only flips `closed` and leaves every commissioned node in `nodes`, while `commission`/`command`/`read` throw `MatterError(\"stopped\")` \u2014 yet the inspection helpers `nodeState()` (and `commands`) skip the guard entirely. A stopped controller therefore still reports full node state and command history, which can make \"refuses all work after close\" assertions pass while stale data leaks. Either clear `nodes` on close and guard `nodeState` consistently, or document explicitly that these are post-close-readable inspection helpers.",
+   "suggestion_code": "  async close(): Promise<void> {\n    this.closed = true;\n    this.nodes.clear();\n  }",
+   "existing_code": "  async close(): Promise<void> {\n    this.closed = true;\n  }",
+   "start_line": 152,
+   "end_line": 154,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/matter/src/controller.ts",
+   "content": "`not-confirmed` and `already-bound` are declared in `MatterReason` but are never produced by any code path \u2014 `commission` never checks whether a node/pairing is already bound, and there is no confirmation step. Consumers may write handling branches for reasons that can never fire. Either implement the duplicate-binding/confirmation checks or remove the dead reasons.",
+   "existing_code": "export type MatterReason = \"bad-pairing-code\" | \"stopped\" | \"unknown-node\" | \"not-confirmed\" | \"already-bound\";",
+   "start_line": 48,
+   "end_line": 48,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/matter/src/controller.ts",
+   "content": "Vendor/product IDs are hardcoded as anonymous magic constants (Matter test IDs 0xFFF1 / 0x8001) in the default identity. Any per-node reported Basic Information depends on these literals; extract them into named constants so the intent (test vendor/product) and any future change are explicit and searchable.",
+   "existing_code": "    private readonly identity: BasicInfo = { vendorId: 0xfff1, productId: 0x8001 },",
+   "start_line": 96,
+   "end_line": 96,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/rekordbox-library/src/anlz.ts": [
+  {
+   "path": "packages/rekordbox-library/src/anlz.ts",
+   "content": "`swapSuffix` only recognizes `/` as the path separator. `join()` (and the stored absolute fallback) produce platform-native paths, so on Windows `slash` is always -1 and the `dot <= slash` guard becomes inert. In that case any dot that is not the file extension \u2014 e.g. a dotted directory segment in `/share/PIONEER/v1.2/ANLZ0000` \u2014 is treated as the extension and the sliced path becomes corrupted, yielding wrong `.EXT`/`.2EX` paths and therefore wrong `anlz-partial`/`anlz-ok` statuses. Using the `node:path` helpers removes the separator assumption.",
+   "suggestion_code": "function swapSuffix(target: string, suffix: string): string {\n  const ext = extname(target);\n  const base = ext === \"\" ? basename(target) : basename(target, ext);\n  return join(dirname(target), `${base}${suffix}`);",
+   "existing_code": "function swapSuffix(path: string, suffix: string): string {\n  const dot = path.lastIndexOf(\".\");\n  const slash = path.lastIndexOf(\"/\");",
+   "start_line": 104,
+   "end_line": 106,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-library/src/anlz.ts",
+   "content": "This swallows every errno as \"not found\". Permission/resource errors (EACCES, EMFILE, EIO, ENOTDIR) are indistinguishable from ENOENT, so they are silently reported as `anlz-missing` / `anlz-partial` and the caller cannot tell a genuinely absent file from an unreadable one. Since a missing file is already modeled as a status, non-ENOENT errors should be surfaced (rethrow or return a distinct signal) rather than converted to a missing status. Note this also does not verify the path is a regular file, so a directory at `datPath`/`audioPath` is reported as existing.",
+   "existing_code": "  try {\n    const stats = statSync(path);\n    return { sizeBytes: stats.size, mtimeMs: stats.mtimeMs };\n  } catch {\n    return undefined;\n  }",
+   "start_line": 48,
+   "end_line": 53,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-library/src/anlz.ts",
+   "content": "Two concerns with this expression: (1) it stats `joined` (and possibly `stored`) to make the decision, then `facts(datPath, statFile)` re-stats the chosen path, so the DAT is stat'ed twice per row and the decision is based on a snapshot that can differ from the recorded facts (TOCTOU). Prefer resolving the path once and reusing the stat result. (2) `isAbsolute(stored)` is true on POSIX for the documented normal case (stored paths carry a leading `/` but are share-relative), so the absolute-wins fallback probes the filesystem root (`/PIONEER/...`) whenever the share-relative file is absent; the intended fallback should be triggered by an actually absolute stored path, not by the leading-separator convention.",
+   "existing_code": "  const joined = join(options.sharePath, relative);\n  const datPath = isAbsolute(stored) && statFile(joined) === undefined && statFile(stored) !== undefined ? stored : joined;",
+   "start_line": 91,
+   "end_line": 92,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "packages/rekordbox-library/src/anlz.ts",
+   "content": "`join()` normalizes `..` segments, and there is no check that the resolved path stays under `sharePath`. A stored `analysisDataPath` containing `..` (an edited/unexpected DB row) escapes the share directory, and the resolver will stat and report files outside it as `anlz-ok`. Consider validating that the resolved path is contained within `sharePath` before trusting it.",
+   "existing_code": "  const relative = stored.replace(/^[\\\\/]+/, \"\");",
+   "start_line": 81,
+   "end_line": 81,
+   "category": "security",
+   "severity": "low"
+  }
+ ],
+ "packages/rekordbox-library/src/readonly.test.ts": [
+  {
+   "path": "packages/rekordbox-library/src/readonly.test.ts",
+   "content": "Tautological mock: the injected `run` ignores both `command` and `stdin` and always returns `writeProbe: { rejected: true, ... }`. `SidecarReader.probeWrite()` simply forwards whatever payload the mocked runner produced, so `probe.rejected` is true no matter what request is actually sent. If `probeWrite()` regressed (e.g. stopped setting `probeWrite: true`, or `SidecarReader` stopped delegating to the sidecar at all), this test would still pass. Capture the `stdin` argument in the mock and assert the serialized request contains `probeWrite: true` (e.g. `expect(JSON.parse(stdin).probeWrite).toBe(true)`), or assert against the real `SIDECAR_SCRIPT`. The next test (`rejects writes through the sidecar protocol against the real fixture`) has the same hardcoded `writeProbe` payload and same gap.",
+   "existing_code": "          stdout: JSON.stringify({ ...payload, writeProbe: { rejected: true, error: \"attempt to write a readonly database\" } }),",
+   "start_line": 74,
+   "end_line": 74,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-library/src/readonly.test.ts",
+   "content": "The INSERT and DROP probes only assert `rejected === true`. `attemptWrite()` returns `rejected: true` for ANY thrown error (driver.ts), so an unrelated failure \u2014 a syntax/schema mismatch, a missing table, or a non-read-only driver error \u2014 would satisfy this assertion without proving the database actually blocked the write. Assert the error matches the read-only reason here as well (`expect(direct.error).toMatch(/readonly|read-only|query_only/i)`).",
+   "suggestion_code": "      const direct = attemptWrite(db, \"INSERT INTO djmdContent (ID) VALUES ('evil')\");\n      expect(direct.rejected).toBe(true);\n      expect(direct.error).toMatch(/readonly|read-only|query_only/i);\n      const drop = attemptWrite(db, \"DROP TABLE djmdContent\");\n      expect(drop.rejected).toBe(true);\n      expect(drop.error).toMatch(/readonly|read-only|query_only/i);",
+   "existing_code": "      const direct = attemptWrite(db, \"INSERT INTO djmdContent (ID) VALUES ('evil')\");\n      expect(direct.rejected).toBe(true);\n      const drop = attemptWrite(db, \"DROP TABLE djmdContent\");\n      expect(drop.rejected).toBe(true);",
+   "start_line": 43,
+   "end_line": 46,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-library/src/readonly.test.ts",
+   "content": "Unlike the other cases in this file, this test does not wrap the probe in `try/finally`: if `probeWrite()` rejects or the assertions fail, `reader.close()` is skipped. It is currently harmless because `SidecarReader.close()` is a no-op, but it is inconsistent with the surrounding tests and becomes a real leak if the reader later holds a process/handle. Wrap the probe and assertions in `try { ... } finally { reader.close(); }`.",
+   "existing_code": "    const probe = await reader.probeWrite();\n    expect(probe.rejected).toBe(true);\n    expect(probe.error).toMatch(/readonly|read-only/i);\n    reader.close();",
+   "start_line": 78,
+   "end_line": 81,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/rekordbox-library/src/readonly.test.ts",
+   "content": "The write-method detection only inspects own prototype property names against a fixed list, so write-shaped methods with names outside the list (e.g. `set`, `put`, `mutate`, `saveAll`, `insertMany`) would slip through; `Object.getOwnPropertyNames` also excludes Symbol-keyed methods, and the getters `mode`/`reader` plus instance own-properties are never checked. Consider walking the full prototype chain, checking own-property names/symbols, and asserting an explicit allowlist of read-only operations rather than a deny-list.",
+   "existing_code": "      const names = Object.getOwnPropertyNames(Object.getPrototypeOf(service));\n      for (const name of names) {\n        expect(name).not.toMatch(/^(insert|update|delete|upsert|write|save|remove|create|drop|exec|run|checkpoint)$/i);\n      }",
+   "start_line": 105,
+   "end_line": 108,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/rekordbox-library/src/sidecar.test.ts": [
+  {
+   "path": "packages/rekordbox-library/src/sidecar.test.ts",
+   "content": "`root` is destructured but never referenced in this test \u2014 dead code. Additionally, `probeWrite: true` passed to `open()` is wasted work here: `SidecarReader.open` runs the probe but `SidecarReader` exposes no accessor for `payload.writeProbe`, and the later `sidecar.probeWrite()` re-runs the whole sidecar with `probeWrite: true` again, doubling the interpreter invocation. Remove `root` and drop the `probeWrite` flag from `open()` (keep it on the `probeWrite()` call).",
+   "suggestion_code": "    const { dbPath, sharePath, summary } = fixture();\n    const sidecar = await SidecarReader.open({ dbPath, encrypted: false });",
+   "existing_code": "    const { root, dbPath, sharePath, summary } = fixture();\n    const sidecar = await SidecarReader.open({ dbPath, encrypted: false, probeWrite: true });",
+   "start_line": 121,
+   "end_line": 122,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/rekordbox-library/src/sidecar.test.ts",
+   "content": "`sharePath` is destructured but never used in this test (the injected payload is compared directly), leaving an unused binding. Destructure only `dbPath`.",
+   "suggestion_code": "    const { dbPath } = fixture();",
+   "existing_code": "    const { dbPath, sharePath } = fixture();",
+   "start_line": 103,
+   "end_line": 103,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "packages/rekordbox-library/src/sidecar.test.ts",
+   "content": "The `try` covers not just `RekordboxReader.open(...)` but also the reader assertions (`reader.counts()`, `reader.probeWrite()`). A genuine mismatch (wrong counts or a probeWrite that is not rejected) throws an `AssertionError` that is swallowed by this `catch` and then re-reported via `expect(error).toBeInstanceOf(LibraryDbError)`, replacing the real failure with a misleading \"not a LibraryDbError\" message. Narrow the `try` so it wraps only the `await opened` call, and keep the count/probe assertions outside the catch.",
+   "existing_code": "    } catch (error) {\n      // Absent or unloadable native binding (no .node build on this\n      // machine): the typed cipher-module-missing error either way.\n      expect(error).toBeInstanceOf(LibraryDbError);",
+   "start_line": 160,
+   "end_line": 163,
+   "category": "maintainability",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-library/src/sidecar.test.ts",
+   "content": "This opt-in test issues a write probe (the script runs `create table autolight_write_probe`) against the owner's real encrypted `master.db`. If the read-only URI / `PRAGMA query_only` guard regresses \u2014 the exact behavior under test \u2014 the DDL would actually execute and mutate the user's live library, causing data-integrity damage. In addition the assertions are weak (`counts.tracks > 0`, `counts.playlists > 0`, dbVersion only logged), so the test can pass while returning stale/incorrect rows. Consider running the write probe against a throwaway copy of the library and asserting on concrete values (dbVersion, a known row) instead of just positivity.",
+   "existing_code": "    const sidecar = await SidecarReader.open({ dbPath, encrypted: true, probeWrite: true });\n    const counts = sidecar.counts();",
+   "start_line": 177,
+   "end_line": 178,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/rekordbox-live/src/ax.test.ts": [
+  {
+   "path": "packages/rekordbox-live/src/ax.test.ts",
+   "content": "Grid isolation is never asserted for deck 2. `setGrid(1, \u2026)` sets a grid only for deck 1, and the test only inspects `deckOne`. Since `axFractionalBeat`/`stateFor` key the grid by `deckId`, a regression that applied the grid globally (or dropped/duplicated deck 2) would still pass because only `emitted.length === 2` is checked. Add an explicit deck-2 assertion (no grid \u21d2 `beat` must stay `null`) so grid isolation is actually covered.",
+   "suggestion_code": "    expect(deckOne?.beat).toBeCloseTo(1.5, 5);\n    expect(deckOne?.playing).toBe(false);\n    // Deck 2 has no grid, so its beat must remain null (grid isolation).\n    const deckTwo = emitted.find((s) => s.deckId === 2);\n    expect(deckTwo?.beat).toBeNull();",
+   "existing_code": "    expect(deckOne?.beat).toBeCloseTo(1.5, 5);\n    expect(deckOne?.playing).toBe(false);",
+   "start_line": 111,
+   "end_line": 112,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/ax.test.ts",
+   "content": "The derive-`playing` oracle is not isolated. Both samples change `elapsed` (0:12\u21920:13) and `remaining` (-2:48\u2192-2:47) at once, so the test cannot distinguish whether the heuristic keys off `elapsed` increasing or `remaining` decreasing \u2014 an implementation that only implements one of the two signals still passes, despite the test name claiming \"the field that decreases\". Make it a real regression oracle by holding one field constant while the other moves.",
+   "suggestion_code": "    const first = refineAxReading(readAxDecks(tree(\"0:12\", \"-2:48\", \"1:05\"))[0]!, undefined);\n    // Only `remaining` decreases; `elapsed` is unchanged, so this pins the\n    // remaining-time signal specifically.\n    const later = refineAxReading(readAxDecks(tree(\"0:12\", \"-2:47\", \"1:05\"))[0]!, first);\n    // Conversely, only `elapsed` increases.\n    const laterByElapsed = refineAxReading(readAxDecks(tree(\"0:13\", \"-2:48\", \"1:05\"))[0]!, first);\n    expect(laterByElapsed.playing).toBe(true);",
+   "existing_code": "    const first = refineAxReading(readAxDecks(tree(\"0:12\", \"-2:48\", \"1:05\"))[0]!, undefined);\n    const later = refineAxReading(readAxDecks(tree(\"0:13\", \"-2:47\", \"1:05\"))[0]!, first);",
+   "start_line": 75,
+   "end_line": 76,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/rekordbox-live/src/ax.test.ts",
+   "content": "Deck-2 field assertions are incomplete: the macOS test checks only title/elapsed/playing for deck 2 and never `two.remainingSeconds` (fixture value is `-0:35`), while the Windows test only checks `readings[1].playing`. A field-leak regression where deck 1's elapsed/remaining/title bleeds into deck 2 would not be caught. Assert deck 2's remaining (and title/elapsed) explicitly.",
+   "suggestion_code": "    expect(two?.title).toBe(\"Homecoming (feat. Chris Martin)\");\n    expect(two?.elapsedSeconds).toBe(65);\n    expect(two?.remainingSeconds).toBe(-35);\n    expect(two?.playing).toBe(true);",
+   "existing_code": "    expect(two?.title).toBe(\"Homecoming (feat. Chris Martin)\");\n    expect(two?.elapsedSeconds).toBe(65);\n    expect(two?.playing).toBe(true);",
+   "start_line": 53,
+   "end_line": 55,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "packages/rekordbox-live/src/ax.test.ts",
+   "content": "Unsafe non-null assertions on array elements (`ambiguous[0]!`, `clear[0]!`, and the `readAxDecks(...)[0]!` in the derive-playing test) bypass the project's null-check rule. If `readAxDecks` ever returns an empty array (regression or fixture mismatch), the test throws a `TypeError` on the next property access instead of producing a clear assertion failure. Assert the array length/definedness first, then index.",
+   "suggestion_code": "    expect(ambiguous).toHaveLength(2);\n    expect(refineAxReading(ambiguous[0]!, undefined).readable).toBe(false);",
+   "existing_code": "    expect(refineAxReading(ambiguous[0]!, undefined).readable).toBe(false);",
+   "start_line": 69,
+   "end_line": 69,
+   "category": "test",
+   "severity": "low"
+  }
+ ]
+}

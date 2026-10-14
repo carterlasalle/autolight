@@ -1,0 +1,368 @@
+{
+ "packages/controller-flx4/src/backend.test.ts": [
+  {
+   "path": "packages/controller-flx4/src/backend.test.ts",
+   "content": "The \"non-exclusive open\" guarantee is only asserted via the number of arguments the mock's `open` receives (`args === 2`). Since the scripted driver never performs (or can perform) a real exclusive open, this assertion cannot detect an exclusive OS-level open in the actual native driver \u2014 it only confirms the service does not pass a third argument. Consider driving the mock from a real exclusive-open stub or asserting that two independent listeners on the same port both receive events (the behavior that actually matters), rather than relying on the argument count.",
+   "existing_code": "    expect(driver.openCalls.every((call) => call.args === 2)).toBe(true);",
+   "start_line": 145,
+   "end_line": 145,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/controller-flx4/src/backend.test.ts",
+   "content": "No scheduler is injected here, so `start()` arms a real 2000 ms interval while the test also calls `service.poll()` manually. On a slow CI run the real timer can fire additional polls, producing duplicate/unexpected transitions and making this test flaky. Inject the `fakeScheduler()` (as the \"arms and clears the hotplug poll\" test does) or switch to fake timers so the only polls are the explicit ones.",
+   "existing_code": "    const service = new Flx4ControllerService({ mode: \"native\", drivers: { native: driver }, hotplugPollMs: 2000 });",
+   "start_line": 177,
+   "end_line": 177,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/controller-flx4/src/backend.test.ts",
+   "content": "The mock returned by `openInput` exposes a `send()` that it never had in the real binding \u2014 the actual interface is `openInput(portName, onMessage): { close(): void }` \u2014 so this `send` is dead/misleading code, and because it is never invoked, `expect(seen).toEqual([])` is trivially true and exercises nothing about message delivery through WMS. Additionally `_name` is discarded, so the mock cannot detect the driver passing `port.id` instead of `port.name` (the real driver passes `port.name`). Drop the unsupported `send`, capture the received name, and assert on it to actually cover port resolution.",
+   "existing_code": "    // The binding surface has no send function; the driver only wires the callback.\n    expect(input.port.name).toBe(\"DDJ-FLX4\");",
+   "start_line": 311,
+   "end_line": 312,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/controller-flx4/src/backend.test.ts",
+   "content": "Failover is only tested when `probe()` fails. There is no case where a backend probes `ok: true`, lists the FLX4 port, but `open()` throws while another backend is available \u2014 i.e., the failover-on-open-failure path is uncovered. An incorrect or missing fallback after a successful probe would go undetected. Add a scenario with two drivers where the first fails to open and verify the second backend is attempted.",
+   "existing_code": "    const windows = new Flx4ControllerService({ mode: \"native\", drivers: { native: held }, platform: \"win32\" });",
+   "start_line": 115,
+   "end_line": 115,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "packages/controller-flx4/src/backend.test.ts",
+   "content": "`stop()` is invoked here (and in most other tests) but the scripted driver's `closeCount()` is never asserted, so a listener/port leak on shutdown would pass unnoticed. Only the hotplug test checks `closeCount()`. Assert `driver.closeCount()` equals the number of successful opens after `stop()` to lock down resource cleanup on shutdown.",
+   "existing_code": "    await first.stop();\n    await second.stop();",
+   "start_line": 147,
+   "end_line": 148,
+   "category": "test",
+   "severity": "medium"
+  }
+ ],
+ "packages/failover/src/transports.ts": [
+  {
+   "path": "packages/failover/src/transports.ts",
+   "content": "Inconsistent selection contract: when the explicit pin is *unverified*, `selectPinned` still returns a non-null `transport` (and `frameClass`), yet the `reason` claims \"fixture holds instead of switching\". Because `routeFrame` only verifies that a sink exists for `sel.transport`, a show that was never qualified for this transport will still push frames into it. `selectAuto`/`selectHybrid` correctly return `transport: null` in the equivalent all-down case. Either return `transport: null`/`frameClass: null` here so the fixture truly holds, or make `routeFrame` refuse unqualified selections.",
+   "suggestion_code": "      transport: null,\n      frameClass: null,\n      pinned: true,\n      degraded: true,\n      banner: avail.reason,",
+   "existing_code": "      transport: pinned,\n      frameClass: FRAME_CLASS[pinned],\n      pinned: true,\n      degraded: true,\n      banner: avail.reason,",
+   "start_line": 194,
+   "end_line": 198,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/failover/src/transports.ts",
+   "content": "The unreachable branch returns `transport: pinned` while the reason states \"fixture stays dark on this transport\". Since `routeFrame` does not check reachability, the frame is still written into the down transport instead of the fixture going dark. This contradicts the stated intent and the dark-fixture guarantee that `selectAuto`/`selectHybrid` uphold (they return `null` when nothing is usable).",
+   "suggestion_code": "      transport: null,\n      frameClass: null,\n      pinned: true,\n      degraded: true,\n      banner: `${pinned} unreachable; explicit mode never switches.`,",
+   "existing_code": "      transport: pinned,\n      frameClass: FRAME_CLASS[pinned],\n      pinned: true,\n      degraded: true,\n      banner: `${pinned} unreachable; explicit mode never switches.`,",
+   "start_line": 204,
+   "end_line": 208,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/failover/src/transports.ts",
+   "content": "`modeAvailability` for `auto`/`hybrid` only checks `verified`, ignoring `reachable`. A device whose transports are all qualified but currently unreachable reports `enabled: true` (\"Qualified frame transport present.\"), while `selectFrameTransport` for the same config yields `transport: null` (dark) because `firstUsable` requires `usable` = verified && reachable. The tile thus advertises a usable mode while frames go dark.",
+   "existing_code": "    const anyFrame = TRANSPORTS.some(\n      (t) => FRAME_CLASS[t] !== \"never\" && (status[t]?.verified ?? false),\n    );",
+   "start_line": 127,
+   "end_line": 129,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/failover/src/transports.ts",
+   "content": "Strict policy does not flag a whole-fixture transport as degraded. Unlike `selectAuto`, `selectHybrid` and `selectPinned` (which set `degraded: true` and a banner when `FRAME_CLASS === 'whole'`), this path always returns `degraded: false` and `banner: null`. When `order[0]` is `lan-json`/`ble-single`/`matter`, the tile will not warn the operator about the degraded whole-fixture fallback, which contradicts spec 148's \"whole-fixture fallback with a visible banner\".",
+   "suggestion_code": "    degraded: FRAME_CLASS[first] === \"whole\",\n    banner: FRAME_CLASS[first] === \"whole\" ? `Whole-fixture on ${first} (degraded)` : null,\n    reason: `Strict policy holds the first enabled transport ${first}.`,",
+   "existing_code": "    degraded: false,\n    banner: null,\n    reason: `Strict policy holds the first enabled transport ${first}.`,",
+   "start_line": 248,
+   "end_line": 250,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/failover/src/transports.ts",
+   "content": "`routeFrame` silently picks the first matching sink and performs no safety checks on the selection. It does not reject `frameClass === 'never'` (so a cloud-basic selection would still be sent), does not reject selections whose transport is down/unqualified (a null-vs-held selection from `selectPinned` is written to anyway), and does not detect duplicate sinks for the same transport \u2014 a stale/duplicated sink would silently capture frames. Given this is the seam that proves which transport carried bytes, an implicit wrong sink makes tests pass while real frames go to the wrong path.",
+   "suggestion_code": "  if (sel.frameClass === \"never\") {\n    throw new Error(`Transport ${sel.transport} never carries frames: ${sel.reason}`);\n  }\n  const matches = sinks.filter((s) => s.transport === sel.transport);\n  if (matches.length === 0) throw new Error(`No sink recorded transport ${sel.transport}`);\n  if (matches.length > 1) throw new Error(`Multiple sinks recorded transport ${sel.transport}`);\n  const sink = matches[0];",
+   "existing_code": "  const sink = sinks.find((s) => s.transport === sel.transport);\n  if (sink === undefined) throw new Error(`No sink recorded transport ${sel.transport}`);",
+   "start_line": 329,
+   "end_line": 330,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/govee/src/actions.ts": [
+  {
+   "path": "packages/govee/src/actions.ts",
+   "content": "The unarmed flash never powers the unit on before sending white `colorwc`. The restore branch is explicitly written for an off unit (`else if (!observed.onOff) { ... turnCommand(false) }`), which only makes sense if the flash turned it on first \u2014 but no `turnCommand(true)` is sent. On a unit that is currently off, `colorwc` alone does not light it (the transport in `govee-lan.ts` sends `turn(true)` before the white `colorwc` for exactly this reason), so IDENTIFY produces no visible flash and the user cannot identify/name the unit; the subsequent `turn(false)` restore is then a no-op. Add a power-on before the white command (mirroring the production transport), which the off-state restore already compensates for.",
+   "suggestion_code": "    await link.sendJson(turnCommand(true));\n    await link.sendJson(colorCommand(255, 255, 255));",
+   "existing_code": "    await link.sendJson(colorCommand(255, 255, 255));",
+   "start_line": 147,
+   "end_line": 147,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/govee/src/actions.ts",
+   "content": "The flash is performed and then restored as a single unguarded sequence. If any `sendRaw`/`sendJson`/`wait(options.flashMs)` rejects (a `Waiter` that rejects, a transport error, or a `paint()` RangeError from a malformed `currentFrame` or `zones > 255`), control jumps out of `identify` and the restore step never runs, leaving the unit stuck in white RGB \u2014 the exact state the function's contract promises to undo. Wrap the flash+restore in `try { ... } finally { restore }` so the previous look is re-applied on every exit path.",
+   "existing_code": "  if (fixture.armed) {\n    path = \"stream\";",
+   "start_line": 132,
+   "end_line": 133,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/govee/src/actions.ts",
+   "content": "The stream-vs-`colorwc` path and the restore strategy are chosen from `fixture.armed`, a snapshot taken by the caller before this call. If the unit's real armed state has changed (e.g. a show opened/closed between snapshot and action), the unarmed branch will send a white `colorwc` \u2014 and the off-state restore sends `turnCommand(false)` \u2014 while the channel is actually armed. Both are documented as capable of terminating the razer channel, which is the data-loss case the module header warns about. Re-confirm armed state at action time (read B2 status, or take the live stream/`armed` value) before deciding the path instead of trusting the stale boolean.",
+   "existing_code": "  const capture = await readDevStatus(link, { retryMs: captureTimeoutMs, deadlineMs: captureTimeoutMs });",
+   "start_line": 118,
+   "end_line": 118,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/govee/src/actions.ts",
+   "content": "`testChase` never restores the look that preceded it. In the single-zone unarmed branch the ramp ends on `colorwc(255,255,255)`, i.e. the fixture is left at full white indefinitely; the segmented branch leaves the last travel frame (only one zone lit) on the unit. Unlike `identify`, there is no read-back/restore and no blackout, so the previous static look is lost after every test chase unless the caller re-paints. Consider capturing the pre-chase state (or re-sending a blackout/last known frame) at the end of the walk as `identify` does.",
+   "existing_code": "      const white = whiteHitPayload(1, intensity);",
+   "start_line": 238,
+   "end_line": 238,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/govee/src/actions.ts",
+   "content": "`zones` here is `Math.max(1, fixture.zones)` without flooring, while `chaseFrames` floors internally (`Math.max(1, Math.floor(zones))`). For a non-integer zone count the frame loop uses the floored count but `zoneOrder` is computed with the raw value, so the reported zone order drifts from the bytes actually sent (e.g. reverse step yields `3.5`). There is also no bound check: a zone count > 255 makes `paint` throw `RangeError`, aborting the chase mid-walk. Floor/validate `zones` once and use the same value for both the frames and `zoneOrder`.",
+   "existing_code": "      zoneOrder.push(direction === \"forward\" ? step : zones - 1 - step);",
+   "start_line": 273,
+   "end_line": 273,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "packages/govee/src/actions.ts",
+   "content": "When the pre-flash read-back times out, no restore is issued at all and `restored` is `\"no-read-back\"`, so the unit is left permanently at `colorwc(255,255,255)` (full white) \u2014 contradicting the function's stated contract to restore the previous look. A slow/silent unit therefore ends up visibly white until the next command. At minimum this should be surfaced/compensated (e.g. a deterministic blackout or the last known frame) rather than silently leaving the fixture white; document the trade-off if it is intentional.",
+   "existing_code": "    if (observed === null) {\n      restored = \"no-read-back\";",
+   "start_line": 149,
+   "end_line": 150,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "packages/govee/src/actions.ts",
+   "content": "`restoreFrame` (`fixture.currentFrame`) is passed straight to `paint` with no length check. The flash was sent with `zones` segments, but `paint` derives its segment count from `restoreFrame.length / 3`, so a frame captured at a different resolution paints a different number of zones than the flash (and a length not divisible by 3 throws `RangeError`, leaving the unit white). Guard that `restoreFrame.length === zones * 3` and fall back to the blackout frame otherwise, as the production transport does.",
+   "existing_code": "      await link.sendRaw(paint(restoreFrame));",
+   "start_line": 139,
+   "end_line": 139,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "packages/show-planner/src/events.ts": [
+  {
+   "path": "packages/show-planner/src/events.ts",
+   "content": "This comment contradicts the actual behavior: `planEvent` never returns `null` for a confident drop \u2014 it returns an `impact` PlannedEvent (see the `case \"drop\"` else-branch above). The docs (`docs/finish/evidence/T-PLAN-07/README.md`) state that confident drops deliberately stay in the event layer while the drop engine adds the hit and body. So the comment is stale/misleading and will cause a future reader to wrongly assume the event is filtered out. Either fix the comment to match the code, or (if a null really was intended) make `planEvent` return null so the caller's assumption holds.",
+   "existing_code": "    // A confident drop that is not soft is programmed by the drop engine\n    // (contrast.ts), not here; planEvent returns null for it by design.",
+   "start_line": 311,
+   "end_line": 312,
+   "category": "documentation",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/events.ts",
+   "content": "`span` is clamped to `>= 0`, but every branch then uses `durationBeats: span || <default>`. When a supplied `endBeat` is at or before `beat` (span === 0), the event is emitted with a positive `durationBeats` while its `endBeat` remains `<= beat`. That produces internally inconsistent `PlannedEvent`s \u2014 e.g. `endBeat < beat` but `durationBeats: 8`. Consumers that trust `endBeat` (the fake-hold fallback `fakeActuals.get(p.beat) ?? p.endBeat` in compile.ts, and the fakeDropHold span math) receive a zero/negative window and silently fall back to a different duration than `durationBeats` advertises. Derive `durationBeats` from the resolved end (or normalize `endBeat = Math.max(beat, endBeat)`) so both fields agree.",
+   "existing_code": "  const span = Math.max(0, (endBeat ?? beat + 4) - beat);",
+   "start_line": 64,
+   "end_line": 64,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/events.ts",
+   "content": "`soft` (confidence below the per-type floor but above half-floor) is never consulted for `final-hit`, so a low-confidence final-hit still emits `intensity: 0.95`, `priority: 100`, the strongest impact in the whole schedule. This directly violates the stated invariant \"low confidence ... never a full impact\". The same omission applies to `drop-continuation` (0.8/60) and `large-transient` (0.5+strength*0.4). Downgrade the intensity/cue type when `soft` is true (as the `drop`, re-entry and pause/silence branches already do).",
+   "existing_code": "    case \"final-hit\":\n      return {\n        beat,\n        endBeat: beat + 2,\n        kind: \"final-hit\",\n        cueType: \"final-hit\",\n        intensity: clampIntensity(0.95, style),\n        priority: 100,",
+   "start_line": 237,
+   "end_line": 244,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/show-planner/src/events.ts",
+   "content": "When `eventConfidenceFloor` resolves to 0 (`eventMinConfidence[type] === 0`, or a config with `defaultEventConfidence: 0`), the gate `confidence < floor * 0.5` becomes `confidence < 0`, which is never true, and `soft = confidence < floor` is always false. A confidence-0 `drop`/`final-hit` is then emitted as a full impact with no low-confidence downgrade \u2014 exactly the case the design says must never happen. Guard against non-positive floors (fall back to a sane floor) instead of letting a 0 silently disable gating.",
+   "existing_code": "  const floor = eventConfidenceFloor(type, config);\n  if (confidence < floor * 0.5) return null;\n  const soft = confidence < floor;",
+   "start_line": 61,
+   "end_line": 63,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/events.ts",
+   "content": "The moved-event lookup key `${ev.type}@${ev.beat}` is not unique: if `track.musicalEvents` contains two events with the same `type` and `beat` (duplicate detections / multiple detectors reporting the same hit), a single move offset from `movedEvents` is applied to all of them, and a move intended for one is silently lost for the other. Floating-point `beat` formatting also makes the key fragile to precision differences between producer and consumer. Key move offsets on a stable per-event identifier (or index) rather than a `type@beat` string.",
+   "existing_code": "    const movedTo = movedEvents[`${ev.type}@${ev.beat}`];",
+   "start_line": 299,
+   "end_line": 299,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "packages/show-planner/src/types.ts": [
+  {
+   "path": "packages/show-planner/src/types.ts",
+   "content": "`mulberry32` derives its state from `parseInt(seedHex.slice(0, 8), 16)`. For any seed whose first 8 chars are not valid hex (e.g. the caller in recurrence.ts passes `` `motif-${seedHex}` ``, and `CompileInput.seedOverride` / `trackFingerprint`'s \"id\" branch can pass arbitrary strings), `parseInt` returns `NaN` and `NaN >>> 0` is `0`. Every such seed therefore silently collapses to the SAME PRNG stream, defeating seed determinism and masking malformed seed input. Derive the state from a hash of the full input string (e.g. `fnv1aHex(seedHex)`) or validate and throw on a non-hex seed instead of silently falling back to 0.",
+   "existing_code": "  let a = parseInt(seedHex.slice(0, 8), 16) >>> 0;",
+   "start_line": 364,
+   "end_line": 364,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "packages/show-planner/src/types.ts",
+   "content": "`envelopeToBeats` silently returns `0` when `bpm <= 0`, and it never guards negative `e.beats`/`e.ms`. An invalid tempo or malformed envelope thus yields a zero (or negative, for the `beats` branch and negative `ms`) sub-beat duration instead of surfacing an error, propagating bad timing into compiled plans and hidden reproducibility failures. Consider throwing (or returning `NaN`) on invalid tempo and validating non-negative inputs at the boundary.",
+   "existing_code": "export function envelopeToBeats(e: EnvelopeTime, bpm: number): number {\n  if (e.kind === \"beats\") return e.beats;\n  if (!(bpm > 0)) return 0;",
+   "start_line": 13,
+   "end_line": 15,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/types.ts",
+   "content": "Both `stableStringify` and `canonical` collapse structurally different values into the same string: `undefined`/`NaN`/`Infinity` serialize like `null`, and Map/Set/Date/class instances with no enumerable own keys serialize like `{}`. Since these feed `hashValue`/`stableHash` (and thus style/venue/config hashes and the deterministic compile seed), different inputs can hash identically and reuse the wrong cache entry. Distinguish `undefined`/`null` and handle/serialize Map/Set/Date explicitly (or reject unsupported types).",
+   "existing_code": "  if (v === null || v === undefined) return \"null\";\n  if (typeof v !== \"object\") return JSON.stringify(v) ?? \"null\";",
+   "start_line": 340,
+   "end_line": 341,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/types.ts",
+   "content": "`selectorName` concatenates child names with bare `+`/`&`/`-` and no grouping or escaping, so distinct selector trees map to the same string (e.g. a group literally named `\"a+b\"` collides with `union(group a, group b)`; nested combinators also flatten ambiguously, and `difference` with more than two operands has no defined meaning). Since this name is used as an identity/lookup key, such collisions can mis-associate or shadow selectors. Wrap each child in parentheses/escaping (or return a structural representation) so the encoding is injective.",
+   "existing_code": "    case \"union\":\n      return s.of.map(selectorName).join(\"+\");\n    case \"intersection\":\n      return s.of.map(selectorName).join(\"&\");\n    case \"difference\":\n      return s.of.map(selectorName).join(\"-\");",
+   "start_line": 68,
+   "end_line": 73,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/show-planner/src/types.ts",
+   "content": "`DEVICE_REF` hardcodes specific vendor model IDs (`H6076`, `H1A45`, `segment...=`), which is brittle: new/unlisted device identifiers pass the guard, so this allowlist-style blocklist cannot enforce the 'never device IDs' contract. Conversely, the IPv4 alternative `(?:\\d{1,3}\\.){3}\\d{1,3}` has no boundary/range validation and will false-positive on version-like or dotted numeric tokens (e.g. `v1.2.3.4`, `999.999.999.999`), rejecting valid selectors. Prefer structural validation (reject unknown numeric/ID-like tokens) or add word boundaries and per-octet range checks rather than enumerating specific model numbers.",
+   "existing_code": "const DEVICE_REF =\n  /(?:[0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}|(?:\\d{1,3}\\.){3}\\d{1,3}|device-id|device_id|segment\\s*\\d+\\s*=|H6076|H1A45|govee\\s+(device|lan\\s+id)|physical-index|wire-index/i;",
+   "start_line": 77,
+   "end_line": 78,
+   "category": "security",
+   "severity": "medium"
+  }
+ ],
+ "packages/storage/src/consent.ts": [
+  {
+   "path": "packages/storage/src/consent.ts",
+   "content": "No running-state is tracked: `startHelper` only checks consent and `stopHelper` appends unconditionally. Calling `startHelper` twice logs two `start` entries with no matching `stop`, and `stopHelper` logs `stop` even when the helper was never started, producing invalid state transitions and an audit trail that cannot be trusted for compliance. Track a per-helper running set (e.g. `private readonly running = new Set<string>()`) and refuse/log invalid transitions.",
+   "suggestion_code": "    if (this.running.has(helperId)) {\n      return { ok: false, error: `${helperId}: helper already running` };\n    }\n    this.running.add(helperId);\n    this.audit.push({ at, helperId, action: \"start\", detail: \"helper started by user request\" });\n    return { ok: true };",
+   "existing_code": "    this.audit.push({ at, helperId, action: \"start\", detail: \"helper started by user request\" });\n    return { ok: true };",
+   "start_line": 78,
+   "end_line": 79,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/storage/src/consent.ts",
+   "content": "`entries()` returns the live `AuditEntry` objects and `get()` returns the live `ConsentRecord` stored in the map (`grant()` also returns the inserted object), so callers can mutate the audit trail or recorded consent state in place. Return defensive copies (or freeze them / expose readonly views) so the stored records cannot be tampered with.",
+   "suggestion_code": "  entries(): AuditEntry[] {\n    return this.audit.map((e) => ({ ...e }));\n  }",
+   "existing_code": "  entries(): AuditEntry[] {\n    return [...this.audit];\n  }",
+   "start_line": 86,
+   "end_line": 88,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/storage/src/consent.ts",
+   "content": "`textHash` is stored verbatim and never validated against a hash of `consentTextFor(helperId)`, and `startHelper()` does not re-verify it. A caller can record consent for text the user never saw, and after the consent text changes the stale grant remains valid. Compute the hash from `consentTextFor(helperId)` in `grant()` (or at least verify it) and re-check it in `startHelper()` before allowing a start.",
+   "existing_code": "  grant(helperId: string, textHash: string, at: string = new Date().toISOString()): ConsentRecord {",
+   "start_line": 52,
+   "end_line": 52,
+   "category": "security",
+   "severity": "high"
+  },
+  {
+   "path": "packages/storage/src/consent.ts",
+   "content": "Every method accepts a caller-controlled `at` defaulting to the local clock, so consent and audit timestamps can be backdated or set inconsistently across callers, making cross-source ordering unreliable. For an audit trail, derive timestamps internally (or validate a single trusted clock source) rather than trusting the caller.",
+   "existing_code": "  startHelper(helperId: string, at: string = new Date().toISOString()): { ok: true } | { ok: false; error: string } {",
+   "start_line": 74,
+   "end_line": 74,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/storage/src/consent.ts",
+   "content": "Consents and the audit log live only in memory, so all recorded consent and the privileged-helper audit history are lost on restart. The stated requirement (audit trail for privileged helpers) is not durable across a process restart. Persist and reload both through the storage layer.",
+   "existing_code": "  private readonly consents = new Map<string, ConsentRecord>();\n  private readonly audit: AuditEntry[] = [];",
+   "start_line": 49,
+   "end_line": 50,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "analysis/src/autolight_analysis/protocol.py": [
+  {
+   "path": "analysis/src/autolight_analysis/protocol.py",
+   "content": "`os.write` may perform a partial write and its return value (bytes written) is ignored. fd 1 is a pipe to the supervisor; a JSON frame larger than PIPE_BUF (4096 bytes on Linux) \u2014 very plausible for analysis results \u2014 can be written only partially, silently truncating/corrupting the frame and desynchronising the newline-delimited protocol stream. Loop until all bytes are written.",
+   "suggestion_code": "    def write(self, frame: dict) -> None:\n        data = (json.dumps(frame) + \"\\n\").encode()\n        with self._lock:\n            view = memoryview(data)\n            while view:\n                written = os.write(self._fd, view)\n                view = view[written:]",
+   "existing_code": "    def write(self, frame: dict) -> None:\n        data = (json.dumps(frame) + \"\\n\").encode()\n        with self._lock:\n            os.write(self._fd, data)",
+   "start_line": 96,
+   "end_line": 99,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/protocol.py",
+   "content": "Because `**body` is spread last, any caller-supplied key (e.g. `ok_frame(ident, v=99, id=\"other\", type=\"error\")`) silently overrides the reserved `v`/`id` fields, emitting a frame whose version/id does not match the request. Put the reserved fields after the body so the protocol invariants always win.",
+   "suggestion_code": "def ok_frame(ident: str | None, **body: object) -> dict:\n    return {**body, \"v\": PROTOCOL_VERSION, \"id\": ident}",
+   "existing_code": "def ok_frame(ident: str | None, **body: object) -> dict:\n    return {\"v\": PROTOCOL_VERSION, \"id\": ident, **body}",
+   "start_line": 75,
+   "end_line": 76,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/protocol.py",
+   "content": "Check-then-act on the module global `_PROTOCOL_FD` is unlocked: two threads entering `protect_stdout()` concurrently (e.g. two `FrameWriter()` calls whose `fd` defaults to `None`) both see `None`, both run `os.dup(1)`, and one fd is leaked / stdout may be redirected twice. Guard the initialization with a module-level lock (double-checked) so the function is truly idempotent under concurrency.",
+   "existing_code": "    global _PROTOCOL_FD\n    if _PROTOCOL_FD is not None:\n        return _PROTOCOL_FD\n    kept = os.dup(1)",
+   "start_line": 35,
+   "end_line": 38,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/protocol.py",
+   "content": "If `os.dup2(2, 1)` fails the failure is silently swallowed, leaving fd 1 still connected to the protocol channel while the function reports success. Third-party C-level prints (HuggingFace progress, native libs) would then write directly into the frame stream and corrupt it. At minimum log the failure (via `log_event`) or surface it, since the whole stdout-discipline guarantee depends on this step.",
+   "suggestion_code": "    try:\n        os.dup2(2, 1)\n    except OSError as e:\n        log_event(\"protect-stdout-dup2-failed\", error=str(e))",
+   "existing_code": "    with contextlib.suppress(OSError):\n        os.dup2(2, 1)",
+   "start_line": 40,
+   "end_line": 41,
+   "category": "bug",
+   "severity": "medium"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/protocol.py",
+   "content": "`start()` is not synchronized and never assigns `_thread` before spawning, so two concurrent `start()` calls each observe `_thread is None` and spawn duplicate heartbeat threads. Also, once `stop()` has been called `_thread` stays non-None, so a subsequent `start()` silently no-ops (heartbeat can never be restarted). Guard the check/set with a lock and reset `_thread` on stop, or document/enforce single-shot lifecycle.",
+   "existing_code": "    def start(self) -> None:\n        if self._thread is not None:\n            return\n        self._thread = threading.Thread(",
+   "start_line": 113,
+   "end_line": 116,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "analysis/src/autolight_analysis/protocol.py",
+   "content": "`stop()` only sets the event and does not join the heartbeat thread, so it returns while the thread may still be mid-write; callers cannot know the heartbeat has actually ceased (e.g. before shutting down the writer/process). Consider `self._thread.join(timeout=...)` and clearing `_thread` after stop.",
+   "existing_code": "    def stop(self) -> None:\n        self._stop.set()",
+   "start_line": 121,
+   "end_line": 122,
+   "category": "bug",
+   "severity": "low"
+  }
+ ]
+}

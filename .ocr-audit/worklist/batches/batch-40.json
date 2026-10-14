@@ -1,0 +1,257 @@
+{
+ "test-fixtures/analysis/trackmodel-v2.fixture.json": [
+  {
+   "path": "test-fixtures/analysis/trackmodel-v2.fixture.json",
+   "content": "Coverage status contradicts the embedded native data. `analysisCoverage2.inputs` marks `native.rekordbox.cues` (and `native.rekordbox.waveforms`) as `absent`, yet `nativeAnalysis.rekordbox` contains a cue entry and `waveformFlags.hasWaveform` is `true`. A parity/readiness fixture whose input flags disagree with the data it carries can let tests pass while the coverage/readiness flags are wrong. Reconcile the input statuses with the embedded native data (e.g. mark both `present`, or drop the corresponding native data).",
+   "existing_code": "\"native.rekordbox.cues\":{\"status\":\"absent\"}",
+   "start_line": 0,
+   "end_line": 0,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "test-fixtures/analysis/trackmodel-v2.fixture.json",
+   "content": "This gridWarning cannot be produced by the current producer and encodes inconsistent coordinates. In `analysis/src/autolight_analysis/metrical.py` `metrical_vote`:\n- `evidence` is emitted as `f\"{name}:offset-median-{median}ms\"` / `f\"{name}:p95-{p95}ms\"` (e.g. `beat-this:offset-median-60ms`), not the bare `beat-this:offset` used here.\n- `beatRange` is set to `[1, len(native_times)]`, i.e. `[1,4]`; but the grid's beats are 0-indexed (`index` 0\u20133), so `[1,4]` exceeds the valid max index 3 (off-by-one coordinate mismatch).\n- `compare_grids` short-circuits to no warning when `n < minAnchors` (default 32), so a 4-beat grid cannot yield any warning under default config.\nThe fixture therefore validates a warning shape/range the pipeline never emits; align the evidence string, `beatRange` coordinate base, and anchor count with the producer (or with an explicitly lowered `minAnchors`).",
+   "existing_code": "{\"source\":\"beat-this\",\"medianOffsetMs\":60,\"p95OffsetMs\":80,\"driftMs\":5,\"evidence\":[\"beat-this:offset\"],\"beatRange\":[1,4],\"segments\":[]}",
+   "start_line": 0,
+   "end_line": 0,
+   "category": "bug",
+   "severity": "medium"
+  }
+ ],
+ "analysis/tests/test_structure.py": [
+  {
+   "path": "analysis/tests/test_structure.py",
+   "content": "Vacuous assertion: `all(...)` over an empty `hits` list is always `True`, so this test passes even when `detect_drops` returns zero drop events. With this input (`kinds = [\"chorus\"] * 64`, empty `builds`, no ML boundaries) the jump at beat 16 has no structural context (`on_boundary`/`near_build`/`ml_hit` are all False), so the detector emits no drop and the dedupe path is never exercised \u2014 the test cannot detect a machine-gun-drops regression. Assert at least one drop is produced before checking spacing.",
+   "suggestion_code": "    assert hits, \"expected at least one drop to exercise dedupe\"\n    assert all(b - a >= 8 for a, b in pairwise(hits)), f\"machine-gun drops: {hits}\"",
+   "existing_code": "    assert all(b - a >= 8 for a, b in pairwise(hits)), f\"machine-gun drops: {hits}\"",
+   "start_line": 65,
+   "end_line": 65,
+   "category": "test",
+   "severity": "high"
+  },
+  {
+   "path": "analysis/tests/test_structure.py",
+   "content": "Dead no-op expression: `[0.0] * 0` is an empty list, so this is equivalent to `bass = _flat(64)`. The concatenation conveys no intent and looks like a leftover from an aborted input change; it also obscures that this test intentionally uses flat bass.",
+   "suggestion_code": "    bass = _flat(64)",
+   "existing_code": "    bass = _flat(64) + [0.0] * 0",
+   "start_line": 29,
+   "end_line": 29,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "analysis/tests/test_structure.py",
+   "content": "Shallow evidence check: `\"evidence\" in b` only verifies the key exists, so a build event with empty/placeholder evidence would still pass. Assert the evidence is a non-empty collection to actually validate the provenance contract.",
+   "suggestion_code": "    assert all(isinstance(b.get(\"evidence\"), list) and b[\"evidence\"] for b in builds)",
+   "existing_code": "    assert all(\"evidence\" in b for b in builds)",
+   "start_line": 18,
+   "end_line": 18,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/electron/services/secrets-service.test.ts": [
+  {
+   "path": "apps/desktop/electron/services/secrets-service.test.ts",
+   "content": "This plaintext-persistence assertion is effectively vacuous. `SecretVault.flush()` writes `toBase64(crypto.encryptString(...))`, and `PLAIN` contains `-`, which cannot appear in the base64 alphabet, so `bytes.includes(PLAIN)` can never be true regardless of whether encryption actually happened. Combined with the transparent fake cipher (`encryptString` returns `enc(<plaintext>)`, so the \"encrypted\" bytes still contain the secret verbatim), the test would still pass even if encryption were removed and the vault wrote `toBase64(JSON.stringify(persist))` directly. Make the fake cipher opaque (e.g. XOR each byte with a fixed key) and assert against the base64-decoded blob so the check genuinely detects a missing/identity encryption step.",
+   "existing_code": "    expect(bytes.includes(PLAIN)).toBe(false);",
+   "start_line": 58,
+   "end_line": 58,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/services/secrets-service.test.ts",
+   "content": "Test name promises the cloud key is retained (\"keeps the cloud key\"), but the body only sets/checks the memory-only agent token \u2014 the cloud key is never set and never asserted. The test can pass regardless of a cloud-key persistence regression, so the stated guarantee is unverified. Set `govee.cloud.apiKey` before the restart and assert it is still retrievable (in addition to the agent token being gone), or rename the test to match what it actually verifies.",
+   "existing_code": "  it(\"loses the agent token across a restart but keeps the cloud key\", async () => {",
+   "start_line": 63,
+   "end_line": 63,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/services/secrets-service.test.ts",
+   "content": "Removal durability is never verified across a restart. The test checks only the in-memory `getSecret` after `removeSecret`, then stops. `removeSecret` ultimately calls `flush()`, which for an empty persistent set writes `clearBlob()` (\"blob\": null). If `clearBlob` were a no-op (or wrongly rewrote the old blob), the value would remain in the on-disk file and a subsequent start would resurrect it \u2014 yet this test would still pass. Add a third `started(file)` cycle and assert `getSecret(\"govee.cloud.apiKey\")` is missing after restart.",
+   "existing_code": "    expect(second.removeSecret(\"govee.cloud.apiKey\")).toMatchObject({ ok: true });",
+   "start_line": 47,
+   "end_line": 47,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/electron/services/secrets-service.test.ts",
+   "content": "The test is titled \"redacts every live value at log boundaries\" but only the persisted cloud key (`PLAIN`) is set before calling `redactSecrets`/`liveValues()`. The memory-only agent token is a live value too (`liveValues()` returns both ids), yet it is never exercised, so a leak of in-memory secrets through redaction would go undetected. Also set `agent.apiToken` and assert its value is redacted from the same line.",
+   "existing_code": "    expect(redactSecrets(line, svc.liveValues())).toBe(\"fetch with [redacted] failed, retry\");",
+   "start_line": 99,
+   "end_line": 99,
+   "category": "test",
+   "severity": "medium"
+  }
+ ],
+ "apps/desktop/electron/services/simulator-show-seed.ts": [
+  {
+   "path": "apps/desktop/electron/services/simulator-show-seed.ts",
+   "content": "Data integrity: every one of the ~328 beats in this seed grid carries `beatInBar: 1`, so the meter never cycles 1\u20134. This is not inert: `packages/show-runtime/src/index.ts` derives downbeats with `model.beatGrid.beats.filter((b) => b.beatInBar === 1)` (see its comment `Native downbeats (beatInBar === 1)`). Fed through the real planner/runtime that this seed drives, every beat \u2014 including beat indices that should be bar boundaries \u2014 will be classified as a native downbeat, so bar-aligned rendering and section-boundary logic in the simulator loop will be exercised against a corrupt grid. Either the fixture is wrong or the native-live downbeat derivation upstream is wrong; regenerate this seed (and its source fixture) with correctly cycling `beatInBar` values, otherwise the simulator's bar behaviour is not representative.",
+   "existing_code": "\"beatGrid\":{\"beats\":[{\"beatInBar\":1,\"bpm\":126,\"index\":0,\"sourceTimeMs\":406}",
+   "start_line": 0,
+   "end_line": 0,
+   "category": "bug",
+   "severity": "high"
+  },
+  {
+   "path": "apps/desktop/electron/services/simulator-show-seed.ts",
+   "content": "Several beats carry non-integer floating-point artifacts (e.g. `index: 33 \u2192 16120.000000000002`, `index: 67 \u2192 32310.000000000004`, `index: 136 \u2192 65168.00000000001`). Consumers do strict-value timing math on this field \u2014 `packages/storage/src/validation.ts` asserts monotonicity with `cur.sourceTimeMs > prev.sourceTimeMs`, and `packages/contracts/src/index.ts` interpolates with it. The artifacts happen not to break the strict-greater check here, but such values make timing/fixture assertions brittle and can cause flaky drift in any test that compares against rounded/expected millisecond values. Prefer clean integer (or consistently rounded) `sourceTimeMs` values in seed/fixture data.",
+   "existing_code": "{\"beatInBar\":1,\"bpm\":126,\"index\":33,\"sourceTimeMs\":16120.000000000002}",
+   "start_line": 0,
+   "end_line": 0,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "apps/desktop/electron/services/simulator-show-seed.ts",
+   "content": "The provenance comment claims this module holds the \"exact bytes\" of the two fixture files, but the constants below are minified JSON while the referenced fixtures are stored pretty-printed (values are equivalent, byte representation is not). The stated regeneration procedure (\"re-copying those two files\") would therefore not reproduce these bytes and would turn each constant into a multi-line literal. Please correct the comment to say the values are copied, or record the exact minification step so future regeneration stays reproducible.",
+   "existing_code": "// Provenance: exact bytes of test-fixtures/analysis/live-deck1.trackmodel.json\n// plus reference-style.json at commit ac01416. Copied here so the test-build",
+   "start_line": 2,
+   "end_line": 3,
+   "category": "documentation",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/src/features/setup/rkbx-setup-panel.test.ts": [
+  {
+   "path": "apps/desktop/src/features/setup/rkbx-setup-panel.test.ts",
+   "content": "These assertions do not actually prove the receiving state was rendered. `toContain(\"receiving\")` matches the step id `receiving` that `StepRow` always emits (follow.ts pushes the `receiving` step for every report, rendered as `<strong>receiving:</strong>`), and `toContain(\"sudo\")` matches the statically imported `RKBX_SUDO_COPY` that is rendered unconditionally. Both would still pass if the panel rendered `no-packets` or `unsupported-version` instead. Assert on the state-specific copy instead, e.g. `toContain(\"State: receiving\")` and `toContain(\"Receiving packets. No further setup needed.\")`, and drop the `sudo` assertion or move it to a check that the remedy is absent.",
+   "existing_code": "    expect(html).toContain(\"receiving\");",
+   "start_line": 19,
+   "end_line": 19,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/features/setup/rkbx-setup-panel.test.ts",
+   "content": "This test never renders `SetupView`/`RkbxSetupPanel`; it only inspects the `STEP_LABELS` constants. The behavior named in the test title \u2014 the controller's self-route button being suppressed \u2014 lives in the render guard `!ready && meta.route !== \"setup\"` in setup-view.tsx and is not exercised here, so that guard could regress while this test stays green. Render the view (or the step list) and assert the `controller` button is absent for a not-ready state, and that `dj`/`library`/`lights` produce the expected routed buttons.",
+   "existing_code": "    expect(STEP_LABELS.dj.route).toBe(\"live\");",
+   "start_line": 32,
+   "end_line": 32,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/features/setup/rkbx-setup-panel.test.ts",
+   "content": "`re-sign` also appears in the always-rendered `RKBX_RESIGN_COPY`/`RKBX_SUDO_COPY` strings, so this assertion passes even if the unsupported-version remedy is dropped or wrong. The test name also promises the \"specific missing step\", but nothing asserts it. Assert the version-specific remedy text (e.g. `toContain(\"is not a version rkbx_link supports here\")`) and the failing step, e.g. `toContain('aria-label=\"version missing\"')`.",
+   "existing_code": "    expect(html).toContain(\"re-sign\");",
+   "start_line": 55,
+   "end_line": 55,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "apps/desktop/src/features/setup/rkbx-setup-panel.test.ts",
+   "content": "The URL is hardcoded here even though `RKBX_LINK_PROJECT_URL` is the canonical source in `@autolight/rekordbox-live/setup-assistant` (already re-exported/imported by the component). Duplicating the literal means a legitimate URL change breaks the test while a wrong URL in the component could still match. Import `RKBX_LINK_PROJECT_URL` and assert against it; the author-time \"curled 200\" note is not validated by the test and should not stand in for a link check.",
+   "existing_code": "    expect(html).toContain(\"https://github.com/grufkork/rkbx_link\");",
+   "start_line": 22,
+   "end_line": 22,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "apps/desktop/src/features/setup/rkbx-setup-panel.test.ts",
+   "content": "The no-packets snapshot sets `lastAddress: null`, but the only assertion checks the state string; it never verifies the missing-address fallback (`snapshot.packets.lastAddress ?? \"none\"` in the panel). A regression that rendered `null`/`undefined` or the wrong placeholder would still pass. Assert the rendered fallback, e.g. `toContain(\"last none\")`, alongside `no-packets`.",
+   "existing_code": "    expect(renderToStaticMarkup(createElement(RkbxSetupPanel, { snapshot: noPackets }))).toContain(\"no-packets\");",
+   "start_line": 45,
+   "end_line": 45,
+   "category": "test",
+   "severity": "low"
+  },
+  {
+   "path": "apps/desktop/src/features/setup/rkbx-setup-panel.test.ts",
+   "content": "The `UNAVAILABLE_ON_THIS_DEVICE` branch is driven by prefix matching against `RKBX_MACOS_VERSIONS` (`7.2.8`/`7.2.17`/`7.2.18`), but only the build-tag sample `7.2.10.0333` is covered. There is no boundary coverage (e.g. `7.2.17` supported, `7.2.19` unsupported, whitespace-padded input), so an off-by-one or format change in the version gate would go unnoticed. Add cases around the threshold.",
+   "existing_code": "      installedVersion: \"7.2.10.0333\",",
+   "start_line": 49,
+   "end_line": 49,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/cloud/src/client.test.ts": [
+  {
+   "path": "packages/cloud/src/client.test.ts",
+   "content": "The disabled gate is only proven with `cloudAllowed:false` (both the default-off client at line 129 and this `enabled:true, cloudAllowed:false` case). An implementation that ignores `enabled` entirely and checks only `cloudAllowed` would satisfy all three existing cases, contradicting the test title \"unless both ... hold\". Add an `enabled:false, cloudAllowed:true` case to actually prove both flags are required.",
+   "suggestion_code": "    const half = new CloudMetadataClient({\n      apiKey: \"k\",\n      fetchFn: halfStub.fetchFn,\n      enabled: true,\n      cloudAllowed: false,\n    });\n    await expect(half.listDevices()).rejects.toBeInstanceOf(CloudDisabledError);\n    const gateStub = ok(DEVICES_BODY);\n    const gate = new CloudMetadataClient({\n      apiKey: \"k\",\n      fetchFn: gateStub.fetchFn,\n      enabled: false,\n      cloudAllowed: true,\n    });\n    await expect(gate.listDevices()).rejects.toBeInstanceOf(CloudDisabledError);",
+   "existing_code": "    const half = new CloudMetadataClient({\n      apiKey: \"k\",\n      fetchFn: halfStub.fetchFn,\n      enabled: true,\n      cloudAllowed: false,\n    });\n    await expect(half.listDevices()).rejects.toBeInstanceOf(CloudDisabledError);",
+   "start_line": 132,
+   "end_line": 138,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/cloud/src/client.test.ts",
+   "content": "Only the `lamp` device key is ever used, so a client with a single global minute counter (instead of a per-device one) would still pass this test. Add a call with a distinct device key to assert that device budgets are isolated.",
+   "suggestion_code": "    await client.listDevices({ deviceKey: \"lamp\" });\n    await client.listDevices({ deviceKey: \"lamp\" });\n    await expect(client.listDevices({ deviceKey: \"lamp\" })).rejects.toBeInstanceOf(CloudRateLimitError);\n    // A distinct device keeps its own independent minute budget.\n    await client.listDevices({ deviceKey: \"strip\" });",
+   "existing_code": "    await client.listDevices({ deviceKey: \"lamp\" });\n    await client.listDevices({ deviceKey: \"lamp\" });\n    await expect(client.listDevices({ deviceKey: \"lamp\" })).rejects.toBeInstanceOf(CloudRateLimitError);",
+   "start_line": 161,
+   "end_line": 163,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/cloud/src/client.test.ts",
+   "content": "The test title says \"takes the first known key\", but only `zoneCount` is supplied, so the key precedence (`segments` > `segmentCount` > `zoneCount`) is never actually asserted \u2014 a reversed or unordered lookup would still pass. Supply multiple keys and assert the first known one wins.",
+   "suggestion_code": "      properties: { segments: 14, zoneCount: 8.9 },\n    });\n    expect(zoned.capabilities.declaredSegmentCount).toBe(14);",
+   "existing_code": "      properties: { zoneCount: 8.9 },\n    });\n    expect(zoned.capabilities.declaredSegmentCount).toBe(8);",
+   "start_line": 235,
+   "end_line": 237,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/cloud/src/client.test.ts",
+   "content": "The show-tick guard is only exercised through `listDevices`. `listScenes` also routes through `guard(...)`; a regression that dropped `ensureNotShowTick` there would go unnoticed. Add a `listScenes` case (and, ideally, assert a normal non-tick call still succeeds).",
+   "suggestion_code": "    await expect(client.listDevices({ fromShowTick: true })).rejects.toBeInstanceOf(\n      CloudFrameRejectedError,\n    );\n    await expect(\n      client.listScenes(\"AA:BB:CC:DD:EE:01\", \"H6076\", { fromShowTick: true }),\n    ).rejects.toBeInstanceOf(CloudFrameRejectedError);\n    expect(CLOUD_CARRIES_FRAMES).toBe(false);",
+   "existing_code": "    await expect(client.listDevices({ fromShowTick: true })).rejects.toBeInstanceOf(\n      CloudFrameRejectedError,\n    );\n    expect(CLOUD_CARRIES_FRAMES).toBe(false);",
+   "start_line": 143,
+   "end_line": 146,
+   "category": "test",
+   "severity": "medium"
+  }
+ ],
+ "packages/govee/src/firmware.test.ts": [
+  {
+   "path": "packages/govee/src/firmware.test.ts",
+   "content": "This test only covers the `known && segmentedVerified === true` path. The distinct branch in `firmware.ts` for known firmware with an *unverified* channel (`known && !segmentedVerified`, lines 58\u201362, which returns `\"verified-fallback\"` with the warning \"segmented channel not verified on this unit\") is never exercised, so a regression on that path (e.g. accidentally returning `\"segmented\"`) would go undetected. Add a case such as `policy.decide(\"1.02.03\", \"1.02.03\", false)` asserting `gate === \"verified-fallback\"` and that non-null warning.",
+   "existing_code": "    const decision = policy.decide(\"1.02.03\", \"1.02.03\", true);",
+   "start_line": 11,
+   "end_line": 11,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/govee/src/firmware.test.ts",
+   "content": "The warning for the unreadable/unmeasured branch is only asserted with `not.toBeNull()`, so the actual message content is unverified \u2014 a wrong, truncated, or misleading warning would still pass. Assert on a distinguishing substring (e.g. `toContain(\"unreadable\")`) so message regressions are caught. Note also that this combination (`saved = \"1.02.03\"`, `current = \"unmeasured\"`) is the only one exercising the `segmentedVerified === true` direction here.",
+   "existing_code": "    expect(kept.gate).toBe(\"segmented\");\n    expect(kept.warning).not.toBeNull();",
+   "start_line": 28,
+   "end_line": 29,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/govee/src/firmware.test.ts",
+   "content": "This asserts only the `empty string + segmentedVerified === false` combination. The other two combinations of the unmeasured branch's ternary are untested: `decide(\"1.02.03\", \"\", true)` should yield `\"segmented\"`, and `decide(\"1.02.03\", \"unmeasured\", false)` should yield `\"verified-fallback\"`. Without them, a swap/inversion of the `segmentedVerified ? ... : ...` mapping in `firmware.ts` lines 44\u201350 would not be caught. The warning content is again only checked for non-nullness.",
+   "existing_code": "    const ungated = policy.decide(\"1.02.03\", \"\", false);\n    expect(ungated.gate).toBe(\"verified-fallback\");\n    expect(ungated.warning).not.toBeNull();",
+   "start_line": 30,
+   "end_line": 32,
+   "category": "test",
+   "severity": "medium"
+  },
+  {
+   "path": "packages/govee/src/firmware.test.ts",
+   "content": "The jump from `now = 0` to `now = 2000` skips the window boundary entirely, so an off-by-one in the eviction condition (`now - rearmAt[0] >= windowMs` in `firmware.ts`) would not be detected. Add assertions at exactly `now = 999` (fourth `mayRearm()` still `false`) and `now = 1000` (slides and returns `true`). Also assert `rearmCount()` after the slide (should be `1`, the just-pushed re-arm) to lock the reset semantics, since the comment claims the window slides.",
+   "existing_code": "    now = 2000;",
+   "start_line": 43,
+   "end_line": 43,
+   "category": "test",
+   "severity": "medium"
+  }
+ ]
+}

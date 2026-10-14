@@ -1,0 +1,99 @@
+{
+ "packages/ble/vitest.config.ts": [
+  {
+   "path": "packages/ble/vitest.config.ts",
+   "content": "Unvalidated, unfiltered alias generation. `readdirSync(packages)` returns every entry under `packages/`, not just directories, and each one is unconditionally mapped to `<name>/src/index.ts` with no existence check. Consequences:\n- Any non-directory entry sitting in `packages/` (e.g. `.DS_Store` on macOS, a stray `README.md`/lockfile) becomes a bogus alias `@autolight/<entry>`.\n- Any `packages/<dir>` that is not a real workspace package (or lacks `src/index.ts`) silently yields an alias pointing at a non-existent file, so a genuine module-resolution failure for that package surfaces as a confusing Vite resolution error instead of a clear config-time failure.\n\nThe root `vitest.config.ts` already handles this by using `readdirSync(workspaceSrc, { withFileTypes: true }).filter((e) => e.isDirectory())`. Mirror that here, and ideally skip entries whose `src/index.ts` does not exist. Adding a short comment explaining the dynamic generation (as the root config does) would also help.",
+   "suggestion_code": "const workspaceAlias = Object.fromEntries(\n  readdirSync(packages, { withFileTypes: true })\n    .filter((e) => e.isDirectory())\n    .map((e) => [",
+   "existing_code": "const workspaceAlias = Object.fromEntries(\n  readdirSync(packages).map((name) => [",
+   "start_line": 8,
+   "end_line": 9,
+   "category": "maintainability",
+   "severity": "low"
+  },
+  {
+   "path": "packages/ble/vitest.config.ts",
+   "content": "Only the bare package barrel is aliased. Vite/`@rollup/plugin-alias` matches a string `find` as a prefix of the specifier, so a subpath import such as `@autolight/controller-flx4/consts` or `@autolight/rekordbox-live/follow` is rewritten to `<pkg>/src/index.ts/consts` and fails to resolve. The root `vitest.config.ts` and `apps/desktop/vitest.config.ts` deliberately prepend a regex subpath alias first (see the \"barrels never swallow `/follow`, `/registry`, `/setup-assistant`\" comment, T-TRU-04 spine fix) precisely to avoid this. The `@autolight/ble` tests do not import cross-package subpaths today, so this is latent, but the config cannot resolve browser-safe subpaths the rest of the monorepo relies on. Add the same regex subpath alias before the barrel aliases.",
+   "existing_code": "  resolve: { alias: workspaceAlias },",
+   "start_line": 16,
+   "end_line": 16,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "packages/storage/src/cache.ts": [
+  {
+   "path": "packages/storage/src/cache.ts",
+   "content": "`deleteWhere` reads the count with `COUNT(*)` and then issues a separate `DELETE`, with no transaction wrapping the two statements. A concurrent writer (another connection/process using the same SQLite file) can insert/delete matching rows between the two calls, so the returned `deleted` count reported in `InvalidationReport` can diverge from the rows actually removed, and the `count > 0` guard can skip a DELETE that has become non-empty. Prefer running the DELETE and deriving the count from the affected-row count (or wrap count+delete in a single transaction) so the reported numbers are accurate.",
+   "existing_code": "  const row = db.get<{ n: number }>(`SELECT COUNT(*) AS n FROM ${table} WHERE ${where}`, params);\n  const count = Number(row?.n ?? 0);\n  if (count > 0) db.run(`DELETE FROM ${table} WHERE ${where}`, params);\n  return count;",
+   "start_line": 147,
+   "end_line": 150,
+   "category": "bug",
+   "severity": "low"
+  },
+  {
+   "path": "packages/storage/src/cache.ts",
+   "content": "The note claims only rows for *other* fingerprints are invalidated, but `native_analysis` is deleted for the track unconditionally (`WHERE track_id = ?`). This mismatch between the reported scope and the actual deletion is misleading; either clarify the note (native analysis is fully re-derived for the track) or scope the deletion if partial reuse is intended.",
+   "existing_code": "        note: `track ${invalidation.trackId} changed on disk; only its derived rows for other fingerprints are invalid`,",
+   "start_line": 218,
+   "end_line": 218,
+   "category": "documentation",
+   "severity": "low"
+  }
+ ],
+ "analysis/tests/conftest.py": [
+  {
+   "path": "analysis/tests/conftest.py",
+   "content": "Precedence inversion + shadowing risk: each iteration uses `sys.path.insert(0, ...)`, so the *last* item wins the front position. The loop therefore ends up with `ROOT/fixtures` ahead of `ROOT` (the reverse of the intended order), and both directories are placed ahead of the standard library and site-packages. Any module in these directories whose name collides with a stdlib/third-party module (or with a module in the tests root) would silently shadow it for the whole pytest session. If the goal is only to make these directories importable (not to give them top priority), prefer `sys.path.append(...)`; if precedence between `ROOT` and `ROOT/fixtures` matters, insert them in the reverse order so the intended one ends up first.",
+   "existing_code": "for extra in (ROOT, ROOT / \"fixtures\"):\n    if str(extra) not in sys.path:\n        sys.path.insert(0, str(extra))",
+   "start_line": 7,
+   "end_line": 9,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "analysis/tests/test_native.py": [
+  {
+   "path": "analysis/tests/test_native.py",
+   "content": "`test_extract_real_anlz` depends on a checked-in binary fixture and asserts fixture-specific exact values (`len(got[\"phrases\"]) == 18`, `> 100` beats, first `rawLabel == \"Intro 2\"`). If the fixture is ever absent (partial checkout, or running tests from an sdist/installed package that ships without `tests/fixtures`), `extract_anlz` raises `FileNotFoundError` and the test errors out instead of skipping; and re-capturing the fixture later would fail the test for reasons unrelated to the code under test. It also duplicates the fixture coverage already in `test_native_full.py` (`test_pqtz_full_fields`/`test_pssi_full_fields`). Consider guarding with a skip when the sample is missing and preferring structural invariants over exact fixture counts.",
+   "existing_code": "    sample = pathlib.Path(__file__).parent / \"fixtures\" / \"anlz-sample\"\n    got = extract_anlz(str(sample))",
+   "start_line": 60,
+   "end_line": 61,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/src/app/main.tsx": [
+  {
+   "path": "apps/desktop/src/app/main.tsx",
+   "content": "The root render is unguarded: if `<Shell />` (or any descendant) throws during render/lifecycle, React 18 unmounts the entire tree and the Electron window goes blank with no fallback UI or error report. A repository-wide search confirms no `ErrorBoundary`/`componentDidCatch` exists anywhere in the codebase, so nothing catches this. Consider wrapping the render in a top-level error boundary (and reporting the error) so a single failing screen degrades gracefully instead of silently blanking the app.",
+   "existing_code": "createRoot(root).render(<Shell />);",
+   "start_line": 7,
+   "end_line": 7,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/src/components/ui/popover.tsx": [
+  {
+   "path": "apps/desktop/src/components/ui/popover.tsx",
+   "content": "`PopoverTitle` is typed as `React.ComponentProps<\"h2\">` but renders a `<div>`. This mismatch lets h2-only attributes (and the expected semantic heading element) through the type while the actual DOM node is a div, so callers relying on the declared type get a node whose semantics/attributes don't match. Either render an `<h2>` or align the type with the rendered element.",
+   "suggestion_code": "function PopoverTitle({ className, ...props }: React.ComponentProps<\"div\">) {",
+   "existing_code": "function PopoverTitle({ className, ...props }: React.ComponentProps<\"h2\">) {",
+   "start_line": 55,
+   "end_line": 55,
+   "category": "bug",
+   "severity": "low"
+  }
+ ],
+ "apps/desktop/src/components/ui/scroll-area.tsx": [
+  {
+   "path": "apps/desktop/src/components/ui/scroll-area.tsx",
+   "content": "`ScrollArea` renders only a single vertical `<ScrollBar />`, and `ScrollBar` is hardcoded to `orientation = \"vertical\"`. Radix sets `overflow-x: hidden` on the viewport while no horizontal scrollbar is registered, so any child content wider than the viewport is silently clipped and cannot be scrolled \u2014 a functional defect for wide/tabular content. Consider mounting a horizontal scrollbar (e.g. conditionally rendering `<ScrollBar orientation=\"horizontal\" />`, or exposing it via a prop) so horizontally overflowing content remains reachable.",
+   "existing_code": "      <ScrollBar />\n      <ScrollAreaPrimitive.Corner />",
+   "start_line": 24,
+   "end_line": 25,
+   "category": "bug",
+   "severity": "low"
+  }
+ ]
+}

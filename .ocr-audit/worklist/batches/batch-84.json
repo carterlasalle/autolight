@@ -1,0 +1,82 @@
+{
+ "packages/reactive-audio/package.json": [
+  {
+   "path": "packages/reactive-audio/package.json",
+   "content": "This package declares `main`/`types` but omits the `exports` map, unlike every sibling package (`controller-flx4`, `config`, `rekordbox-live`), which all publish `exports` with `.` and subpath entries. Under `\"type\": \"module\"` this means consumers cannot use conditional resolution or deep subpath imports (e.g. `@autolight/reactive-audio/dsp` would resolve to a non-existent path instead of `./dist/dsp.js`), and resolution behavior diverges from the rest of the workspace. Add an `exports` map mirroring the siblings.",
+   "suggestion_code": "  \"main\": \"./dist/index.js\",\n  \"types\": \"./dist/index.d.ts\",\n  \"exports\": {\n    \".\": {\n      \"types\": \"./dist/index.d.ts\",\n      \"default\": \"./dist/index.js\"\n    }\n  },",
+   "existing_code": "  \"main\": \"./dist/index.js\",\n  \"types\": \"./dist/index.d.ts\",",
+   "start_line": 5,
+   "end_line": 6,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/renderer/package.json": [
+  {
+   "path": "packages/renderer/package.json",
+   "content": "`@autolight/show-planner` is declared as a runtime `dependency`, but the renderer's non-test source never imports it. A search across `packages/renderer/src` shows `@autolight/show-planner` is only referenced by test files (`src/goldens.test.ts`, `src/spatial.test.ts`); `src/primitive-params.ts` deliberately mirrors the registry via a comment instead of importing it. The parallel test-only dependency `@autolight/simulator` is correctly placed in `devDependencies`, so the placement here is inconsistent and, if this package is ever published, forces the production install to pull in show-planner. Suggest moving it to `devDependencies` next to `@autolight/simulator` (or documenting the runtime re-export if one exists).",
+   "existing_code": "    \"@autolight/show-planner\": \"^0.1.0\",",
+   "start_line": 15,
+   "end_line": 15,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/renderer/vitest.config.ts": [
+  {
+   "path": "packages/renderer/vitest.config.ts",
+   "content": "The alias map is built purely from directory names under `packages/`, with no verification that each directory is actually a workspace package exposing `src/index.ts`. Every entry is hard-wired to `src/index.ts`, so any directory that is not a package, is half-created, is renamed, or uses a different entry point silently produces a bogus alias (e.g. `@autolight/<dir>` -> nonexistent `src/index.ts`). This breaks module resolution for that specifier at import time while the config itself still loads without error, making the failure hard to diagnose. Anchor on real packages and guard the entry file, e.g. only map directories whose `package.json` declares a matching `@autolight/*` name and where `src/index.ts` exists (and prefer the scope name from `package.json` over the raw directory name).",
+   "suggestion_code": "  readdirSync(workspaceSrc, { withFileTypes: true })\n    .filter((e) => e.isDirectory())\n    .map((e) => [`@autolight/${e.name}`, join(workspaceSrc, e.name, \"src\", \"index.ts\")])\n    .filter(([, entry]) => existsSync(entry)),",
+   "existing_code": "  readdirSync(workspaceSrc, { withFileTypes: true })\n    .filter((e) => e.isDirectory())\n    .map((e) => [`@autolight/${e.name}`, join(workspaceSrc, e.name, \"src\", \"index.ts\")]),",
+   "start_line": 9,
+   "end_line": 11,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/show-mixer/src/weights.property.test.ts": [
+  {
+   "path": "packages/show-mixer/src/weights.property.test.ts",
+   "content": "This range assertion is effectively tautological: `deckWeightOf` ultimately returns `Math.min(1, Math.max(0, ...))` (see `deckWeight`/`audibleWeight` in `@autolight/dj-core`), so the invariant can only fail on `NaN` and cannot detect a broken weight formula (wrong crossfader side, ignored `position`, ignored channel fader). The sweep also toggles `master` on every other iteration but never asserts its effect, so an implementation that drops the master bonus entirely still passes this file (the only place master is exercised here). Assert concrete values instead \u2014 e.g. hard-left/hard-right endpoints, monotonic decrease of A / increase of B as `position` rises, and `master: true` > `master: false` at a channel level that does not clamp.",
+   "existing_code": "        const w = deckWeightOf(deck({ channelFader: c / 10, master: (c % 2 === 0) }), { position: p / 10 });\n        expect(w).toBeGreaterThanOrEqual(0);\n        expect(w).toBeLessThanOrEqual(1);",
+   "start_line": 25,
+   "end_line": 27,
+   "category": "test",
+   "severity": "low"
+  }
+ ],
+ "packages/simulator/tsconfig.json": [
+  {
+   "path": "packages/simulator/tsconfig.json",
+   "content": "The `include` pattern pulls in every file under `src`, and this config is used by the emit-based `build` script (`tsc -p tsconfig.json`, see package.json line 8) with no exclusions for test sources. The co-located tests `src/index.test.ts` and `src/govee-lan.test.ts` therefore get compiled and emitted into `dist`, which is the published artifact referenced by `main`/`types` (`./dist/index.js`, `./dist/index.d.ts`). This leaks test code (and its `vitest` devDependency imports) into the shipped package. Consider adding a dedicated build config (e.g. `tsconfig.build.json` that extends this one plus `\"exclude\": [\"src/**/*.test.ts\"]`) and pointing the `build` script at it, keeping this config for `lint`/`typecheck` so tests are still type-checked.",
+   "existing_code": "  \"include\": [\n    \"src\"\n  ]",
+   "start_line": 7,
+   "end_line": 9,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/track-identity/tsconfig.json": [
+  {
+   "path": "packages/track-identity/tsconfig.json",
+   "content": "`include` covers all of `src`, and `npm run build` runs `tsc -p tsconfig.json`, so the colocated test file `src/identity.test.ts` is compiled and emitted into `dist/` (e.g. `dist/identity.test.js`). Since `package.json` declares no `files` field and there is no `.npmignore`, these test artifacts become part of the package's published output, bloating `dist` and pulling test-only imports into the shipped tree. Note tests must stay type-checked, so rather than excluding them here (which would also drop them from `lint`/`typecheck`), consider adding a dedicated build config that excludes test files, e.g. a `tsconfig.build.json` extending this one with `\"exclude\": [\"node_modules\", \"dist\", \"src/**/*.test.ts\"]` (re-list `node_modules`/`dist` because setting `exclude` here overrides the base config's value) and point the `build` script at it.",
+   "suggestion_code": "  \"include\": [\n    \"src\"\n  ],\n  \"exclude\": [\n    \"node_modules\",\n    \"dist\",\n    \"src/**/*.test.ts\"\n  ]",
+   "existing_code": "  \"include\": [\n    \"src\"\n  ]",
+   "start_line": 7,
+   "end_line": 9,
+   "category": "maintainability",
+   "severity": "low"
+  }
+ ],
+ "packages/track-model/package.json": [
+  {
+   "path": "packages/track-model/package.json",
+   "content": "`vitest run --passWithNoTests` makes the test script exit 0 even when zero test files are collected. A package that currently has `src/index.test.ts` will silently report a green CI result if that file is deleted, renamed, or excluded by a vitest pattern \u2014 masking lost coverage behind a passing build. Prefer failing when no tests are discovered (drop the flag, or add an explicit assertion/coverage gate) so regressions in test collection are surfaced. Note this flag is repeated across all workspace packages, so it may be worth fixing consistently.",
+   "existing_code": "\"test\": \"vitest run --passWithNoTests\",",
+   "start_line": 9,
+   "end_line": 9,
+   "category": "test",
+   "severity": "low"
+  }
+ ]
+}
