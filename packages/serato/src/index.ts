@@ -31,7 +31,9 @@ export function parseCrate(buf: Uint8Array): SeratoCrateEntry[] {
     const len = readU32(o + 4);
     o += 8;
 
-    if (o + len > buf.length) break;
+    if (o + len > buf.length) {
+      throw new Error(`crate record overruns the file: ${tag} at ${o - 8} claims ${len} bytes, only ${buf.length - o} left`);
+    }
 
     if (tag === "otrk") {
       let j = o;
@@ -41,7 +43,9 @@ export function parseCrate(buf: Uint8Array): SeratoCrateEntry[] {
         const il = readU32(j + 4);
         j += 8;
 
-        if (j + il > o + len) break;
+        if (j + il > o + len) {
+          throw new Error(`crate row overruns its otrk: ${it} at ${j - 8} claims ${il} bytes, only ${o + len - j} left`);
+        }
 
         if (it === "ptrk") out.push({ path: decodePath(j, il) });
         j += il;
@@ -116,11 +120,16 @@ export function parseBeatGrid(payload: Uint8Array): SeratoTempoRegion[] {
   const out: SeratoTempoRegion[] = [];
 
   for (let i = 0; i < count; i++) {
-    out.push({
-      startSeconds: v.getFloat32(6 + i * 8, false),
-      bpm: v.getFloat32(10 + i * 8, false),
-      beatInBar: 1,
-    });
+    const startSeconds = v.getFloat32(6 + i * 8, false);
+    const bpm = v.getFloat32(10 + i * 8, false);
+
+    // A zero or non-finite tempo would divide into Infinity/NaN downstream
+    // (region lengths, beat lists); loud beats silent (batch-03).
+    if (!Number.isFinite(bpm) || bpm <= 0) {
+      throw new Error(`beatgrid marker ${i} has bpm ${bpm}, expected a finite positive tempo`);
+    }
+
+    out.push({ startSeconds, bpm, beatInBar: 1 });
   }
 
   return out;
@@ -129,6 +138,13 @@ export function parseBeatGrid(payload: Uint8Array): SeratoTempoRegion[] {
 export function tempoRegionsToBeats(regions: SeratoTempoRegion[]): { index: number; beatInBar: 1 | 2 | 3 | 4; sourceTimeMs: number; bpm: number }[] {
   const out: { index: number; beatInBar: 1 | 2 | 3 | 4; sourceTimeMs: number; bpm: number }[] = [];
   regions.forEach((r, ri) => {
+    // A zero or non-finite tempo would divide into Infinity/NaN region
+    // lengths and beat spacing below; fail loudly here too, since callers
+    // can hand-build regions without parseBeatGrid (batch-03).
+    if (!Number.isFinite(r.bpm) || r.bpm <= 0) {
+      throw new Error(`tempo region ${ri} has bpm ${r.bpm}, expected a finite positive tempo`);
+    }
+
     const startBeat = out.length;
     const nextStart = regions[ri + 1]?.startSeconds;
     const regionLen = nextStart !== undefined ? nextStart - r.startSeconds : 60 / r.bpm * 4;

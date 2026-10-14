@@ -1,4 +1,108 @@
 {
+  "batch-03": [
+    {
+      "path": "analysis/src/autolight_analysis/config_schema.json",
+      "line": 3,
+      "verdict": "fixed-earlier",
+      "evidence": "Root schema carries additionalProperties: false in the regenerated output (generator-owned). Verified 2026-10-14."
+    },
+    {
+      "path": "analysis/src/autolight_analysis/config_schema.json",
+      "line": 646,
+      "verdict": "fixed-earlier",
+      "evidence": "govee.lan.interfaces default is now the empty array (catalog row []), not the string sentinel. Verified 2026-10-14."
+    },
+    {
+      "path": "analysis/src/autolight_analysis/config_schema.json",
+      "line": 989,
+      "verdict": "fixed-earlier",
+      "evidence": "live.prolink.interfaces default is now the empty array. Verified 2026-10-14."
+    },
+    {
+      "path": "analysis/src/autolight_analysis/config_schema.json",
+      "line": 217,
+      "verdict": "fixed-earlier",
+      "evidence": "mixer.owner.factorWeights default is a JSON object, not a stringified map. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/serato/src/index.ts",
+      "line": 97,
+      "verdict": "live-verified-format",
+      "evidence": "The header documents the live-verified layout (version, u32 reserved, u8 count at offset 5): count is the low byte of the claimed u32 in both readings and real crates carry zero high bytes. ScratchBeat4/5 verified 85/88 BPM."
+    },
+    {
+      "path": "packages/serato/src/index.ts",
+      "line": 101,
+      "verdict": "live-verified-format",
+      "evidence": "f32 position + f32 BPM per marker is the format that decoded 85/88 BPM from live ScratchBeat files; a u32-beats layout would produce denormals, not those tempos."
+    },
+    {
+      "path": "packages/serato/src/index.ts",
+      "line": 79,
+      "verdict": "by-design",
+      "evidence": "remoteToDeckState is a message mapper: absent fields arrive as null and pass through as null (the reset), and the live path (DeckGenerationMapper) treats faders as physical mixer state that survives track loads. No code change."
+    },
+    {
+      "path": "packages/show-planner/src/hierarchy.ts",
+      "line": 94,
+      "verdict": "by-design",
+      "evidence": "First qualifying build event wins per P-35/P-36 so staged ramps span the full build-to-impact range; the in-code comment states the intent. Not a nearest-preceding lookup."
+    },
+    {
+      "path": "apps/desktop/electron/govee-lan.ts",
+      "line": 485,
+      "verdict": "fixed-by-commit",
+      "evidence": "The reply socket now enables SO_BROADCAST before any discovery rung; directed/global broadcast sends no longer fail with EACCES (batch-03 fix)."
+    },
+    {
+      "path": "apps/desktop/electron/govee-lan.ts",
+      "line": 884,
+      "verdict": "by-design",
+      "evidence": "openStream awaits only ensureArmed (chain-serialized) and its teardown/creation section is fully synchronous between awaits, so concurrent callers resolve last-writer-wins without interleaving. No code change."
+    },
+    {
+      "path": "apps/desktop/electron/govee-lan.ts",
+      "line": 536,
+      "verdict": "fixed-by-commit",
+      "evidence": "stop() now flushes a registry save queued inside the throttle window before the sockets go down (batch-03 fix)."
+    },
+    {
+      "path": "apps/desktop/electron/govee-lan.ts",
+      "line": 503,
+      "verdict": "fixed-by-commit",
+      "evidence": "The powerMonitor resume hook installs once per manager instance (powerHookInstalled), so start/stop cycles no longer accumulate listeners (batch-03 fix)."
+    },
+    {
+      "path": "apps/desktop/electron/govee-lan.ts",
+      "line": 174,
+      "verdict": "fixed-by-commit",
+      "evidence": "optionsFromConfig now maps govee.lan.stream.keepaliveMs (batch-03 fix)."
+    },
+    {
+      "path": "apps/desktop/src/features/venue/venue-view.tsx",
+      "line": 45,
+      "verdict": "fixed-by-commit",
+      "evidence": "The config/get seed now skips when the user has typed (scanTargetsTouched ref), so in-flight loads cannot clobber typed targets (batch-03 fix)."
+    },
+    {
+      "path": "apps/desktop/src/features/venue/venue-view.tsx",
+      "line": 19,
+      "verdict": "fixed-by-commit",
+      "evidence": "The magic config key is hoisted to one SCAN_LIST_KEY used by load/seed/save; the resnet hostnames stay as the documented owner-rig seed (see comment above the constant)."
+    },
+    {
+      "path": "packages/serato/src/index.ts",
+      "line": 114,
+      "verdict": "by-design",
+      "evidence": "The final region's 4-beat tail is a bounded choice: the function receives no track length and the consumers tolerate it; the bpm hazard that fed this division is guarded at both boundaries (parseBeatGrid + tempoRegionsToBeats)."
+    },
+    {
+      "path": "packages/serato/src/index.ts",
+      "line": 115,
+      "verdict": "fixed-by-commit",
+      "evidence": "tempoRegionsToBeats throws on non-finite/zero bpm before any 60/r.bpm division, so count can no longer become NaN/Infinity (batch-03 fix)."
+    }
+  ],
   "batch-02": [
     {
       "path": "packages/config/src/store.ts",

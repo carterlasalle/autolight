@@ -882,7 +882,9 @@ describe("ipc handlers have real effects (T-TRU-03)", () => {
           // SAFETY: device records carry name/enabled/firmware; the tile
           // rows below read exactly these fields.
           const devices = scanned["devices"] as { name: string; enabled: boolean; firmware: string }[];
-          expect(devices[0]?.name).toBe("AA:BB:CC:DD:EE:01");
+          // A fresh H6076 adopts its SKU default name (DEFAULT_NAMES); the
+          // MAC is the fallback only for unknown SKUs (govee-lan.test.ts).
+          expect(devices[0]?.name).toBe("Lamp");
           expect(devices[0]?.enabled).toBe(true);
           expect(devices[0]?.firmware).toBe("1.02.03");
           // venue/list reads the same registry snapshot (non-empty now).

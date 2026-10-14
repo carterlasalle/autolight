@@ -189,6 +189,7 @@ export function optionsFromConfig(get: (key: string) => unknown): GoveeManagerOp
     armSettleMsDefault: num("govee.lan.arm.settleMsDefault", GOVEE_DEFAULTS.armSettleMsDefault),
     fallbackHz: num("govee.lan.stream.fallbackHz", GOVEE_DEFAULTS.fallbackHz),
     targetHz: num("govee.lan.stream.targetHz", GOVEE_DEFAULTS.targetHz),
+    keepaliveMs: num("govee.lan.stream.keepaliveMs", GOVEE_DEFAULTS.keepaliveMs),
     maxRearmAttempts: num("govee.lan.stream.maxRearmAttempts", GOVEE_DEFAULTS.maxRearmAttempts),
     rearmWindowMs: num("govee.lan.stream.rearmWindowMs", GOVEE_DEFAULTS.rearmWindowMs),
     minSpacingMs: num("govee.lan.command.minSpacingMs", GOVEE_DEFAULTS.minSpacingMs),
@@ -486,6 +487,7 @@ export class GoveeLanManager implements StreamTransport {
   private backgroundTimer: NodeJS.Timeout | null = null;
   private lastError: string | null = null;
   private saveTimer: NodeJS.Timeout | null = null;
+  private powerHookInstalled = false;
   private lastIfaceSig = "";
   private scanRounds = 0;
   private refusedWan: { name: string; address: string }[] = [];
@@ -564,6 +566,14 @@ export class GoveeLanManager implements StreamTransport {
       sock.on("error", (err: Error) => {
         this.lastError = err.message;
       });
+
+      // Discovery's directed + global broadcast rungs are sent from this
+      // socket; without SO_BROADCAST every broadcast send fails with EACCES
+      // and discovery silently rides on multicast + the scan list (batch-03).
+      try {
+        sock.setBroadcast(true);
+      } catch { /* directed broadcast unavailable; multicast and scan-list remain */ }
+
       this.replySock = sock;
 
       try {
@@ -581,11 +591,14 @@ export class GoveeLanManager implements StreamTransport {
         }
       }
 
-      try {
-        (electron as { powerMonitor?: { on: (event: string, fn: () => void) => void } }).powerMonitor?.on("resume", () => {
-          this.notifyResume();
-        });
-      } catch { /* not under Electron (tests); resume is notified explicitly */ }
+      if (!this.powerHookInstalled) {
+        try {
+          (electron as { powerMonitor?: { on: (event: string, fn: () => void) => void } }).powerMonitor?.on("resume", () => {
+            this.notifyResume();
+          });
+          this.powerHookInstalled = true;
+        } catch { /* not under Electron (tests); resume is notified explicitly */ }
+      }
 
       this.started = true;
       this.lastError = null;
@@ -617,6 +630,14 @@ export class GoveeLanManager implements StreamTransport {
 
   stop(): void {
     this.stopDiscovery();
+
+    // A registry update queued inside the save throttle window would be lost
+    // by a restart; flush it before the sockets go down (batch-03).
+    if (this.saveTimer !== null) {
+      clearTimeout(this.saveTimer);
+      this.saveTimer = null;
+      this.saveRegistryNow();
+    }
 
     for (const w of this.waiters.splice(0)) {
       clearTimeout(w.timer);
@@ -815,6 +836,7 @@ export class GoveeLanManager implements StreamTransport {
 
   notifyNetworkChange(): void {
     this.retryDelayMs = this.o.retryInitialMs;
+    this.refreshInterfaces();
     void this.round();
   }
 
@@ -1018,6 +1040,13 @@ export class GoveeLanManager implements StreamTransport {
 
     if (entry.zones !== null && entry.zones !== zones) {
       await this.openStream(mac, { zones });
+
+      // The resize must not eat the frame that triggered it: paint it on
+      // the fresh stream so the strip is correct from the first tick
+      // (batch-03).
+      const fresh = this.require(mac);
+      fresh.lastFrame = frame.slice();
+      fresh.stream?.setAll(frame);
 
       return;
     }
@@ -1595,7 +1624,9 @@ export class GoveeLanManager implements StreamTransport {
 
       entry.stream = null;
       entry.armed = false;
-      void this.openStream(mac, { zones, fps: next });
+      void this.openStream(mac, { zones, fps: next }).catch((err: unknown) => {
+        this.warn(`backoff reopen failed for ${mac}: ${err instanceof Error ? err.message : String(err)}`);
+      });
     }
   }
 
@@ -2219,13 +2250,61 @@ export class GoveeLanManager implements StreamTransport {
   }
 
   private checkInterfaces(): void {
-    const sig = this.eligibleInterfaces().map((i) => `${i.name}=${i.address}`).join(",");
+    this.refreshInterfaces();
+  }
 
-    if (this.lastIfaceSig !== "" && sig !== this.lastIfaceSig) {
-      this.retryDelayMs = this.o.retryInitialMs;
+  /** Rebuild interface-dependent sockets after the interface set changed:
+   *  senders for the new addresses, multicast memberships dropped and
+   *  rejoined to match. Without this a lifted or new interface leaves
+   *  discovery talking to dead addresses (batch-03). */
+  private refreshInterfaces(): void {
+    const ifaces = this.eligibleInterfaces();
+    const sig = ifaces.map((i) => `${i.name}=${i.address}`).join(",");
+
+    if (this.lastIfaceSig === sig) return;
+    this.lastIfaceSig = sig;
+    this.retryDelayMs = this.o.retryInitialMs;
+
+    const wanted = new Set(ifaces.map((i) => i.address || "*"));
+
+    // Deleting the current entry while iterating a Map is spec-safe (the
+    // remaining entries are still visited).
+    for (const [key, s] of this.senders) {
+      if (wanted.has(key)) continue;
+
+      try {
+        s.socket.close();
+      } catch { /* already closed */ }
+
+      this.senders.delete(key);
     }
 
-    this.lastIfaceSig = sig;
+    this.openSenders(ifaces);
+
+    const sock = this.replySock;
+
+    if (!sock) return;
+
+    for (const addr of this.multicastOk.keys()) {
+      if (ifaces.some((i) => i.address === addr)) continue;
+
+      try {
+        sock.dropMembership(MULTICAST, addr);
+      } catch { /* never joined */ }
+
+      this.multicastOk.delete(addr);
+    }
+
+    for (const iface of ifaces) {
+      if (this.multicastOk.has(iface.address)) continue;
+
+      try {
+        sock.addMembership(MULTICAST, iface.address);
+        this.multicastOk.set(iface.address, true);
+      } catch {
+        this.multicastOk.set(iface.address, false);
+      }
+    }
   }
 
   private markOffline(): void {
@@ -2350,8 +2429,11 @@ export class GoveeLanManager implements StreamTransport {
   private noteScanData(data: Record<string, unknown>, senderIp: string, atMs: number): void {
     const mac = data["device"] as string;
     const claimedIp = typeof data["ip"] === "string" ? (data["ip"] as string) : null;
-    const ip = claimedIp ?? senderIp;
-    const inferred = claimedIp === null;
+    // Trust the reply's sender address, not the device's claim: firmware
+    // that reports a stale ip would otherwise make us send into a different
+    // subnet (govee2mqtt issue 437). The mismatch is still reported.
+    const ip = senderIp;
+    const inferred = claimedIp !== senderIp;
 
     if (claimedIp !== null && claimedIp !== senderIp) {
       this.warn(
@@ -2483,26 +2565,32 @@ export class GoveeLanManager implements StreamTransport {
     if (zones <= 0) return;
     const started = this.clock();
     void (async () => {
-      const stream = entry.stream;
+      try {
+        const stream = entry.stream;
 
-      if (stream && !entry.streamClosed) {
-        entry.streamClosed = true;
+        if (stream && !entry.streamClosed) {
+          entry.streamClosed = true;
 
-        try {
-          stream.close();
-        } catch { /* pacing loop already torn down */ }
+          try {
+            stream.close();
+          } catch { /* pacing loop already torn down */ }
 
-        entry.stream = null;
+          entry.stream = null;
+        }
+
+        entry.armed = false;
+        await this.ensureArmed(entry.mac);
+
+        if (this.clock() - started > this.o.reconnectMaxMs) {
+          this.warn(`device ${entry.mac} re-armed slower than govee.lan.reconnect.maxMs`);
+        }
+
+        await this.openStream(entry.mac, { zones, fps: entry.fps });
+      } catch (err) {
+        // A rejected reopen must surface as a warning, not an unhandled
+        // rejection that can crash main (batch-03).
+        this.warn(`rearm failed for ${entry.mac}: ${err instanceof Error ? err.message : String(err)}`);
       }
-
-      entry.armed = false;
-      await this.ensureArmed(entry.mac);
-
-      if (this.clock() - started > this.o.reconnectMaxMs) {
-        this.warn(`device ${entry.mac} re-armed slower than govee.lan.reconnect.maxMs`);
-      }
-
-      await this.openStream(entry.mac, { zones, fps: entry.fps });
     })();
   }
 

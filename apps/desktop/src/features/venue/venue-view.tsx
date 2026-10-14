@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useShell, typedInvoke } from "../../app/store.js";
 import { Button } from "../../components/ui/button.js";
 import { Input } from "../../components/ui/input.js";
@@ -21,6 +21,9 @@ import { rectangleRoom } from "@autolight/venue";
 // Owner Govee units on ND resnet (broadcast-isolated from the dev machine):
 // H6076 goveelamp plus H1A45 carterlights, both LAN Control on, verified
 // 2026-10-12 by unicast scan plus devStatus read-back.
+// One key, one spelling: the seed, the load and the save must agree.
+const SCAN_LIST_KEY = "govee.lan.discovery.scanList";
+
 const KNOWN_SCAN_TARGETS: readonly string[] = [
   "goveelamp.resnet.nd.edu",
   "carterlights.resnet.nd.edu",
@@ -44,20 +47,21 @@ export function VenueView(): JSX.Element {
   const [modes, setModes] = useState<Record<string, TransportMode>>({});
   const [scanning, setScanning] = useState(false);
   const [scanTargets, setScanTargets] = useState("");
+  const scanTargetsTouched = useRef(false);
   const [scanSaved, setScanSaved] = useState(false);
   const [nameDrafts, setNameDrafts] = useState<Record<string, string>>({});
 
   useEffect(() => {
     let cancelled = false;
-    void typedInvoke("config/get", { version: 1, key: "govee.lan.discovery.scanList" }).then((res) => {
-      if (cancelled) return;
+    void typedInvoke("config/get", { version: 1, key: SCAN_LIST_KEY }).then((res) => {
+      if (cancelled || scanTargetsTouched.current) return;
       const saved = res !== null && Array.isArray(res.value) ? res.value.map((v) => String(v)) : [];
 
       const seeded = saved.length > 0 ? saved : [...KNOWN_SCAN_TARGETS];
       setScanTargets(seeded.join(", "));
 
       if (saved.length === 0 && seeded.length > 0) {
-        void typedInvoke("config/set", { version: 1, scope: "app", key: "govee.lan.discovery.scanList", value: seeded });
+        void typedInvoke("config/set", { version: 1, scope: "app", key: SCAN_LIST_KEY, value: seeded });
       }
     });
 
@@ -70,7 +74,7 @@ export function VenueView(): JSX.Element {
 
   const saveScanTargets = (): void => {
     const list = scanTargets.split(",").map((t) => t.trim()).filter((t) => t.length > 0);
-    void typedInvoke("config/set", { version: 1, scope: "app", key: "govee.lan.discovery.scanList", value: list }).then((res) => {
+    void typedInvoke("config/set", { version: 1, scope: "app", key: SCAN_LIST_KEY, value: list }).then((res) => {
       if (res !== null) setScanSaved(true);
     });
   };
@@ -146,7 +150,7 @@ export function VenueView(): JSX.Element {
           </Button>
           <label className="flex min-w-0 flex-1 basis-64 items-center gap-2">
             <span className="shrink-0 text-xs text-muted-foreground">Targets</span>
-            <Input aria-label="Scan targets (IPs or hostnames)" value={scanTargets} onChange={(e) => { setScanTargets(e.target.value); setScanSaved(false); }} placeholder="10.24.253.138, carterlights.resnet.nd.edu" className="h-8 min-w-0" />
+            <Input aria-label="Scan targets (IPs or hostnames)" value={scanTargets} onChange={(e) => { scanTargetsTouched.current = true; setScanTargets(e.target.value); setScanSaved(false); }} placeholder="10.24.253.138, carterlights.resnet.nd.edu" className="h-8 min-w-0" />
           </label>
           <Button size="sm" variant="ghost" onClick={saveScanTargets}>Save</Button>
           {scanSaved ? <span className="text-xs text-muted-foreground">Saved.</span> : null}
