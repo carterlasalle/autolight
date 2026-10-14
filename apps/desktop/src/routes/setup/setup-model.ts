@@ -2,6 +2,8 @@
 // steps plus evidence gating. device-screens.ts re-exports these so the
 // Venue screen and Setup screen share one definition.
 
+import { EMPTY_DECK_TITLE } from "../../routes/library/library-rows.js";
+
 export const SETUP_EVIDENCE_STEPS = [
   "dj", "controller", "library", "lights", "identify",
   "placement", "orientation", "qualification", "analysis", "preview",
@@ -33,8 +35,9 @@ export function setupEvidence(inputs: SetupInputs): Partial<Record<EvidenceStep,
   const { live, devices, tiles, roomSaved } = inputs;
   // dj = transport flowing (a show/live response arrived); library = track
   // identities resolved (a non-empty track list). They coincide while only
-  // deck A can carry a track, but they test different projections.
-  const titles = live === null ? [] : [live.deckA.title, live.deckB.title].filter((t) => t !== "—");
+  // deck A can carry a track, but they test different projections. The
+  // empty-deck sentinel comes from its one definition in library-rows.
+  const titles = live === null ? [] : [live.deckA.title, live.deckB.title].filter((t) => t !== EMPTY_DECK_TITLE);
   const identified = new Set(inputs.identifiedIds);
   const chased = new Set(inputs.chasePassedIds);
 

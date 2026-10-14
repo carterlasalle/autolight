@@ -14,8 +14,15 @@ const BUILD_INFO: { sha: string; dirty: boolean; builtAt: string } =
 
 // Titlebar: hiddenInset traffic lights on macOS, overlay on Win/Linux
 // (electron/main.ts). Drag region + no-drag controls per Electron docs.
-export function Titlebar(): JSX.Element {
+
+/** BPM badge shared by the titlebar and statusbar: one label/format source. */
+function BpmMetric(): JSX.Element {
   const bpm = useShell((s) => s.bpm);
+
+  return <MetricBadge metric={{ label: "BPM", value: deckBpm(bpm), unit: "" }} />;
+}
+
+export function Titlebar(): JSX.Element {
   const live = useShell((s) => s.live);
   const simulatorMode = useShell((s) => s.simulatorMode);
   const set = useShell((s) => s.set);
@@ -32,7 +39,7 @@ export function Titlebar(): JSX.Element {
           SIMULATOR
         </Badge>
       ) : null}
-      <MetricBadge metric={{ label: "BPM", value: deckBpm(bpm), unit: "" }} />
+      <BpmMetric />
       <span className="flex-1" />
       <Button
         variant="ghost"
@@ -60,7 +67,6 @@ export function Titlebar(): JSX.Element {
 }
 
 export function Statusbar(): JSX.Element {
-  const bpm = useShell((s) => s.bpm);
   const live = useShell((s) => s.live);
   const devices = useShell((s) => s.devices);
 
@@ -73,7 +79,7 @@ export function Statusbar(): JSX.Element {
       <span className="shrink-0 font-mono" title={`built ${BUILD_INFO.builtAt}${BUILD_INFO.dirty ? " (dirty tree)" : ""}`}>
         {BUILD_INFO.sha}{BUILD_INFO.dirty ? "*" : ""}
       </span>
-      <MetricBadge metric={{ label: "BPM", value: deckBpm(bpm), unit: "" }} />
+      <BpmMetric />
     </footer>
   );
 }

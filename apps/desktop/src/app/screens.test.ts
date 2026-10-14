@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { rowForTrack, inspectorLanes } from "../features/library/library.js";
-import { tileForFixture, nextSetupStep } from "../features/venue/venue.js";
-import type { TrackModel } from "@autolight/contracts";
+import { tileForFixture, nextSetupStep, SETUP_STEPS } from "../features/venue/venue.js";
+import { trackModelSchema, type TrackModel } from "@autolight/contracts";
 
-const model = {
+const modelLiteral = {
   schemaVersion: 2, analyzerVersion: "t",
   identity: { id: "t1", sourceIds: {}, title: "Track", artist: "Artist" },
   durationSeconds: 200,
@@ -39,7 +39,11 @@ const model = {
   gridWarnings: [],
   beatFeatures: [],
   phrases: [],
-} as unknown as TrackModel;
+};
+
+// Parse through the contract schema instead of casting: the fixture stays
+// honest to the real TrackModel (unknown keys and wrong enum shapes fail).
+const model: TrackModel = trackModelSchema.parse(modelLiteral);
 
 describe("desktop screens", () => {
   it("grades library readiness", () => {
@@ -47,10 +51,25 @@ describe("desktop screens", () => {
     expect(rowForTrack(model, false, false).status).toBe("READY");
     expect(rowForTrack(model, true, false).status).toBe("GRID WARNING");
     expect(rowForTrack(model, false, true).status).toBe("SOURCE MISSING");
+    // The warning status also holds for a model carrying a real warning
+    // record, not just a bare caller flag.
+    const warned = trackModelSchema.parse({
+      ...modelLiteral,
+      gridWarnings: [{
+        source: "beat-this", medianOffsetMs: 80, p95OffsetMs: 120, driftMs: 10,
+        evidence: ["beat-this:offset-median-80ms"], beatRange: [1, 320], segments: [],
+      }],
+    });
+
+    expect(rowForTrack(warned, true, false).status).toBe("GRID WARNING");
   });
   it("builds inspector lanes", () => {
     const lanes = inspectorLanes(model);
     expect(lanes.map((l) => l.name)).toEqual(["sections", "events", "grid"]);
+    // The lane beats are the actual contract: kinds, type@beat, indexes.
+    expect(lanes[0]?.beats).toEqual(["chorus"]);
+    expect(lanes[1]?.beats).toEqual(["drop@32"]);
+    expect(lanes[2]?.beats).toEqual([0]);
   });
   it("tiles fixtures with health", () => {
     const tile = tileForFixture(
@@ -60,9 +79,13 @@ describe("desktop screens", () => {
 
     expect(tile.segments).toBe(1);
     expect(tile.health).toBe("online");
+    // The null-calibration branch is the fallback under test.
+    expect(tile.firmware).toBe("unknown");
   });
   it("walks setup to ready", () => {
     expect(nextSetupStep([])).toBe("dj");
-    expect(nextSetupStep(["dj", "controller", "library", "lights", "identify", "placement", "orientation", "qualification", "analysis", "preview"])).toBe("ready");
+    // The full list comes from the exported constant, so a new step cannot
+    // slip between a hardcoded test copy and the real sequence.
+    expect(nextSetupStep([...SETUP_STEPS])).toBe("ready");
   });
 });

@@ -120,7 +120,7 @@ export function RoomVenueRoute({ room: roomProp, onRoom, saved: savedProp, onSav
     <div className="flex max-w-5xl flex-col gap-3">
       <section aria-label="Room editor" className="flex flex-col gap-2">
         <h2 className="text-sm font-semibold">Room editor</h2>
-        <RoomCanvas room={room} onPatch={setRoom} />
+        <RoomCanvas room={room} />
         <div className="flex flex-wrap items-center gap-2">
           <label className="flex items-center gap-2 text-sm">
             Width (m)

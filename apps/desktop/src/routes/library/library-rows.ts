@@ -88,8 +88,8 @@ export interface LiveDeckSnapshot {
   present?: boolean;
 }
 
-/** Empty-deck title shown when no track is loaded (spec 95). */
-const EMPTY_DECK_TITLE = "—";
+/** Presentation sentinel for an empty deck slot; one spelling for readers. */
+export const EMPTY_DECK_TITLE = "—";
 
 function isDeckPresent(deck: LiveDeckSnapshot | undefined): deck is LiveDeckSnapshot {
   if (!deck) return false;

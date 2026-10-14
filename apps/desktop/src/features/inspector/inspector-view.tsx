@@ -18,6 +18,8 @@ export function InspectorView(): JSX.Element {
   const [sendToLights, setSendToLights] = useState(false);
   const [audition, setAudition] = useState<string | null>(null);
   const [blend, setBlend] = useState(0.5);
+  // Library rows key off deck slots ("deck-a"/"deck-b"), never titles.
+  const selectedDeck = selected === "deck-a" ? 1 : selected === "deck-b" ? 2 : null;
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -32,27 +34,33 @@ export function InspectorView(): JSX.Element {
 
         for (const d of decks) {
           if (!d.track) continue;
-          const title = d.track.identity.title ?? d.track.identity.id;
+          if (selectedDeck !== null && d.state.deckId !== selectedDeck) continue;
 
-          if (selected && title !== selected && live && title !== live.deckA.title && title !== live.deckB.title) continue;
+          if (!cancelled) {
+            setLoaded(true);
+            setTrack(d.track);
+          }
 
-          if (!cancelled) { setLoaded(true); setTrack(d.track);
-
- return; }
+          return;
         }
-
-        if (!cancelled) { setLoaded(true); setTrack(null); }
       } catch { /* show host unreachable: empty lanes below */ }
 
-      if (!cancelled) { setLoaded(true); setTrack(null); }
+      // One terminal state set for every non-match path (no duplicates).
+      if (!cancelled) {
+        setLoaded(true);
+        setTrack(null);
+      }
     })();
 
     return () => { cancelled = true; };
-  }, [selected, live]);
+    // Only the selection drives the fetch: depending on the whole live
+    // snapshot refetched show/live on every 250 ms resolve-live tick.
+  }, [selectedDeck]);
 
   const lanes = (beat: number): void => {
     if (!track) return;
-    const pick = auditionAtBeat(track, [], beat, sendToLights);
+    // Live plan cues from the shell store; empty until the show host resolves.
+    const pick = auditionAtBeat(track, live?.cues ?? [], beat, sendToLights);
     setAudition(pick ? `beat ${pick.beat}: ${pick.cueType}${sendToLights ? " to lights" : " in preview"}` : null);
   };
 

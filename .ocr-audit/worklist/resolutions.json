@@ -2476,5 +2476,199 @@
       "verdict": "documented-precondition",
       "evidence": "DEFERRED: three sibling fixture files are currently modified (live-deck1, planner-golden, trackmodel-v2) in the same directory; regeneration of live-deck2 with real bar structure/phrases/integral ms is deferred to avoid colliding with that in-flight work."
     }
+  ],
+  "batch-34": [
+    {
+      "path": "packages/ble/src/commands.ts",
+      "line": 72,
+      "verdict": "fixed",
+      "evidence": "BleFrame.payload doc now states the fixed 17-byte region keeps trailing zero padding (a final 0x00 can be a real channel)."
+    },
+    {
+      "path": "packages/ble/src/commands.ts",
+      "line": 63,
+      "verdict": "fixed",
+      "evidence": "Encode/decode share LONG_FRAME_PROTYPES; encode rejects unknown proTypes loudly and decode uses the same table."
+    },
+    {
+      "path": "packages/ble/src/commands.ts",
+      "line": 190,
+      "verdict": "fixed",
+      "evidence": "masked kelvin validates 0..255; single kelvin validates 0..65535; both throw instead of silently clamping."
+    },
+    {
+      "path": "packages/ble/src/commands.ts",
+      "line": 129,
+      "verdict": "fixed",
+      "evidence": "One scaledLevel() owns the 0..1 to 100/255 rounding for all three brightness builders."
+    },
+    {
+      "path": "packages/ble/src/commands.ts",
+      "line": 184,
+      "verdict": "fixed",
+      "evidence": "Masked colour/brightness pre-check the payload budget with a message naming the zone limit."
+    },
+    {
+      "path": "apps/desktop/journeys/soak.journey.ts",
+      "line": 17,
+      "verdict": "fixed",
+      "evidence": "The gate now includes a real disconnect window; the offline branch is counted and asserted (10000 frames)."
+    },
+    {
+      "path": "apps/desktop/journeys/soak.journey.ts",
+      "line": 30,
+      "verdict": "fixed",
+      "evidence": "heard tracks the sounding deck id (weights.a>0) and asserts {1,2}: both deck identities produced audible weight."
+    },
+    {
+      "path": "apps/desktop/journeys/soak.journey.ts",
+      "line": 26,
+      "verdict": "fixed",
+      "evidence": "fullLit requires every cell lit, asserted over the non-offline frames."
+    },
+    {
+      "path": "apps/desktop/journeys/soak.journey.ts",
+      "line": 32,
+      "verdict": "fixed",
+      "evidence": "The tautological maxPending check is replaced by an exact counter partition (sent+dropped+offline=864000, offline=10000, dropped=857), verified by the journey run."
+    },
+    {
+      "path": "apps/desktop/journeys/soak.journey.ts",
+      "line": 20,
+      "verdict": "fixed",
+      "evidence": "deckB constructed once outside the loop."
+    },
+    {
+      "path": "apps/desktop/journeys/soak.journey.ts",
+      "line": 4,
+      "verdict": "fixed",
+      "evidence": "Single simulator import."
+    },
+    {
+      "path": "apps/desktop/src/app/screens.test.ts",
+      "line": 42,
+      "verdict": "fixed",
+      "evidence": "The fixture parses through trackModelSchema instead of casting; all tests run on the parsed model."
+    },
+    {
+      "path": "apps/desktop/src/app/screens.test.ts",
+      "line": 53,
+      "verdict": "fixed",
+      "evidence": "Lane beats payloads asserted (kinds, type@beat, indexes)."
+    },
+    {
+      "path": "apps/desktop/src/app/screens.test.ts",
+      "line": 60,
+      "verdict": "fixed",
+      "evidence": "The calibration-null firmware fallback asserts 'unknown'."
+    },
+    {
+      "path": "apps/desktop/src/app/screens.test.ts",
+      "line": 48,
+      "verdict": "fixed",
+      "evidence": "A model carrying a real gridWarnings record is exercised for GRID WARNING."
+    },
+    {
+      "path": "apps/desktop/src/app/screens.test.ts",
+      "line": 36,
+      "verdict": "fixed",
+      "evidence": "Dead fixture fields are gone: the schema parse validates the whole literal, so nothing is decorative."
+    },
+    {
+      "path": "apps/desktop/src/app/screens.test.ts",
+      "line": 65,
+      "verdict": "fixed",
+      "evidence": "SETUP_STEPS is exported and the test spreads the real list."
+    },
+    {
+      "path": "apps/desktop/src/components/chrome.tsx",
+      "line": 33,
+      "verdict": "fixed",
+      "evidence": "BpmMetric owns the badge for titlebar and statusbar."
+    },
+    {
+      "path": "apps/desktop/src/features/inspector/inspector-view.tsx",
+      "line": 39,
+      "verdict": "fixed",
+      "evidence": "The effect depends on the selected deck slot only, not the 250ms-replaced live object."
+    },
+    {
+      "path": "apps/desktop/src/features/inspector/inspector-view.tsx",
+      "line": 42,
+      "verdict": "fixed",
+      "evidence": "Audition uses live store cues, so cueType reflects the real plan."
+    },
+    {
+      "path": "apps/desktop/src/features/inspector/inspector-view.tsx",
+      "line": 30,
+      "verdict": "fixed",
+      "evidence": "Selection matches deck rows ('deck-a'/'deck-b') by deckId, not titles."
+    },
+    {
+      "path": "apps/desktop/src/features/inspector/inspector-view.tsx",
+      "line": 34,
+      "verdict": "fixed",
+      "evidence": "One terminal state set; the duplicate trailing call is gone."
+    },
+    {
+      "path": "apps/desktop/src/features/inspector/inspector-view.tsx",
+      "line": 31,
+      "verdict": "fixed",
+      "evidence": "No unguarded deck title dereferences remain."
+    },
+    {
+      "path": "apps/desktop/src/routes/setup/setup-model.ts",
+      "line": 40,
+      "verdict": "by-design",
+      "evidence": "controller evidence has no IPC source; the step hint says it stays pending, which is the documented state."
+    },
+    {
+      "path": "apps/desktop/src/routes/setup/setup-model.ts",
+      "line": 44,
+      "verdict": "by-design",
+      "evidence": "placement/orientation both derive from the saved-room record; the hints document both as pending until that record exists."
+    },
+    {
+      "path": "apps/desktop/src/routes/setup/setup-model.ts",
+      "line": 35,
+      "verdict": "fixed",
+      "evidence": "The empty-deck sentinel now comes from EMPTY_DECK_TITLE exported by library-rows (one spelling)."
+    },
+    {
+      "path": "apps/desktop/src/routes/venue/room-canvas.tsx",
+      "line": 45,
+      "verdict": "fixed",
+      "evidence": "Dimensions read from raw outline bounds, not the framing clamps."
+    },
+    {
+      "path": "apps/desktop/src/routes/venue/room-canvas.tsx",
+      "line": 48,
+      "verdict": "fixed",
+      "evidence": "The unreachable patch rect and its now-dead onPatch prop are deleted; caller updated."
+    },
+    {
+      "path": "apps/desktop/src/routes/venue/room-canvas.tsx",
+      "line": 37,
+      "verdict": "fixed",
+      "evidence": "Arrow uses the engine's facing convention (-sin f, cos f), matching fields.ts."
+    },
+    {
+      "path": "apps/desktop/src/routes/venue/room-canvas.tsx",
+      "line": 27,
+      "verdict": "fixed",
+      "evidence": "All SVG texts carry fill=currentColor for the dark theme."
+    },
+    {
+      "path": "apps/desktop/src/routes/venue/room-canvas.tsx",
+      "line": 33,
+      "verdict": "fixed",
+      "evidence": "The DJ marker renders only when anchors.dj exists."
+    },
+    {
+      "path": "apps/desktop/src/routes/venue/room-canvas.tsx",
+      "line": 28,
+      "verdict": "fixed",
+      "evidence": "Wall labels sit at wall midpoints."
+    }
   ]
 }

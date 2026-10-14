@@ -24,7 +24,8 @@ import {
 export interface BleFrame {
   proType: number;
   cmd: number;
-  /** Raw payload bytes without padding or checksum. */
+  /** The fixed 17-byte payload region as sent: trailing zero padding is kept
+   *  (never trimmed, since a final 0x00 can be a real channel value). */
   payload: Uint8Array;
 }
 
@@ -44,10 +45,25 @@ function sumOf(bytes: Uint8Array): number {
   return sum;
 }
 
+// The long-frame proTypes: encode and decode share this table so a frame the
+// encoder produces is always decodable (handshake 0xE7 uses its own builder).
+const LONG_FRAME_PROTYPES: Record<number, true> = {
+  [BLE_PROTYPE.WRITE]: true,
+  [BLE_PROTYPE.READ]: true,
+  [BLE_PROTYPE.PROVISION]: true,
+  [BLE_PROTYPE.CHUNKED]: true,
+};
+
 /** Encodes a 20 byte frame for 0x33, 0xAA, 0xA1, 0xA3. Payload over 17 bytes throws. */
 export function encodeBleFrame(proType: number, cmd: number, payload: Uint8Array = new Uint8Array(0)): Uint8Array {
   if (proType === BLE_PROTYPE.HOST_COLOR) {
     throw new RangeError("use encodeHostColor for 0xA5 frames");
+  }
+
+  if (LONG_FRAME_PROTYPES[proType] !== true) {
+    throw new RangeError(
+      `unsupported BLE proType 0x${proType.toString(16)}; long frames are 0x33/0xaa/0xa1/0xa3, handshake frames use encodeBleHandshake`,
+    );
   }
 
   if (payload.length > BLE_PAYLOAD_LEN) {
@@ -68,12 +84,7 @@ export function decodeBleFrame(frame: Uint8Array): BleFrame | null {
   if (frame.length !== BLE_FRAME_LEN) return null;
   const proType = frame[0] ?? -1;
 
-  if (
-    proType !== BLE_PROTYPE.WRITE &&
-    proType !== BLE_PROTYPE.READ &&
-    proType !== BLE_PROTYPE.PROVISION &&
-    proType !== BLE_PROTYPE.CHUNKED
-  ) {
+  if (LONG_FRAME_PROTYPES[proType] !== true) {
     return null;
   }
 
@@ -139,15 +150,18 @@ export function blePower(on: boolean): Uint8Array {
 
 export type BleBrightnessScale = 100 | 255;
 
-/** Brightness write: 33 04 <level>. Scale comes from the device profile. */
-export function bleBrightness(level01: number, scale: BleBrightnessScale = 100): Uint8Array {
+/** level01 (0..1) to the family's brightness scale; the one rounding rule. */
+function scaledLevel(level01: number, scale: BleBrightnessScale): number {
   const clamped01 = Math.min(1, Math.max(0, level01));
 
-  const level = scale === 100
+  return scale === 100
     ? Math.min(100, Math.max(0, Math.round(clamped01 * 100)))
     : Math.min(255, Math.max(0, Math.round(clamped01 * 255)));
+}
 
-  return encodeBleFrame(BLE_PROTYPE.WRITE, 0x04, new Uint8Array([level]));
+/** Brightness write: 33 04 <level>. Scale comes from the device profile. */
+export function bleBrightness(level01: number, scale: BleBrightnessScale = 100): Uint8Array {
+  return encodeBleFrame(BLE_PROTYPE.WRITE, 0x04, new Uint8Array([scaledLevel(level01, scale)]));
 }
 
 export interface BleRgb {
@@ -162,6 +176,11 @@ function byte(v: number): number {
 
 /** Single colour: 33 05 0d <RGB> <K_hi K_lo> <RGB white>. Kelvin 0 for RGB. */
 export function bleColorSingle(color: BleRgb, kelvin = 0, white: BleRgb = { r: 0, g: 0, b: 0 }): Uint8Array {
+  // The single-colour layout carries kelvin as 16-bit big-endian.
+  if (!Number.isInteger(kelvin) || kelvin < 0 || kelvin > 0xffff) {
+    throw new RangeError(`kelvin needs an integer 0..65535, got ${kelvin}`);
+  }
+
   const payload = new Uint8Array([
     0x0d,
     byte(color.r), byte(color.g), byte(color.b),
@@ -202,7 +221,21 @@ export function bleColorMasked(
   kelvin = 0,
   white: BleRgb = { r: 0, g: 0, b: 0 },
 ): Uint8Array {
+  // The masked layout carries one kelvin byte: a larger value cannot be
+  // represented, so fail loudly instead of silently clamping.
+  if (!Number.isInteger(kelvin) || kelvin < 0 || kelvin > 255) {
+    throw new RangeError(`masked colour kelvin needs an integer 0..255, got ${kelvin}`);
+  }
+
   const mask = maskForZones(zones, zoneCount);
+
+  // 2 header + 3 RGB + 1 kelvin + 3 white = 9 bytes before the mask.
+  if (mask.length + 9 > BLE_PAYLOAD_LEN) {
+    throw new RangeError(
+      `masked colour supports at most ${(BLE_PAYLOAD_LEN - 9) * 8} zones, got ${zoneCount}`,
+    );
+  }
+
   const payload = new Uint8Array(2 + 3 + 1 + 3 + mask.length);
   payload[0] = 0x15;
   payload[1] = BLE_MASKED_KIND.COLOR;
@@ -225,15 +258,18 @@ export function bleMaskedBrightness(
   zoneCount: number,
   scale: BleBrightnessScale = 100,
 ): Uint8Array {
-  const level = scale === 100
-    ? Math.min(100, Math.max(0, Math.round(Math.min(1, Math.max(0, level01)) * 100)))
-    : Math.min(255, Math.max(0, Math.round(Math.min(1, Math.max(0, level01)) * 255)));
-
   const mask = maskForZones(zones, zoneCount);
+
+  if (mask.length + 3 > BLE_PAYLOAD_LEN) {
+    throw new RangeError(
+      `masked brightness supports at most ${(BLE_PAYLOAD_LEN - 3) * 8} zones, got ${zoneCount}`,
+    );
+  }
+
   const payload = new Uint8Array(3 + mask.length);
   payload[0] = 0x15;
   payload[1] = BLE_MASKED_KIND.BRIGHTNESS;
-  payload[2] = level;
+  payload[2] = scaledLevel(level01, scale);
   payload.set(mask, 3);
 
   return encodeBleFrame(BLE_PROTYPE.WRITE, 0x05, payload);
@@ -245,8 +281,7 @@ export function blePerZoneBrightness(levels01: readonly number[], scale: BleBrig
   payload[0] = 0x15;
   payload[1] = BLE_MASKED_KIND.PER_ZONE_BRIGHTNESS;
   levels01.forEach((v, i) => {
-    const c = Math.min(1, Math.max(0, v));
-    payload[2 + i] = scale === 100 ? Math.min(100, Math.max(0, Math.round(c * 100))) : Math.min(255, Math.max(0, Math.round(c * 255)));
+    payload[2 + i] = scaledLevel(v, scale);
   });
 
   return encodeBleFrame(BLE_PROTYPE.WRITE, 0x05, payload);
