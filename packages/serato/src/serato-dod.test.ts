@@ -268,7 +268,11 @@ describe("serato definition of done (T-SER-06, spec 121)", () => {
           2n,
         ).state;
 
-        expect(after.playheadSeconds - before.playheadSeconds).toBeCloseTo(80);
+        // A seek lands the new position on the same track; the old
+        // after-minus-before check restated the fixture literals (batch-09).
+        expect(after.playheadSeconds).toBe(90);
+        expect(after.track?.id).toBe(before.track?.id);
+        expect(after.playing).toBe(true);
       },
     },
     {

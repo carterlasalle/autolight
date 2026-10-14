@@ -14,7 +14,6 @@ import {
   CUE_LEVEL_ATTRIBUTES,
   findDropPlans,
   phraseCues,
-  phraseStartsIn,
   stagedBuild,
   subBeatCues,
   trackArcPosition,
@@ -112,11 +111,10 @@ export function compileShow(input: CompileInput): CompileResult {
     if (!deleted.has(c.id)) cues.push(c);
   };
 
-  const { design, core, sectionStarts } = planIdentity(input.track, style, config, seed);
+  const { design, core } = planIdentity(input.track, style, config, seed);
   const summaries = summarizeSections(input.track.sections, config.sectionEnergy, core);
   const recurrence = planRecurrence(summaries, core, design.densityBaseline, config, seed);
   const drops = findDropPlans(input.track, config.dropMinConfidence);
-  const dropByBeat = new Map(drops.map((d) => [d.impactBeat, d] as const));
   const dropOccurrence = new Map<number, number>();
   const fakeActuals = new Map<number, number>();
 
@@ -126,8 +124,6 @@ export function compileShow(input: CompileInput): CompileResult {
     }
   }
 
-  const phraseStarts = input.track.sections.flatMap((s) => phraseStartsIn(s.startBeat, s.endBeat));
-  void phraseStarts;
   const restraint = freshRestraint();
   const bpm = sectionBpm(input.track);
   const lastBeat = Math.max(16, ...input.track.sections.map((s) => s.endBeat));
@@ -198,8 +194,6 @@ export function compileShow(input: CompileInput): CompileResult {
     const chosen = variants[winner] ?? variants[0]!;
     sections[idx] = { ...sec, darkness: chosen.darkness, density: chosen.density };
     const secStyle = { ...style, ...edits?.sectionStyles[idx] };
-    const drop = dropByBeat.get(section.startBeat) ?? null;
-    void drop;
 
     // Section look with the track identity colour. The emitted type keeps
     // the legacy section-look spelling (a StaticLook alias) because the
@@ -352,10 +346,13 @@ export function compileShow(input: CompileInput): CompileResult {
           // full-colour impact through the same restraint path.
           const draw = ((at * 2654435761 + seed.length * 97) % 100) / 100;
           const forceImpact = draw >= secStyle.whiteHitFrequency;
-
-          const r = forceImpact
-            ? { state: restraint, verdict: { decision: "substitute", substitute: "impact", reason: "white-hit frequency draw favours a full-colour impact" } as const }
-            : restrain(restraint, "white-hit", at, c.durationBeats, secStyle, config, { impact: true });
+          // A forced impact still books through restrain — its counters are
+          // budgets the plan must respect — and only the verdict is
+          // overridden, never against a reject (batch-09).
+          const rc = restrain(restraint, "white-hit", at, c.durationBeats, secStyle, config, { impact: true });
+          const r = forceImpact && rc.verdict.decision !== "reject"
+            ? { ...rc, verdict: { decision: "substitute", substitute: "impact", reason: "white-hit frequency draw favours a full-colour impact" } as const }
+            : rc;
 
           if (r.verdict.decision === "reject") {
             rejected.push({ candidate: candidateNo++, reasons: [r.verdict.reason] });
@@ -465,9 +462,6 @@ export function compileShow(input: CompileInput): CompileResult {
         }),
       );
     }
-
-    void dropByBeat;
-    void sectionStarts;
   });
 
   // Event layer: every musical event becomes planning behaviour.
@@ -508,6 +502,24 @@ export function compileShow(input: CompileInput): CompileResult {
 
       if (r.verdict.decision === "reject") {
         rejected.push({ candidate: candidateNo++, reasons: [r.verdict.reason] });
+        continue;
+      }
+
+      // A substituted blackout emits as its substitute; falling through
+      // would reassert the original type and drop the verdict (batch-09).
+      if (r.verdict.decision === "substitute") {
+        emit(
+          makeCue(seed, 0, ordinal, {
+            type: r.verdict.substitute,
+            startBeat: p.beat,
+            durationBeats: p.durationBeats,
+            intensity: Math.min(style.intensityRange[1], p.intensity),
+            target: "PRIMARY",
+            priority: p.priority,
+            color: core[0],
+            reason: r.verdict.reason,
+          }),
+        );
         continue;
       }
     }
@@ -575,7 +587,7 @@ export function compileShow(input: CompileInput): CompileResult {
 
   const budgetsRemaining: Record<string, number> = {
     impacts: Math.max(0, config.trackImpactMax - restraint.wholeTrackImpactCount),
-    strobeBeats: Math.max(0, 32 - restraint.strobeBeats),
+    strobeBeats: Math.max(0, (config.evaluationBounds.strobeBeats?.[1] ?? 0) - restraint.strobeBeats),
   };
 
   const plan: CompiledShowPlan = {

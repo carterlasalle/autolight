@@ -51,13 +51,18 @@ export interface FastPathDeps {
  * now (STRUCTURED from native data, ADAPTIVE otherwise) plus a top-priority
  * analysis queue. Returns parsed objects either way.
  */
+// Callers that do not thread their own store share one module-level store:
+// a fresh store per call would drop every alias learned by the previous
+// call, and alias learning is the store's whole purpose (batch-09).
+const defaultAliasStore = new MemoryAliasStore();
+
 export function loadGeneration(
   world: DeckWorld,
   generation: number,
   input: LiveTrackInput,
   request: Omit<FastPathRequest, "trackId"> & { trackId?: string },
   deps: FastPathDeps,
-  aliasStore: MemoryAliasStore = new MemoryAliasStore(),
+  aliasStore: MemoryAliasStore = defaultAliasStore,
 ): GenerationLoad {
   const started = performance.now();
   const makeId = deps.makeId ?? (() => `gen:${generation}:${Date.now()}`);
@@ -101,7 +106,7 @@ export function loadGeneration(
 
   return {
     generation, resolution, track: null, plan: null, miss: loaded.miss,
-    detail: loaded.detail, cacheHit: false, totalMs: performance.now() - started, installed: false,
+    detail: loaded.detail, cacheHit: loaded.timings.cacheHit, totalMs: performance.now() - started, installed: false,
   };
 }
 
@@ -129,25 +134,36 @@ export interface UpgradeDecision {
  * boundary beat; this function picks the beat.
  */
 export function upgradeAtBoundary(proposal: UpgradeProposal): UpgradeDecision {
-  const pool = proposal.boundary === "phrase"
-    ? proposal.phraseBoundaries
-    : proposal.boundary === "section"
-      ? proposal.sectionBoundaries
-      : phraseOrBar(proposal);
+  let pool: number[];
+
+  if (proposal.boundary === "phrase") pool = proposal.phraseBoundaries;
+  else if (proposal.boundary === "section") pool = proposal.sectionBoundaries;
+  else pool = phraseOrBar(proposal);
 
   const next = pool.filter((b) => b >= proposal.beat).sort((a, b) => a - b)[0];
 
-  if (next === undefined) return { installAtBeat: proposal.beat, waitBeats: 0, boundary: proposal.boundary };
+  if (next === undefined) {
+    // Past every known boundary (a lagging plan): waiting would never end,
+    // so install now and let the next proposal re-target (batch-09).
+    return { installAtBeat: proposal.beat, waitBeats: 0, boundary: proposal.boundary };
+  }
 
   return { installAtBeat: next, waitBeats: next - proposal.beat, boundary: proposal.boundary };
 }
 
 function phraseOrBar(proposal: UpgradeProposal): number[] {
+  // "bar" mode: phrase lines when the plan knows them (a coarser but always
+  // clean boundary), else every four beats from here — the proposal carries
+  // no meter, so 4/4 is the documented assumption. The old every-beat pool
+  // made a bar setting install on the very next beat (batch-09).
   if (proposal.phraseBoundaries.length > 0) return proposal.phraseBoundaries;
   const out: number[] = [];
-  const start = Math.ceil(proposal.beat);
+  let b = Math.ceil(proposal.beat / 4) * 4;
 
-  for (let b = start; b < start + 64; b++) out.push(b);
+  for (let i = 0; i < 16; i++) {
+    out.push(b);
+    b += 4;
+  }
 
   return out;
 }

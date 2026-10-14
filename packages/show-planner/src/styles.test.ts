@@ -57,7 +57,9 @@ function model(): TrackModel {
 }
 
 function compile(style: PlannerStyle): CompileResult {
-  return compileShow({ track: model(), venue: DEFAULT_VENUE_CLASS, style, config: DEFAULT_CONFIG });
+  // One fixed seed for every compile: per-style seeds would confound the
+  // property under test with RNG sequence noise (batch-09).
+  return compileShow({ track: model(), venue: DEFAULT_VENUE_CLASS, style, config: DEFAULT_CONFIG, seedOverride: "styles-test" });
 }
 
 describe("T-PLAN-09 styles (P-135)", () => {
@@ -75,7 +77,7 @@ describe("T-PLAN-09 styles (P-135)", () => {
   it("moves the plan in the expected direction for every property", () => {
     const base = BUILT_IN_STYLES["club"]!;
 
-    const cases: Array<{ prop: string; low: PlannerStyle; high: PlannerStyle; check: (l: number, h: number) => boolean; metric?: "default" | "darknessPct" | "intensity" | "whiteHits" | "intensity" }> = [
+    const cases: Array<{ prop: string; low: PlannerStyle; high: PlannerStyle; check: (l: number, h: number) => boolean; metric?: "default" | "darknessPct" | "intensity" | "whiteHits" | "strobeBeats" | "activeDensity" }> = [
       {
         prop: "intensityRange",
         low: { ...base, intensityRange: [0.1, 0.4] },
@@ -94,18 +96,14 @@ describe("T-PLAN-09 styles (P-135)", () => {
         low: { ...base, spatialDensity: 0 },
         high: { ...base, spatialDensity: 1 },
         check: (l, h) => h >= l,
+        metric: "activeDensity",
       },
       {
         prop: "colorSaturation",
         low: { ...base, colorSaturation: 0 },
         high: { ...base, colorSaturation: 1 },
-        check: (l, h) => h !== l,
-      },
-      {
-        prop: "paletteChangeRate",
-        low: { ...base, paletteChangeRate: 0 },
-        high: { ...base, paletteChangeRate: 1 },
-        check: (l, h) => h !== l,
+        // Higher saturation raises the chroma term of the default metric.
+        check: (l, h) => h > l,
       },
       {
         prop: "movementDensity",
@@ -132,12 +130,7 @@ describe("T-PLAN-09 styles (P-135)", () => {
         low: { ...base, strobeFrequency: 0 },
         high: { ...base, strobeFrequency: 1 },
         check: (l, h) => h >= l,
-      },
-      {
-        prop: "symmetry",
-        low: { ...base, symmetry: 0 },
-        high: { ...base, symmetry: 1 },
-        check: (l, h) => h !== l,
+        metric: "strobeBeats",
       },
       {
         prop: "reactiveAmount",
@@ -146,19 +139,35 @@ describe("T-PLAN-09 styles (P-135)", () => {
         check: (l, h) => h !== l,
       },
     ];
+    // paletteChangeRate and symmetry are deliberately absent: their plan
+    // effects gate on motif recurrence (repaint, alternating targets), which
+    // this envelope fixture cannot exercise — with a fixed seed their
+    // presence-only checks would be theater. Everything else asserts a
+    // direction on a metric the property actually drives (batch-09).
 
-    const metricFor = (s: PlannerStyle, which?: "default" | "darknessPct" | "intensity" | "whiteHits"): number => {
-      const r = compile(s);
-      const d = evaluateCompiledPlan(r.plan, DEFAULT_CONFIG);
-
+    const metricFor = (s: PlannerStyle, which?: "default" | "darknessPct" | "intensity" | "whiteHits" | "strobeBeats" | "activeDensity"): number => {
+      // Each branch compiles only what it measures: the default-metric
+      // compile used to run eagerly for every case (batch-09).
       if (which === "intensity") return evaluateCompiledPlan(compile(s).plan, DEFAULT_CONFIG).intensityArc;
 
       if (which === "whiteHits") return compile(s).plan.cues.filter((c) => c.type === "white-hit").length;
 
-      if (which === "darknessPct") { const r2 = compile(s); const dip = r2.plan.cues.filter((c) => c.type === "dip" && c.reason.includes("darkness preference")).reduce((n, c) => n + c.durationBeats, 0); const sec = r2.plan.sections.reduce((n, x) => n + x.darkness, 0);
+      if (which === "strobeBeats") return evaluateCompiledPlan(compile(s).plan, DEFAULT_CONFIG).strobeBeats;
 
- return dip + sec; }
+      if (which === "activeDensity") return evaluateCompiledPlan(compile(s).plan, DEFAULT_CONFIG).activeDensity;
 
+      if (which === "darknessPct") {
+        const r2 = compile(s);
+        // Dip duration, not a reason-string filter: any dip the planner emits
+        // counts, so the metric does not couple to internal copy (batch-09).
+        const dip = r2.plan.cues.filter((c) => c.type === "dip").reduce((n, c) => n + c.durationBeats, 0);
+        const sec = r2.plan.sections.reduce((n, x) => n + x.darkness, 0);
+
+        return dip + sec;
+      }
+
+      const r = compile(s);
+      const d = evaluateCompiledPlan(r.plan, DEFAULT_CONFIG);
       const chroma = r.plan.cues.reduce((n, c) => n + (c.color?.c ?? 0), 0);
       const hue = r.plan.cues.reduce((n, c) => n + ((c.color?.h ?? 0) / 360), 0);
       const secondary = r.plan.cues.filter((c) => c.target === "SECONDARY").length / 10;
@@ -176,8 +185,10 @@ describe("T-PLAN-09 styles (P-135)", () => {
     const dark = evaluateCompiledPlan(compile(BUILT_IN_STYLES["dark"]!).plan, DEFAULT_CONFIG);
     const fest = evaluateCompiledPlan(compile(BUILT_IN_STYLES["festival"]!).plan, DEFAULT_CONFIG);
     const minimal = evaluateCompiledPlan(compile(BUILT_IN_STYLES["minimal"]!).plan, DEFAULT_CONFIG);
-    expect(dark.darknessPct).toBeGreaterThanOrEqual(fest.darknessPct);
-    expect(minimal.activeDensity).toBeLessThanOrEqual(fest.activeDensity);
-    expect(fest.whiteHits).toBeGreaterThanOrEqual(dark.whiteHits);
+    // Strict separations: with a fixed seed and one fixture, equal metrics
+    // would mean the style knob did nothing (batch-09).
+    expect(dark.darknessPct).toBeGreaterThan(fest.darknessPct);
+    expect(fest.activeDensity).toBeGreaterThan(minimal.activeDensity);
+    expect(fest.whiteHits).toBeGreaterThan(dark.whiteHits);
   });
 });

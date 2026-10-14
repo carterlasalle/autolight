@@ -1,4 +1,144 @@
 {
+  "batch-09": [
+    {
+      "path": "packages/rekordbox-live/src/os2l.ts",
+      "line": 238,
+      "verdict": "by-design",
+      "evidence": "The permanent error handler reports failed status while the once-handler rejects the startup promise; the listen callback withdraws the once-handler on success. Both firing on a real failure is the intended pairing. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/rekordbox-live/src/os2l.ts",
+      "line": 142,
+      "verdict": "fixed-earlier",
+      "evidence": "decodeOs2lText delegates to splitOs2lMessages + parseOs2lText; the parsing exists once. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/rekordbox-live/src/os2l.ts",
+      "line": 168,
+      "verdict": "type-required",
+      "evidence": "The slot guard narrows number to the 1|2|3|4 union the ProviderDeckState shape demands; it is the type assertion, not a runtime filter."
+    },
+    {
+      "path": "packages/serato/src/serato-dod.test.ts",
+      "line": 222,
+      "verdict": "fixed-by-commit",
+      "evidence": "Item 15 now asserts the mapped seek result (position, same track, still playing) instead of restating fixture literals (batch-09)."
+    },
+    {
+      "path": "packages/show-planner/src/compile.ts",
+      "line": 126,
+      "verdict": "fixed-by-commit",
+      "evidence": "The unused phraseStarts computation and its void are deleted (batch-09)."
+    },
+    {
+      "path": "packages/show-planner/src/compile.ts",
+      "line": 192,
+      "verdict": "fixed-by-commit",
+      "evidence": "The unused drop lookup, dropByBeat map, sectionStarts binding and all three voids are deleted (batch-09)."
+    },
+    {
+      "path": "packages/show-planner/src/compile.ts",
+      "line": 334,
+      "verdict": "fixed-by-commit",
+      "evidence": "A forced impact books through restrain (budgets preserved) and only overrides the verdict, never against a reject (batch-09)."
+    },
+    {
+      "path": "packages/show-planner/src/compile.ts",
+      "line": 471,
+      "verdict": "fixed-by-commit",
+      "evidence": "A substituted blackout/dip emits as its substitute instead of falling through to reassert the original type (batch-09)."
+    },
+    {
+      "path": "packages/show-planner/src/compile.ts",
+      "line": 188,
+      "verdict": "by-design",
+      "evidence": "rejectBase numbers vetoed candidates per section while candidateNo++ ordinals later rejections; no consumer distinguishes the two ranges and the rejected list is diagnostics-only. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/show-planner/src/compile.ts",
+      "line": 537,
+      "verdict": "fixed-by-commit",
+      "evidence": "The strobe budget reads config.evaluationBounds.strobeBeats[1] instead of the hardcoded 32 (batch-09)."
+    },
+    {
+      "path": "packages/show-planner/src/styles.test.ts",
+      "line": 59,
+      "verdict": "fixed-by-commit",
+      "evidence": "All compiles share one seedOverride, so the property under test is not confounded with RNG noise (batch-09)."
+    },
+    {
+      "path": "packages/show-planner/src/styles.test.ts",
+      "line": 97,
+      "verdict": "fixed-by-commit",
+      "evidence": "colorSaturation now asserts a strict direction on the chroma metric; paletteChangeRate and symmetry cases were removed with a note because their effects gate on motif recurrence the fixture cannot exercise (batch-09)."
+    },
+    {
+      "path": "packages/show-planner/src/styles.test.ts",
+      "line": 156,
+      "verdict": "fixed-by-commit",
+      "evidence": "Direct per-property metrics replace the diluted composite for strobeBeats and activeDensity; the composite remains only where no direct diagnostic exists (batch-09)."
+    },
+    {
+      "path": "packages/show-planner/src/styles.test.ts",
+      "line": 151,
+      "verdict": "fixed-by-commit",
+      "evidence": "The darkness metric counts dip durations without matching on the reason string (batch-09)."
+    },
+    {
+      "path": "packages/show-planner/src/styles.test.ts",
+      "line": 167,
+      "verdict": "fixed-by-commit",
+      "evidence": "The dark/festival/minimal separations are strict inequalities; equal values would mean the knob did nothing (batch-09)."
+    },
+    {
+      "path": "packages/show-planner/src/styles.test.ts",
+      "line": 147,
+      "verdict": "fixed-by-commit",
+      "evidence": "Each metric branch compiles only what it measures; the eager compile/evaluate pair is gone (batch-09)."
+    },
+    {
+      "path": "packages/show-planner/src/styles.test.ts",
+      "line": 75,
+      "verdict": "fixed-by-commit",
+      "evidence": "The duplicated 'intensity' metric literal is collapsed into the single union (batch-09)."
+    },
+    {
+      "path": "packages/show-runtime/src/fastpath.ts",
+      "line": 60,
+      "verdict": "fixed-by-commit",
+      "evidence": "A module-level default alias store carries learned aliases across callers that do not thread their own (batch-09)."
+    },
+    {
+      "path": "packages/show-runtime/src/fastpath.ts",
+      "line": 89,
+      "verdict": "by-design",
+      "evidence": "installed documents whether the caller should install this load; a structured model with the plan still compiling is installable by design (spec 132 staged boot)."
+    },
+    {
+      "path": "packages/show-runtime/src/fastpath.ts",
+      "line": 129,
+      "verdict": "fixed-by-commit",
+      "evidence": "The past-every-boundary branch is commented: waiting would never end, so it installs and the next proposal re-targets (batch-09)."
+    },
+    {
+      "path": "packages/show-runtime/src/fastpath.ts",
+      "line": 134,
+      "verdict": "fixed-by-commit",
+      "evidence": "Bar-mode fallback steps four beats from the current position (4/4 documented) instead of every beat; phrase lines still win when known (batch-09)."
+    },
+    {
+      "path": "packages/show-runtime/src/fastpath.ts",
+      "line": 123,
+      "verdict": "fixed-by-commit",
+      "evidence": "Boundary pool selection is an if/else chain, not a nested ternary (batch-09)."
+    },
+    {
+      "path": "packages/show-runtime/src/fastpath.ts",
+      "line": 95,
+      "verdict": "fixed-by-commit",
+      "evidence": "The no-track branch propagates loaded.timings.cacheHit like the other branches (batch-09)."
+    }
+  ],
   "batch-08": [
     {
       "path": "packages/storage/src/netaudit.ts",
