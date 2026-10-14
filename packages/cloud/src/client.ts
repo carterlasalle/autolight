@@ -95,7 +95,8 @@ export interface CloudRequestOptions {
 export interface CloudAccounting {
   perDevicePerMinute: number;
   perAccountPerDay: number;
-  deviceMinuteUsed: number;
+  /** Sum of minute-window hits across every device key (not one device). */
+  deviceMinuteUsedTotal: number;
   accountDayUsed: number;
   lastServerMinuteRemaining: number | null;
   lastServerDayRemaining: number | null;
@@ -160,7 +161,7 @@ export function parseDeviceEntry(raw: RawDeviceEntry): CloudDevice {
     name: raw.deviceName,
     capabilities: {
       declaredSegmentCount: declared,
-      instances: [...raw.supportCmds],
+      instances: [...(raw.supportCmds ?? [])],
       controllable: raw.controllable,
       retrievable: raw.retrievable,
     },
@@ -230,20 +231,38 @@ export class CloudMetadataClient {
   }
 
   get accounting(): CloudAccounting {
+    // Read-only: the stored hit arrays are only pruned by guard(), never by
+    // an observation (batch-05).
     const at = this.now();
-    let deviceMinuteUsed = 0;
+    let deviceMinuteUsedTotal = 0;
 
-    for (const hits of this.deviceHits.values()) deviceMinuteUsed += this.prune(hits, at, MINUTE_MS).length;
+    for (const hits of this.deviceHits.values()) {
+      deviceMinuteUsedTotal += hits.filter((t) => t > at - MINUTE_MS && t <= at).length;
+    }
 
     return {
       perDevicePerMinute: this.perDevicePerMinute,
       perAccountPerDay: this.perAccountPerDay,
-      deviceMinuteUsed,
-      accountDayUsed: this.prune(this.accountHits, at, DAY_MS).length,
+      deviceMinuteUsedTotal,
+      accountDayUsed: this.accountHits.filter((t) => t > at - DAY_MS && t <= at).length,
       lastServerMinuteRemaining: this.lastServerMinuteRemaining,
       lastServerDayRemaining: this.lastServerDayRemaining,
       lastRetryAfterMs: this.lastRetryAfterMs,
     };
+  }
+
+  /** Guarded JSON body read: a truncated or non-JSON 2xx body must surface
+   *  as a typed API error naming the call, not a raw SyntaxError (batch-05). */
+  private parseBody<T>(res: CloudFetchResponse, what: string): T {
+    try {
+      const parsed: unknown = JSON.parse(res.body);
+
+      if (typeof parsed !== "object" || parsed === null) throw new Error("not an object");
+
+      return parsed as T;
+    } catch {
+      throw new CloudApiError(res.status, `${what} response was not a JSON object`);
+    }
   }
 
   /** Device list with names and declared capabilities (recorded in tests). */
@@ -261,7 +280,7 @@ export class CloudMetadataClient {
     if (res.status === 429) throw this.limited("server", res.headers);
 
     if (res.status < 200 || res.status >= 300) throw this.apiError(res);
-    const parsed = JSON.parse(res.body) as { data?: RawDeviceEntry[] };
+    const parsed = this.parseBody<{ data?: RawDeviceEntry[] }>(res, "device list");
 
     return (parsed.data ?? []).map(parseDeviceEntry);
   }
@@ -282,7 +301,7 @@ export class CloudMetadataClient {
     if (res.status === 429) throw this.limited("server", res.headers);
 
     if (res.status < 200 || res.status >= 300) throw this.apiError(res);
-    const parsed = JSON.parse(res.body) as { data?: Array<{ id?: string; name?: string; sceneId?: string }> };
+    const parsed = this.parseBody<{ data?: Array<{ id?: string; name?: string; sceneId?: string }> }>(res, "scene list");
 
     return (parsed.data ?? []).map((entry, index) => ({
       sceneId: entry.sceneId ?? entry.id ?? `scene-${index}`,
@@ -304,9 +323,13 @@ export class CloudMetadataClient {
     const hits = this.prune(this.hitsFor(key), at, MINUTE_MS);
 
     if (hits.length >= this.perDevicePerMinute) {
+      // Report the time until the window actually frees (the oldest hit
+      // ages out), not the full window (batch-05).
+      const retryAfterMs = Math.max(1, (hits[0] ?? at) + MINUTE_MS - at);
+
       throw new CloudRateLimitError(
         "device-minute",
-        MINUTE_MS,
+        retryAfterMs,
         `Device minute budget ${this.perDevicePerMinute} per govee.cloud.perDevicePerMinute.`,
       );
     }
@@ -314,9 +337,11 @@ export class CloudMetadataClient {
     const day = this.prune(this.accountHits, at, DAY_MS);
 
     if (day.length >= this.perAccountPerDay) {
+      const retryAfterMs = Math.max(1, (day[0] ?? at) + DAY_MS - at);
+
       throw new CloudRateLimitError(
         "account-day",
-        DAY_MS,
+        retryAfterMs,
         `Account day budget ${this.perAccountPerDay} per govee.cloud.perAccountPerDay.`,
       );
     }

@@ -51,7 +51,7 @@ describe("AX tree reading (T-LIVE-06)", () => {
     const [one, two] = readings;
     expect(one?.title).toBe("Nice For What");
     expect(one?.elapsedSeconds).toBe(12);
-    expect(one?.remainingSeconds).toBe(-168);
+    expect(one?.remainingSeconds).toBe(168);
     expect(one?.playing).toBe(false);
     expect(two?.title).toBe("Homecoming (feat. Chris Martin)");
     expect(two?.elapsedSeconds).toBe(65);
@@ -62,7 +62,7 @@ describe("AX tree reading (T-LIVE-06)", () => {
     const readings = readAxDecks(windows.root);
     expect(readings.map((r) => r.deckId)).toEqual([1, 2]);
     expect(readings[0]?.elapsedSeconds).toBe(12);
-    expect(readings[0]?.remainingSeconds).toBe(-168);
+    expect(readings[0]?.remainingSeconds).toBe(168);
     expect(readings[0]?.playing).toBe(false);
     expect(readings[1]?.playing).toBe(true);
   });

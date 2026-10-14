@@ -1,5 +1,4 @@
 import type { MappedCell, Run } from "./placement.js";
-import { runLength } from "./placement.js";
 import type { Point2, Room } from "./room.js";
 import { normalizeOutline, perimeterLength, polygonCentroid, roomCenter } from "./room.js";
 
@@ -57,7 +56,16 @@ export interface FieldOptions {
   pivot?: Point2;
 }
 
+// The cumulative array is a pure function of the outline's identity; callers
+// build one outline per room and reuse it across every cell, so memoizing by
+// reference removes the per-cell rebuild + allocation (batch-05). Callers
+// never mutate an outline after constructing it.
+const cumCache = new WeakMap<readonly Point2[], { cum: number[]; total: number }>();
+
 function outlineCum(outline: Point2[]): { cum: number[]; total: number } {
+  const cached = cumCache.get(outline);
+
+  if (cached) return cached;
   const cum: number[] = [0];
 
   for (let i = 0; i < outline.length; i++) {
@@ -66,7 +74,10 @@ function outlineCum(outline: Point2[]): { cum: number[]; total: number } {
     cum.push(cum[i]! + Math.hypot(b.x - a.x, b.y - a.y));
   }
 
-  return { cum, total: cum[cum.length - 1]! };
+  const result = { cum, total: cum[cum.length - 1]! };
+  cumCache.set(outline, result);
+
+  return result;
 }
 
 export function projectToOutline(
@@ -142,7 +153,24 @@ export function runPointAt(
   arcM: number,
 ): { p: { x: number; y: number; z: number }; tangent: Point2 } {
   const pts = run.closed ? [...run.polyline, run.polyline[0]!] : run.polyline;
-  const total = Math.max(1e-9, runLength(run));
+
+  // The walk below follows the control-point polyline, so the parameter span
+  // must be the chord total of that polyline, not runLength's curved
+  // sampling; otherwise curved runs fall through to an extrapolated tail
+  // (batch-05).
+  if (pts.length < 2) {
+    throw new Error(`run "${run.id}" has fewer than two polyline points`);
+  }
+
+  let chordTotal = 0;
+
+  for (let i = 0; i + 1 < pts.length; i++) {
+    const a = pts[i]!;
+    const b = pts[i + 1]!;
+    chordTotal += Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z);
+  }
+
+  const total = Math.max(1e-9, chordTotal);
   const d = run.closed ? (((arcM % total) + total) % total) : Math.min(Math.max(0, arcM), total);
   let acc = 0;
 
@@ -152,7 +180,7 @@ export function runPointAt(
     const seg = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z);
 
     if (d <= acc + seg || i === pts.length - 2) {
-      const t = seg < 1e-9 ? 0 : (d - acc) / seg;
+      const t = seg < 1e-9 ? 0 : Math.min(1, Math.max(0, (d - acc) / seg));
       const planar = Math.hypot(b.x - a.x, b.y - a.y) || 1;
 
       return {
@@ -297,7 +325,10 @@ export function computeFields(
     f.dDj[i] = Math.hypot(c.pos.x - room.anchors.dj.position.x, c.pos.y - room.anchors.dj.position.y) / maxDist;
     f.gDj[i] = Math.min(Math.abs(sRaw - djS), 1 - Math.abs(sRaw - djS)) * 2;
     const half = (spanX * band) / 2;
-    f.side[i] = lx < -half ? SIDE_LEFT : lx > half ? SIDE_RIGHT : SIDE_CENTER;
+
+    if (lx < -half) f.side[i] = SIDE_LEFT;
+    else if (lx > half) f.side[i] = SIDE_RIGHT;
+    else f.side[i] = SIDE_CENTER;
     f.frontBack[i] = ly >= 0 ? 1 : 0;
     f.chain[i] = c.chain;
     f.physical[i] = c.physicalIndex;
@@ -315,7 +346,6 @@ export function fieldCellsFromMap(
   fixtureId: string,
   map: { cells: MappedCell[] },
   runs: Run[],
-  z: number,
 ): FieldCell[] {
   const runById: Record<string, Run> = {};
 
@@ -325,21 +355,18 @@ export function fieldCellsFromMap(
     const p = c.positions[0];
 
     if (!p) {
-      return {
-        fixtureId, physicalIndex: c.physicalIndex, logicalIndex: c.logicalIndex,
-        pos: { x: 0, y: 0, z }, extentStart: { x: 0, y: 0, z }, extentEnd: { x: 0, y: 0, z },
-        runId: null, arcM: 0, chain: c.physicalIndex,
-      };
+      // A position-less cell is a corrupt mapping: fabricating the room
+      // origin would produce plausible-looking but meaningless fields
+      // (batch-05).
+      throw new Error(`mapped cell ${c.physicalIndex} carries no position`);
     }
 
-    const run = runById[p.run] ?? runs[0];
+    // A dangling run id means the mapping and the room disagree: guessing
+    // runs[0] would read real geometry against the wrong polyline.
+    const run = runById[p.run];
 
     if (!run) {
-      return {
-        fixtureId, physicalIndex: c.physicalIndex, logicalIndex: c.logicalIndex,
-        pos: { x: 0, y: 0, z }, extentStart: { x: 0, y: 0, z }, extentEnd: { x: 0, y: 0, z },
-        runId: null, arcM: 0, chain: c.physicalIndex,
-      };
+      throw new Error(`mapped cell ${c.physicalIndex} references unknown run ${JSON.stringify(p.run)} (known: ${Object.keys(runById).join(", ") || "none"})`);
     }
 
     const midM = (p.startM + p.endM) / 2;
@@ -386,7 +413,23 @@ export function zeroSFor(room: Room, outline: Point2[], mode: string): number {
       if (p.y > bestY) { bestY = p.y; best = k / 64; }
     }
 
-    return best;
+    // The fixed sweep can miss the true front-most point on long perimeters;
+    // refine within the winning step with a ternary search on y (batch-05).
+    let lo = best - 1 / 64;
+    let hi = best + 1 / 64;
+
+    for (let iter = 0; iter < 24; iter++) {
+      const mid1 = lo + (hi - lo) / 3;
+      const mid2 = hi - (hi - lo) / 3;
+
+      if (outlinePoint(o, mid1).y < outlinePoint(o, mid2).y) lo = mid1;
+      else hi = mid2;
+    }
+
+    const refined = (lo + hi) / 2;
+    const refinedY = outlinePoint(o, refined).y;
+
+    return refinedY >= bestY ? ((refined % 1) + 1) % 1 : best;
   }
 
   if (mode === "controller" || mode === "custom-anchor") return room.logicalZeroS ?? 0;

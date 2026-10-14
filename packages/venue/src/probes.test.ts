@@ -168,7 +168,7 @@ describe("P-ROOM probes on SIM", () => {
 
     const remapped = computeFields(
       { ...ref.room, logicalZeroS: 0.4 },
-      fieldCellsFromMap("strip", { cells: fitRunMapping(ref.runs[0]!, 30, []) }, ref.runs, 2.5),
+      fieldCellsFromMap("strip", { cells: fitRunMapping(ref.runs[0]!, 30, []) }, ref.runs),
       ref.runs,
       { zeroS: 0.4 },
     );

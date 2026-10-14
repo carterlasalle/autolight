@@ -100,7 +100,7 @@ export function Waveform({ points, beat }: { points: WaveformPoint[]; beat: numb
   const h = 48;
   const minAt = points.length > 0 ? Math.min(...points.map((p) => p.at)) : 0;
   const maxAt = points.length > 1 ? Math.max(...points.map((p) => p.at)) : minAt + 1;
-  const span = maxAt - minAt;
+  const span = Math.max(1e-9, maxAt - minAt);
   const x = (at: number): number => ((at - minAt) / span) * w;
   const d = points.map((p) => `${x(p.at)},${(1 - p.value) * h}`).join(" ");
 
@@ -129,7 +129,10 @@ export function BeatRuler({ ticks, startBeat, endBeat, beatsPerBar }: {
   return (
     <div role="img" aria-label="Beat ruler" className="relative h-4 border-b border-border">
       {ticks.map((t) => {
-        const isBar = (t.at - startBeat) % beatsPerBar === 0;
+        // Bars are integer beats divisible by the bar length: anchoring on
+        // the (possibly fractional) window origin would never hit zero
+        // (batch-05).
+        const isBar = ((Math.round(t.at) % beatsPerBar) + beatsPerBar) % beatsPerBar === 0;
         const left = `${((t.at - startBeat) / span) * 100}%`;
 
         return (
@@ -171,12 +174,12 @@ export function SectionLane({ bands, startBeat, endBeat }: {
 
   return (
     <div role="img" aria-label="Sections" className="relative h-6 border-b border-border">
-      {bands.map((s) => {
+      {bands.map((s, i) => {
         const left = ((s.start - startBeat) / span) * 100;
         const width = Math.max(0.5, ((s.end - s.start) / span) * 100);
 
         return (
-          <span key={s.start} aria-hidden className="absolute top-0 h-6 bg-muted" style={{ left: `${left}%`, width: `${width}%` }}>
+          <span key={`${s.start}-${i}`} aria-hidden className="absolute top-0 h-6 bg-muted" style={{ left: `${left}%`, width: `${width}%` }}>
             <span className={"overflow-hidden px-1 " + tokens.type.caption}>{s.label}</span>
           </span>
         );
@@ -195,12 +198,16 @@ export function EventLane({ marks, startBeat, endBeat }: {
 
   return (
     <div role="img" aria-label="Events" className="relative h-5">
-      {marks.map((m) => {
+      {marks.map((m, i) => {
         const left = ((m.at - startBeat) / span) * 100;
-        const tone = m.kind === "cue" ? tokens.statusWarn : m.kind === "event" ? tokens.statusOk : tokens.accent;
+        let tone: string;
+
+        if (m.kind === "cue") tone = tokens.statusWarn;
+        else if (m.kind === "event") tone = tokens.statusOk;
+        else tone = tokens.accent;
 
         return (
-          <span key={`${m.kind}-${m.at}`} title={m.label} aria-hidden
+          <span key={`${m.kind}-${m.at}-${i}`} title={m.label} aria-hidden
             className="absolute top-1/2 size-2 -translate-y-1/2"
             style={{ left: `${left}%`, backgroundColor: tone }} />
         );
@@ -250,7 +257,11 @@ export function DeviceTile({ tile, onAction }: {
   tile: TileData;
   onAction?: (action: "IDENTIFY" | "TEST CHASE" | "RECALIBRATE") => void;
 }): JSX.Element {
-  const healthTone: StatusTone = tile.health === "online" ? "ok" : tile.health === "degraded" ? "warn" : "bad";
+  const HEALTH_TONES: Record<string, StatusTone> = { online: "ok", degraded: "warn" };
+  const healthTone: StatusTone = HEALTH_TONES[tile.health] ?? "bad";
+  // 0 (and any non-finite value) is the no-measurement sentinel in this
+  // codebase, like the segments line below treats 0 (batch-05).
+  const latencyMeasured = Number.isFinite(tile.latencyMs) && tile.latencyMs > 0;
 
   return (
     <article aria-label={tile.id} className={tokens.panel}>
@@ -259,7 +270,7 @@ export function DeviceTile({ tile, onAction }: {
         <HealthIndicator tone={healthTone} label={`health: ${tile.health}`} />
       </header>
       <div className={tokens.space.padding}>
-        <MetricBadge metric={{ label: "latency", value: String(tile.latencyMs), unit: "ms" }} />
+        <MetricBadge metric={{ label: "latency", value: latencyMeasured ? String(tile.latencyMs) : "unmeasured", unit: latencyMeasured ? "ms" : "" }} />
         <p className={tokens.type.small + " " + tokens.subtle}>
           {tile.segments !== 0 ? `${tile.segments} segments` : "segments: unmeasured"} · {tile.ip ?? "no IP"}
         </p>
@@ -277,8 +288,9 @@ export function DeviceTile({ tile, onAction }: {
 
 // ---------------------------------------------------------------- inspector
 // InspectorPanel: synchronized lanes (spec 96) driven straight from the
-// installed TrackModel: sections as bands, musical events and cues as
-// marks, grid from the beat grid. The one place a track becomes lanes.
+// installed TrackModel: sections as bands, musical events as marks (plan
+// cues live on ShowPlan and render through CueList, not here), grid from
+// the beat grid. The one place a track becomes lanes.
 export function InspectorPanel({ track, startBeat, endBeat }: {
   track: TrackModel;
   startBeat: number;
@@ -286,6 +298,9 @@ export function InspectorPanel({ track, startBeat, endBeat }: {
 }): JSX.Element {
   const bands: SectionBand[] = track.sections.map((s) => ({ start: s.startBeat, end: s.endBeat, label: s.kind }));
   const marks: LaneMark[] = track.musicalEvents.map((e) => ({ at: e.beat, label: e.type, kind: "event" }));
+  // The bar length is the grid's own beat-in-bar cycle, not a constant: 3/4
+  // and other meters must not render 4-beat bars (batch-05).
+  const beatsPerBar = track.beatGrid.beats.reduce((max, b) => Math.max(max, b.beatInBar), 4);
 
   return (
     <section aria-label="Track inspector" className={tokens.panel}>
@@ -293,7 +308,7 @@ export function InspectorPanel({ track, startBeat, endBeat }: {
         <h2 className={tokens.type.body}>{track.identity.title ?? track.identity.id}</h2>
       </header>
       <SectionLane bands={bands} startBeat={startBeat} endBeat={endBeat} />
-      <BeatRuler ticks={barTicks(startBeat, endBeat)} startBeat={startBeat} endBeat={endBeat} beatsPerBar={4} />
+      <BeatRuler ticks={barTicks(startBeat, endBeat)} startBeat={startBeat} endBeat={endBeat} beatsPerBar={beatsPerBar} />
       <EventLane marks={marks} startBeat={startBeat} endBeat={endBeat} />
       <div className="flex flex-wrap gap-1">
         {track.beatGrid.beats.slice(0, 16).map((b) => (
@@ -309,14 +324,13 @@ export function InspectorPanel({ track, startBeat, endBeat }: {
 export function TimelineCursor({ at, end }: { at: number; end: number }): JSX.Element {
   const left = end > 0 ? `${Math.min(100, Math.max(0, (at / end) * 100))}%` : "0%";
 
-  return <span role="img" aria-label="Playhead" aria-hidden className="absolute top-0 bottom-0 w-px bg-primary" style={{ left }} />;
+  return <span aria-hidden className="absolute top-0 bottom-0 w-px bg-primary" style={{ left }} />;
 }
 
 // ---------------------------------------------------------------- cue list
 export interface CueRow {
   cue: ShowCue;
   now: number; // measured master beat, not advanced here
-  onSelect?: (cue: ShowCue) => void;
 }
 
 export function cueRelative(cue: ShowCue, now: number): string {
@@ -329,8 +343,8 @@ export function cueRelative(cue: ShowCue, now: number): string {
 export function CueList({ cues, now }: { cues: CueRow[]; now: number }): JSX.Element {
   return (
     <ol role="list" aria-label="Upcoming cues">
-      {cues.map((row) => (
-        <li key={`${row.cue.startBeat}-${row.cue.target}`} className={tokens.panel + " " + tokens.space.paddingTight}>
+      {cues.map((row, i) => (
+        <li key={`${row.cue.startBeat}-${row.cue.target}-${i}`} className={tokens.panel + " " + tokens.space.paddingTight}>
           <span>{row.cue.type.replace(/-/g, " ")} → {row.cue.target}</span>
           <span className={tokens.type.timing + " " + tokens.accent}>{cueRelative(row.cue, now)}</span>
         </li>
@@ -457,8 +471,17 @@ export const CAPABILITY_STATUSES: readonly CapabilityStatus[] = [
   "PASS", "IMPLEMENTED_UNQUALIFIED", "PARTIAL", "FAIL", "UNAVAILABLE_ON_THIS_DEVICE", "MISSING",
 ];
 
+const CAPABILITY_TONES: Record<CapabilityStatus, StatusTone> = {
+  PASS: "ok",
+  IMPLEMENTED_UNQUALIFIED: "warn",
+  PARTIAL: "warn",
+  FAIL: "bad",
+  UNAVAILABLE_ON_THIS_DEVICE: "bad",
+  MISSING: "bad",
+};
+
 export function CapabilityBadge({ capability, status }: { capability: string; status: CapabilityStatus }): JSX.Element {
-  const tone: StatusTone = status === "PASS" ? "ok" : status === "PARTIAL" || status === "IMPLEMENTED_UNQUALIFIED" ? "warn" : "bad";
+  const tone = CAPABILITY_TONES[status];
 
   return <BadgeSpan label={`${capability}: ${status}`} tone={tone} />;
 }
@@ -473,7 +496,12 @@ export interface SourceInfo {
 // SourceBadge: source, provider and quality (spec 89). The unverified copy
 // is exactly the spec 145 banner wording.
 export function SourceBadge({ info }: { info: SourceInfo }): JSX.Element {
-  const quality = info.verified ? "verified" : UNVERIFIED_REKORDBOX_COPY;
+  // The spec 145 banner wording is Rekordbox-specific: never paste it onto
+  // a Serato badge (batch-05).
+  let quality = "unverified";
+
+  if (info.verified) quality = "verified";
+  else if (info.source === "REKORDBOX") quality = UNVERIFIED_REKORDBOX_COPY;
 
   return (
     <BadgeSpan label={`${info.source} ${info.provider} ${quality}`} tone={info.verified ? "ok" : "warn"} />

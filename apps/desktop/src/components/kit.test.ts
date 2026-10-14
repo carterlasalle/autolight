@@ -345,7 +345,15 @@ describe("SourceBadge", () => {
       info: { source: "SERATO", provider: "serato-remote", verified: false },
     }));
 
-    expect(unverified).toContain("SERATO serato-remote UNVERIFIED REKORDBOX VERSION");
+    // The spec-145 banner wording is Rekordbox-specific; Serato reads plain
+    // "unverified" (batch-05).
+    expect(unverified).toContain("SERATO serato-remote unverified");
+
+    const unverifiedRekordbox = render(createElement(SourceBadge, {
+      info: { source: "REKORDBOX", provider: "prolink", verified: false },
+    }));
+
+    expect(unverifiedRekordbox).toContain(`REKORDBOX prolink ${UNVERIFIED_REKORDBOX_COPY}`);
   });
 });
 

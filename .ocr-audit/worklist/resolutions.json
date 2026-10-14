@@ -1,4 +1,108 @@
 {
+  "batch-05": [
+    {
+      "path": "apps/desktop/src/components/kit.tsx",
+      "line": 276,
+      "verdict": "fixed-by-commit",
+      "evidence": "InspectorPanel's comment now documents events-as-marks and points cues to ShowPlan/CueList (batch-05)."
+    },
+    {
+      "path": "packages/rekordbox-live/src/fusion.ts",
+      "line": 275,
+      "verdict": "fixed-by-commit",
+      "evidence": "The pair scan now filters both providers by supplied(...) per field before measuring, so null playheads cannot fabricate spread (batch-05)."
+    },
+    {
+      "path": "packages/rekordbox-live/src/fusion.ts",
+      "line": 404,
+      "verdict": "fixed-by-commit",
+      "evidence": "start() registers subscriptions for all providers then awaits them concurrently via Promise.all (batch-05)."
+    },
+    {
+      "path": "packages/rekordbox-live/src/fusion.ts",
+      "line": 414,
+      "verdict": "fixed-by-commit",
+      "evidence": "Scheduled restart timers no-op when the manager is stopped, and restart() ignores failures after stop (batch-05)."
+    },
+    {
+      "path": "packages/rekordbox-live/src/ax.ts",
+      "line": 57,
+      "verdict": "fixed-by-commit",
+      "evidence": "remainingSeconds is normalized to a magnitude (Math.abs) so signed countdowns cannot invert refine's comparisons (batch-05); recorded-tree tests updated to 168."
+    },
+    {
+      "path": "packages/rekordbox-live/src/ax.ts",
+      "line": 101,
+      "verdict": "fixed-by-commit",
+      "evidence": "Nested deck/player containers are deduplicated to the outermost set in both the role match and the group/pane fallback (batch-05)."
+    },
+    {
+      "path": "packages/venue/src/fields.ts",
+      "line": 289,
+      "verdict": "fixed-by-commit",
+      "evidence": "A mapped cell with no position now throws instead of collapsing to the room origin (batch-05)."
+    },
+    {
+      "path": "packages/venue/src/fields.ts",
+      "line": 151,
+      "verdict": "fixed-by-commit",
+      "evidence": "runPointAt throws for a polyline with fewer than two points instead of spreading undefined into the field arrays (batch-05)."
+    },
+    {
+      "path": "packages/venue/src/fields.ts",
+      "line": 72,
+      "verdict": "fixed-by-commit",
+      "evidence": "outlineCum is memoized per outline identity (WeakMap), removing the per-cell rebuild and allocation (batch-05)."
+    },
+    {
+      "path": "packages/venue/src/fields.ts",
+      "line": 340,
+      "verdict": "fixed-by-commit",
+      "evidence": "front-center zeroS refines the winning sweep step with a ternary search on y, so long perimeters no longer miss the front-most point (batch-05)."
+    },
+    {
+      "path": "packages/cloud/src/client.ts",
+      "line": 293,
+      "verdict": "by-design",
+      "evidence": "The local budget counts attempts (guard runs before the fetch): that is the conservative side of rate limiting — a failing request still consumed the attempt against the server. The account-day budget test pins attempt counting."
+    },
+    {
+      "path": "packages/cloud/src/client.ts",
+      "line": 184,
+      "verdict": "by-design",
+      "evidence": "Falling back to the generic x-ratelimit-remaining header is a compatibility path for responses that only carry the legacy header; both headers are remaining-counts of the same minute window in the Govee API."
+    },
+    {
+      "path": "packages/rekordbox-live/src/ax.ts",
+      "line": 84,
+      "verdict": "by-design-with-limitation",
+      "evidence": "AxNode carries no checked/selected state (role/position/label/value/children only), so the toggle's actual state cannot be read; the presence heuristic is the best available from the dumped tree. Extending the tree dump with state is a helper-side change, noted as follow-up."
+    },
+    {
+      "path": "packages/rekordbox-live/src/ax.ts",
+      "line": 96,
+      "verdict": "by-design",
+      "evidence": "deckIndexOf is only called with the containers list itself as siblings, so indexOf can never return -1; the label hint wins when present."
+    },
+    {
+      "path": "packages/rekordbox-live/src/ax.ts",
+      "line": 156,
+      "verdict": "by-design",
+      "evidence": "readable describes the time fields (both present and distinct); a null playing is honest unknown — the provider labels it estimated. Comparing against the previous sample remains the documented refinement path."
+    },
+    {
+      "path": "packages/rekordbox-live/src/ax.ts",
+      "line": 174,
+      "verdict": "documented-precondition",
+      "evidence": "The grid comes from the analysis track model, which owns ascending sourceTimeMs ordering; the function documents the precondition and bails only on an empty grid."
+    },
+    {
+      "path": "packages/rekordbox-live/src/ax.ts",
+      "line": 58,
+      "verdict": "type-required",
+      "evidence": "noUncheckedIndexedAccess makes m[2]/m[3] string|undefined at the type level, so the ?? fallbacks are index-access guards, not dead branches."
+    }
+  ],
   "batch-04": [
     {
       "path": "apps/desktop/electron/services/show-host-supervisor.ts",

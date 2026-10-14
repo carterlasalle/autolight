@@ -66,6 +66,14 @@ function timeToSeconds(text: string | undefined): number | null {
   return sign * seconds;
 }
 
+function containsNode(ancestor: AxNode, node: AxNode): boolean {
+  for (const child of ancestor.children ?? []) {
+    if (child === node || containsNode(child, node)) return true;
+  }
+
+  return false;
+}
+
 function isRemaining(label: string | undefined, value: string | undefined): boolean {
   if (label && /remain|left/i.test(label)) return true;
 
@@ -113,7 +121,13 @@ function deckIndexOf(node: AxNode, siblings: readonly AxNode[]): number {
 export function readAxDecks(root: readonly AxNode[]): AxDeckReading[] {
   const all = flatten(root);
   const deckContainers = all.filter((n) => (/deck|player/i.test(n.role) && !/button/i.test(n.role)) || /deck\s*[1-4]/i.test(n.label ?? ""));
-  const containers: AxNode[] = deckContainers.length > 0 ? deckContainers : all.filter((n) => /group|pane/i.test(n.role));
+  // A nested deck/player node inside another container would read the same
+  // deck twice with renumbered ids; keep only the outermost containers, in
+  // both the role match and the group/pane fallback (batch-05).
+  const outermost = (candidates: AxNode[]): AxNode[] =>
+    candidates.filter((n) => !candidates.some((o) => o !== n && containsNode(o, n)));
+  const matched = outermost(deckContainers);
+  const containers: AxNode[] = matched.length > 0 ? matched : outermost(all.filter((n) => /group|pane/i.test(n.role)));
   const readings: AxDeckReading[] = [];
 
   for (const container of containers) {
@@ -125,7 +139,10 @@ export function readAxDecks(root: readonly AxNode[]): AxDeckReading[] {
     const artistNode = nodes.find((n) => /artist/i.test(n.label ?? ""));
     const deckId = deckIndexOf(container, containers);
     const elapsedSeconds = timeToSeconds(elapsedNode?.value);
-    const remainingSeconds = timeToSeconds(remainingNode?.value);
+    // Remaining time is a magnitude: "-2:48" and "2:48 left" must not flip
+    // the sign of the field (refine's comparisons assume it decreases).
+    const remainingRaw = timeToSeconds(remainingNode?.value);
+    const remainingSeconds = remainingRaw === null ? null : Math.abs(remainingRaw);
     const readable = elapsedSeconds !== null || remainingSeconds !== null;
     readings.push({
       deckId,
@@ -192,6 +209,9 @@ export function axPermissionState(granted: boolean): AxPermissionState {
 }
 
 // Elapsed seconds onto the ANLZ grid, as fractional beats (§T-LIVE-06 DoD).
+// Precondition: the grid is sorted ascending by sourceTimeMs (the analysis
+// track model owns that ordering); the search bails to null only for an
+// empty grid.
 export function axFractionalBeat(elapsedSeconds: number, grid: readonly { sourceTimeMs: number }[]): number | null {
   if (grid.length === 0) return null;
   const t = elapsedSeconds * 1000;

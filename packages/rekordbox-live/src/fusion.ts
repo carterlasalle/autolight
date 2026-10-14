@@ -32,7 +32,7 @@ export interface FusionSwitchEvent {
   field: FusionField;
   from: string | null;
   to: string;
-  reason: "acquired" | "higher-authority" | "stale-takeover" | "quality";
+  reason: "acquired" | "higher-authority" | "stale-takeover";
 }
 
 export interface FusionDiagnostic {
@@ -74,7 +74,10 @@ function supplied(state: ProviderDeckState, field: FusionField): boolean {
 function isFresh(state: ProviderDeckState, field: FusionField, atNs: bigint, staleMs: number): boolean {
   if (state.quality[field] === "stale") return false;
 
-  return Number(atNs - state.receivedAtNs) / 1e6 <= staleMs;
+  // A provider timestamp ahead of the engine (clock skew) must not read as
+  // permanently fresh: clamp the age to zero, so freshness expires once the
+  // engine clock passes receivedAtNs + staleMs (batch-05).
+  return Math.max(0, Number(atNs - state.receivedAtNs) / 1e6) <= staleMs;
 }
 
 function beatsBetween(a: ProviderDeckState, b: ProviderDeckState): number {
@@ -106,8 +109,10 @@ export class FusionEngine {
   private fusedByDeck = new Map<number, ProviderDeckState>();
 
   constructor(opts: { now: () => bigint } & Partial<FusionOptions>) {
-    this.options = { ...DEFAULT_FUSION_OPTIONS, ...opts, authority: opts.authority ?? DEFAULT_FUSION_AUTHORITY };
-    this.now = opts.now;
+    const { now, ...rest } = opts;
+
+    this.options = { ...DEFAULT_FUSION_OPTIONS, ...rest, authority: opts.authority ?? DEFAULT_FUSION_AUTHORITY };
+    this.now = now;
   }
 
   getOptions(): FusionOptions {
@@ -141,7 +146,9 @@ export class FusionEngine {
   // provider that went silent shows up as stale instead of looking fresh
   // until the next packet arrives.
   refresh(): void {
-    for (const deckId of [...this.fusedByDeck.keys()]) this.recompute(deckId);
+    // Map iteration tolerates recompute's writes to existing keys, so the
+    // keys can be walked directly (no copy).
+    for (const deckId of this.fusedByDeck.keys()) this.recompute(deckId);
   }
 
   drainEvents(): FusionSwitchEvent[] {
@@ -321,7 +328,10 @@ export class FusionEngine {
           const a = fresh[i]!;
           const b = fresh[j]!;
 
-          if (group.field === "effectiveBpm" && (a.state.effectiveBpm === null || b.state.effectiveBpm === null)) continue;
+          // A provider that never supplied the field must not be compared:
+          // null coerces to 0 and fabricates spread, masking the real pair
+          // (batch-05).
+          if (!supplied(a.state, group.field) || !supplied(b.state, group.field)) continue;
           const d = group.measure(a.state, b.state);
 
           if (d > spread) {
@@ -408,6 +418,7 @@ export class ProviderManager {
   private readonly port = new LatestWinsPort();
   private readonly statuses = new Map<string, ProviderStatus>();
   private readonly restarts = new Map<string, number>();
+  private readonly restarting = new Set<string>();
   private readonly restartsInFlight = new Set<Promise<void>>();
   private readonly unsubscribes: (() => void)[] = [];
   private readonly schedule: (fn: () => void, ms: number) => void;
@@ -445,7 +456,11 @@ export class ProviderManager {
 
         if (status.state === "failed") this.restart(provider);
       }));
+    }
 
+    // Starting is independent per provider: one that never settles must not
+    // block the others or the caller (batch-05).
+    await Promise.all(this.providers.map(async (provider) => {
       try {
         await provider.start();
         this.statuses.set(provider.id, provider.getStatus());
@@ -453,7 +468,7 @@ export class ProviderManager {
         this.statuses.set(provider.id, { state: "failed", error: err instanceof Error ? err.message : String(err) });
         this.restart(provider);
       }
-    }
+    }));
   }
 
   async stop(): Promise<void> {
@@ -502,6 +517,11 @@ export class ProviderManager {
   }
 
   private restart(provider: DJLiveProvider): void {
+    // Stopped managers ignore failures (a late status must not resurrect a
+    // provider), and one in-flight attempt per provider prevents duplicate
+    // timers from re-entrant failure storms (batch-05).
+    if (!this.started || this.restarting.has(provider.id)) return;
+
     const attempts = this.restarts.get(provider.id) ?? 0;
 
     if (attempts >= this.maxRestarts) {
@@ -514,9 +534,19 @@ export class ProviderManager {
     }
 
     this.restarts.set(provider.id, attempts + 1);
+    this.restarting.add(provider.id);
     const attempt = Promise.withResolvers<void>();
     this.restartsInFlight.add(attempt.promise);
     this.schedule(() => {
+      // A timer queued before stop() must not restart anything afterwards.
+      if (!this.started) {
+        this.restarting.delete(provider.id);
+        this.restartsInFlight.delete(attempt.promise);
+        attempt.resolve();
+
+        return;
+      }
+
       void provider.stop()
         .then(() => provider.start())
         .then(() => {
@@ -524,9 +554,12 @@ export class ProviderManager {
         })
         .catch((err: unknown) => {
           this.statuses.set(provider.id, { state: "failed", error: err instanceof Error ? err.message : String(err) });
+          // Cleared before the recursive retry so the guard lets it through.
+          this.restarting.delete(provider.id);
           this.restart(provider);
         })
         .finally(() => {
+          this.restarting.delete(provider.id);
           this.restartsInFlight.delete(attempt.promise);
           attempt.resolve();
         });
