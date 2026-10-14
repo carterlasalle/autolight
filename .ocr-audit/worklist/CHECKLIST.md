@@ -1,6 +1,6 @@
 # OCR audit — batch checklist
 
-Refreshed against HEAD eacb0c1 (2026-10-14) with `node .ocr-audit/worklist/triage.mjs`.
+Refreshed against HEAD 4cf0113 (2026-10-14) with `node .ocr-audit/worklist/triage.mjs`.
 Legend: [x] all comments resolved+verified, [~] in progress, [ ] not started.
 
 [x] batch-01: open 0, unknown 0, applied 44 of 44
@@ -40,7 +40,7 @@ Legend: [x] all comments resolved+verified, [~] in progress, [ ] not started.
 [x] batch-35: open 0, unknown 0, applied 30 of 30
 [x] batch-36: open 0, unknown 0, applied 25 of 25
 [x] batch-37: open 0, unknown 0, applied 29 of 29
-[~] batch-38: open 16, unknown 5, applied 8 of 29
+[~] batch-38: open 0, unknown 5, applied 24 of 29
 [x] batch-39: open 0, unknown 0, applied 35 of 35
 [x] batch-40: open 0, unknown 0, applied 26 of 26
 [~] batch-41: open 28, unknown 0, applied 5 of 33

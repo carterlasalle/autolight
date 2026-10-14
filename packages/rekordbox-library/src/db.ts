@@ -131,7 +131,14 @@ export const TRACK_SELECT = `SELECT c.*,
   LEFT JOIN djmdKey AS k ON c.KeyID = k.ID
   LEFT JOIN djmdColor AS co ON c.ColorID = co.ID`;
 
-const SEARCH_WHERE = " WHERE c.Title LIKE :search OR ar.Name LIKE :search OR c.FolderPath LIKE :search";
+// ESCAPE '\' pairs with likePattern(): user text cannot smuggle % or _.
+const SEARCH_WHERE = " WHERE c.Title LIKE :search ESCAPE '\\' OR ar.Name LIKE :search ESCAPE '\\' OR c.FolderPath LIKE :search ESCAPE '\\'";
+
+/** LIKE pattern for user text: metacharacters escaped so `100%` or `a_b`
+ *  match literally instead of becoming wildcards. */
+function likePattern(search: string): string {
+  return `%${search.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`;
+}
 
 function numberOrNull(value: unknown): number | null {
   return typeof value === "number" ? value : null;
@@ -145,6 +152,16 @@ function text(value: unknown, fallback: string): string {
   return typeof value === "string" && value.length > 0 ? value : fallback;
 }
 
+/** Identifier text: a driver or sidecar may hand IDs back as number/bigint,
+ *  which must not collapse to the empty fallback. */
+function idText(value: unknown, fallback: string): string {
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+
+  if (typeof value === "bigint") return value.toString();
+
+  return text(value, fallback);
+}
+
 /** Normalize one joined `djmdContent` row; the single mapping for all readers. */
 export function mapTrackRow(row: SqlRow, opts: { sharePath: string; statFile?: StatFile }): LibraryTrack {
   const analysisDataPath = stringOrNull(row["AnalysisDataPath"] ?? null);
@@ -155,7 +172,7 @@ export function mapTrackRow(row: SqlRow, opts: { sharePath: string; statFile?: S
     : { sharePath: opts.sharePath, audioPath: filePath, statFile: opts.statFile };
 
   return {
-    rekordboxId: text(row["ID"], ""),
+    rekordboxId: idText(row["ID"], ""),
     title: stringOrNull(row["Title"] ?? null),
     artist: stringOrNull(row["artistName"] ?? null),
     album: stringOrNull(row["albumName"] ?? null),
@@ -178,12 +195,17 @@ export function mapTrackRow(row: SqlRow, opts: { sharePath: string; statFile?: S
 }
 
 export function mapPlaylistRow(row: SqlRow): LibraryPlaylist {
+  // Attributes may arrive numeric or TEXT ("4"): both name the same kind.
+  const attribute = row["Attribute"];
+
+  const attributeKey = typeof attribute === "number" ? String(attribute) : typeof attribute === "string" && attribute.length > 0 ? attribute : "0";
+
   return {
-    id: text(row["ID"], ""),
+    id: idText(row["ID"], ""),
     name: text(row["Name"], ""),
     seq: numberOrNull(row["Seq"] ?? null),
     parentId: stringOrNull(row["ParentID"] ?? null),
-    kind: PLAYLIST_ATTRIBUTE_KINDS[String(numberOrNull(row["Attribute"] ?? null) ?? 0)] ?? "playlist",
+    kind: PLAYLIST_ATTRIBUTE_KINDS[attributeKey] ?? "playlist",
     dateCreated: stringOrNull(row["DateCreated"] ?? null),
     raw: row,
   };
@@ -256,7 +278,7 @@ export class RekordboxReader implements LibrarySource {
     let sql = TRACK_SELECT;
 
     if (query.search !== undefined && query.search !== "") {
-      params["search"] = `%${query.search}%`;
+      params["search"] = likePattern(query.search);
       sql += SEARCH_WHERE;
     }
 
@@ -270,7 +292,7 @@ export class RekordboxReader implements LibrarySource {
     let sql = `SELECT count(*) AS n FROM ${CONTENT} AS c LEFT JOIN djmdArtist AS ar ON c.ArtistID = ar.ID`;
 
     if (search !== undefined && search !== "") {
-      params["search"] = `%${search}%`;
+      params["search"] = likePattern(search);
       sql += SEARCH_WHERE;
     }
 

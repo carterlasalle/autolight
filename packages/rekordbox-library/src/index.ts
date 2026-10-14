@@ -39,8 +39,16 @@ export interface LibraryTrackRow {
 }
 
 export function rowToIdentity(row: LibraryTrackRow): { rekordboxId: string; canonicalPath?: string; title?: string; artist?: string } {
-  const path = row.canonicalPath ?? row.filePath;
-  const out: { rekordboxId: string; canonicalPath?: string; title?: string; artist?: string } = { rekordboxId: row.rekordboxId };
+  const rekordboxId = row.rekordboxId.trim();
+
+  // The native ID is the resolution start (§12): a missing one must fail
+  // loudly instead of keying an identity on "".
+  if (rekordboxId === "") throw new Error("rowToIdentity: rekordboxId is missing");
+
+  // An EMPTY canonicalPath is as absent as a null one: fall back to the raw
+  // database path instead of silently dropping the canonical path.
+  const path = row.canonicalPath !== undefined && row.canonicalPath !== "" ? row.canonicalPath : row.filePath;
+  const out: { rekordboxId: string; canonicalPath?: string; title?: string; artist?: string } = { rekordboxId };
 
   if (path !== undefined && path !== "") out.canonicalPath = path;
 

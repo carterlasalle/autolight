@@ -3055,6 +3055,102 @@
       "line": 59,
       "verdict": "documented-precondition",
       "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "packages/matter/src/binding.test.ts",
+      "line": 26,
+      "verdict": "fixed",
+      "evidence": "All adapters register in an opened[] list closed by afterEach, so cleanup survives thrown assertions."
+    },
+    {
+      "path": "packages/matter/src/binding.test.ts",
+      "line": 25,
+      "verdict": "fixed",
+      "evidence": "Flow validated: exactly one identify/identify, issued BEFORE the confirmation callback (command-log index compared)."
+    },
+    {
+      "path": "packages/matter/src/binding.test.ts",
+      "line": 38,
+      "verdict": "fixed",
+      "evidence": "The decline test counts the flash (flashed===1) and asserts the identify command, then the clean store."
+    },
+    {
+      "path": "packages/matter/src/binding.test.ts",
+      "line": 51,
+      "verdict": "fixed",
+      "evidence": "The rejected rebind asserts the WHOLE stored record equals its pre-rebind snapshot."
+    },
+    {
+      "path": "packages/matter/src/binding.test.ts",
+      "line": 44,
+      "verdict": "fixed",
+      "evidence": "commissioned(name) helper parametrized and reused; the rebind test no longer re-implements the commission sequence."
+    },
+    {
+      "path": "packages/rekordbox-library/src/db.ts",
+      "line": 127,
+      "verdict": "fixed",
+      "evidence": "likePattern() escapes %/_/\\ and SEARCH_WHERE carries ESCAPE '\\': user text matches literally."
+    },
+    {
+      "path": "packages/rekordbox-library/src/db.ts",
+      "line": 177,
+      "verdict": "fixed",
+      "evidence": "Playlist Attribute accepts numeric and TEXT forms ('4' names the same kind)."
+    },
+    {
+      "path": "packages/rekordbox-library/src/db.ts",
+      "line": 149,
+      "verdict": "fixed",
+      "evidence": "idText() coerces numeric/bigint IDs; track and playlist ids no longer collapse to ''."
+    },
+    {
+      "path": "packages/rekordbox-library/src/db.ts",
+      "line": 290,
+      "verdict": "fixed-earlier",
+      "evidence": "historyTrackCounts is declared on LibrarySource (:93), used by service.ts:180 for fallback matching, and implemented by sidecar.ts — wired, not dead."
+    },
+    {
+      "path": "packages/rekordbox-library/src/index.ts",
+      "line": 33,
+      "verdict": "fixed",
+      "evidence": "An empty canonicalPath falls back to filePath instead of dropping the path; pinned by test."
+    },
+    {
+      "path": "packages/rekordbox-library/src/index.ts",
+      "line": 34,
+      "verdict": "fixed",
+      "evidence": "rekordboxId is trimmed and required: a blank native ID throws instead of keying an identity on ''; tests added."
+    },
+    {
+      "path": "packages/rekordbox-live/src/contract-suite.ts",
+      "line": 83,
+      "verdict": "fixed",
+      "evidence": "Status captured once; a missing status records the failure and returns."
+    },
+    {
+      "path": "packages/rekordbox-live/src/contract-suite.ts",
+      "line": 80,
+      "verdict": "fixed",
+      "evidence": "The check body runs inside try/catch: a throw becomes a recorded failure and cleanup still runs."
+    },
+    {
+      "path": "packages/rekordbox-live/src/contract-suite.ts",
+      "line": 122,
+      "verdict": "fixed",
+      "evidence": "Queue must DRAIN to exactly 0 after the settling burst, not merely stay clamped at 1."
+    },
+    {
+      "path": "packages/rekordbox-live/src/contract-suite.ts",
+      "line": 108,
+      "verdict": "fixed",
+      "evidence": "Deck 2 asserted to carry no deck-1 track id across ALL its states; the comment no longer claims a fixed generation 0 (numbering is provider-defined)."
+    },
+    {
+      "path": "packages/rekordbox-live/src/contract-suite.ts",
+      "line": 62,
+      "verdict": "fixed",
+      "evidence": "capture() owns both unsubscribe functions; the suite finally calls off() before stop()."
     }
   ],
   "batch-39": [

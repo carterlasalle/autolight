@@ -36,6 +36,12 @@ describe("rekordbox-library surface", () => {
     expect(rowToIdentity({ rekordboxId: "100307086", filePath: "/music/aurora.aiff" }).canonicalPath).toBe("/music/aurora.aiff");
     // An empty path is not an identity field.
     expect(rowToIdentity({ rekordboxId: "7", canonicalPath: "" }).canonicalPath).toBeUndefined();
+    // An EMPTY canonicalPath with a filePath present falls back instead of
+    // dropping the path (the ?? alone would lose it).
+    expect(rowToIdentity({ rekordboxId: "7", canonicalPath: "", filePath: "/music/fallback.mp3" }).canonicalPath).toBe("/music/fallback.mp3");
+    // The native id is trimmed and required.
+    expect(rowToIdentity({ rekordboxId: " 42 " }).rekordboxId).toBe("42");
+    expect(() => rowToIdentity({ rekordboxId: "   " })).toThrow(/rekordboxId/);
   });
 
   it("re-exports the reader, the service, the resolver and the label table", () => {

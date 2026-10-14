@@ -55,15 +55,20 @@ export interface ContractHarness {
 interface Capture {
   states: ProviderDeckState[];
   statuses: string[];
+  /** Unsubscribes both listeners: the suite must not leak them. */
+  off: () => void;
 }
 
 function capture(provider: DJLiveProvider): Capture {
   const states: ProviderDeckState[] = [];
   const statuses: string[] = [];
-  provider.onDeckState((state) => states.push(state));
-  provider.onConnection((status) => statuses.push(status.state));
+  const offState = provider.onDeckState((state) => states.push(state));
+  const offConnection = provider.onConnection((status) => statuses.push(status.state));
 
-  return { states, statuses };
+  return { states, statuses, off: () => {
+    offState();
+    offConnection();
+  } };
 }
 
 function lastFor(states: readonly ProviderDeckState[], deckId: number): ProviderDeckState | undefined {
@@ -74,20 +79,40 @@ function lastFor(states: readonly ProviderDeckState[], deckId: number): Provider
 // not claim (track text) is skipped.
 export async function runProviderContractSuite(subject: ProviderContractSubject): Promise<string[]> {
   const failures: string[] = [];
+  const trace = capture(subject.provider);
 
+  try {
+    // A throw anywhere in the checks becomes a recorded failure instead of
+    // escaping the suite and skipping the unsubscribe/stop cleanup.
+    try {
+      await runChecks(subject, trace, failures);
+    } catch (err) {
+      failures.push(`contract suite threw: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  } finally {
+    trace.off();
+    await subject.provider.stop();
+    await subject.provider.stop();
+  }
+
+  return failures;
+}
+
+async function runChecks(subject: ProviderContractSubject, trace: Capture, failures: string[]): Promise<void> {
   const check = (ok: boolean, message: string): void => {
     if (!ok) failures.push(message);
   };
 
   const { provider } = subject;
-  const trace = capture(provider);
+    await provider.start();
+    await provider.start();
+    const afterStart = provider.getStatus();
 
-  try {
-    await provider.start();
-    await provider.start();
-    check(provider.getStatus() !== undefined, "status missing after start");
+    check(afterStart !== undefined, "status missing after start");
+
+    if (afterStart === undefined) return;
     check(trace.statuses.length > 0, "onConnection emitted no status");
-    check(provider.getStatus().state !== "failed", `provider failed on start: ${JSON.stringify(provider.getStatus())}`);
+    check(afterStart.state !== "failed", `provider failed on start: ${JSON.stringify(afterStart)}`);
 
     await subject.loadTrack(1, { id: "gen-a", title: "Generation A", artist: "Suite" });
     await subject.advance(100);
@@ -107,12 +132,15 @@ export async function runProviderContractSuite(subject: ProviderContractSubject)
     const leaked = trace.states.filter((s) => s.deckId === 1 && (s.generation ?? 0) > generationA && s.track?.title === "Generation A");
     check(leaked.length === 0, `metadata leaked from generation ${generationA} into a later generation (${leaked.length} states)`);
 
-    // A second deck must stay at generation 0 and not borrow deck 1's track.
+    // A second deck must carry only its own metadata; its generation
+    // numbering is provider-defined (the first load may itself count).
     await subject.loadTrack(2, { id: "gen-c", title: "Deck Two", artist: "Suite" });
     await subject.advance(100);
     const deckTwo = lastFor(trace.states, 2);
     check(deckTwo !== undefined, "no deck state emitted for the second deck");
-    check(deckTwo?.track?.title !== "Generation A", "deck 2 inherited deck 1 metadata");
+    check(deckTwo?.track?.title !== "Generation A" && deckTwo?.track?.title !== "Generation B", "deck 2 inherited deck 1 metadata");
+    const borrowed = trace.states.filter((s) => s.deckId === 2 && (s.track?.id === "gen-a" || s.track?.id === "gen-b"));
+    check(borrowed.length === 0, `deck 2 states carried deck 1's track (${borrowed.length} states)`);
 
     // Monotonic receivedAtNs per deck.
     let previous: bigint | null = null;
@@ -129,7 +157,9 @@ export async function runProviderContractSuite(subject: ProviderContractSubject)
       await subject.advance(10);
     }
 
-    check(provider.getStats().queueDepth <= 1, `queue depth grew to ${provider.getStats().queueDepth} (latest-wins is 1)`);
+    // After 40 settling advances the dispatch queue must be drained, not
+    // merely clamped: a stuck entry would keep the depth at 1 forever.
+    check(provider.getStats().queueDepth === 0, `queue did not drain after the burst: depth ${provider.getStats().queueDepth}`);
 
     // Malformed input is rejected and counted, never thrown.
     const rejectedBefore = provider.getStats().rejected;
@@ -139,12 +169,6 @@ export async function runProviderContractSuite(subject: ProviderContractSubject)
     const statusAfter = provider.getStatus().state;
     check(statusAfter !== "failed", `malformed input took the provider to failed: ${JSON.stringify(provider.getStatus())}`);
     check(provider.getDecks().length >= 1, "provider lost its deck state after malformed input");
-  } finally {
-    await provider.stop();
-    await provider.stop();
-  }
-
-  return failures;
 }
 
 export function describeFailures(failures: readonly string[]): string {
