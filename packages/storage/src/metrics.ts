@@ -74,10 +74,23 @@ export function histogramOf(samples: readonly number[]): Histogram {
 }
 
 const WINDOW = 512;
+// Distinct label keys are capped so a long session with ever-new labels
+// (device or scene ids) cannot grow the label map without bound; the oldest
+// key is evicted first (insertion order) (batch-16).
+const LABEL_CAP = 256;
 
 export class MetricsRegistry {
   private readonly samples = new Map<MetricName, number[]>();
   private readonly labels = new Map<string, number[]>();
+
+  private evictLabelsIfNeeded(): void {
+    while (this.labels.size > LABEL_CAP) {
+      const oldest = this.labels.keys().next().value;
+
+      if (oldest === undefined) return;
+      this.labels.delete(oldest);
+    }
+  }
 
   observe(name: MetricName, value: number, label = ""): void {
     if (!Number.isFinite(value)) return;
@@ -86,7 +99,10 @@ export class MetricsRegistry {
 
     if (target === undefined) {
       if (label === "") this.samples.set(name, [value]);
-      else this.labels.set(key, [value]);
+      else {
+        this.labels.set(key, [value]);
+        this.evictLabelsIfNeeded();
+      }
 
       return;
     }
@@ -99,8 +115,14 @@ export class MetricsRegistry {
   count(name: "queueDrops" | "supersededFrames" | "failoverSwitches" | "fusionAuthoritySwitches" | "missedWatcherChanges", by = 1, label = ""): void {
     const key = label === "" ? name : `${name}:${label}`;
     const store = label === "" ? this.samples : this.labels;
-    const current = (store.get(key as MetricName) ?? []).reduce((sum, v) => sum + v, 0);
+    // Counters store a single-element total by construction; read the total
+    // directly instead of reducing whatever else might share the key
+    // (batch-16).
+    const current = store.get(key as MetricName)?.[0] ?? 0;
+
     store.set(key as MetricName, [current + by]);
+
+    if (label !== "") this.evictLabelsIfNeeded();
   }
 
   histogram(name: MetricName, label = ""): Histogram {
@@ -110,20 +132,27 @@ export class MetricsRegistry {
   }
 
   // Diagnostics snapshot: only metrics with at least one sample appear, so a
-  // metric can never read as a constant zero before it is exercised.
+  // metric can never read as a constant zero before it is exercised. Labeled
+  // samples under `<name>:<label>` merge into their metric's histogram, so a
+  // metric exercised only with a label still shows up (batch-16).
   snapshot(): Partial<Record<MetricName, Histogram>> {
     const out: Partial<Record<MetricName, Histogram>> = {};
 
     for (const name of METRIC_NAMES) {
-      const samples = this.samples.get(name) ?? [];
+      const plain = this.samples.get(name) ?? [];
+      const merged = [...plain];
 
-      if (samples.length > 0) out[name] = histogramOf(samples);
+      for (const [key, values] of this.labels) {
+        if (key.startsWith(`${name}:`)) merged.push(...values);
+      }
+
+      if (merged.length > 0) out[name] = histogramOf(merged);
     }
 
     return out;
   }
 
   observedNames(): MetricName[] {
-    return METRIC_NAMES.filter((name) => (this.samples.get(name) ?? []).length > 0);
+    return METRIC_NAMES.filter((name) => (this.samples.get(name) ?? []).length > 0 || [...this.labels.keys()].some((key) => key.startsWith(`${name}:`)));
   }
 }
