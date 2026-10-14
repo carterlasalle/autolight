@@ -448,6 +448,10 @@ export class GoveeLanManager implements StreamTransport {
   private readonly senders = new Map<string, { socket: Socket; address: string | null; netmask: string | null }>();
   private readonly devices = new Map<string, DeviceEntry>();
   private readonly waiters: ReplyWaiter[] = [];
+  // Send times of per-device unicast scans, keyed by destination ip: a scan
+  // reply measures round-trip latency for devices that never answer devStatus
+  // (the H6076 ignores it), so their rtt still resolves every round.
+  private readonly scanSentAt = new Map<string, number>();
   private readonly chains = new Map<string, Promise<unknown>>();
   private readonly marks: RungMark[] = [];
   private readonly warnings: { at: number; message: string }[] = [];
@@ -2068,7 +2072,10 @@ export class GoveeLanManager implements StreamTransport {
       if (cached.length > 0) {
         this.markRung("cached-unicast");
 
-        for (const ip of cached) send(ip, this.o.scanPort);
+        for (const ip of cached) {
+          this.scanSentAt.set(ip, this.clock());
+          send(ip, this.o.scanPort);
+        }
       }
 
       this.checkInterfaces();
@@ -2247,8 +2254,16 @@ export class GoveeLanManager implements StreamTransport {
 
     const rung = this.rungForReply(atMs);
     const existing = this.devices.get(mac);
+    // A reply to our unicast scan measures this device's round trip; stale
+    // send times (device missed that rung) are ignored.
+    const scanSent = this.scanSentAt.get(senderIp);
+
+    if (scanSent !== undefined) this.scanSentAt.delete(senderIp);
+
+    const scanRttMs = scanSent !== undefined && atMs - scanSent < 2000 ? atMs - scanSent : null;
 
     if (existing) {
+      if (scanRttMs !== null) existing.rttMs = scanRttMs;
       if (claimedIp !== null && claimedIp !== senderIp) existing.disagreeCount += 1;
 
       if (existing.ip !== ip) {
@@ -2306,7 +2321,7 @@ export class GoveeLanManager implements StreamTransport {
       lastColor: null,
       sentFrames: 0,
       supersededFrames: 0,
-      rttMs: null,
+      rttMs: scanRttMs,
       consecutiveFailures: 0,
       reconnects: 0,
       disagreeCount: claimedIp !== null && claimedIp !== senderIp ? 1 : 0,
