@@ -7,7 +7,6 @@ import type { DeviceEntrySnapshot } from "./govee-lan.js";
 import { getProviderManager, startProlinkWatch } from "./services/provider-manager.js";
 import { getLiveShowBridge } from "./services/live-show-bridge.js";
 import { getAnalysisSupervisor } from "./services/analysis-supervisor.js";
-import { scaleChannel } from "@autolight/govee";
 import { audit, auditDropped, auditTail } from "./services/audit-log.js";
 import type { DeckState, Fixture, ShowPlan, TrackModel } from "@autolight/contracts";
 
@@ -241,39 +240,6 @@ export async function testChaseCommand(id: string): Promise<{ ok: true; id: stri
   return { ok: true, id };
 }
 
-// Rendered frame → LAN: the segmented razer stream owns the frame
-// (T-GOV-08 newest-frame-wins, T-GOV-10 verified capability); global
-// brightness travels only the slow rate-limited path (T-GOV-09), so the
-// per-frame brightness argument scales RGB in linear light instead.
-// Linear-light RGB scale for the per-frame intensity argument (spec 49):
-// one shared helper, not a copy of the renderer math.
-function scaleFrame(frame: Uint8Array, intensity: number): Uint8Array {
-  if (!(intensity < 1)) return frame;
-  const out = frame.slice();
-
-  for (let i = 0; i < out.length; i++) out[i] = scaleChannel(out[i] ?? 0, intensity);
-
-  return out;
-}
-
-export function pushFrame(id: string, frame: Uint8Array, intensity = 1): void {
-  const manager = govee();
-  void (async () => {
-    const zones = Math.floor(frame.length / 3);
-
-    if (zones > 0) {
-      // Intensity lives in the RGB scaling above; the brightness wire stays
-      // quiet so a beat never becomes a brightness command (T-GOV-09).
-      await manager.pushFrame(id, scaleFrame(frame, intensity));
-    }
-  })().catch((err: unknown) => {
-    getShowService().recorder.record("frame/push-failed", {
-      id,
-      message: err instanceof Error ? err.message : String(err),
-    });
-  });
-}
-
 // T-ARC-03 crash policy + §133 steps 2 and 7. applyCrashPolicy holds the
 // safe look for holdMs (runtime.crash.holdMs), then dims to zero. restartShowHost
 // stops and restarts the AX/prolink observers that feed the host.
@@ -494,6 +460,8 @@ export function readDiagnostics(): { ok: true; diagnostics: Record<string, unkno
       // T-ARC-03 step 1 (freeze-ui): false once the app is quitting, so the
       // renderer can see why its intents stop landing.
       acceptingUi: isShowAcceptingUi(),
+      // The manual alternate runner's live status (null when idle).
+      alternate: govee().alternateStatus(),
       // Newest session events (bounded): the receipts behind venue and
       // manual lanes (addressed ip, identify path, chase steps). tNs is
       // stringified so the payload stays clone-safe for any JSON consumer.
@@ -547,6 +515,44 @@ function manualCommand(op: string, run: () => Promise<{ ok: string[]; failed: { 
     });
 }
 
+// Manual-lane precedence (§47, §48, §65; the pre-runtime stand-in for the
+// mixer's impact owner): every explicit output action takes the wheel, and
+// blackout / full / freeze hold only until the next explicit action or
+// resume. Decision, recorded: last explicit action wins; blackout and full
+// stop the alternate runner (a looping effect must not fight a blackout);
+// intensity is independent (brightness never clears anything); the standing
+// venue colour is always updated so resume restores what was last picked.
+function takeManualWheel(op: string): void {
+  const svc = getShowService();
+  const held = svc.overrides.blackout ? "blackout" : svc.overrides.full ? "full" : svc.overrides.frozen ? "freeze" : null;
+
+  svc.overrides.blackout = false;
+  svc.overrides.full = false;
+  svc.overrides.frozen = false;
+
+  if (held !== null) svc.recorder.record("manual/takeover", { op, held });
+}
+
+/** Stop the alternate runner first, then run the output command, so the
+ *  runner's own restore repaint can never land after a newer override
+ *  (blackout would otherwise be repainted away by the stop path). */
+function manualCommandAfterAlternate(op: string, run: () => Promise<{ ok: string[]; failed: { mac: string; message: string }[] }>): void {
+  void govee().stopAlternate()
+    .then((stopped) => {
+      if (stopped) getShowService().recorder.record("manual/alternate-stopped", { op });
+
+      return run();
+    })
+    .then((receipt) => {
+      if (receipt.failed.length > 0) {
+        getShowService().recorder.record("manual/failed", { op, failed: receipt.failed });
+      }
+    })
+    .catch((err: unknown) => {
+      getShowService().recorder.record("manual/failed", { op, message: err instanceof Error ? err.message : String(err) });
+    });
+}
+
 // T-ARC-02 real handlers: each mutates or reads authoritative service state
 // and records into the session recorder. None echoes its payload.
 export function setMasterBlackout(): { ok: true; blackout: true } {
@@ -555,8 +561,9 @@ export function setMasterBlackout(): { ok: true; blackout: true } {
   svc.overrides.full = false;
   svc.recorder.record("master/blackout", { at: Date.now() });
   hostForwarder("master/blackout", { version: 1 });
-  // Blackout = RGB 0,0,0, never power-off (§47).
-  manualCommand("master/blackout", () => govee().setColorAll(0, 0, 0));
+  // Blackout = RGB 0,0,0, never power-off (§47), and it owns the wheel: the
+  // alternate runner stops before the zeros go out.
+  manualCommandAfterAlternate("master/blackout", () => govee().setColorAll(0, 0, 0));
 
   return { ok: true, blackout: true };
 }
@@ -568,7 +575,7 @@ export function setMasterFull(): { ok: true; full: true } {
   svc.recorder.record("master/full", { at: Date.now() });
   hostForwarder("master/full", { version: 1 });
   // White = RGB(255,255,255), never kelvin (§48).
-  manualCommand("master/full", () => govee().setColorAll(255, 255, 255));
+  manualCommandAfterAlternate("master/full", () => govee().setColorAll(255, 255, 255));
 
   return { ok: true, full: true };
 }
@@ -601,8 +608,9 @@ export function resumeMaster(at: "beat" | "bar" | "phrase" | "immediate"): { ok:
   svc.overrides.frozen = false;
   svc.recorder.record("master/resume", { at });
   hostForwarder("master/resume", { version: 1, at });
-  // Resume restores the standing look: the venue colour (white default).
-  manualCommand("master/resume", () => govee().setColorAll(svc.venueColor[0], svc.venueColor[1], svc.venueColor[2]));
+  // Resume restores the standing look: the venue colour (white default),
+  // and it takes the wheel back from a running alternate (single writer).
+  manualCommandAfterAlternate("master/resume", () => govee().setColorAll(svc.venueColor[0], svc.venueColor[1], svc.venueColor[2]));
 
   return { ok: true, at };
 }
@@ -665,19 +673,48 @@ export function readVenueList(): { ok: true; fixtures: unknown[] } {
 
 export function setVenueColor(rgb: [number, number, number], targets?: string[]): { ok: true; rgb: [number, number, number] } {
   const svc = getShowService();
+  // Picking a colour is an explicit manual action: it takes the wheel from
+  // blackout / full / freeze (recorded), and updates the standing colour.
+  takeManualWheel("venue/set-color");
   svc.venueColor = rgb;
   svc.recorder.record("venue/set-color", { rgb, targets: targets ?? "all-enabled" });
   // The swatch is the standing look: it paints the rig now (manual lane)
   // and is what master/resume restores after blackout. An explicit target
   // list is the console's per-light picker; without one, every enabled
-  // fixture takes the colour.
+  // fixture takes the colour. The alternate runner stops first (single
+  // writer): otherwise its next tick would overwrite this pick.
   if (targets !== undefined && targets.length > 0) {
-    manualCommand("venue/set-color", () => govee().setColorFor(targets, rgb[0], rgb[1], rgb[2]));
+    manualCommandAfterAlternate("venue/set-color", () => govee().setColorFor(targets, rgb[0], rgb[1], rgb[2]));
   } else {
-    manualCommand("venue/set-color", () => govee().setColorAll(rgb[0], rgb[1], rgb[2]));
+    manualCommandAfterAlternate("venue/set-color", () => govee().setColorAll(rgb[0], rgb[1], rgb[2]));
   }
 
   return { ok: true, rgb };
+}
+
+export function setVenueAlternate(req: { enabled: boolean; mode: "lamps" | "halves"; pattern: "swap" | "complement"; speedMs: number; rgb: [number, number, number] }): { ok: true; enabled: boolean; mode: string } {
+  const svc = getShowService();
+
+  if (req.enabled) {
+    // Starting a looping effect is an explicit takeover: it cannot fight a
+    // blackout, so it clears the master overrides first (recorded).
+    takeManualWheel("venue/alternate");
+    const receipt = govee().startAlternate({ mode: req.mode, pattern: req.pattern, speedMs: req.speedMs, base: req.rgb });
+
+    svc.recorder.record("venue/alternate", { enabled: true, ...receipt });
+
+    return { ok: true, enabled: true, mode: receipt.mode };
+  }
+
+  const manager = govee();
+
+  void manager.stopAlternate().then((stopped) => {
+    svc.recorder.record("venue/alternate", { enabled: false, stopped });
+  }).catch((err: unknown) => {
+    svc.recorder.record("manual/failed", { op: "venue/alternate", message: err instanceof Error ? err.message : String(err) });
+  });
+
+  return { ok: true, enabled: false, mode: "off" };
 }
 
 export function setVenueSegments(id: string, zones: number): { ok: true; id: string; zones: number } {
@@ -688,7 +725,9 @@ export function setVenueSegments(id: string, zones: number): { ok: true; id: str
 }
 
 export function paintStripesCommand(id: string, zones: number): Promise<{ ok: true; id: string; zones: number }> {
-  return govee().paintStripes(id, zones).then((receipt) => {
+  takeManualWheel("venue/paint-stripes");
+  // A probe needs a stable strip: a ticking alternate would overwrite it.
+  return govee().stopAlternate().then(() => govee().paintStripes(id, zones)).then((receipt) => {
     getShowService().recorder.record("venue/paint-stripes", { id: receipt.mac, zones: receipt.zones });
 
     return { ok: true as const, id: receipt.mac, zones: receipt.zones };
@@ -696,7 +735,8 @@ export function paintStripesCommand(id: string, zones: number): Promise<{ ok: tr
 }
 
 export function paintRangeCommand(id: string, from: number, to: number, rgb: [number, number, number]): Promise<{ ok: true; id: string; from: number; to: number }> {
-  return govee().paintRange(id, from, to, rgb[0], rgb[1], rgb[2]).then((receipt) => {
+  takeManualWheel("venue/paint-range");
+  return govee().stopAlternate().then(() => govee().paintRange(id, from, to, rgb[0], rgb[1], rgb[2])).then((receipt) => {
     getShowService().recorder.record("venue/paint-range", { id: receipt.mac, from: receipt.from, to: receipt.to, rgb });
 
     return { ok: true as const, id: receipt.mac, from: receipt.from, to: receipt.to };

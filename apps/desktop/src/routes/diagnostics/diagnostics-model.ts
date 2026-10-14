@@ -3,16 +3,17 @@
 // tabs and formats staleness. Event Inspector rows carry the record-to-ndjson
 // flag without touching disk here.
 
+import type { ConfigScope } from "@autolight/ipc";
+
 export const DIAGNOSTIC_TABS = [
   "DJ Events", "Transport", "Beat Clock", "Track Resolver", "Analysis",
   "Planner", "Renderer", "Fixtures", "Latency", "Logs",
 ] as const;
 
-export type DiagnosticTab = (typeof DIAGNOSTIC_TABS)[number];
 
 export function isFresh(updatedAtMs: number | null, nowMs: number, staleAfterMs = 2000): boolean {
-  if (updatedAtMs === null) return false;
-
+  if (updatedAtMs === null || !Number.isFinite(updatedAtMs) || !Number.isFinite(nowMs)) return false;
+  if (updatedAtMs > nowMs) return false;
   return nowMs - updatedAtMs <= staleAfterMs;
 }
 
@@ -24,8 +25,8 @@ export interface DjEventRow {
   recordToNdjson: boolean;
 }
 
-export function djEventRow(timestampMs: number, source: string, deck: number, event: string): DjEventRow {
-  return { timestampMs, source, deck, event, recordToNdjson: true };
+export function djEventRow(timestampMs: number, source: string, deck: number, event: string, recordToNdjson = true): DjEventRow {
+  return { timestampMs, source, deck, event, recordToNdjson };
 }
 
 export function settingsGroup(key: string): string {
@@ -36,7 +37,7 @@ export function settingsGroup(key: string): string {
 
 export interface PendingChange {
   key: string;
-  scope: string;
+  scope: ConfigScope;
   value: unknown;
   liveSafe: boolean;
 }
@@ -50,5 +51,7 @@ export function routeConfigChange(change: PendingChange, liveActive: boolean): "
 }
 
 export function drainPendingQueue(queue: PendingChange[]): PendingChange[] {
-  return [...queue];
+  // Drain: consume every entry and empty the source in place, so callers
+  // never re-apply the same pending changes.
+  return queue.splice(0, queue.length);
 }

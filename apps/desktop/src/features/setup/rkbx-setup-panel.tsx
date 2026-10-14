@@ -18,7 +18,7 @@ import {
   type RkbxAssistantSnapshot,
   type RkbxPlatform,
 } from "@autolight/rekordbox-live/setup-assistant";
-import { invoke } from "../../app/store.js";
+import { typedInvoke } from "../../app/store.js";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card.js";
 import { Button } from "../../components/ui/button.js";
 import { Input } from "../../components/ui/input.js";
@@ -74,20 +74,18 @@ export function RkbxSetupAssistant(): JSX.Element {
 
   useEffect(() => {
     let cancelled = false;
-    void invoke("config/get", { version: 1, key: "live.rkbx.configPath" }).then((raw: unknown) => {
+    void typedInvoke("config/get", { version: 1, key: "live.rkbx.configPath" }).then((res) => {
       if (cancelled) return;
-      const envelope = raw as { ok?: boolean; value?: unknown } | null;
 
-      if (envelope && envelope.ok !== false && typeof envelope.value === "string" && envelope.value.length > 0) {
-        setConfigPath(envelope.value);
+      if (res !== null && typeof res.value === "string" && res.value.length > 0) {
+        setConfigPath(res.value);
       }
     });
-    void invoke("config/get", { version: 1, key: "live.rkbx.oscBind" }).then((raw: unknown) => {
+    void typedInvoke("config/get", { version: 1, key: "live.rkbx.oscBind" }).then((res) => {
       if (cancelled) return;
-      const envelope = raw as { ok?: boolean; value?: unknown } | null;
 
-      if (envelope && envelope.ok !== false && typeof envelope.value === "string" && envelope.value.length > 0) {
-        setOscBind(envelope.value);
+      if (res !== null && typeof res.value === "string" && res.value.length > 0) {
+        setOscBind(res.value);
       }
     });
 
@@ -104,7 +102,7 @@ export function RkbxSetupAssistant(): JSX.Element {
   });
 
   const savePath = (): void => {
-    void invoke("config/set", { version: 1, scope: "app", key: "live.rkbx.configPath", value: configPath });
+    void typedInvoke("config/set", { version: 1, scope: "app", key: "live.rkbx.configPath", value: configPath });
   };
 
   return (

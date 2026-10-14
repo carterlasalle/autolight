@@ -163,4 +163,60 @@ describe("govee registry (venue hydration)", () => {
       second.stop();
     }
   });
+
+  it("rejects alternate requests the rig cannot satisfy, with the fix named", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "autolight-registry-"));
+    const path = join(dir, "govee-registry.json");
+
+    writeFileSync(path, JSON.stringify({
+      version: 1,
+      devices: [{
+        mac: "AA:BB:CC:DD:EE:08", sku: "H6076", name: "Solo", enabled: true, zones: null,
+        ipHistory: ["127.0.0.1"], rung: "cached-unicast", lastSeenMs: 7,
+      }],
+    }));
+
+    const mgr = new GoveeLanManager({ ...quietOpts(path), replyPort: 0, loopbackScan: true });
+
+    try {
+      mgr.registrySnapshot();
+      expect(() => mgr.startAlternate({ mode: "lamps", pattern: "swap", speedMs: 200, base: [255, 255, 255] }))
+        .toThrow(/two fixtures/);
+      expect(() => mgr.startAlternate({ mode: "halves", pattern: "swap", speedMs: 200, base: [255, 255, 255] }))
+        .toThrow(/saved segment count/);
+      expect(mgr.alternateStatus()).toBeNull();
+    } finally {
+      await mgr.stopAlternate();
+      mgr.stop();
+    }
+  });
+
+  it("runs and stops the alternate runner over the enabled rig", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "autolight-registry-"));
+    const path = join(dir, "govee-registry.json");
+
+    writeFileSync(path, JSON.stringify({
+      version: 1,
+      devices: [
+        { mac: "AA:BB:CC:DD:EE:09", sku: "H6076", name: "Left", enabled: true, zones: 2, ipHistory: ["127.0.0.1"], rung: "cached-unicast", lastSeenMs: 8 },
+        { mac: "AA:BB:CC:DD:EE:0A", sku: "H6076", name: "Right", enabled: true, zones: null, ipHistory: ["127.0.0.1"], rung: "cached-unicast", lastSeenMs: 9 },
+      ],
+    }));
+
+    const mgr = new GoveeLanManager({ ...quietOpts(path), replyPort: 0, loopbackScan: true });
+
+    try {
+      mgr.registrySnapshot();
+      const receipt = mgr.startAlternate({ mode: "lamps", pattern: "complement", speedMs: 200, base: [10, 20, 30] });
+      expect(receipt).toMatchObject({ mode: "lamps", pattern: "complement", fixtures: 2 });
+      expect(mgr.alternateStatus()).not.toBeNull();
+      // A second start replaces the runner instead of stacking timers.
+      mgr.startAlternate({ mode: "lamps", pattern: "swap", speedMs: 100, base: [10, 20, 30] });
+      expect(await mgr.stopAlternate()).toBe(true);
+      expect(mgr.alternateStatus()).toBeNull();
+      expect(await mgr.stopAlternate()).toBe(false);
+    } finally {
+      mgr.stop();
+    }
+  });
 });

@@ -189,9 +189,14 @@ export function VenueView(): JSX.Element {
                     variant={isIdentified ? "secondary" : "default"}
                     onClick={() => {
                       void typedInvoke("venue/identify", { version: 1, id: t.id }).then((res) => {
-                        if (res !== null && !useShell.getState().identifiedIds.includes(t.id)) {
+                        if (res === null) return;
+
+                        if (!useShell.getState().identifiedIds.includes(t.id)) {
                           useShell.getState().set({ identifiedIds: [...useShell.getState().identifiedIds, t.id] });
                         }
+                        // The identify read-back measured rtt/health: refresh
+                        // the tile from the registry so the status line shows it.
+                        hydrateRig();
                       });
                     }}
                   >
@@ -202,9 +207,12 @@ export function VenueView(): JSX.Element {
                     variant={isChased ? "secondary" : "outline"}
                     onClick={() => {
                       void typedInvoke("venue/test-chase", { version: 1, id: t.id }).then((res) => {
-                        if (res !== null && !useShell.getState().chasePassedIds.includes(t.id)) {
+                        if (res === null) return;
+
+                        if (!useShell.getState().chasePassedIds.includes(t.id)) {
                           useShell.getState().set({ chasePassedIds: [...useShell.getState().chasePassedIds, t.id] });
                         }
+                        hydrateRig();
                       });
                     }}
                   >

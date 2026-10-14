@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DIAGNOSTIC_TABS, djEventRow, drainPendingQueue, isFresh, routeConfigChange, settingsGroup } from "./diagnostics-model.js";
+import { DIAGNOSTIC_TABS, djEventRow, drainPendingQueue, isFresh, routeConfigChange, settingsGroup, type PendingChange } from "./diagnostics-model.js";
 
 describe("diagnostics model and change safety (T-UI-10/11, T-CFG-07)", () => {
   it("names the ten spec tabs and flags freshness", () => {
@@ -19,7 +19,7 @@ describe("diagnostics model and change safety (T-UI-10/11, T-CFG-07)", () => {
     expect(routeConfigChange({ key: "a", scope: "app", value: 1, liveSafe: true }, true)).toBe("apply-at-bar");
     expect(routeConfigChange({ key: "b", scope: "app", value: 1, liveSafe: false }, true)).toBe("queue-until-live-ends");
     expect(routeConfigChange({ key: "b", scope: "app", value: 1, liveSafe: false }, false)).toBe("apply-now");
-    const q = [{ key: "b", scope: "app", value: 1, liveSafe: false }];
+    const q: PendingChange[] = [{ key: "b", scope: "app", value: 1, liveSafe: false }];
     expect(drainPendingQueue(q)).toHaveLength(1);
   });
 });

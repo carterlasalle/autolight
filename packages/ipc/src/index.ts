@@ -5,6 +5,15 @@ import { z } from "zod";
 // in renderer code: preload exposes named functions built from this table.
 // Errors return { ok: false, error: { code, message } } and surface in UI status.
 
+// Config layers, in resolution order. One definition owns the union: the
+// channel schemas, the settings screen's queue and the typed client all
+// consume this instead of re-typing the literals.
+export const configScopes = ["app", "venue", "device", "style", "session"] as const;
+
+export type ConfigScope = (typeof configScopes)[number];
+
+const scopeSchema = z.enum(configScopes);
+
 const errorSchema = z.object({
   ok: z.literal(false),
   error: z.object({ code: z.string(), message: z.string() }),
@@ -100,6 +109,17 @@ export const channels = {
     request: z.object({ version: v1, id: z.string(), zones: z.number().int().min(1).max(255) }),
     response: z.union([ok(z.object({ id: z.string(), zones: z.number() })), errorSchema]),
   },
+  "venue/alternate": {
+    request: z.object({
+      version: v1,
+      enabled: z.boolean(),
+      mode: z.enum(["lamps", "halves"]),
+      pattern: z.enum(["swap", "complement"]),
+      speedMs: z.number().int().min(40).max(5000),
+      rgb: z.tuple([z.number().int().min(0).max(255), z.number().int().min(0).max(255), z.number().int().min(0).max(255)]),
+    }),
+    response: z.union([ok(z.object({ enabled: z.boolean(), mode: z.string() })), errorSchema]),
+  },
   "venue/paint-stripes": {
     request: z.object({ version: v1, id: z.string(), zones: z.number().int().min(1).max(255) }),
     response: z.union([ok(z.object({ id: z.string(), zones: z.number() })), errorSchema]),
@@ -176,22 +196,22 @@ export const channels = {
   "config/set": {
     request: z.object({
       version: v1,
-      scope: z.enum(["app", "venue", "device", "style", "session"]),
+      scope: scopeSchema,
       key: z.string(),
       value: z.unknown(),
     }),
     response: z.union([
-      ok(z.object({ key: z.string(), scope: z.enum(["app", "venue", "device", "style", "session"]), value: z.unknown(), layer: z.string() })),
+      ok(z.object({ key: z.string(), scope: scopeSchema, value: z.unknown(), layer: z.string() })),
       errorSchema,
     ]),
   },
   "config/reset": {
     request: z.object({
       version: v1,
-      scope: z.enum(["app", "venue", "device", "style", "session"]),
+      scope: scopeSchema,
       key: z.string(),
     }),
-    response: z.union([ok(z.object({ key: z.string(), scope: z.enum(["app", "venue", "device", "style", "session"]) })), errorSchema]),
+    response: z.union([ok(z.object({ key: z.string(), scope: scopeSchema })), errorSchema]),
   },
   "config/export": {
     request: z.object({ version: v1 }),

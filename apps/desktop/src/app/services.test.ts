@@ -928,6 +928,9 @@ describe("ipc handlers have real effects (T-TRU-03)", () => {
               "255,0,0", "0,0,255", "255,0,0", "0,0,255", "255,0,0", "0,0,255", "255,0,0", "0,0,255",
             ]);
           });
+          // A probe count is not a confirmed count: the snapshot (and the
+          // tile's "segments counted") stays null until the operator saves.
+          expect(appMgr.registrySnapshot().find((d) => d.mac === "AA:BB:CC:DD:EE:01")?.zones).toBeNull();
           await call("venue/segments-set", { version: 1, id: "AA:BB:CC:DD:EE:01", zones: 8 });
           expect(appMgr.registrySnapshot().find((d) => d.mac === "AA:BB:CC:DD:EE:01")?.zones).toBe(8);
           await call("venue/paint-range", { version: 1, id: "AA:BB:CC:DD:EE:01", from: 0, to: 3, rgb: [0, 255, 0] });

@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 // Registry only (pure zod, no node: imports). The barrel re-exports the
 // file-backed store and blank-screens dev the same way dgram did.
 import { KEYS } from "@autolight/config/registry";
-import { useShell, invoke } from "../../app/store.js";
+import { configScopes, type ConfigScope } from "@autolight/ipc";
+import { useShell, typedInvoke } from "../../app/store.js";
 import { Button } from "../../components/ui/button.js";
 import { Badge } from "../../components/ui/badge.js";
 import { Input } from "../../components/ui/input.js";
@@ -10,6 +11,11 @@ import { ConfigField } from "../../components/kit.js";
 import { routeConfigChange, settingsGroup, type PendingChange } from "../../routes/diagnostics/diagnostics-model.js";
 
 const PENDING_KEY = "autolight.settings.pending";
+
+/** True when the value is one of the config layer names (narrowing guard). */
+function isConfigScope(v: unknown): v is ConfigScope {
+  return configScopes.some((s) => s === v);
+}
 
 function loadPending(): PendingChange[] {
   try {
@@ -21,7 +27,7 @@ function loadPending(): PendingChange[] {
     if (!Array.isArray(parsed)) return [];
 
     return parsed.filter((p): p is PendingChange =>
-      typeof p === "object" && p !== null && "key" in p && "scope" in p && typeof p.key === "string" && typeof p.scope === "string");
+      typeof p === "object" && p !== null && "key" in p && "scope" in p && typeof p.key === "string" && isConfigScope(p.scope));
   } catch {
     return [];
   }
@@ -72,7 +78,7 @@ export function SettingsView(): JSX.Element {
     return [...map.entries()];
   }, [rows]);
 
-  const commit = (key: string, scope: "app" | "venue" | "device" | "style" | "session", liveSafe: boolean): void => {
+  const commit = (key: string, scope: ConfigScope, liveSafe: boolean): void => {
     const value = edits[key];
 
     if (value === undefined) return;
@@ -85,10 +91,8 @@ export function SettingsView(): JSX.Element {
       return;
     }
 
-    void invoke("config/set", { version: 1, scope, key, value }).then((raw) => {
-      const failed = raw === null || (typeof raw === "object" && "ok" in raw && raw.ok === false);
-
-      if (failed) {
+    void typedInvoke("config/set", { version: 1, scope, key, value }).then((res) => {
+      if (res === null) {
         setErrors((prev) => ({ ...prev, [key]: "Write failed — value kept. Retry Set." }));
 
         return;
@@ -103,11 +107,9 @@ export function SettingsView(): JSX.Element {
     });
   };
 
-  const resetRow = (key: string, scope: "app" | "venue" | "device" | "style" | "session"): void => {
-    void invoke("config/reset", { version: 1, scope, key }).then((raw) => {
-      const failed = raw === null || (typeof raw === "object" && "ok" in raw && raw.ok === false);
-
-      if (failed) {
+  const resetRow = (key: string, scope: ConfigScope): void => {
+    void typedInvoke("config/reset", { version: 1, scope, key }).then((res) => {
+      if (res === null) {
         setErrors((prev) => ({ ...prev, [key]: "Reset failed — value unchanged." }));
 
         return;
@@ -134,10 +136,8 @@ export function SettingsView(): JSX.Element {
 
   const applyPending = (): void => {
     for (const p of pending) {
-      void invoke("config/set", { version: 1, scope: p.scope, key: p.key, value: p.value }).then((raw) => {
-        const failed = raw === null || (typeof raw === "object" && "ok" in raw && raw.ok === false);
-
-        if (failed) return;
+      void typedInvoke("config/set", { version: 1, scope: p.scope, key: p.key, value: p.value }).then((res) => {
+        if (res === null) return;
 
         setPending((prev) => prev.filter((q) => q.key !== p.key));
         setEdits((prev) => {

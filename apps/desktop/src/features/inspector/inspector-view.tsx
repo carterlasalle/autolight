@@ -4,7 +4,7 @@ import { Switch } from "../../components/ui/switch.js";
 import { Slider } from "../../components/ui/slider.js";
 import { InspectorPanel } from "../../components/kit.js";
 import type { TrackModel } from "@autolight/contracts";
-import { useShell, invoke } from "../../app/store.js";
+import { useShell, typedInvoke } from "../../app/store.js";
 import { addDropBeat, auditionAtBeat, type CorrectionOp } from "../../routes/inspector/inspector-helpers.js";
 
 // state, never refetched per tick. Beat audition renders that beat in the
@@ -22,11 +22,13 @@ export function InspectorView(): JSX.Element {
     let cancelled = false;
     void (async () => {
       try {
-        const raw = (await invoke("show/live", { version: 1 })) as unknown as {
-          decks: { state: { deckId: number }; track: TrackModel | null }[];
-        } | null;
+        const res = await typedInvoke("show/live", { version: 1 });
 
-        const decks = raw && Array.isArray(raw.decks) ? raw.decks : [];
+        // SAFETY: show/live's reply contract carries a decks array; each row
+        // is the {state, track} pair the lanes render (defensive cast only).
+        const decks = res !== null && Array.isArray(res.decks)
+          ? (res.decks as { state: { deckId: number }; track: TrackModel | null }[])
+          : [];
 
         for (const d of decks) {
           if (!d.track) continue;
@@ -55,8 +57,10 @@ export function InspectorView(): JSX.Element {
   };
 
   const correct = (op: CorrectionOp): void => {
-    void invoke("show/correction", { version: 1, op, sendToLights: false });
-    setAudition(`correction queued: ${op.op}`);
+    // show/correction has no channel yet: applying planner edits to the live
+    // plan belongs to the show runtime build. The buttons are disabled; this
+    // stays defensive for the day the channel lands.
+    setAudition(`Not applied: corrections need the show runtime (${op.op}).`);
   };
 
   return (
@@ -121,18 +125,19 @@ function InspectorBody({ track, lanes, correct, sendToLights, setSendToLights, b
       </div>
       {audition ? <p className="min-w-0 text-sm text-muted-foreground">{audition}</p> : null}
       <div className="flex flex-col gap-2" role="group" aria-label="Corrections">
+        <p className="text-xs text-muted-foreground">Corrections need the show runtime (not built yet) — the planner-edit channel lands with it.</p>
         <div className="flex flex-wrap gap-2" role="group" aria-label="Drop corrections">
           {addBeat === null ? (
             <span className="text-sm text-muted-foreground">No drop-free beat available</span>
           ) : (
-            <Button size="sm" variant="outline" onClick={() => correct({ op: "add-drop", beat: addBeat })}>Add missing drop at {addBeat}</Button>
+            <Button size="sm" variant="outline" disabled onClick={() => correct({ op: "add-drop", beat: addBeat })}>Add missing drop at {addBeat}</Button>
           )}
-          <Button size="sm" variant="outline" onClick={() => correct({ op: "delete-drop", beat: dropBeat })}>Delete false drop at {dropBeat}</Button>
-          <Button size="sm" variant="outline" onClick={() => correct({ op: "mark-fake-drop", beat: dropBeat, actualBeat: Math.min(lastBeat, dropBeat + 32) })}>Mark fake drop {dropBeat} to {Math.min(lastBeat, dropBeat + 32)}</Button>
+          <Button size="sm" variant="outline" disabled onClick={() => correct({ op: "delete-drop", beat: dropBeat })}>Delete false drop at {dropBeat}</Button>
+          <Button size="sm" variant="outline" disabled onClick={() => correct({ op: "mark-fake-drop", beat: dropBeat, actualBeat: Math.min(lastBeat, dropBeat + 32) })}>Mark fake drop {dropBeat} to {Math.min(lastBeat, dropBeat + 32)}</Button>
         </div>
         <div className="flex flex-wrap gap-2" role="group" aria-label="Section corrections">
-          <Button size="sm" variant="outline" onClick={() => correct({ op: "regenerate-section", startBeat: sectionStart, endBeat: sectionEnd })}>Regenerate section {sectionStart} to {sectionEnd}</Button>
-          <Button size="sm" variant="outline" onClick={() => correct({ op: "lock-section", startBeat: sectionStart, endBeat: sectionEnd })}>Lock section {sectionStart} to {sectionEnd}</Button>
+          <Button size="sm" variant="outline" disabled onClick={() => correct({ op: "regenerate-section", startBeat: sectionStart, endBeat: sectionEnd })}>Regenerate section {sectionStart} to {sectionEnd}</Button>
+          <Button size="sm" variant="outline" disabled onClick={() => correct({ op: "lock-section", startBeat: sectionStart, endBeat: sectionEnd })}>Lock section {sectionStart} to {sectionEnd}</Button>
         </div>
       </div>
     </>

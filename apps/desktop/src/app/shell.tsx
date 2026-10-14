@@ -3,7 +3,7 @@ import { Sidebar, Statusbar, Titlebar } from "../components/chrome.js";
 import { CommandPalette } from "../components/command-palette.js";
 import { Toaster } from "../components/ui/sonner.js";
 import { Routes } from "../routes/index.js";
-import { useShell, invoke } from "./store.js";
+import { useShell, typedInvoke } from "./store.js";
 import type { FollowMode } from "./store.js";
 import { useLiveCursor } from "./resolve-live.js";
 import { shortcutFor } from "./shortcuts.js";
@@ -25,10 +25,9 @@ export function Shell(): JSX.Element {
     if (route !== "setup") return;
     let cancelled = false;
     const seen = useShell.getState().followMode;
-    void invoke("config/get", { version: 1, key: "live.follow.mode" }).then((raw: unknown) => {
+    void typedInvoke("config/get", { version: 1, key: "live.follow.mode" }).then((res) => {
       if (cancelled) return;
-      const envelope = raw as { ok?: boolean; value?: unknown } | null;
-      const saved = envelope && envelope.ok !== false && typeof envelope.value === "string" ? envelope.value : null;
+      const saved = res !== null && typeof res.value === "string" ? res.value : null;
       const modes: FollowMode[] = ["preview", "ax-beat", "prolink", "soundswitch"];
 
       if (saved !== null && (modes as string[]).includes(saved)) {
@@ -56,9 +55,13 @@ export function Shell(): JSX.Element {
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       const ch = shortcutFor(event.key);
 
-      if (ch === "master/freeze") void invoke(ch, { version: 1, frozen: true });
-      else if (ch === "master/resume") void invoke(ch, { version: 1, at: "bar" });
-      else if (ch) void invoke(ch, { version: 1 });
+      // Channel literals, not a dynamic string: the shortcut table names
+      // typed channels (shortcuts.ts) and this switch keeps that contract
+      // compile-checked as the table grows.
+      if (ch === "master/blackout") void typedInvoke("master/blackout", { version: 1 });
+      else if (ch === "master/full") void typedInvoke("master/full", { version: 1 });
+      else if (ch === "master/freeze") void typedInvoke("master/freeze", { version: 1, frozen: true });
+      else if (ch === "master/resume") void typedInvoke("master/resume", { version: 1, at: "bar" });
     };
 
     window.addEventListener("keydown", onKeyDown);

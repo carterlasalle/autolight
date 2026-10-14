@@ -1,7 +1,6 @@
-import { useShell, invoke } from "../app/store.js";
+import { useShell, typedInvoke } from "../app/store.js";
 import type { Route } from "../app/store.js";
 import { Button } from "./ui/button.js";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card.js";
 import { Badge } from "./ui/badge.js";
 import { MetricBadge, StatusDot, deckBpm } from "./kit.js";
 import { tokens } from "../app/tokens.js";
@@ -43,7 +42,7 @@ export function Titlebar(): JSX.Element {
         onClick={() => {
           const next = !useShell.getState().simulatorMode;
           set({ simulatorMode: next });
-          void invoke("simulator/mode", { version: 1, enabled: next });
+          void typedInvoke("simulator/mode", { version: 1, enabled: next });
         }}
       >
         {simulatorMode ? "Exit SIM" : "SIM"}
@@ -52,7 +51,7 @@ export function Titlebar(): JSX.Element {
         variant="ghost"
         size="sm"
         className="app-no-drag"
-        onClick={() => { void invoke("master/blackout", { version: 1 }); }}
+        onClick={() => { useShell.getState().set({ altOn: false }); void typedInvoke("master/blackout", { version: 1 }); }}
       >
         Blackout
       </Button>
@@ -111,17 +110,3 @@ export function Sidebar({ route, onRoute }: {
   );
 }
 
-export function Panel({ title, children, className }: {
-  title: string;
-  children: React.ReactNode;
-  className?: string;
-}): JSX.Element {
-  return (
-    <Card className={className}>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm">{title}</CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-2.5">{children}</CardContent>
-    </Card>
-  );
-}

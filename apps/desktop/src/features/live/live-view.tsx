@@ -6,10 +6,8 @@ import { Slider } from "../../components/ui/slider.js";
 import { Switch } from "../../components/ui/switch.js";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select.js";
 import { BUILT_IN_STYLES } from "@autolight/show-planner";
-import { ALT_PATTERNS } from "../../app/store.js";
-import type { AltPattern } from "../../app/store.js";
 import { nextPhraseBeat } from "../../routes/live/live-fields.js";
-import { LightConsoleCard, SegmentsCard } from "./light-console.js";
+import { AlternateCard, LightConsoleCard, SegmentsCard } from "./light-console.js";
 import { CueList, DeckPanel, FixturePreview, MasterControls } from "../../components/kit.js";
 import { AudioSyncCard } from "../../components/audio-sync.js";
 
@@ -24,16 +22,16 @@ function masterIntent(intent: "blackout" | "full" | "freeze" | "resume"): void {
   const sync = useShell.getState().set;
 
   if (intent === "blackout") {
-    sync({ blackout: true, frozen: false });
+    sync({ blackout: true, frozen: false, altOn: false });
     void typedInvoke("master/blackout", { version: 1 });
   } else if (intent === "full") {
-    sync({ blackout: false });
+    sync({ blackout: false, altOn: false });
     void typedInvoke("master/full", { version: 1 });
   } else if (intent === "freeze") {
-    sync({ frozen: true });
+    sync({ frozen: true, altOn: false });
     void typedInvoke("master/freeze", { version: 1, frozen: true });
   } else {
-    sync({ blackout: false, frozen: false });
+    sync({ blackout: false, frozen: false, altOn: false });
     void typedInvoke("master/resume", { version: 1, at: "bar" });
   }
 }
@@ -137,13 +135,9 @@ export function LiveView({ live }: { live: LiveState | null }): JSX.Element {
 
 // Below-fold manual lane: the working light console plus the show-scoped
 // controls, grouped by purpose with one heading each. Controls whose effect
-// needs the show runtime (style, energy, build/drop, flash, alternate) are
-// disabled with that stated — a button that records an intent nobody
-// consumes is a dead button.
-function isAltPattern(v: string): v is AltPattern {
-  return ALT_PATTERNS.some((p) => p === v);
-}
-
+// needs the show runtime (style, energy, build/drop, flash) are disabled
+// with that stated — a button that records an intent nobody consumes is a
+// dead button. Alternate is a real manual effect (see AlternateCard).
 const RUNTIME_NOTE = "Needs the show runtime (not built yet): acts when a show is loaded.";
 
 export function ControlGrid(): JSX.Element {
@@ -151,7 +145,7 @@ export function ControlGrid(): JSX.Element {
     style: st.style, palette: st.palette, pendingStyle: st.pendingStyle, blinder: st.blinder,
     running: st.running, flashOn: st.flashOn, flashMode: st.flashMode,
     manual: st.manual, tier: st.tier, liveBeat: st.liveBeat, target: st.target,
-    sensitivity: st.sensitivity, altOn: st.altOn, altPattern: st.altPattern, altSpeed: st.altSpeed,
+    sensitivity: st.sensitivity,
     set: st.set,
   })));
 
@@ -230,35 +224,17 @@ export function ControlGrid(): JSX.Element {
           <label className="flex min-w-0 flex-col gap-1 text-sm">Master intensity: {s.sensitivity.toFixed(1)}x
             <Slider min={0.5} max={1} step={0.05} value={[s.sensitivity]} onValueChange={([v]) => {
               const next = v ?? 1;
-              s.set({ sensitivity: next });
+              // Both the visible sensitivity and the master-bar readout: the
+              // bar shows overridesIntensity, which this slider is the only
+              // writer of, so it must move together with the value it sends.
+              s.set({ sensitivity: next, overridesIntensity: next });
               void typedInvoke("master/intensity", { version: 1, value: next });
             }} />
           </label>
           <p className="text-xs text-muted-foreground">{RUNTIME_NOTE}</p>
         </div>
       </div>
-      <div className="min-w-0 rounded-xl border border-border bg-card px-4 py-3">
-        <h3 className="text-base font-medium">Alternate</h3>
-        <div className="mt-2 flex min-w-0 flex-col gap-2">
-          <label className="flex items-center gap-2 text-sm">
-            <Switch disabled checked={s.altOn} onCheckedChange={(v) => { s.set({ altOn: v }); void typedInvoke("show/energy", { version: 1, tier: s.tier ?? "MED", alternate: v }); }} /> Alternating mode
-          </label>
-          <label className="flex min-w-0 items-center gap-2 text-sm">Pattern:
-            <Select disabled value={s.altPattern} onValueChange={(v) => { if (!isAltPattern(v)) return; s.set({ altPattern: v }); void typedInvoke("show/energy", { version: 1, tier: s.tier ?? "MED", alternate: s.altOn, pattern: v }); }}>
-              <SelectTrigger className="h-8 min-w-0 flex-1"><SelectValue /></SelectTrigger>
-              <SelectContent>{ALT_PATTERNS.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
-            </Select>
-          </label>
-          <label className="flex min-w-0 flex-col gap-1 text-sm">Speed: {s.altSpeed}ms
-            <Slider disabled min={100} max={2000} step={50} value={[s.altSpeed]} onValueChange={([v]) => {
-              const next = v ?? 500;
-              s.set({ altSpeed: next });
-              void typedInvoke("show/energy", { version: 1, tier: s.tier ?? "MED", alternate: s.altOn, speedMs: next });
-            }} />
-          </label>
-          <p className="text-xs text-muted-foreground">{RUNTIME_NOTE}</p>
-        </div>
-      </div>
+      <AlternateCard />
       </div>
     </section>
   );

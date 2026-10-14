@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Badge } from "../../components/ui/badge.js";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs.js";
-import { invoke, useShell } from "../../app/store.js";
+import { typedInvoke, useShell } from "../../app/store.js";
 import { deckBpm } from "../../components/kit.js";
 import { DIAGNOSTIC_TABS, isFresh } from "../../routes/diagnostics/diagnostics-model.js";
 
@@ -11,7 +11,8 @@ function renderBpm(bpm: number | null): string {
 
 // Per-tab metric rows: each tab names the rows it owns; anything else falls
 // back to the stored string. Labels stay stable so a glance finds them.
-const TAB_ROWS: Record<string, string[]> = {
+type MetricTab = Exclude<(typeof DIAGNOSTIC_TABS)[number], "DJ Events" | "Logs">;
+const TAB_ROWS: Record<MetricTab, readonly string[]> = {
   Transport: ["DJ link"],
   "Beat Clock": ["Beat clock"],
   Analysis: ["Track", "Analysis"],
@@ -19,20 +20,18 @@ const TAB_ROWS: Record<string, string[]> = {
   Renderer: ["Renderer"],
   Fixtures: ["Lights"],
   Latency: ["Latency"],
-  Logs: ["Session"],
   "Track Resolver": ["Track"],
 };
 
 function TabMetrics({ tab, rows, fallback, sessionEvents }: {
-  tab: string; rows: { label: string; value: string }[]; fallback: string | undefined; sessionEvents: number;
+  tab: MetricTab | "Logs"; rows: { label: string; value: string }[]; fallback: string | undefined; sessionEvents: number;
 }): JSX.Element {
   if (tab === "Logs") {
     return <p className="font-timing text-sm tabular-nums">Session events: {sessionEvents}</p>;
   }
 
-  const wanted = TAB_ROWS[tab] ?? [];
+  const wanted = TAB_ROWS[tab];
   const found = rows.filter((r) => wanted.includes(r.label));
-
   if (found.length === 0) {
     return <p className="text-sm text-muted-foreground">{fallback ?? `${tab}: loading…`}</p>;
   }
@@ -57,35 +56,76 @@ export function DiagnosticsView(): JSX.Element {
   const diagnostics = useShell((s) => s.diagnostics);
   const set = useShell((s) => s.set);
   const [seenAt, setSeenAt] = useState<number | null>(null);
+  const [now, setNow] = useState<number>(() => Date.now());
   const [sessionEvents, setSessionEvents] = useState(0);
+  // The stale badge needs a ticking clock: without it `stale` only changes
+  // when some unrelated store update re-renders the view.
+  useEffect(() => {
+    const timer = setInterval(() => { setNow(Date.now()); }, 1000);
+
+    return () => { clearInterval(timer); };
+  }, []);
+  // Refresh from a 5s interval plus document-visibility changes, not from
+  // live-store reactivity: re-fetching on every beat/status update fires a
+  // request-per-beat storm, and each re-run would mask staleness detection.
   useEffect(() => {
     let cancelled = false;
-    void invoke("diagnostics/all", { version: 1 }).then((raw: unknown) => {
-      if (cancelled) return;
-      const envelope = raw as { ok?: boolean; diagnostics?: { ax?: unknown; prolink?: unknown; events?: number } } | null;
-      const d = envelope && envelope.ok !== false ? envelope.diagnostics : undefined;
-      set({
-        diagnostics: {
-          "DJ Events": `AX: ${JSON.stringify(d?.ax ?? [])} PROLINK: ${JSON.stringify(d?.prolink ?? {})}`,
-          Transport: live ? `${live.source} deck1=${live.deckA.title} deck2=${live.deckB.title}` : "no decks",
-          "Beat Clock": live?.beat !== undefined ? `beat ${deckBpm(live.beat)} @ ${renderBpm(bpm)}` : "no clock",
-          "Track Resolver": live ? `${live.deckA.title} resolved` : "no track",
-          Analysis: live ? "ANLZ grid + plan resolved" : "no track",
-          Planner: live ? `${live.cues.length} upcoming cues` : "no plan",
-          Renderer: live ? `${live.cells.length} cells` : "no frames",
-          Fixtures: devices.length > 0 ? devices.map((x) => x.address).join(", ") : "no lights",
-          Latency: "devStatus read-back verified per command",
-          Logs: `session events: ${typeof d?.events === "number" ? d.events : 0}`,
-        },
-      });
-      setSeenAt(Date.now());
 
-      if (typeof d?.events === "number") setSessionEvents(d.events);
-    });
+    const refresh = async (): Promise<void> => {
+      try {
+        const res = await typedInvoke("diagnostics/all", { version: 1 });
 
-    return () => { cancelled = true; };
-  }, [live, bpm, devices, set]);
-  const stale = seenAt !== null && !isFresh(seenAt, Date.now());
+        if (cancelled) return;
+        // SAFETY: diagnostics/all's reply contract carries a diagnostics
+        // object (typed unknown); every field below is optional-chained and
+        // d === undefined returns early, so a wrong shape degrades to "no
+        // update", never a crash.
+        const d = res !== null ? (res.diagnostics as { ax?: unknown; prolink?: unknown; events?: number } | undefined) : undefined;
+
+        if (d === undefined) return;
+        // BigInt/cyclic payloads throw on stringify: fall back to the empty
+        // shape instead of aborting the whole update unobserved.
+        let axText = "[]";
+        let prolinkText = "{}";
+
+        try {
+          axText = JSON.stringify(d.ax ?? []) ?? "[]";
+          prolinkText = JSON.stringify(d.prolink ?? {}) ?? "{}";
+        } catch {
+          // Keep the fallbacks above.
+        }
+
+        const prior = useShell.getState().diagnostics;
+        const rawEvents: unknown = d.events;
+        const eventCount = rawEvents === undefined || rawEvents === null ? 0 : Number(rawEvents);
+        set({
+          diagnostics: {
+            ...prior,
+            "DJ Events": `AX: ${axText} PROLINK: ${prolinkText}`,
+            Logs: `session events: ${eventCount}`,
+          },
+        });
+        setSeenAt(Date.now());
+        setSessionEvents(eventCount);
+      } catch {
+        // Leave the previous timestamp/state intact so the stale badge keeps
+        // reporting the last good fetch instead of success on empty data.
+      }
+    };
+
+    void refresh();
+    const timer = setInterval(() => { void refresh(); }, 5000);
+    const onVisible = (): void => { void refresh(); };
+
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [set]);
+  const stale = seenAt !== null && !isFresh(seenAt, now);
 
   const rows: { label: string; value: string }[] = [
     { label: "DJ link", value: live ? `${live.source} · deck 1 ${live.deckA.title}` : "No DJ link" },

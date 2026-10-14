@@ -105,16 +105,6 @@ export const PARTY_PALETTES = ["ND", "Warm", "Cool", "Neon", "Fire", "Ocean", "U
 
 export type PartyPalette = (typeof PARTY_PALETTES)[number];
 
-export const ALT_PATTERNS = [
-  "Alternating Flash",
-  "Alternating On/Off",
-  "Alternating Colors",
-  "Chase (A→B→A→B)",
-  "Opposite Colors",
-] as const;
-
-export type AltPattern = (typeof ALT_PATTERNS)[number];
-
 export type LightTarget = "A" | "B" | "Both";
 
 // Follow mode: preview = designer tool (resolved grid + plan, no playhead
@@ -142,7 +132,6 @@ interface ShellState {
   pendingStyle: string | null;
   liveBeat: number;
   altOn: boolean;
-  altPattern: AltPattern;
   altSpeed: number;
   bpm: number | null;
   reactiveLevel: number;
@@ -186,7 +175,6 @@ export const useShell = create<ShellState>((set) => ({
   pendingStyle: null,
   liveBeat: 0,
   altOn: false,
-  altPattern: "Alternating Flash",
   altSpeed: 500,
   bpm: null,
   reactiveLevel: 0,

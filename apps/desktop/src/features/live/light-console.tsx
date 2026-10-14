@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useShell, typedInvoke } from "../../app/store.js";
 import { Button } from "../../components/ui/button.js";
 import { Input } from "../../components/ui/input.js";
+import { Slider } from "../../components/ui/slider.js";
 import type { DeviceTile } from "../venue/venue.js";
 
 // The Live page's working light console (T-UI-04 follow-up): everything here
@@ -39,16 +40,103 @@ export function lightLabel(t: DeviceTile): string {
   return t.name === t.id ? t.sku : t.name;
 }
 
+/** HSV → RGB (h in degrees, s/v in 0..1). The wheel's single conversion. */
+export function hsvToRgb(h: number, s: number, v: number): [number, number, number] {
+  const c = v * s;
+  const hh = (((h % 360) + 360) % 360) / 60;
+  const x = c * (1 - Math.abs((hh % 2) - 1));
+  const m = v - c;
+  const [r1, g1, b1] = hh < 1 ? [c, x, 0] : hh < 2 ? [x, c, 0] : hh < 3 ? [0, c, x]
+    : hh < 4 ? [0, x, c] : hh < 5 ? [x, 0, c] : [c, 0, x];
+
+  return [
+    Math.round((r1 + m) * 255), Math.round((g1 + m) * 255), Math.round((b1 + m) * 255),
+  ];
+}
+
+/** Hue of an RGB colour in degrees (0 = red). */
+export function hueOf(rgb: [number, number, number]): number {
+  const r = rgb[0] / 255;
+  const g = rgb[1] / 255;
+  const b = rgb[2] / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const d = max - min;
+
+  if (d === 0) return 0;
+  const h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+
+  return ((h * 60) % 360 + 360) % 360;
+}
+
+/** Hue ring with a draggable thumb; picks at full saturation. */
+function ColorWheel({ colour, value, onPick }: {
+  colour: [number, number, number];
+  value: number;
+  onPick: (rgb: [number, number, number], hue: number) => void;
+}): JSX.Element {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const hue = hueOf(colour);
+  const rad = ((hue - 90) * Math.PI) / 180;
+  const thumbX = 50 + 42 * Math.cos(rad);
+  const thumbY = 50 + 42 * Math.sin(rad);
+
+  const pick = (clientX: number, clientY: number): void => {
+    const el = ref.current;
+
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const dx = clientX - (rect.left + rect.width / 2);
+    const dy = clientY - (rect.top + rect.height / 2);
+    const deg = (Math.atan2(dy, dx) * 180) / Math.PI + 90;
+    const h = (deg + 360) % 360;
+
+    onPick(hsvToRgb(h, 1, value), h);
+  };
+
+  return (
+    <div
+      ref={ref}
+      role="slider"
+      aria-label="Colour wheel"
+      aria-valuemin={0}
+      aria-valuemax={359}
+      aria-valuenow={Math.round(hue)}
+      className="relative size-24 shrink-0 cursor-crosshair touch-none rounded-full"
+      style={{ background: "conic-gradient(from 0deg, red, yellow, lime, cyan, blue, magenta, red)" }}
+      onPointerDown={(e) => {
+        e.currentTarget.setPointerCapture(e.pointerId);
+        setDragging(true);
+        pick(e.clientX, e.clientY);
+      }}
+      onPointerMove={(e) => { if (dragging) pick(e.clientX, e.clientY); }}
+      onPointerUp={() => setDragging(false)}
+      onPointerCancel={() => setDragging(false)}
+    >
+      <span className="absolute left-1/2 top-1/2 size-12 -translate-x-1/2 -translate-y-1/2 rounded-full border border-border" style={{ background: toHex(colour) }} />
+      <span
+        className="pointer-events-none absolute size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow"
+        style={{ left: `${thumbX}%`, top: `${thumbY}%`, background: toHex(colour) }}
+      />
+    </div>
+  );
+}
+
 export function LightConsoleCard(): JSX.Element {
   const livePalette = useShell((st) => st.live?.palette ?? null);
   const tiles = useShell((st) => st.tiles);
+  const colour = useShell((st) => st.wheelColor);
   const [targetId, setTargetId] = useState<string | null>(null);
-  const [colour, setColour] = useState<[number, number, number]>([255, 255, 255]);
+  const [wheelValue, setWheelValue] = useState(1);
+  const [wheelHue, setWheelHue] = useState(() => hueOf(colour));
 
   const lights = tiles.filter((t) => t.enabled);
 
   const paint = (rgb: [number, number, number], target: string | null = targetId): void => {
-    setColour(rgb);
+    // An explicit pick takes the wheel: the alternate runner stops server
+    // side, so its start/stop button must stop claiming it is running.
+    useShell.getState().set({ wheelColor: rgb, altOn: false });
     void typedInvoke("venue/set-color", target === null ? { version: 1, rgb } : { version: 1, rgb, targets: [target] });
   };
 
@@ -94,36 +182,57 @@ export function LightConsoleCard(): JSX.Element {
             <span className="text-xs text-muted-foreground">No lights on the rig — scan in Venue.</span>
           ) : null}
         </div>
-        <div role="group" aria-label="Colour palette" className="flex flex-wrap items-center gap-2">
-          {swatches.map((rgb, i) => (
-            <button
-              key={`sw-${i}`} type="button" aria-label={`colour ${i + 1}`}
-              className="size-7 shrink-0 rounded-full border-2 border-white/20"
-              style={{ backgroundColor: `rgb(${rgb[0]},${rgb[1]},${rgb[2]})` }}
-              onClick={() => paint(rgb)}
-            />
-          ))}
-          <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            Custom
-            <input
-              type="color"
-              aria-label="Custom colour"
-              value={toHex(colour)}
-              onChange={(e) => {
-                const rgb = fromHex(e.target.value);
+        <div className="flex min-w-0 flex-wrap items-center gap-3">
+          <ColorWheel
+            colour={colour}
+            value={wheelValue}
+            onPick={(rgb, hue) => { setWheelHue(hue); paint(rgb); }}
+          />
+          <div className="flex min-w-0 flex-col gap-2">
+            <label className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">Brightness
+              <Slider
+                aria-label="Wheel brightness"
+                min={0.15} max={1} step={0.05} value={[wheelValue]}
+                onValueChange={([v]) => {
+                  const next = v ?? 1;
 
-                if (rgb) paint(rgb);
-              }}
-              className="h-7 w-9 cursor-pointer rounded border border-border bg-transparent p-0.5"
-            />
-          </label>
+                  setWheelValue(next);
+                  paint(hsvToRgb(wheelHue, 1, next));
+                }}
+              />
+            </label>
+            <div role="group" aria-label="Colour palette" className="flex flex-wrap items-center gap-2">
+              {swatches.map((rgb, i) => (
+                <button
+                  key={`sw-${i}`} type="button" aria-label={`colour ${i + 1}`}
+                  className="size-7 shrink-0 rounded-full border-2 border-white/20"
+                  style={{ backgroundColor: `rgb(${rgb[0]},${rgb[1]},${rgb[2]})` }}
+                  onClick={() => { setWheelHue(hueOf(rgb)); paint(rgb); }}
+                />
+              ))}
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                Custom
+                <input
+                  type="color"
+                  aria-label="Custom colour"
+                  value={toHex(colour)}
+                  onChange={(e) => {
+                    const rgb = fromHex(e.target.value);
+
+                    if (rgb) { setWheelHue(hueOf(rgb)); paint(rgb); }
+                  }}
+                  className="h-7 w-9 cursor-pointer rounded border border-border bg-transparent p-0.5"
+                />
+              </label>
+            </div>
+          </div>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="outline" onClick={blinder}>Blinder</Button>
-          <Button size="sm" variant="outline" onClick={() => { void typedInvoke("master/blackout", { version: 1 }); }}>Blackout</Button>
+          <Button size="sm" variant="outline" onClick={() => { useShell.getState().set({ altOn: false }); void typedInvoke("master/blackout", { version: 1 }); }}>Blackout</Button>
           <Button
             size="sm" variant="outline"
-            onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); void typedInvoke("master/full", { version: 1 }); }}
+            onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); useShell.getState().set({ altOn: false }); void typedInvoke("master/full", { version: 1 }); }}
             onPointerUp={() => { void typedInvoke("master/resume", { version: 1, at: "bar" }); }}
             onPointerCancel={() => { void typedInvoke("master/resume", { version: 1, at: "bar" }); }}
           >
@@ -131,6 +240,67 @@ export function LightConsoleCard(): JSX.Element {
           </Button>
         </div>
         <p className="text-xs text-muted-foreground">Blinder and Blackout act on {targetId === null ? "both lights" : "the picked light"}; White (hold) is master-level (all lights).</p>
+      </div>
+    </div>
+  );
+}
+
+/** Alternate runner (manual lane): flashes between the two lamps, or between
+ *  each strip's halves. `swap` leaves group B dark; `complement` gives it the
+ *  inverse colour. LED_PARTY's AB swap / single spot, on the real rig. */
+export function AlternateCard(): JSX.Element {
+  const altOn = useShell((st) => st.altOn);
+  const altSpeed = useShell((st) => st.altSpeed);
+  const colour = useShell((st) => st.wheelColor);
+  const [mode, setMode] = useState<"lamps" | "halves">("lamps");
+  const [pattern, setPattern] = useState<"swap" | "complement">("swap");
+  const tiles = useShell((st) => st.tiles);
+  const halvesReady = tiles.filter((t) => t.enabled).every((t) => t.segments >= 2);
+
+  const send = (enabled: boolean): void => {
+    useShell.getState().set({ altOn: enabled });
+    void typedInvoke("venue/alternate", { version: 1, enabled, mode, pattern, speedMs: altSpeed, rgb: colour }).then((res) => {
+      if (res === null && enabled) useShell.getState().set({ altOn: false });
+    });
+  };
+
+  return (
+    <div className="min-w-0 rounded-xl border border-border bg-card px-4 py-3">
+      <h3 className="text-base font-medium">Alternate</h3>
+      <div className="mt-2 flex min-w-0 flex-col gap-2">
+        <div className="flex flex-wrap items-center gap-1" role="radiogroup" aria-label="Alternate target">
+          {(["lamps", "halves"] as const).map((m) => (
+            <Button key={m} size="sm" variant={mode === m ? "default" : "outline"} disabled={m === "halves" && !halvesReady} onClick={() => setMode(m)} aria-pressed={mode === m}>
+              {m === "lamps" ? "Two lamps" : "Strip halves"}
+            </Button>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-1" role="radiogroup" aria-label="Alternate pattern">
+          {(["swap", "complement"] as const).map((p) => (
+            <Button key={p} size="sm" variant={pattern === p ? "default" : "outline"} onClick={() => setPattern(p)} aria-pressed={pattern === p}>
+              {p === "swap" ? "Swap (one dark)" : "Complement"}
+            </Button>
+          ))}
+        </div>
+        <label className="flex min-w-0 flex-col gap-1 text-sm">Speed: {altSpeed}ms
+          <Slider min={100} max={2000} step={50} value={[altSpeed]} onValueChange={([v]) => {
+            const next = v ?? 500;
+
+            useShell.getState().set({ altSpeed: next });
+            if (altOn) send(true);
+          }} />
+        </label>
+        <div className="flex flex-wrap gap-2">
+          {altOn
+            ? <Button size="sm" variant="destructive" onClick={() => send(false)}>Stop alternate</Button>
+            : <Button size="sm" onClick={() => send(true)}>Start alternate</Button>}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Flashes {mode === "lamps" ? "the two lamps" : "each strip's two halves"} at {altSpeed}ms{pattern === "swap" ? ", one side going dark" : " with the inverse colour"}. Uses the picked colour as the bright side.
+        </p>
+        {mode === "halves" && !halvesReady ? (
+          <p className="text-xs text-muted-foreground">Strip halves need a saved segment count on every lamp (Segments card).</p>
+        ) : null}
       </div>
     </div>
   );

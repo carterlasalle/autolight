@@ -232,6 +232,32 @@ export interface ManualReceipt {
   failed: { mac: string; message: string }[];
 }
 
+export type AlternateMode = "lamps" | "halves";
+export type AlternatePattern = "swap" | "complement";
+
+/** Alternate-runner request: the rig's fixtures swap, or each strip splits
+ *  in half and the halves swap. */
+export interface AlternateOptions {
+  mode: AlternateMode;
+  pattern: AlternatePattern;
+  speedMs: number;
+  /** Standing colour group A keeps; group B gets off (swap) or the inverse
+   *  (complement). */
+  base: [number, number, number];
+}
+
+export interface AlternateReceipt {
+  mode: AlternateMode;
+  pattern: AlternatePattern;
+  speedMs: number;
+  fixtures: number;
+}
+
+interface AlternateStateInternal extends AlternateOptions {
+  timer: NodeJS.Timeout;
+  phase: boolean;
+}
+
 export interface DeviceStream {
   readonly mac: string;
   readonly zones: number;
@@ -244,6 +270,13 @@ export interface DeviceStream {
 interface DeviceEntry extends Omit<DeviceEntrySnapshot, "requested"> {
   name: string;
   enabled: boolean;
+  /** Operator-confirmed segment count (wizard step 9); null until saved.
+   *  `zones` stays the live stream count, which a probe may temporarily
+   *  set without the operator having confirmed it. */
+  zonesSaved: number | null;
+  /** Last solid colour commanded, so a confirmed count can repaint the
+   *  standing look across the strip without asking again. */
+  lastColor: [number, number, number] | null;
   ipHistory: string[];
   bleHard: string;
   bleSoft: string;
@@ -419,6 +452,7 @@ export class GoveeLanManager implements StreamTransport {
   private scanRounds = 0;
   private refusedWan: { name: string; address: string }[] = [];
   private multicastOk = new Map<string, boolean>();
+  private alternate: AlternateStateInternal | null = null;
 
   constructor(opts: GoveeManagerOptions = {}) {
     const d = GOVEE_DEFAULTS;
@@ -969,10 +1003,30 @@ export class GoveeLanManager implements StreamTransport {
       throw new RangeError(`setZones needs 1..255, got ${zones} (fix: qualify the unit first)`);
     }
 
+    entry.zonesSaved = zones;
     entry.zones = zones;
     // Operator-confirmed counts are durable knowledge: keep them across
     // restarts so the console and the segmented chase come back armed.
     this.saveRegistrySoon();
+    // Saving the count ends the stripes probe: reopen the stream at the
+    // confirmed size and repaint the standing colour across the whole
+    // strip, so the far zones are never left showing probe stripes.
+    const colour = entry.lastColor;
+
+    if (colour !== null) {
+      void (async () => {
+        try {
+          await this.ensureStreamAt(entry.mac, zones);
+          const live = this.require(entry.mac);
+          const frame = solidPayload(zones, colour[0], colour[1], colour[2]);
+
+          live.lastFrame = frame.slice();
+          live.stream?.setAll(frame);
+        } catch (err) {
+          this.warn(`segment repaint failed for ${entry.mac}: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      })();
+    }
   }
 
   /** Address an explicit fixture set (the console's per-light picker).
@@ -1021,14 +1075,14 @@ export class GoveeLanManager implements StreamTransport {
   }
 
   /** One contiguous zone range in one colour (console segment paint).
-   *  Needs a known count: counting segments is the operator's step. */
+   *  Needs the operator-confirmed count: counting segments is their step. */
   async paintRange(mac: string, from: number, to: number, r: number, g: number, b: number): Promise<{ mac: string; zones: number; from: number; to: number }> {
     await this.start();
     const entry = this.require(mac);
-    const zones = entry.zones ?? (entry.lastFrame ? Math.floor(entry.lastFrame.length / 3) : 0);
+    const zones = entry.zonesSaved ?? 0;
 
     if (zones <= 0) {
-      throw new Error(`paintRange needs a known segment count for ${mac} (fix: count segments first)`);
+      throw new Error(`paintRange needs a saved segment count for ${mac} (fix: paint stripes, count the bands, save the count)`);
     }
 
     await this.ensureStreamAt(entry.mac, zones);
@@ -1045,8 +1099,127 @@ export class GoveeLanManager implements StreamTransport {
     const entry = this.require(mac);
     const stream = entry.stream;
 
-    if (stream && !entry.streamClosed && entry.zones === zones) return;
+    // Compare the live stream's own size (entry.zones may already have been
+    // updated by setZones before the stream caught up).
+    if (stream && !entry.streamClosed && stream.zones === zones) return;
     await this.openStream(mac, { zones });
+  }
+
+  // -- alternate runner (manual lane; LED_PARTY AB swap / single spot) -------
+
+  /** Alternate between the rig's fixtures (lamps) or between the two halves
+   *  of each strip (halves; needs operator-confirmed counts). Pattern swap
+   *  puts group B off while group A burns; complement gives B the inverse
+   *  colour. Base is the standing colour the picker set. */
+  startAlternate(opts: AlternateOptions): AlternateReceipt {
+    const enabled = [...this.devices.values()].filter((e) => e.enabled);
+
+    if (enabled.length === 0) {
+      throw new Error("alternate needs a fixture on the rig (fix: scan the LAN in Venue)");
+    }
+
+    if (opts.mode === "lamps" && enabled.length < 2) {
+      throw new Error(`alternate over lamps needs two fixtures on the rig, found ${enabled.length} (fix: enable both lights)`);
+    }
+
+    if (opts.mode === "halves") {
+      const missing = enabled.filter((e) => (e.zonesSaved ?? 0) < 2).map((e) => e.name);
+
+      if (missing.length > 0) {
+        throw new Error(`alternate over strip halves needs a saved segment count (>= 2) for ${missing.join(", ")} (fix: paint stripes, count the bands, save the count)`);
+      }
+    }
+
+    const speedMs = Math.min(5000, Math.max(40, Math.round(opts.speedMs)));
+
+    void this.stopAlternate();
+    const timer = setInterval(() => { void this.alternateStep(); }, speedMs);
+
+    try {
+      timer.unref?.();
+    } catch { /* loop lifetime owns the timer */ }
+
+    const state: AlternateStateInternal = { ...opts, speedMs, timer, phase: false };
+    this.alternate = state;
+    // Engage immediately: waiting one interval before the first swap makes
+    // the button feel dead.
+    void this.alternateStep();
+
+    return { mode: opts.mode, pattern: opts.pattern, speedMs, fixtures: enabled.length };
+  }
+
+  /** Stop the alternation and settle every enabled fixture back on the
+   *  standing colour, so the room is never left mid-swap. */
+  async stopAlternate(): Promise<boolean> {
+    const cur = this.alternate;
+
+    if (cur === null) return false;
+    clearInterval(cur.timer);
+    this.alternate = null;
+
+    try {
+      for (const entry of this.devices.values()) {
+        if (!entry.enabled) continue;
+        await this.setColor(entry.mac, cur.base[0], cur.base[1], cur.base[2]);
+      }
+    } catch (err) {
+      this.warn(`alternate restore failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    return true;
+  }
+
+  alternateStatus(): AlternateReceipt | null {
+    const cur = this.alternate;
+
+    if (cur === null) return null;
+
+    return {
+      mode: cur.mode, pattern: cur.pattern, speedMs: cur.speedMs,
+      fixtures: [...this.devices.values()].filter((e) => e.enabled).length,
+    };
+  }
+
+  private async alternateStep(): Promise<void> {
+    const cur = this.alternate;
+
+    if (cur === null) return;
+    cur.phase = !cur.phase;
+
+    try {
+      const base = cur.base;
+      const other: [number, number, number] = cur.pattern === "complement"
+        ? [255 - base[0], 255 - base[1], 255 - base[2]]
+        : [0, 0, 0];
+      const colourFor = (groupA: boolean): [number, number, number] => (groupA !== cur.phase ? base : other);
+      const enabled = [...this.devices.values()].filter((e) => e.enabled);
+
+      if (cur.mode === "lamps") {
+        for (let i = 0; i < enabled.length; i++) {
+          const colour = colourFor(i % 2 === 0);
+          const entry = enabled[i];
+
+          if (entry === undefined) continue;
+          await this.setColor(entry.mac, colour[0], colour[1], colour[2]);
+        }
+
+        return;
+      }
+
+      for (const entry of enabled) {
+        const zones = entry.zonesSaved ?? 0;
+
+        if (zones < 2) continue;
+        const mid = Math.floor(zones / 2);
+        const low = colourFor(true);
+        const high = colourFor(false);
+
+        await this.paintRange(entry.mac, 0, mid - 1, low[0], low[1], low[2]);
+        await this.paintRange(entry.mac, mid, zones - 1, high[0], high[1], high[2]);
+      }
+    } catch (err) {
+      this.warn(`alternate step failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   closeStream(mac: string): void {
@@ -1179,18 +1352,21 @@ export class GoveeLanManager implements StreamTransport {
 
   // -- manual lane (T-RUN-07, spec 50): master intents command the rig ------
 
-  /** Solid colour on one fixture: an armed stream paints the segmented frame
-   *  (§51 newest-state-wins); an unarmed fixture takes the one-shot colorwc
-   *  path, the same one identify uses. Blackout rides this as RGB 0,0,0
-   *  (§47), never turn. */
+  /** Solid colour on one fixture: a confirmed segmented stream paints the
+   *  frame (§51 newest-state-wins); anything else — unarmed, or a probe
+   *  armed at an unconfirmed count — takes the one-shot colorwc path, so a
+   *  colour pick always covers the whole strip. Blackout rides this as
+   *  RGB 0,0,0 (§47), never turn. */
   async setColor(mac: string, r: number, g: number, b: number): Promise<void> {
     await this.start();
     const entry = this.require(mac);
-    const zones = entry.zones ?? (entry.lastFrame ? Math.floor(entry.lastFrame.length / 3) : 0);
+    const saved = entry.zonesSaved;
     const stream = entry.stream;
 
-    if (entry.armed && stream && !entry.streamClosed && zones > 0) {
-      const frame = solidPayload(zones, r, g, b);
+    entry.lastColor = [r, g, b];
+
+    if (saved !== null && entry.armed && stream && !entry.streamClosed && stream.zones === saved) {
+      const frame = solidPayload(saved, r, g, b);
       entry.lastFrame = frame.slice();
 
       try {
@@ -1198,6 +1374,13 @@ export class GoveeLanManager implements StreamTransport {
 
         return;
       } catch { /* zones raced the stream: the one-shot path below still lands */ }
+    }
+
+    // A probe stream armed at an unconfirmed count would keep its stripes
+    // on the wire and shadow this colour: tear it down first.
+    if (stream && !entry.streamClosed && stream.zones !== saved) {
+      this.teardownStream(entry);
+      entry.streamDesired = false;
     }
 
     this.sendJson(entry.mac, colorCommand(r, g, b));
@@ -1385,7 +1568,9 @@ export class GoveeLanManager implements StreamTransport {
     await this.start();
     const entry = this.require(mac);
     const stepMs = Math.max(0, opts?.stepMs ?? this.o.testChaseStepMs);
-    const zones = entry.zones ?? (entry.lastFrame ? Math.floor(entry.lastFrame.length / 3) : 0);
+    // Only an operator-confirmed count earns the segmented chase; a probe
+    // count or a leftover frame length would chase the wrong band count.
+    const zones = entry.zonesSaved ?? 0;
 
     if (zones > 0) {
       if (!entry.stream || entry.streamClosed) {
@@ -1501,7 +1686,7 @@ export class GoveeLanManager implements StreamTransport {
         sku: e.sku,
         name: e.name,
         enabled: e.enabled,
-        zones: e.zones,
+        zones: e.zonesSaved,
         ipHistory: e.ipHistory,
         bleHard: e.bleHard,
         bleSoft: e.bleSoft,
@@ -1546,7 +1731,7 @@ export class GoveeLanManager implements StreamTransport {
       health: e.health,
       fps: e.fps,
       armed: e.armed,
-      zones: e.zones,
+      zones: e.zonesSaved,
       sentFrames: e.stream?.framesSent ?? e.sentFrames,
       supersededFrames: e.stream?.framesSuperseded ?? 0,
       rttMs: e.rttMs,
@@ -2079,6 +2264,8 @@ export class GoveeLanManager implements StreamTransport {
       fps: this.o.fallbackHz,
       armed: false,
       zones: null,
+      zonesSaved: null,
+      lastColor: null,
       sentFrames: 0,
       supersededFrames: 0,
       rttMs: null,
@@ -2194,6 +2381,8 @@ export class GoveeLanManager implements StreamTransport {
           fps: this.o.fallbackHz,
           armed: false,
           zones: typeof row.zones === "number" && row.zones > 0 ? row.zones : null,
+          zonesSaved: typeof row.zones === "number" && row.zones > 0 ? row.zones : null,
+          lastColor: null,
           sentFrames: 0,
           supersededFrames: 0,
           rttMs: null,

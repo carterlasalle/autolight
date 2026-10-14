@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useShell, invoke } from "../../app/store.js";
+import { useShell, typedInvoke } from "../../app/store.js";
 import type { FollowMode } from "../../app/store.js";
 import { Button } from "../../components/ui/button.js";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select.js";
@@ -57,7 +57,7 @@ export function SetupView(): JSX.Element {
           {MODES.map((m) => (
             <button
               key={m.id} type="button" role="radio" aria-checked={mode === m.id}
-              onClick={() => { set({ followMode: m.id }); void invoke("follow/mode", { version: 1, mode: m.id }); }}
+              onClick={() => { const prev = useShell.getState().followMode; set({ followMode: m.id }); void typedInvoke("follow/mode", { version: 1, mode: m.id }).then((res) => { if (res === null) set({ followMode: prev }); }); }}
               className={`min-w-0 rounded-lg border p-2.5 text-left text-sm ${mode === m.id ? "border-primary bg-primary/10" : "border-border hover:bg-muted"}`}
             >
               <span className="block truncate font-medium" title={m.title}>{m.title}</span>
@@ -70,15 +70,19 @@ export function SetupView(): JSX.Element {
         <h2 className="text-base font-medium">Simulator: {simulatorMode ? "on" : "off"}</h2>
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <label className="flex min-w-0 items-center gap-2 text-sm">Scenario:
-            <Select value={scenario} onValueChange={(v) => setScenario(v as SimulatorScenario)}>
+            {/* The pick is local until a scenario reaches the simulator loop:
+                the seed is a single normal-night loop today, and simulator/mode
+                carries only the on/off flag. */}
+            <Select disabled value={scenario} onValueChange={(v) => { setScenario(v as SimulatorScenario); }}>
               <SelectTrigger className="h-8 w-44"><SelectValue /></SelectTrigger>
               <SelectContent>{SIMULATOR_SCENARIOS.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
             </Select>
           </label>
-          <Button size="sm" variant="outline" onClick={() => { set({ simulatorMode: !simulatorMode }); void invoke("simulator/mode", { version: 1, enabled: !simulatorMode, scenario }); }}>
+          <Button size="sm" variant="outline" onClick={() => { const next = !useShell.getState().simulatorMode; set({ simulatorMode: next }); void typedInvoke("simulator/mode", { version: 1, enabled: next }); }}>
             {simulatorMode ? "Exit simulator" : "Enter simulator"}
           </Button>
         </div>
+        <p className="mt-2 text-xs text-muted-foreground">One normal-night seed loop today — scenario switching is not wired yet.</p>
       </section>
       <section className="rounded-xl border border-border bg-card px-4 py-3">
         <h2 className="text-base font-medium">Setup: {done.length} of {SETUP_EVIDENCE_STEPS.length} ready</h2>
