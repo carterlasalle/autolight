@@ -3,7 +3,7 @@ module.exports = {
   forbidden: [
     {
       name: "renderer-no-show-internals",
-      comment: "S7: renderer observes snapshots and sends intents; it owns no timing or output (T-TRU-04). ACCEPTED DEVIATION (T-ANA-12 follow-up, 2026-10-02): apps/desktop/src/features/live/live.ts is a pure view-model (mixDown plus renderFrame over already-installed cues, no clock, no sockets, no output); the show host owns time and output. CI counts this as 1 known error, ratcheted, until the snapshot-render path replaces it.",
+      comment: "S7: renderer observes snapshots and sends intents; it owns no timing or output (T-TRU-04). ACCEPTED DEVIATION (T-ANA-12 follow-up, 2026-10-02): apps/desktop/src/features/live/live.ts is a pure view-model (mixDown plus renderFrame over already-installed cues, no clock, no sockets, no output); the show host owns time and output. Warn-only: CI's depcruise step fails on errors, and tools/ratchet.json records the known count as a manual ledger (no reader yet). The blocking backstop for the workspace-specifier gap is the ast-grep no-renderer-provider-barrel rules (ts + tsx).",
       severity: "warn",
       from: { path: "apps/desktop/src" },
       to: { path: "(show-runtime|show-mixer|packages/renderer|packages/govee)", pathNot: "\\.test\\.ts$" },
@@ -12,7 +12,7 @@ module.exports = {
       name: "renderer-no-simulator",
       comment: "S3: production never imports the simulator except the Simulator mode entry (T-TRU-02, T-QA-02 TestChannel): electron/services/simulator-show.ts owns the test-build show loop; production IPC never touches it.",
       severity: "error",
-      from: { path: "apps/desktop/(src|electron)", pathNot: "(services/simulator-show|\\.test)" },
+      from: { path: "apps/desktop/(src|electron)", pathNot: "(services/simulator-show|\\.test\\.ts$)" },
       to: { path: "packages/simulator", pathNot: "\\.test\\.ts$" },
     },
     {
@@ -62,7 +62,7 @@ module.exports = {
     },
     {
       name: "ownership-govee-sockets",
-      comment: "Govee LAN sockets (4002 listener, 4001 to 4003 control) | show host govee-manager | no other module opens UDP. Exceptions: the Govee LAN manager itself, the DJ provider observer (PRO DJ LINK owns :50001, main services), and the TEST-BUILD simulator show loop (loopback sim + recording sender only, never production IPC).",
+      comment: "Govee LAN sockets (4002 listener, 4001 to 4003 control) | show host govee-manager | no other main-process module opens UDP (package code is covered when depcruise resolves the import). Exceptions: the Govee LAN manager itself, the DJ provider observer (PRO DJ LINK owns :50001, main services), and the TEST-BUILD simulator show loop (loopback sim + recording sender only, never production IPC).",
       severity: "error",
       from: { path: "apps/desktop/electron", pathNot: "(govee-lan|services/provider-manager|services/simulator-show)\\.ts$" },
       to: { path: "dgram$" },

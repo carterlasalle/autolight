@@ -101,27 +101,39 @@ export function validateSections(sections: unknown, grid: unknown): ValidationIs
     rows.push({ start, end, i });
   });
   const ordered = [...rows].sort((a, b) => a.start - b.start);
+  // Compare against the running cover end: with nested intervals the
+  // immediate predecessor may end earlier while an earlier section still
+  // covers the current one (batch-21).
+  let coverEnd = ordered[0]?.end ?? -Infinity;
 
   for (let k = 1; k < ordered.length; k++) {
-    const prev = ordered[k - 1]!;
     const cur = ordered[k]!;
 
-    if (cur.start < prev.end) {
+    if (cur.start < coverEnd) {
       issues.push({
         path: `sections[${cur.i}].startBeat`,
-        message: `section overlaps previous: starts ${cur.start} before ${prev.end}`,
+        message: `section overlaps previous cover: starts ${cur.start} before ${coverEnd}`,
       });
-    } else if (cur.start > prev.end) {
+    } else if (cur.start > coverEnd) {
       issues.push({
         path: `sections[${cur.i}].startBeat`,
-        message: `section cover has gap: starts ${cur.start} after ${prev.end}`,
+        message: `section cover has gap: starts ${cur.start} after ${coverEnd}`,
       });
     }
+
+    coverEnd = Math.max(coverEnd, cur.end);
   }
 
   if (range && rows.length > 0) {
-    const minStart = Math.min(...rows.map((r) => r.start));
-    const maxEnd = Math.max(...rows.map((r) => r.end));
+    // Reduce instead of spreading: section arrays can be very large and
+    // Math.min(...items) overflows the argument stack (batch-21).
+    let minStart = Infinity;
+    let maxEnd = -Infinity;
+
+    for (const r of rows) {
+      minStart = Math.min(minStart, r.start);
+      maxEnd = Math.max(maxEnd, r.end);
+    }
 
     if (minStart < range.lo || maxEnd > range.hi) {
       issues.push({
@@ -269,16 +281,20 @@ export function validateFixtureCells(
     seen[index] = true;
   });
 
+  const validCells = Object.keys(seen).length;
   const counts: ReadonlyArray<readonly [string, number | null]> = [
     ["calibration.segmentCount", calibrationSegmentCount],
     ["device.segmentCount", deviceSegmentCount],
   ];
 
   for (const [label, count] of counts) {
-    if (count !== null && count !== cells.length) {
+    // Agreement compares against the cells that were valid: malformed
+    // entries are already reported and must not mask a count mismatch
+    // (batch-21).
+    if (count !== null && count !== validCells) {
       issues.push({
         path: label,
-        message: `${label} ${count} disagrees with cell map length ${cells.length}`,
+        message: `${label} ${count} disagrees with ${validCells} valid cells`,
       });
     }
   }
@@ -307,13 +323,15 @@ export function validateFixture(value: unknown, deviceSegmentCount: number | nul
 
 export type BoundaryKind = "track-model" | "show-plan" | "fixture";
 
-export function validateAtBoundary(kind: BoundaryKind, value: unknown): ValidationIssue[] {
+export function validateAtBoundary(kind: BoundaryKind, value: unknown, opts: { deviceSegmentCount?: number } = {}): ValidationIssue[] {
   switch (kind) {
     case "track-model":
       return validateTrackModel(value);
     case "show-plan":
       return validateShowPlan(value);
     case "fixture":
-      return validateFixture(value);
+      // Callers that know the registered device pass its count so the
+      // segment-count agreement is enforced at the boundary too (batch-21).
+      return validateFixture(value, opts.deviceSegmentCount ?? null);
   }
 }

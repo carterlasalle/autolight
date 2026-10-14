@@ -4,7 +4,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { runProviderContractSuite, type ContractHarness, type ContractTrack, type ProviderContractSubject } from "@autolight/rekordbox-live";
 import type { ProviderDeckState } from "@autolight/rekordbox-live";
-import type { OscArg, OscMessage } from "serato-connect";
+import { arg, frameOsc, osc, type OscArg, type OscMessage } from "serato-connect";
 import { SERATO_MASTER_INFER_HOLD_MS, SERATO_REMOTE_PROVIDER_ID, SeratoRemoteProvider, seratoRemoteProviderFor } from "./remote-provider.js";
 import { SeratoRemoteEmulator, seratoActionScript } from "./emulator.js";
 
@@ -38,7 +38,8 @@ async function awaitCondition(condition: () => boolean, what: string, timeoutMs 
 }
 
 export interface StateWatcher {
-  next(deckId: number, predicate?: (state: ProviderDeckState) => boolean): Promise<ProviderDeckState>;
+  next(deckId: number, predicate?: (state: ProviderDeckState) => boolean, fromIndex?: number): Promise<ProviderDeckState>;
+  count(): number;
 }
 
 /**
@@ -58,16 +59,24 @@ function stateWatcher(provider: SeratoRemoteProvider): StateWatcher {
   provider.onDeckState((state) => {
     seen.push(state);
 
-    for (const waiter of [...waiters]) {
+    // Backwards over the live array: splicing the current waiter must not
+    // shift the next one out of reach (a spread copy is not needed for that).
+    for (let i = waiters.length - 1; i >= 0; i--) {
+      const waiter = waiters[i]!;
+
       if (state.deckId !== waiter.deckId || !waiter.predicate(state)) continue;
-      waiters.splice(waiters.indexOf(waiter), 1);
+      waiters.splice(i, 1);
       waiter.resolve(state);
     }
   });
 
   return {
-    next: (deckId, predicate = () => true) => {
-      const hit = seen.find((state) => state.deckId === deckId && predicate(state));
+    count: () => seen.length,
+    next: (deckId, predicate = () => true, fromIndex = 0) => {
+      // fromIndex gates the history lookup: a caller that needs a state
+      // produced AFTER its action must not match a stale earlier one
+      // (batch-21).
+      const hit = seen.slice(fromIndex).find((state) => state.deckId === deckId && predicate(state));
 
       if (hit) return Promise.resolve(hit);
       const { promise, resolve } = Promise.withResolvers<ProviderDeckState>();
@@ -308,8 +317,12 @@ describe("serato remote provider (T-SER-01)", () => {
 
     for (const action of ["load-deck-1", "play", "pause", "seek", "loop-1-beat", "loop-roll", "two-decks"] as const) {
       const before = provider.getStats().rejected;
+      const seenBefore = watcher.count();
       await emulator.playAction(action, 20);
-      await watcher.next(1, () => true);
+      // Wait for a state the action itself produced: matching the whole
+      // history would resolve instantly and could assert before the action's
+      // frames were processed (batch-21).
+      await watcher.next(1, () => true, seenBefore);
       expect(provider.getStats().rejected).toBe(before);
       expect(seratoActionScript(action).length).toBeGreaterThan(0);
     }
@@ -328,5 +341,47 @@ describe("serato remote provider (T-SER-01)", () => {
     await awaitCondition(() => provider.getStats().rejected > rejectedBefore, "the malformed frame to be counted");
     expect(provider.getStatus().state).not.toBe("failed");
     expect(statuses).toContain("degraded");
+  });
+  it("rejects an out-of-range deck index instead of colliding with deck 4", () => {
+    const { provider } = prepareProvider("autolight-deck-bound");
+    const atNs = 1_000_000_000_000n;
+
+    const titleFor = (raw: number): OscMessage => ({
+      address: "/Status/Deck/Song/Title",
+      args: [{ type: "i", value: raw }, { type: "s", value: "Out of range" }],
+    });
+
+    expect(provider.applyStatusMessage(titleFor(3), atNs)).toBe(4);
+    expect(provider.applyStatusMessage(titleFor(4), atNs)).toBeNull();
+    expect(provider.deck(4)?.track?.title).not.toBe("Out of range");
+  });
+
+  it("ignores an unhandled address without creating a phantom accumulator", () => {
+    const { provider } = prepareProvider("autolight-unknown-address");
+    const atNs = 1_000_000_000_000n;
+    expect(
+      provider.applyStatusMessage(
+        { address: "/Status/Deck/Scratch", args: [{ type: "i", value: 0 }, { type: "f", value: 1 }] },
+        atNs,
+      ),
+    ).toBeNull();
+    expect(provider.getDecks()).toEqual([]);
+  });
+
+  it("reports no identity for a title-only track instead of a colliding fallback id", () => {
+    const { provider } = prepareProvider("autolight-no-path");
+    const atNs = 1_000_000_000_000n;
+    const frameOf = (message: OscMessage): Uint8Array => new Uint8Array(frameOsc(message));
+
+    const titleOnly = Buffer.concat([
+      frameOf(osc("/Status/Deck/Song/Title", arg.i(0), arg.s("Same Title"))),
+      frameOf(osc("/Status/Deck/Song/Artist", arg.i(0), arg.s("Same Artist"))),
+    ]);
+
+    const [first] = provider.ingestFrame(new Uint8Array(titleOnly), atNs);
+    const [second] = provider.ingestFrame(new Uint8Array(titleOnly), atNs + 1n);
+    expect(first?.track).toBeNull();
+    expect(second?.track).toBeNull();
+    expect(second?.generation).toBe(first?.generation);
   });
 });

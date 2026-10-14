@@ -1,4 +1,114 @@
 {
+  "batch-21": [
+    {
+      "path": "packages/rekordbox-live/src/osc.test.ts",
+      "line": 68,
+      "verdict": "fixed-earlier",
+      "evidence": "The malformed test covers the non-address case and a dedicated hostile-bytes test covers unterminated headers, blob overrun and bundle residue. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/rekordbox-live/src/osc.test.ts",
+      "line": 35,
+      "verdict": "fixed-earlier",
+      "evidence": "The bundle vector's args are asserted in the timetag branch ('a decoder that drops a bundle element's arguments must fail here'). Verified 2026-10-14."
+    },
+    {
+      "path": "packages/rekordbox-live/src/osc.test.ts",
+      "line": 38,
+      "verdict": "fixed-earlier",
+      "evidence": "argKinds is read: wire type tags are matched against the fixture and each decoded arg's type is checked. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/rekordbox-live/src/osc.test.ts",
+      "line": 51,
+      "verdict": "fixed-earlier",
+      "evidence": "Round-trip vectors re-encode as messages and timetag vectors through encodeOscBundle in their own test. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/rekordbox-live/src/osc.test.ts",
+      "line": 19,
+      "verdict": "fixed-by-commit",
+      "evidence": "The fixture path walks up from the test file and fails with the attempted path; no fixed-depth assumption (batch-21)."
+    },
+    {
+      "path": "packages/rekordbox-live/src/version-registry.ts",
+      "line": 176,
+      "verdict": "fixed-earlier",
+      "evidence": "qualifyProvider returns an explicit unsupported status with the known ranges, and recordQualification throws when no definition matches. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/serato/src/remote-provider.test.ts",
+      "line": 64,
+      "verdict": "by-design",
+      "evidence": "next() is a documented find-in-history-or-wait helper; the new fromIndex lets callers that need post-action states gate the history lookup (batch-21)."
+    },
+    {
+      "path": "packages/serato/src/remote-provider.test.ts",
+      "line": 288,
+      "verdict": "fixed-by-commit",
+      "evidence": "The action-coverage loop passes the pre-action seen count so it truly waits for the action's own state (batch-21)."
+    },
+    {
+      "path": "packages/serato/src/remote-provider.test.ts",
+      "line": 291,
+      "verdict": "fixed-earlier",
+      "evidence": "The loop runs each action through the emulator/provider and asserts no rejected frames; the script-length check is supplementary. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/storage/src/validation.ts",
+      "line": 263,
+      "verdict": "fixed-by-commit",
+      "evidence": "validateAtBoundary accepts an optional deviceSegmentCount and threads it to validateFixture (batch-21)."
+    },
+    {
+      "path": "packages/storage/src/validation.ts",
+      "line": 91,
+      "verdict": "fixed-by-commit",
+      "evidence": "Overlap/gap checks compare against a running cover end, so nested intervals cannot hide overlaps (batch-21)."
+    },
+    {
+      "path": "packages/storage/src/validation.ts",
+      "line": 104,
+      "verdict": "fixed-by-commit",
+      "evidence": "min/max over sections reduce instead of spreading (no argument-stack overflow) (batch-21)."
+    },
+    {
+      "path": "packages/storage/src/validation.ts",
+      "line": 229,
+      "verdict": "fixed-by-commit",
+      "evidence": "Segment-count agreement compares against the valid cell count; malformed entries cannot mask a mismatch (batch-21)."
+    },
+    {
+      "path": ".dependency-cruiser.cjs",
+      "line": 47,
+      "verdict": "by-design",
+      "evidence": "The config documents that depcruise does not resolve @autolight/* specifiers here, and the blocking enforcement is the ast-grep no-renderer-provider-barrel rules (red-run proven). Comment corrected to name that backstop."
+    },
+    {
+      "path": ".dependency-cruiser.cjs",
+      "line": 39,
+      "verdict": "by-design",
+      "evidence": "ownership-show-clock intentionally covers all of apps/desktop; the renderer deviation is governed by the warn-only first rule. Verified 2026-10-14."
+    },
+    {
+      "path": ".dependency-cruiser.cjs",
+      "line": 68,
+      "verdict": "fixed-by-commit",
+      "evidence": "The UDP rule's comment now states its true scope (no other main-process module) (batch-21)."
+    },
+    {
+      "path": ".dependency-cruiser.cjs",
+      "line": 7,
+      "verdict": "fixed-by-commit",
+      "evidence": "The accepted-deviation comment now states the real enforcement: warn, a manual ratchet ledger with no reader, ast-grep as the blocking backstop (batch-21)."
+    },
+    {
+      "path": ".dependency-cruiser.cjs",
+      "line": 15,
+      "verdict": "fixed-by-commit",
+      "evidence": "The simulator exemption anchors to \\.test\\.ts$ like every other rule (batch-21)."
+    }
+  ],
   "batch-20": [
     {
       "path": "packages/controller-flx4/src/backend.test.ts",
