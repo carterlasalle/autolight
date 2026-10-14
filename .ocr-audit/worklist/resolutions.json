@@ -1,4 +1,66 @@
 {
+  "batch-23": [
+    {
+      "path": "packages/ble/src/scan.ts",
+      "line": 39,
+      "verdict": "fixed-earlier",
+      "evidence": "The docstring states the contract: the payload is the backend's already-trimmed Govee manufacturer data (both shipped backends strip the company id), never raw AD bytes. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/ble/src/stream.test.ts",
+      "line": 97,
+      "verdict": "fixed-earlier",
+      "evidence": "The test title now matches the assertion: blackout takes the single-colour fast path (0x0d), never power off. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/govee/src/resolution.ts",
+      "line": 44,
+      "verdict": "fixed-earlier",
+      "evidence": "selectResolution throws a RangeError for a non-finite targetHz before any Math.floor. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/renderer/src/capability.ts",
+      "line": 52,
+      "verdict": "fixed-earlier",
+      "evidence": "singleZoneColor implements area-weighted-mean-oklab (per-cell OKLab mean), and it is the configured default mode. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/renderer/src/capability.ts",
+      "line": 21,
+      "verdict": "fixed-earlier",
+      "evidence": "The transport switch has a default that throws RangeError naming the value. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/renderer/src/goldens.test.ts",
+      "line": 22,
+      "verdict": "fixed-by-commit",
+      "evidence": "Both determinism passes share named ENVELOPE_BEATS/ENVELOPE constants (batch-23)."
+    },
+    {
+      "path": "packages/renderer/src/goldens.test.ts",
+      "line": 23,
+      "verdict": "fixed-earlier",
+      "evidence": "Finite guards on sample.level and env run before the byte write, so a NaN cannot mask as 0. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/simulator/src/govee-lan.ts",
+      "line": 89,
+      "verdict": "fixed-earlier",
+      "evidence": "paintCount is exposed via paintsSeen and asserted by the sim's own test; hold is a reorder buffer with its own timer (no unused TTL). Verified 2026-10-14."
+    },
+    {
+      "path": "packages/simulator/src/govee-lan.ts",
+      "line": 329,
+      "verdict": "fixed-by-commit",
+      "evidence": "applyPaint clamps the declared segment count to the bytes actually present before indexing (batch-23)."
+    },
+    {
+      "path": "packages/simulator/src/govee-lan.ts",
+      "line": 310,
+      "verdict": "fixed-earlier",
+      "evidence": "The dead base64 catch is gone: malformed input surfaces as decodeRaw null with the behavior documented. Verified 2026-10-14."
+    }
+  ],
   "batch-22": [
     {
       "path": "analysis/src/autolight_analysis/config_defaults.json",

@@ -439,7 +439,11 @@ export class GoveeLanSim {
       this.lastPaintAt = now;
     }
 
-    const nbSeg = payload[1] ?? 0;
+    // Trust only the bytes actually present: a lying segment count must not
+    // be emulated as silently-zero colours past the payload (batch-23).
+    const stride = opcode === OPCODE.RGB_STREAM ? 3 : 4;
+    const available = Math.max(0, Math.floor((payload.length - 2) / stride));
+    const nbSeg = Math.min(payload[1] ?? 0, available);
 
     if (opcode === OPCODE.RGB_STREAM) {
       for (let i = 0; i < nbSeg && i < this.rendered.length; i++) {

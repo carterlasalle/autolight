@@ -8,6 +8,10 @@ import { fieldCellsForReference, REFERENCE_ROOMS, referenceById } from "@autolig
 
 describe("T-REND-06 renderer goldens", () => {
   it("renders every spatial primitive without throwing and hashes deterministically", () => {
+    // Named envelope inputs: both passes below must use the same values for
+    // the determinism claim to mean anything (batch-23).
+    const ENVELOPE_BEATS = 4;
+    const ENVELOPE = { attackBeats: 0.05, releaseBeats: 0.5 } as const;
     const ref = referenceById("square-loop");
     const room = { ...ref.room, logicalZeroS: ref.zeroS, perimeterDirection: "clockwise" as const };
     const built = fieldCellsForReference(ref);
@@ -22,7 +26,7 @@ describe("T-REND-06 renderer goldens", () => {
       for (let i = 0; i < fields.count; i++) {
         const sample = sampleSpatial(name, params, shape.beat, i, fields);
         expect(Number.isFinite(sample.level), `${name} cell ${i} level`).toBe(true);
-        const env = envelopeLevel(shape.beat, 4, { attackBeats: 0.05, releaseBeats: 0.5 });
+        const env = envelopeLevel(shape.beat, ENVELOPE_BEATS, ENVELOPE);
         expect(Number.isFinite(env), `${name} envelope`).toBe(true);
         const v = Math.round(Math.min(1, Math.max(0, sample.level * env)) * 255);
         levels[i * 3] = v;
@@ -36,7 +40,7 @@ describe("T-REND-06 renderer goldens", () => {
 
       for (let i = 0; i < fields.count; i++) {
         const sample = sampleSpatial(name, params, shape.beat, i, fields);
-        const env = envelopeLevel(shape.beat, 4, { attackBeats: 0.05, releaseBeats: 0.5 });
+        const env = envelopeLevel(shape.beat, ENVELOPE_BEATS, ENVELOPE);
         const v = Math.round(Math.min(1, Math.max(0, sample.level * env)) * 255);
         again[i * 3] = v;
         again[i * 3 + 1] = Math.round(v * 0.6);
