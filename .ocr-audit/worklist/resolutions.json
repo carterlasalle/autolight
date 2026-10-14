@@ -1,4 +1,48 @@
 {
+  "batch-18": [
+    {
+      "path": "packages/reactive-audio/src/index.ts",
+      "line": 16,
+      "verdict": "fixed-earlier",
+      "evidence": "nextLook normalizes the seed through ((trunc % n) + n) % n, so negatives and floats cannot index undefined. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/rekordbox-live/src/link.test.ts",
+      "line": 53,
+      "verdict": "fixed-earlier",
+      "evidence": "The test parses the published line and asserts setTempo: 126 exactly. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/serato/src/emulator.ts",
+      "line": 320,
+      "verdict": "fixed-earlier",
+      "evidence": "close() returns early for destroyed/already-closed sockets before awaiting the close event. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/show-director/src/index.ts",
+      "line": 113,
+      "verdict": "fixed-earlier",
+      "evidence": "phraseOf validates finite/positive phraseBeats and beat before any division. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/show-director/src/index.ts",
+      "line": 85,
+      "verdict": "fixed-earlier",
+      "evidence": "advisedEnergy consumes input.onset as a one-step accent. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/show-director/src/index.ts",
+      "line": 176,
+      "verdict": "by-design",
+      "evidence": "fader-rise and filter-sweep nudge energy; transport hints carry no energy and are documented as structurally handled by the mixer. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/storage/src/logging.ts",
+      "line": 141,
+      "verdict": "fixed-earlier",
+      "evidence": "validateLog checks presence in diagnostic mode and typeof string otherwise. Verified 2026-10-14."
+    }
+  ],
   "batch-17": [
     {
       "path": "packages/show-planner/src/contrast.ts",
