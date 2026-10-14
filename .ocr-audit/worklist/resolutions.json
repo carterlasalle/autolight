@@ -3048,5 +3048,398 @@
       "verdict": "documented-precondition",
       "evidence": "DEFERRED: file is under concurrent edit by another session (uncommitted changes present); reviewed but not touched to avoid clobbering in-flight work. The finding remains valid against the working tree and must be addressed once that work commits."
     }
+  ],
+  "batch-38": [
+    {
+      "path": "packages/matter/src/mapping.ts",
+      "line": 59,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    }
+  ],
+  "batch-39": [],
+  "batch-40": [
+    {
+      "path": "apps/desktop/electron/services/secrets-service.test.ts",
+      "line": 63,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "apps/desktop/electron/services/secrets-service.test.ts",
+      "line": 47,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "apps/desktop/electron/services/simulator-show-seed.ts",
+      "line": 0,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "apps/desktop/src/features/setup/rkbx-setup-panel.test.ts",
+      "line": 32,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "apps/desktop/src/features/setup/rkbx-setup-panel.test.ts",
+      "line": 49,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "packages/govee/src/firmware.test.ts",
+      "line": 11,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    }
+  ],
+  "batch-41": [
+    {
+      "path": "packages/rekordbox-live/src/version-registry.test.ts",
+      "line": 46,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "packages/rekordbox-live/src/version-registry.test.ts",
+      "line": 19,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "packages/rekordbox-live/src/version-registry.test.ts",
+      "line": 51,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "packages/rekordbox-live/src/version-registry.test.ts",
+      "line": 65,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    }
+  ],
+  "batch-42": [
+    {
+      "path": "packages/show-director/src/index.test.ts",
+      "line": 24,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "packages/show-mixer/src/blend.test.ts",
+      "line": 28,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "packages/show-mixer/src/blend.test.ts",
+      "line": 60,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "packages/show-planner/package.json",
+      "line": 5,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "packages/show-planner/package.json",
+      "line": 8,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "apps/desktop/scripts/build-preload.mjs",
+      "line": 32,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "apps/desktop/scripts/build-preload.mjs",
+      "line": 7,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    }
+  ],
+  "batch-43": [
+    {
+      "path": "packages/contracts/package.json",
+      "line": 5,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "packages/contracts/package.json",
+      "line": 4,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "packages/controller-flx4/package.json",
+      "line": 23,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "packages/controller-flx4/package.json",
+      "line": 18,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "packages/controller-flx4/src/state.ts",
+      "line": 347,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "packages/govee/src/scenes.ts",
+      "line": 31,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "packages/matter/src/controller.test.ts",
+      "line": 20,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "packages/matter/src/controller.test.ts",
+      "line": 29,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    }
+  ],
+  "batch-44": [
+    {
+      "path": "packages/rekordbox-library/src/beat.test.ts",
+      "line": 147,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    }
+  ],
+  "batch-45": [
+    {
+      "path": "packages/show-mixer/src/index.ts",
+      "line": 351,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "packages/storage/src/cache.test.ts",
+      "line": 122,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "packages/storage/src/cache.test.ts",
+      "line": 191,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "packages/storage/src/cache.test.ts",
+      "line": 216,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "packages/storage/src/cache.test.ts",
+      "line": 173,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "packages/storage/src/fastpath.test.ts",
+      "line": 111,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "packages/storage/src/fastpath.test.ts",
+      "line": 138,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "packages/storage/src/index.test.ts",
+      "line": 7,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "packages/track-identity/src/identity.test.ts",
+      "line": 35,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "packages/track-identity/src/identity.test.ts",
+      "line": 42,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "packages/track-identity/src/identity.test.ts",
+      "line": 53,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "packages/track-model/src/index.test.ts",
+      "line": 10,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    }
+  ],
+  "batch-46": [],
+  "batch-47": [
+    {
+      "path": "apps/desktop/src/routes/inspector/inspector-helpers.ts",
+      "line": 39,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "apps/desktop/src/routes/library/track-key.ts",
+      "line": 10,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "apps/desktop/src/routes/setup/setup-model.test.ts",
+      "line": 7,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    }
+  ],
+  "batch-48": [
+    {
+      "path": "packages/ble/src/e2e.test.ts",
+      "line": 99,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "packages/ble/src/e2e.test.ts",
+      "line": 24,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "packages/ble/src/stream.ts",
+      "line": 59,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "packages/controller-flx4/src/map.ts",
+      "line": 360,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "packages/dj-core/src/index.test.ts",
+      "line": 44,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "packages/govee/src/scenes.test.ts",
+      "line": 34,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "packages/govee/src/scenes.test.ts",
+      "line": 40,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    }
+  ],
+  "batch-49": [
+    {
+      "path": "packages/serato/src/library.test.ts",
+      "line": 172,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "packages/serato/src/library.test.ts",
+      "line": 144,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "packages/show-mixer/src/blackout.test.ts",
+      "line": 95,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    }
+  ],
+  "batch-50": [
+    {
+      "path": "apps/desktop/electron/services/storage-service.ts",
+      "line": 109,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "apps/desktop/electron/services/storage-service.ts",
+      "line": 117,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "packages/ble/src/commands.test.ts",
+      "line": 189,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "packages/ble/src/commands.test.ts",
+      "line": 62,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "packages/ble/src/commands.test.ts",
+      "line": 37,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    }
+  ],
+  "batch-51": [],
+  "batch-52": [
+    {
+      "path": "packages/renderer/src/regions.test.ts",
+      "line": 57,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "packages/renderer/src/regions.test.ts",
+      "line": 54,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "packages/show-runtime/src/seek-equivalence.property.test.ts",
+      "line": 52,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "packages/show-runtime/src/seek-equivalence.property.test.ts",
+      "line": 14,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    }
   ]
 }

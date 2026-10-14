@@ -1,7 +1,6 @@
 # OCR audit — batch checklist
 
-Source: `.ocr-audit/worklist/batches` (85 batches).
-Refreshed against HEAD 2a8022d (2026-10-14) with `node .ocr-audit/worklist/triage.mjs` (sidecar: resolutions.json).
+Refreshed against HEAD 69f37a9 (2026-10-14) with `node .ocr-audit/worklist/triage.mjs`.
 Legend: [x] all comments resolved+verified, [~] in progress, [ ] not started.
 
 [x] batch-01: open 0, unknown 0, applied 44 of 44
@@ -41,21 +40,21 @@ Legend: [x] all comments resolved+verified, [~] in progress, [ ] not started.
 [x] batch-35: open 0, unknown 0, applied 30 of 30
 [x] batch-36: open 0, unknown 0, applied 25 of 25
 [x] batch-37: open 0, unknown 0, applied 29 of 29
-[~] batch-38: open 17, unknown 5, applied 7 of 29
+[~] batch-38: open 16, unknown 5, applied 8 of 29
 [~] batch-39: open 30, unknown 0, applied 5 of 35
-[~] batch-40: open 6, unknown 0, applied 20 of 26
-[~] batch-41: open 32, unknown 0, applied 1 of 33
-[~] batch-42: open 7, unknown 0, applied 22 of 29
-[~] batch-43: open 10, unknown 0, applied 16 of 26
-[~] batch-44: open 30, unknown 0, applied 5 of 35
-[~] batch-45: open 12, unknown 0, applied 20 of 32
+[x] batch-40: open 0, unknown 0, applied 26 of 26
+[~] batch-41: open 28, unknown 0, applied 5 of 33
+[x] batch-42: open 0, unknown 0, applied 29 of 29
+[~] batch-43: open 2, unknown 0, applied 24 of 26
+[~] batch-44: open 29, unknown 0, applied 6 of 35
+[x] batch-45: open 0, unknown 0, applied 32 of 32
 [~] batch-46: open 27, unknown 0, applied 2 of 29
-[~] batch-47: open 3, unknown 0, applied 13 of 16
-[~] batch-48: open 8, unknown 0, applied 17 of 25
-[~] batch-49: open 18, unknown 0, applied 9 of 27
-[~] batch-50: open 17, unknown 0, applied 10 of 27
+[x] batch-47: open 0, unknown 0, applied 16 of 16
+[~] batch-48: open 1, unknown 0, applied 24 of 25
+[~] batch-49: open 15, unknown 0, applied 12 of 27
+[~] batch-50: open 12, unknown 0, applied 15 of 27
 [~] batch-51: open 27, unknown 0, applied 2 of 29
-[~] batch-52: open 18, unknown 0, applied 13 of 31
+[~] batch-52: open 14, unknown 0, applied 17 of 31
 [~] batch-53: open 24, unknown 0, applied 3 of 27
 [~] batch-54: open 11, unknown 0, applied 17 of 28
 [~] batch-55: open 26, unknown 0, applied 2 of 28
