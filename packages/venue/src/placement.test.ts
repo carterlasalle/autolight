@@ -29,6 +29,19 @@ describe("T-ROOM-02 placements and Fixture v2", () => {
     ]);
 
     expect(cells).toHaveLength(20);
+    // Interpolation, not just length: anchors mark cell CENTERS (cell 10 is
+    // at 10 m), so a cell's span starts half a cell earlier; cell 0 clamps
+    // to the run start.
+    const startOf = (i: number): number => cells[i]!.positions[0]!.startM;
+
+    expect(startOf(0)).toBeCloseTo(0, 9);
+    expect(startOf(5)).toBeCloseTo(4.5, 9);
+    expect(startOf(10)).toBeCloseTo(9.5, 9);
+    expect(startOf(15)).toBeCloseTo(14.5, 9);
+    expect(startOf(19)).toBeCloseTo(18.5, 9);
+    expect(startOf(5)).toBeGreaterThan(startOf(0));
+    expect(startOf(5)).toBeLessThan(startOf(10));
+    expect(startOf(15)).toBeLessThan(startOf(19));
     expect(() =>
       fitRunMapping(run, 20, [
         { cell: 0, run: "loop", atMeters: 10 },
@@ -57,16 +70,31 @@ describe("T-ROOM-02 placements and Fixture v2", () => {
   it("keeps physical to logical a bijection and rotates it on logical-zero move", () => {
     const run = square();
     const cells = fitRunMapping(run, 8, []);
-    const midS = [0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875];
+    // Derived from the fitted cells, not hand-written: one s value per cell.
+    const midS = cells.map((_, i) => i / cells.length);
     const ordered = applyLogicalOrder(cells, midS, 0, "clockwise");
     const table = logicalToPhysical(ordered);
     expect([...table].sort((a, b) => a - b)).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
     const rotated = rotateLogicalZero(ordered, 2);
-    expect(logicalToPhysical(rotated)).not.toEqual(table);
-    expect(orderLogical(midS, 0.25, "clockwise")[2]).toBe(0);
+    const rotatedTable = logicalToPhysical(rotated);
+    expect(rotatedTable).not.toEqual(table);
+    // Rotating the zero by 2 moves every physical cell two logical slots:
+    // rotatedTable[i] === table[(i + 2) % 8] for the whole table.
+    expect([...rotatedTable]).toEqual([...table].map((_, i) => table[(i + 2) % table.length]));
+    // The full orderLogical permutation, not one index: physical 2 sits at
+    // logical 0 on the uniform ring with zero at 0.25, neighbours stay
+    // neighbours, and the mapping covers every slot once.
+    const fullOrder = orderLogical(midS, 0.25, "clockwise");
+    expect(fullOrder[2]).toBe(0);
+    expect([...fullOrder].sort((a, b) => a - b)).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
+
+    for (let i = 0; i + 1 < fullOrder.length; i++) {
+      expect((fullOrder[i + 1]! - fullOrder[i]! + 8) % 8).toBe(1);
+    }
   });
 
   it("classifies strip topology without assuming the owner's rig", () => {
+    expect(topologyForRuns([])).toBe("point");
     expect(topologyForRuns([square()])).toBe("closed-loop");
     expect(topologyForRuns([{ ...square(), closed: false }])).toBe("open-path");
     expect(topologyForRuns([square(), { ...square(), id: "b", mirroredOf: "loop" }])).toBe("split-mirrored");

@@ -4,10 +4,13 @@ import { isPrimitiveName, requirePrimitive, checkTopology, checkFixtureRate, PRI
 describe("T-PLAN-04 primitive library", () => {
   it("registers every spec primitive plus the spatial set", () => {
     for (const name of [...SPEC_PRIMITIVES, ...SPATIAL_PRIMITIVES]) {
-      expect(PRIMITIVE_REGISTRY[name], name).toBeDefined();
+      // Non-null and self-named, not merely defined: a null mapping fails.
+      expect(PRIMITIVE_REGISTRY[name]?.name, name).toBe(name);
       expect(isPrimitiveName(name)).toBe(true);
     }
 
+    // The key set IS the union: an orphan or mismatched entry fails.
+    expect(new Set(Object.keys(PRIMITIVE_REGISTRY))).toEqual(new Set([...SPEC_PRIMITIVES, ...SPATIAL_PRIMITIVES]));
     expect(SPEC_PRIMITIVES).toHaveLength(27);
     expect(SPATIAL_PRIMITIVES).toHaveLength(23);
   });
@@ -40,10 +43,15 @@ describe("T-PLAN-04 primitive library", () => {
 
   it("gates orbits on topology and strobes on fixture rate", () => {
     expect(checkTopology("Orbit", "split-mirrored")).toMatch(/closed loop/);
+    // Every topology the source rejects for closed-or-independent orbits.
+    expect(checkTopology("Orbit", "point")).toMatch(/closed loop/);
+    expect(checkTopology("Orbit", "vertical-line")).toMatch(/closed loop/);
     expect(checkTopology("Orbit", "closed-loop")).toBeNull();
     expect(checkTopology("Breathe", "split-mirrored")).toBeNull();
     expect(checkFixtureRate("StrobeBurst", 10)).toMatch(/at least 24/);
-    expect(checkFixtureRate("StrobeBurst", 30)).toBeNull();
+    // The exact boundary qualifies (>=), one below it fails.
+    expect(checkFixtureRate("StrobeBurst", 24)).toBeNull();
+    expect(checkFixtureRate("StrobeBurst", 23.9)).toMatch(/at least 24/);
     // An unknown rate cannot prove a 24 Hz primitive: it must fail loudly.
     expect(checkFixtureRate("StrobeBurst", null)).toMatch(/unknown/);
   });

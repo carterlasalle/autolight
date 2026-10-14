@@ -3057,7 +3057,92 @@
       "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
     }
   ],
-  "batch-39": [],
+  "batch-39": [
+    {
+      "path": "packages/venue/src/index.test.ts",
+      "line": 13,
+      "verdict": "fixed",
+      "evidence": "Ids sort opposite to positions, so an id-sorted implementation fails; intra-fixture x/y ordering pinned."
+    },
+    {
+      "path": "packages/venue/src/index.test.ts",
+      "line": 16,
+      "verdict": "fixed",
+      "evidence": "Forward path asserted as identity, plus a no-mutation check on both branches."
+    },
+    {
+      "path": "packages/venue/src/index.test.ts",
+      "line": 20,
+      "verdict": "fixed",
+      "evidence": "Boundary pinned: stableFps 24 qualifies, 23.9 does not."
+    },
+    {
+      "path": "packages/venue/src/index.test.ts",
+      "line": 33,
+      "verdict": "fixed",
+      "evidence": "PRIMARY moved to the right fixture so LEFT (positional) and PRIMARY (group) resolve differently."
+    },
+    {
+      "path": "packages/venue/src/index.test.ts",
+      "line": 7,
+      "verdict": "fixed",
+      "evidence": "A multi-cell fixture with equal x pins the y tie-break and intra-fixture ordering."
+    },
+    {
+      "path": "packages/venue/src/placement.test.ts",
+      "line": 46,
+      "verdict": "fixed",
+      "evidence": "Rotation asserted as the full slot shift (rotatedTable[i] === table[(i+2)%8]), not just difference."
+    },
+    {
+      "path": "packages/venue/src/placement.test.ts",
+      "line": 41,
+      "verdict": "fixed",
+      "evidence": "midS derived from the fitted cells (i / cells.length)."
+    },
+    {
+      "path": "packages/venue/src/placement.test.ts",
+      "line": 47,
+      "verdict": "fixed",
+      "evidence": "Full orderLogical permutation asserted: anchor at 0, bijection, adjacency preserved."
+    },
+    {
+      "path": "packages/venue/src/placement.test.ts",
+      "line": 29,
+      "verdict": "fixed",
+      "evidence": "Interpolation pinned: anchors mark cell centres (cell 10 at 9.5 span start), interior cells between anchors."
+    },
+    {
+      "path": "packages/venue/src/placement.test.ts",
+      "line": 53,
+      "verdict": "fixed",
+      "evidence": "Empty-run case added: topologyForRuns([]) === point."
+    },
+    {
+      "path": "packages/show-planner/src/primitives.test.ts",
+      "line": 7,
+      "verdict": "fixed",
+      "evidence": "Non-null and self-named assertion replaces toBeDefined."
+    },
+    {
+      "path": "packages/show-planner/src/primitives.test.ts",
+      "line": 10,
+      "verdict": "fixed",
+      "evidence": "Registry key set equals the union of SPEC and SPATIAL exactly."
+    },
+    {
+      "path": "packages/show-planner/src/primitives.test.ts",
+      "line": 40,
+      "verdict": "fixed",
+      "evidence": "Exact 24 Hz boundary and 23.9 rejection pinned alongside the null case."
+    },
+    {
+      "path": "packages/show-planner/src/primitives.test.ts",
+      "line": 37,
+      "verdict": "fixed",
+      "evidence": "point and vertical-line rejections asserted for closed-or-independent primitives."
+    }
+  ],
   "batch-40": [
     {
       "path": "apps/desktop/electron/services/secrets-service.test.ts",
