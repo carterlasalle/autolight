@@ -44,6 +44,9 @@ export interface Measured<T> {
   receipt: string;
 }
 
+// Unmeasured units run at 10 Hz (lan.md 2.3; the native engine's FALLBACK_HZ).
+const DEFAULT_FALLBACK_HZ = 10;
+
 export interface DeviceProfile {
   schema: string;
   sku: string;
@@ -424,7 +427,10 @@ export function profileDefaultsFor(catalog: DeviceCatalog, sku: string): DeviceP
 export function defaultRateHz(profile: DeviceProfile, zones: number, targetHz: number): number {
   if (!Number.isFinite(targetHz)) throw new Error(`defaultRateHz: targetHz must be a finite number, got ${targetHz}`);
   const table = profile.measurements.maxHzByZones.value;
-  let ceiling = profile.measurements.fallbackHz.value ?? 10;
+  // Unmeasured units run at 10 Hz (lan.md 2.3, the native engine's
+  // FALLBACK_HZ); profile lint keeps fallback_hz optional because an
+  // unmeasured SKU is a legitimate state until the owner's sweep.
+  let ceiling = profile.measurements.fallbackHz.value ?? DEFAULT_FALLBACK_HZ;
 
   if (table !== null) {
     const keys = Object.keys(table).map(Number).filter((key) => Number.isFinite(key)).sort((a, b) => a - b);

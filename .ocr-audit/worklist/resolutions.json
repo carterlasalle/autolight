@@ -1,4 +1,42 @@
 {
+  "batch-08": [
+    {
+      "path": "packages/storage/src/netaudit.ts",
+      "line": 50,
+      "verdict": "fixed-earlier",
+      "evidence": "Port allowlisting now requires a wildcard host (0.0.0.0/::) with a comment; a public or single-NIC bind is denied. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/storage/src/netaudit.ts",
+      "line": 38,
+      "verdict": "fixed-earlier",
+      "evidence": "auditListeners stamps the allowlist entry's reason onto the allowed listener, so a caller-supplied reason cannot lie. Verified 2026-10-14."
+    },
+    {
+      "path": "apps/desktop/electron/services/matter-bridge.ts",
+      "line": 53,
+      "verdict": "fixed-earlier",
+      "evidence": "Restart accounting resets after HEALTHY_UPTIME_MS of uptime before counting a new failure, so the budget is per incident window, not process lifetime. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/govee/src/profiles.ts",
+      "line": 341,
+      "verdict": "fixed-by-commit",
+      "evidence": "The 10 Hz fallback is now the named DEFAULT_FALLBACK_HZ with the lan.md 2.3 citation; fallback_hz stays optional in lint because unmeasured SKUs are legitimate until the owner's sweep."
+    },
+    {
+      "path": "packages/rekordbox-library/src/options.ts",
+      "line": 100,
+      "verdict": "fixed-earlier",
+      "evidence": "readOptionsFile filters to well-shaped [string, string] tuples before optionValue sees them. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/rekordbox-live/src/agent-api.ts",
+      "line": 144,
+      "verdict": "fixed-earlier",
+      "evidence": "A wall-clock deadline (setTimeout + destroy) bounds each request in addition to the socket inactivity timeout, with a comment on the drip-feed case. Verified 2026-10-14."
+    }
+  ],
   "batch-07": [
     {
       "path": "packages/rekordbox-live/src/prolink-provider.ts",
