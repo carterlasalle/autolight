@@ -18,7 +18,7 @@ import {
   WALL_SCHEDULER, PORTS, envelope, colorCommand, turnCommand,
   type EngineHealth, type EngineMetrics, type EngineReport, type EngineStatus,
   type LanStreamEngine, type Scheduler, type SegmentStreamLike, type StreamOptions,
-  type StreamTransport, PacingStream,
+  type StreamTransport, type TimerHandle, PacingStream,
 } from "../razer.js";
 
 // Read-back needs the reply socket, which the manager owns (T-GOV-04), and
@@ -65,8 +65,21 @@ export class SocketTransport implements StreamTransport {
   }
 
   private send(deviceId: string, text: string): void {
+    let ip: string;
+
+    try {
+      ip = this.resolve(deviceId);
+    } catch (err) {
+      // A resolver miss (a MAC with no registered address) is a send
+      // failure like any socket error: recorded for health(), never thrown
+      // into PacingStream callers.
+      this.errors.set(deviceId, err instanceof Error ? err : new Error(String(err)));
+
+      return;
+    }
+
     const sock = this.socketFor(deviceId);
-    const ip = this.resolve(deviceId);
+
     sock.send(text, this.port, ip, (err: Error | null) => {
       if (err) this.errors.set(deviceId, err);
       else this.errors.delete(deviceId);
@@ -142,6 +155,13 @@ export class NativeStreamEngine implements LanStreamEngine {
   private readonly known: string[];
   private readonly streams = new Map<string, PacingStream>();
   private readonly snapshots = new Map<string, EngineMetrics>();
+  // Identify flashes in flight, keyed by device: the pre-flash frame and its
+  // restore timer, so a second identify restarts rather than stacks.
+  private readonly identifyPending = new Map<string, { restore: Uint8Array; timer: TimerHandle }>();
+  // One-shot segment streams and their close timers, so close() can disarm
+  // them instead of leaving units armed and timers running.
+  private readonly oneShots = new Set<PacingStream>();
+  private readonly oneShotTimers = new Set<TimerHandle>();
 
   constructor(opts: NativeEngineOptions = {}) {
     this.clock = opts.clock ?? WALL_SCHEDULER;
@@ -182,7 +202,13 @@ export class NativeStreamEngine implements LanStreamEngine {
   async openStream(deviceId: string, opts: StreamOptions): Promise<SegmentStreamLike> {
     const existing = this.streams.get(deviceId);
 
-    if (existing) this.snapshot(deviceId, existing);
+    if (existing) {
+      // Replace, never leak: the old stream's interval and arm would outlive
+      // the swap otherwise (close() disarms and clears its timers).
+      this.snapshot(deviceId, existing);
+      existing.close();
+    }
+
     // PacingStream arms (B1) itself, then waits the settle before the first
     // paint, exactly as the toolkit binding's openStream does (parity).
     const stream = new PacingStream(deviceId, opts, this.transport, this.clock);
@@ -196,13 +222,21 @@ export class NativeStreamEngine implements LanStreamEngine {
 
     if (stream) {
       // Through the stream if armed: white in the channel, then the show
-      // frame back (T-GOV-12). With no frame yet, black keeps it quiet (§47).
-      const restore = stream.currentFrame;
+      // frame back (T-GOV-12). One flash per device: a second identify
+      // reuses the original restore frame and restarts its timer, so the
+      // pre-flash colour always comes back.
+      const pending = this.identifyPending.get(deviceId);
+      const restore = pending?.restore ?? stream.currentFrame ?? new Uint8Array(stream.zones * 3);
+
+      if (pending) this.clock.clearTimeout(pending.timer);
       const white = new Uint8Array(stream.zones * 3).fill(255);
       stream.setAll(white);
-      this.clock.setTimeout(() => {
-        stream.setAll(restore ?? new Uint8Array(stream.zones * 3));
+      const timer = this.clock.setTimeout(() => {
+        this.identifyPending.delete(deviceId);
+        stream.setAll(restore);
       }, this.identifyFlashMs);
+
+      this.identifyPending.set(deviceId, { restore, timer });
 
       return;
     }
@@ -224,12 +258,21 @@ export class NativeStreamEngine implements LanStreamEngine {
 
     const oneShot = new PacingStream(deviceId, opts, this.transport, this.clock);
     oneShot.setAll(frame);
-    this.clock.setTimeout(() => { oneShot.close(); }, this.armSettleMs + this.segmentHoldMs);
+    const timer = this.clock.setTimeout(() => {
+      this.oneShotTimers.delete(timer);
+      this.oneShots.delete(oneShot);
+      oneShot.close();
+    }, this.armSettleMs + this.segmentHoldMs);
+
+    this.oneShots.add(oneShot);
+    this.oneShotTimers.add(timer);
   }
 
   async health(deviceId: string): Promise<EngineHealth | null> {
-    // Send-side health only; read-back health is T-GOV-06/07.
-    const err = this.owned?.errorFor(deviceId) ?? null;
+    // Send-side health only; read-back health is T-GOV-06/07. The transport
+    // is the error source when it exposes one (owned sockets do); injected
+    // transports report through their own layer otherwise.
+    const err = this.transport.errorFor?.(deviceId) ?? this.owned?.errorFor(deviceId) ?? null;
 
     if (err === null && !this.streams.has(deviceId) && !this.known.includes(deviceId)) return null;
 
@@ -260,7 +303,7 @@ export class NativeStreamEngine implements LanStreamEngine {
       framesSent: stream.framesSent,
       framesSuperseded: stream.framesSuperseded,
       missedTicks: stream.missedTicks,
-      effectiveHz: stream.rateHz,
+      effectiveHz: stream.effectiveHz,
     };
   }
 
@@ -277,6 +320,18 @@ export class NativeStreamEngine implements LanStreamEngine {
   }
 
   async close(): Promise<void> {
+    for (const pending of this.identifyPending.values()) this.clock.clearTimeout(pending.timer);
+
+    this.identifyPending.clear();
+
+    for (const timer of this.oneShotTimers) this.clock.clearTimeout(timer);
+
+    this.oneShotTimers.clear();
+
+    for (const oneShot of this.oneShots) oneShot.close();
+
+    this.oneShots.clear();
+
     for (const [id, stream] of this.streams) {
       this.snapshot(id, stream);
       stream.close();

@@ -184,6 +184,7 @@ class ToolkitStream implements SegmentStreamLike {
   readonly rateHz: number;
   framesRequested = 0;
   private readonly stream: BindingStream;
+  private readonly startedAt = Date.now();
   private closed = false;
 
   constructor(stream: BindingStream, fallbackZones: number, fallbackRateHz: number) {
@@ -203,6 +204,14 @@ class ToolkitStream implements SegmentStreamLike {
     return this.stream;
   }
 
+  /** Measured average send rate since the stream opened; 0 until frames
+   *  land. What the binding actually sent, never the requested rate. */
+  get effectiveHz(): number {
+    const seconds = (Date.now() - this.startedAt) / 1000;
+
+    return seconds > 0 && this.bindingStream.framesSent > 0 ? this.bindingStream.framesSent / seconds : 0;
+  }
+
   close(): void {
     if (this.closed) return;
     this.closed = true;
@@ -213,7 +222,6 @@ class ToolkitStream implements SegmentStreamLike {
 
 export interface ToolkitEngineOptions {
   loader: ToolkitLoader;
-  rateHz?: number;
   zones?: number;
 }
 
@@ -224,7 +232,6 @@ export type ToolkitLoadResult =
 
 export class ToolkitEngine implements LanStreamEngine {
   private readonly loader: ToolkitLoader;
-  private readonly rateHz: number;
   private readonly zones: number;
   private sdkPromise: Promise<BindingSdk> | null = null;
   private loadMs: number | null = null;
@@ -236,7 +243,6 @@ export class ToolkitEngine implements LanStreamEngine {
 
   constructor(opts: ToolkitEngineOptions) {
     this.loader = opts.loader;
-    this.rateHz = opts.rateHz ?? 40;
     this.zones = opts.zones ?? 14;
   }
 
@@ -383,7 +389,7 @@ export class ToolkitEngine implements LanStreamEngine {
         // The binding emits on its own task; a skipped tick is not observable
         // through this surface (its `error` getter covers a stopped emitter).
         missedTicks: 0,
-        effectiveHz: stream?.rateHz ?? this.rateHz,
+        effectiveHz: stream?.effectiveHz ?? 0,
       };
     });
   }

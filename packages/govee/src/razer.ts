@@ -35,6 +35,7 @@ export const PORTS = { DISCOVER_MCAST: 4001, DISCOVER_RESP: 4002, CONTROL: 4003 
 export type LanInbound = string | number | boolean | null | LanInbound[] | { [key: string]: LanInbound };
 
 export function encodeRaw(opcode: number, payload: Uint8Array): Uint8Array {
+  if (payload.length > 0xffff) throw new RangeError(`payload length exceeds 16 bits, got ${payload.length}`);
   const out = new Uint8Array(1 + 2 + 1 + payload.length + 1);
   out[0] = 0xbb;
   out[1] = (payload.length >> 8) & 0xff;
@@ -266,6 +267,10 @@ export interface StreamTransport {
   sendRaw(deviceId: string, raw: Uint8Array): void;
   // One official JSON command (turn, brightness, devStatus, colorwc).
   sendJson(deviceId: string, text: string): void;
+  // Optional send-side error source: a transport that owns its sockets can
+  // expose the last error per device so engines report it instead of a
+  // fabricated "ok" (native-ts T-GOV-04 health()).
+  errorFor?(deviceId: string): Error | null;
 }
 
 // Timer handle minted by a scheduler: Node and Electron mint Timeout objects,
@@ -394,8 +399,17 @@ export class PacingStream implements SegmentStreamLike {
   private armed = false;
   private closed = false;
   private lastAt: number;
+  private readonly startedAt: number;
   private startTimer: TimerHandle | null = null;
   private interval: TimerHandle | null = null;
+
+  /** Measured average send rate since creation; 0 until the first frame
+   *  lands. The honest counterpart of the requested `rateHz`. */
+  get effectiveHz(): number {
+    const seconds = (this.clock.now() - this.startedAt) / 1000;
+
+    return seconds > 0 && this.framesSent > 0 ? this.framesSent / seconds : 0;
+  }
 
   constructor(
     deviceId: string,
@@ -411,6 +425,7 @@ export class PacingStream implements SegmentStreamLike {
     this.rateHz = opts.rateHz;
     this.intervalMs = Math.max(1, Math.round(1000 / Math.max(1, opts.rateHz)));
     this.lastAt = clock.now();
+    this.startedAt = clock.now();
 
     if (opts.arm !== false) {
       // Arm first, then the settle timer runs before the first paint: a paint
