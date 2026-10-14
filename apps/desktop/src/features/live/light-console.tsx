@@ -326,7 +326,7 @@ export function AlternateCard(): JSX.Element {
           </Button>
         </div>
         <label className="flex min-w-0 flex-col gap-1 text-sm">Speed: {altSpeed}ms
-          <Slider min={100} max={2000} step={50} value={[altSpeed]} onValueChange={([v]) => {
+          <Slider min={40} max={2000} step={20} value={[altSpeed]} onValueChange={([v]) => {
             const next = v ?? 500;
 
             useShell.getState().set({ altSpeed: next });
@@ -334,6 +334,23 @@ export function AlternateCard(): JSX.Element {
           }} />
         </label>
         <div className="flex flex-wrap gap-2">
+          <Button
+            size="sm" variant="secondary"
+            onClick={() => {
+              // Strobe = white <-> off at a fast flip rate over the razer
+              // stream (the stream is what makes it snap; a lamp without a
+              // saved count would smear instead).
+              setColourA([255, 255, 255]);
+              setColourB([0, 0, 0]);
+              useShell.getState().set({ altSpeed: 80 });
+              useShell.getState().set({ altOn: true });
+              void typedInvoke("venue/alternate", { version: 1, enabled: true, mode, speedMs: 80, rgbA: [255, 255, 255], rgbB: [0, 0, 0] }).then((res) => {
+                if (res === null) useShell.getState().set({ altOn: false });
+              });
+            }}
+          >
+            Strobe (white/off)
+          </Button>
           {altOn
             ? <Button size="sm" variant="destructive" onClick={() => send(false)}>Stop alternate</Button>
             : <Button size="sm" onClick={() => send(true)}>Start alternate</Button>}
