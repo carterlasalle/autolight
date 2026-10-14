@@ -38,7 +38,7 @@ export function registerEvaluator(name: string, fn: Evaluator): void {
   REGISTRY[name] = fn;
 }
 
-export function evaluatorNames(): string[] {
+function evaluatorNames(): string[] {
   return Object.keys(REGISTRY).sort();
 }
 

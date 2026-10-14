@@ -103,7 +103,7 @@ export function encodeBleStreamFrame(frame: Uint8Array, opts: BleStreamEncodeOpt
 // ---------------------------------------------------------------------------
 
 /** Feedback the renderer and planner read after each streamed frame. */
-export interface BleFrameFeedback {
+interface BleFrameFeedback {
   distinctColours: number;
   /** budgetHz divided by distinctColours for this frame. */
   effectiveFps: number;

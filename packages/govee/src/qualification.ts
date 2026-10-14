@@ -48,7 +48,7 @@ import { chaseFrames, identify, type ActionFixture } from "./actions.js";
 /** Spec 52, in order. `spec` is the step number inside spec 52, never a zone
  *  or segment count: segment counts are measured per unit and no literal count
  *  appears in this package (spec 42). */
-export const QUALIFICATION_STEPS = [
+const QUALIFICATION_STEPS = [
   { id: "discover", spec: 1, title: "discover" },
   { id: "identify", spec: 2, title: "identify (flash and user confirm)" },
   { id: "read-sku", spec: 3, title: "read SKU" },
@@ -120,7 +120,7 @@ export interface QualificationState {
 
 /** Spec 54 record plus the honesty fields: anything the wizard could not
  *  measure is listed in `unmeasured` instead of being filled with a number. */
-export interface CalibrationRecord {
+interface CalibrationRecord {
   key: string;
   hardwareId: string;
   sku: string;

@@ -20,7 +20,7 @@ import type { TestApi, TestApiChannel, TestApiChannelArg, TestApiChannelResult, 
 
 export const TEST_IPC_CHANNEL = "qa/recording-frames";
 
-export type RecordedFrame = TestApiResult<"frames">[number];
+type RecordedFrame = TestApiResult<"frames">[number];
 
 export interface Harness {
   app: ElectronApplication;

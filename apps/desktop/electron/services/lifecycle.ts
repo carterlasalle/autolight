@@ -70,13 +70,13 @@ export interface ShutdownStepLog {
   error?: string;
 }
 
-export interface ShutdownOptions {
+interface ShutdownOptions {
   timeoutMs: number;
   ports: ShutdownPorts;
   onStep?: (step: string, ms: number) => void;
 }
 
-export async function runShutdown(opts: ShutdownOptions): Promise<ShutdownStepLog[]> {
+async function runShutdown(opts: ShutdownOptions): Promise<ShutdownStepLog[]> {
   const logs: ShutdownStepLog[] = [];
 
   for (const step of SHUTDOWN_ORDER) {
@@ -157,7 +157,7 @@ export function applyCrashPolicy(ports: CrashPolicyPorts): CrashPolicyResult {
 
 // Crash records and the config file both live under the Electron userData
 // directory; this stays pure so the policy is testable without Electron.
-export function crashRecordPath(userDataDir: string): string {
+function crashRecordPath(userDataDir: string): string {
   return join(userDataDir, "crash-last.json");
 }
 

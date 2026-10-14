@@ -5,7 +5,7 @@ import type { DeviceTile } from "../features/venue/venue.js";
 
 // LiveState: resolved show for the decks actually loaded right now.
 // null = nothing resolved yet — UI shows empty states, never fixture tracks.
-export interface DeckSnapshot { title: string; artist: string; readiness: "READY" | "NEEDS ANALYSIS"; bpm: number | null; section: string | undefined; countdown: string | undefined }
+interface DeckSnapshot { title: string; artist: string; readiness: "READY" | "NEEDS ANALYSIS"; bpm: number | null; section: string | undefined; countdown: string | undefined }
 
 export interface LiveState {
   source: "REKORDBOX" | "SERATO";

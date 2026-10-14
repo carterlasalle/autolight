@@ -37,7 +37,7 @@ export function isUnavailableError(err: unknown): err is ToolkitUnavailableError
   return err instanceof ToolkitUnavailableError;
 }
 
-export function unavailable(reasonClass: UnavailableReasonClass, detail: string): ToolkitUnavailableError {
+function unavailable(reasonClass: UnavailableReasonClass, detail: string): ToolkitUnavailableError {
   return new ToolkitUnavailableError(reasonClass, detail);
 }
 
@@ -175,7 +175,7 @@ function withStatics(base: BindingModule, version: string | undefined, core: str
 
 // The toolkit resolution kinds handed to the binding: a qualified count, or
 // the toolkit's own `"app"` resolution when qualification has none (§53).
-export function resolutionFor(opts: StreamOptions): number | "app" {
+function resolutionFor(opts: StreamOptions): number | "app" {
   return opts.resolution === null ? "app" : opts.resolution;
 }
 

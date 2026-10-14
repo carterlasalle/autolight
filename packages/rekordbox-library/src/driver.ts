@@ -15,7 +15,7 @@
 import { existsSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 
-export type SqlParam = string | number | bigint | null | Uint8Array;
+type SqlParam = string | number | bigint | null | Uint8Array;
 
 export type SqlParams = Record<string, SqlParam>;
 

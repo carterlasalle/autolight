@@ -13,7 +13,7 @@ export interface FirmwarePolicyOptions {
   clock?: () => number;
 }
 
-export type StreamGate = "segmented" | "verified-fallback";
+type StreamGate = "segmented" | "verified-fallback";
 
 export interface FirmwareDecision {
   gate: StreamGate;

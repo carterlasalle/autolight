@@ -36,7 +36,7 @@ export function summarizeSections(
   }));
 }
 
-export function sectionSimilarity(a: SectionSummary, b: SectionSummary): number {
+function sectionSimilarity(a: SectionSummary, b: SectionSummary): number {
   if (a.kind !== b.kind) return 0;
   const energySim = 1 - Math.min(1, Math.abs(a.energy - b.energy));
   let hueDiff = Math.abs(a.coreHue - b.coreHue) % 360;

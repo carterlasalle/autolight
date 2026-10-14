@@ -191,7 +191,7 @@ export const deckSnapshotSchema = z.object({
   clockHealth: z.enum(CLOCK_HEALTHS),
 });
 
-export type DeckSnapshot = z.infer<typeof deckSnapshotSchema>;
+type DeckSnapshot = z.infer<typeof deckSnapshotSchema>;
 
 const cellSnapshotSchema = z.object({
   fixtureId: z.string(),

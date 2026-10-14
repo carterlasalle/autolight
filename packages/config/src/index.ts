@@ -1,13 +1,11 @@
 export { KEYS, defineKey, defaultFor } from "./registry.js";;;
 
-export type { KeyDef, ConfigKey } from "./registry.js";
 
 export { PersistentConfigStore } from "./store.js";;;
 
-export type { ConfigChange, ConfigChangeListener, StoredLayers } from "./store.js";
+export { ConfigChange } from "./store.js";;;
 
 
-export type { LiveChangePlan, PendingQueue } from "./compare.js";
 
 export { ConfigStore, type Scope } from "./base.js";
 

@@ -87,7 +87,7 @@ export function oklabToLinear(lab: Lab): [number, number, number] {
   ];
 }
 
-export function oklabToOklch(lab: Lab): Lch {
+function oklabToOklch(lab: Lab): Lch {
   const C = Math.sqrt(lab.a * lab.a + lab.b * lab.b);
   const h = ((Math.atan2(lab.b, lab.a) * 180) / Math.PI + 360) % 360;
 

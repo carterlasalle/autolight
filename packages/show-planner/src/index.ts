@@ -29,25 +29,6 @@ export { blendRgb } from "./color.js";;;;;
 
 
 export type {
-  Beat,
-  EnvelopeTime,
-  CueLevel,
-  PlanLayer,
-  SpatialSelector,
-  Oklch,
-  PlanCue,
-  GlobalDesign,
-  SectionPlan,
-  MotifMap,
-  CompiledShowPlan,
-  VenueCapabilityClass,
-  PlannerConfigSnapshot,
-  PlannerStyle,
-  PlanDiagnostics,
-  RejectedCandidate,
-  PlanEdits,
-  CompileInput,
-  CompileResult,
 } from "./types.js";
 
 

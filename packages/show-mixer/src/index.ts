@@ -13,7 +13,7 @@ import {
 import { LAYER_ORDER, layerForCue, type RenderLayer } from "@autolight/renderer";
 import { DEFAULT_BLEND_SPACE, type BlendSpace } from "./blend.js";
 
-export type { CrossfaderConfig, CrossfaderSide, DeckState };
+export { CrossfaderConfig, DeckState }
 
 
 // Show mixer (T-MIX-01 to T-MIX-06).

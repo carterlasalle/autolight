@@ -11,9 +11,9 @@
 // native (measured N). `auto` picks the highest that is confirmed, stable and
 // meets the refresh target. The decision carries its reason so the UI can
 // show why (DoD: SIM test where native is too slow and auto picks grouped).
-export type ResolutionKind = "logical" | "grouped" | "native";
+type ResolutionKind = "logical" | "grouped" | "native";
 
-export type ResolutionMode = ResolutionKind | "auto";
+type ResolutionMode = ResolutionKind | "auto";
 
 export interface ResolutionInput {
   logical: number | null;
@@ -24,7 +24,7 @@ export interface ResolutionInput {
   mode?: ResolutionMode;
 }
 
-export interface ResolutionCandidate {
+interface ResolutionCandidate {
   kind: ResolutionKind;
   zones: number;
   stableFps: number;

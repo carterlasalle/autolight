@@ -6,7 +6,7 @@
 // (T-GOV-07) and manager health (T-GOV-06) into one row the Devices screen,
 // Diagnostics and the session recorder can read. No new transport, no new
 // socket, just the counters in one place.
-export type DeviceHealthState = "online" | "degraded" | "offline";
+type DeviceHealthState = "online" | "degraded" | "offline";
 
 export interface DeviceMetricsRow {
   hardwareId: string;

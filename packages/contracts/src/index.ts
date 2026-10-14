@@ -19,7 +19,7 @@ const loopStateSchema = z.object({
   beatLength: z.number().nullable(),
 });
 
-export type LoopState = z.infer<typeof loopStateSchema>;
+type LoopState = z.infer<typeof loopStateSchema>;
 
 const trackIdentitySchema = z.object({
   id: z.string().min(1),
@@ -223,7 +223,7 @@ const inputEntrySchema = z.object({
   durationMs: z.number().optional(),
 }).strict();
 
-export type InputEntry = z.infer<typeof inputEntrySchema>;
+type InputEntry = z.infer<typeof inputEntrySchema>;
 
 const analysisInputsSchema = z.object({
   "source.audio": inputEntrySchema,

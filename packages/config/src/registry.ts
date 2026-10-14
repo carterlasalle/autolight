@@ -263,7 +263,7 @@ export const KEYS: readonly KeyDef[] = [
   { key: "qa.validation.minPerCategory", type: "number", defaultRaw: "3", unit: "tracks", range: "", receipt: "spec 116", liveSafe: false, scope: "app" },
 ] as const;
 
-export type ConfigKey = (typeof KEYS)[number]["key"];
+type ConfigKey = (typeof KEYS)[number]["key"];
 
 const byKey = new Map(KEYS.map((k) => [k.key, k]));
 
@@ -294,10 +294,10 @@ export function defaultFor(key: string): unknown {
   return def.defaultRaw;
 }
 
-export function defaultsObject(): Record<string, unknown> {
+function defaultsObject(): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const k of KEYS) out[k.key] = defaultFor(k.key);
   return out;
 }
 
-export const defaultsSchema = z.record(z.string(), z.unknown());
+const defaultsSchema = z.record(z.string(), z.unknown());

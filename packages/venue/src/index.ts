@@ -17,21 +17,17 @@ export {
   fieldCellsForReference, referenceById, squareMirrored, REFERENCE_ROOMS,
 };
 
-export type { MappedCell, FieldCell, Venue };
 
-export type { Point2, Point3, Room, RoomAnchors, DjAnchor, CustomAnchor, Opening, SplineGeom, PerimeterZero, PerimeterDirection, MarkerKind } from "./room.js";
+export { Room } from "./room.js";;;;;;;;;;;
 
-export type { Placement, Run, CellMap, CellAnchor, CellPosition, Topology, FixtureTransform, FixtureCapability, VenueFixture } from "./placement.js";
 
-export type { VenueFields, FieldCell as VenueFieldCell, FieldOptions } from "./fields.js";
+export { VenueFields, FieldCell as VenueFieldCell } from "./fields.js";;
 
-export type { SplitDef, ZoneDef, Selector, DerivedGroups, RoleGroups } from "./groups.js";
 
-export type { WizardDirection, RunTopology, SimStrip, WizardFit } from "./wizard.js";
+export { RunTopology } from "./wizard.js";;;;
 
-export type { Venue as VenueModel, VenueFile } from "./venue.js";
+export { Venue as VenueModel } from "./venue.js";;
 
-export type { ReferenceRoom } from "./reference.js";
 
 export const DEFAULT_GROUPS = ["ALL","LEFT","RIGHT","CENTER","BACK","FRONT","VERTICALS","HORIZONTALS","PRIMARY","SECONDARY","ACCENT","AMBIENT"] as const;
 
@@ -82,7 +78,7 @@ export function selectResolution(candidates: { zones: number; stableFps: number 
   return ok[0]?.zones ?? null;
 }
 
-export const QUALIFICATION_STEPS = [
+const QUALIFICATION_STEPS = [
   "discover", "identify", "power", "brightness", "rgb", "stream",
   "segment-count", "segment-order", "arm-settle", "fps", "latency", "reconnect",
 ] as const;

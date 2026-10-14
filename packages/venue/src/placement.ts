@@ -21,7 +21,7 @@ export interface Run {
   controllerS?: number;
 }
 
-export type Placement =
+type Placement =
   | { kind: "point"; position: Point3 }
   | { kind: "vertical"; base: Point2; z0: number; z1: number }
   | { kind: "path"; runs: Run[] };
@@ -32,7 +32,7 @@ export interface CellAnchor {
   atMeters: number;
 }
 
-export interface CellPosition {
+interface CellPosition {
   run: string;
   startM: number;
   endM: number;
@@ -52,12 +52,12 @@ export interface CellMap {
   cells: MappedCell[];
 }
 
-export interface FixtureTransform {
+interface FixtureTransform {
   rotationDeg: number;
   reverse: boolean;
 }
 
-export interface FixtureCapability {
+interface FixtureCapability {
   zones: number;
   maxDistinctColoursPerFrame: number | null;
   maxRateHz: number | null;

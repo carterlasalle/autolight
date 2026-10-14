@@ -188,7 +188,7 @@ export function bleV2Decrypt(key: BleV2Key, iv: Uint8Array, ciphertext: Uint8Arr
 }
 
 /** Shape of the owner-provided local key file (JSON). The file holds the hex only. */
-export interface BleKeysFile {
+interface BleKeysFile {
   version: 1;
   keyHex: string;
 }

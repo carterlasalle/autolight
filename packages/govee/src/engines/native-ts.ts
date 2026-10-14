@@ -24,19 +24,19 @@ import {
 // Read-back needs the reply socket, which the manager owns (T-GOV-04), and
 // T-GOV-07 owns the retry policy. A transport that cannot ask returns null
 // from status(), never a fabricated state.
-export interface StatusCapable {
+interface StatusCapable {
   status(deviceId: string, timeoutMs: number): Promise<EngineStatus | null>;
 }
 
-export interface DiscoverCapable {
+interface DiscoverCapable {
   discover(): Promise<string[]>;
 }
 
-export function hasStatus(transport: StreamTransport): transport is StreamTransport & StatusCapable {
+function hasStatus(transport: StreamTransport): transport is StreamTransport & StatusCapable {
   return "status" in transport && typeof (transport as { status?: unknown }).status === "function";
 }
 
-export function hasDiscover(transport: StreamTransport): transport is StreamTransport & DiscoverCapable {
+function hasDiscover(transport: StreamTransport): transport is StreamTransport & DiscoverCapable {
   return "discover" in transport && typeof (transport as { discover?: unknown }).discover === "function";
 }
 

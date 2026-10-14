@@ -29,7 +29,7 @@ export interface AnalyzeResult {
   artifactPath: string;
 }
 
-export interface AnalyzeFailure {
+interface AnalyzeFailure {
   type: "failed";
   trackId: string;
   code: AnalyzeErrorCode;
@@ -37,7 +37,7 @@ export interface AnalyzeFailure {
 }
 
 /** Job states exactly as spec 139 (T-ANA-02). */
-export type AnalysisJobState = "Queued" | "Analyzing" | "Compiling" | "Ready" | "Failed";
+type AnalysisJobState = "Queued" | "Analyzing" | "Compiling" | "Ready" | "Failed";
 
 export interface AnalysisJob {
   id: string;

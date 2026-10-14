@@ -6,27 +6,27 @@ export type Units = "m" | "ft";
 
 const METERS_PER_FOOT = 0.3048;
 
-export interface Opening {
+interface Opening {
   wall: number;
   from: number;
   to: number;
   kind: "door" | "window" | "gap";
 }
 
-export interface DjAnchor { position: Point2; facingRad: number }
+interface DjAnchor { position: Point2; facingRad: number }
 
-export interface CustomAnchor { id: string; name: string; position: Point3 }
+interface CustomAnchor { id: string; name: string; position: Point3 }
 
-export interface RoomAnchors {
+interface RoomAnchors {
   dj: DjAnchor;
   center: Point2 | null;
   audience: Point2 | null;
   custom: CustomAnchor[];
 }
 
-export type PerimeterZero = "dj-nearest" | "front-center" | "controller" | "custom-anchor";
+type PerimeterZero = "dj-nearest" | "front-center" | "controller" | "custom-anchor";
 
-export type PerimeterDirection = "clockwise" | "counterclockwise";
+type PerimeterDirection = "clockwise" | "counterclockwise";
 
 interface RoomBackground {
   imageRef: string;
@@ -318,4 +318,4 @@ export function polylineLength(points: Point3[], geom?: SplineGeom, toleranceM =
 
 const MARKER_KINDS = ["seam", "logical-zero", "dj", "center", "audience", "custom"] as const;
 
-export type MarkerKind = (typeof MARKER_KINDS)[number];
+type MarkerKind = (typeof MARKER_KINDS)[number];

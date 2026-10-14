@@ -19,10 +19,8 @@ import { computeReadiness } from "./readiness.js";
 export type {
   AnalyzeRequest,
   AnalyzeResult,
-  AnalyzeFailure,
   AnalyzeErrorCode,
   AnalysisJob,
-  AnalysisJobState,
 } from "./protocol.js";
 
 // Framed-JSON stdio supervisor for the Python worker (T-ANA-02, spec 14/109).

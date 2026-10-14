@@ -13,37 +13,30 @@ export {
 } from "./razer.js";
 
 export type {
-  ScanReply, LanDeviceStatus, LanInbound, StreamTransport, Scheduler, TimerHandle,
-  StreamOptions, EngineMetrics, EngineHealth, EngineStatus, EngineReport,
-  LanStreamEngine, SegmentStreamLike,
+  LanDeviceStatus, LanInbound, StreamTransport, Scheduler, TimerHandle,
+  StreamOptions,
 } from "./razer.js";
 
 // DS-02 engine switch (T-GOV-03): toolkit primary, native-ts fallback.
 export { createEngineSelector, ToolkitLoadFailure } from "./engines/index.js";;
 
-export type { EngineSummary, DeviceEngineDecision, EngineSelectorOptions } from "./engines/index.js";
 
 export { ToolkitEngine } from "./engines/toolkit.js";;;;;;
 
-export type { BindingModule, BindingDevice, BindingDeviceStatus, BindingStream, BindingSdk, BindingDeviceHandle, ToolkitLoader, ToolkitLoadResult, UnavailableReasonClass } from "./engines/toolkit.js";
+export { BindingModule, BindingDevice, BindingDeviceStatus, BindingStream, BindingSdk, BindingDeviceHandle } from "./engines/toolkit.js";;;;
 
 export { NativeStreamEngine, SocketTransport } from "./engines/native-ts.js";;;
 
-export type { NativeEngineOptions, StatusCapable, DiscoverCapable } from "./engines/native-ts.js";
 
 
-export type { ResolutionKind, ResolutionMode, ResolutionInput, ResolutionCandidate, ResolutionDecision } from "./resolution.js";
 
 
-export type { FirmwarePolicyOptions, StreamGate, FirmwareDecision } from "./firmware.js";
 
 
-export type { SceneCatalog, SceneMoment, SceneRequest } from "./scenes.js";
 
 
 export { stripeFrame } from "./qualification.js";
 
-export type { DeviceHealthState, DeviceMetricsRow, MetricsSample } from "./metrics.js";
 
 // Legacy alias kept until T-GOV-02 deletes encodeFrame (M1): maps to encodeRaw.
 function encodeFrame(opcode: number, payload: Uint8Array): Uint8Array {
@@ -193,7 +186,7 @@ export function collapseToSingleColor(frame: Uint8Array): [number, number, numbe
 
 // LAN manager (§46, §106-107): discovery → arm → stream; per-device FPS
 // backoff on congestion; reconnect re-arms and sends current frame only.
-export type DeviceHealth = "online" | "degraded" | "offline";
+type DeviceHealth = "online" | "degraded" | "offline";
 
 export interface ManagedDevice {
   identity: DeviceIdentity;

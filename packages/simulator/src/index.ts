@@ -93,8 +93,7 @@ export function* performanceScenario(opts: { fps?: number; hours?: number } = {}
 
 export { RecordingTransport } from "./recording.js";
 
-export type { DatagramSender, RecordedDatagram, TransportFaults } from "./recording.js";
 
 export { GoveeLanSim } from "./govee-lan.js";
 
-export type { SimDeviceProfile, SimFaults, SimMetrics } from "./govee-lan.js";
+export { SimDeviceProfile } from "./govee-lan.js";;;

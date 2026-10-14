@@ -30,7 +30,7 @@ type StartupStage =
   | "db" | "show-worker" | "govee" | "dj-adapter" | "library"
   | "analysis" | "venue" | "tracks" | "plans" | "arm" | "ready";
 
-export const STARTUP_ORDER: StartupStage[] = [
+const STARTUP_ORDER: StartupStage[] = [
   "db", "show-worker", "govee", "dj-adapter", "library",
   "analysis", "venue", "tracks", "plans", "arm", "ready",
 ];
@@ -114,7 +114,7 @@ function nextStage(done: StartupStage[]): StartupStage | null {
 
 // Graceful shutdown (§133): freeze UI → ending look → disarm → adapters →
 // analysis → flush → workers → exit.
-export const SHUTDOWN_ORDER = [
+const SHUTDOWN_ORDER = [
   "freeze-ui", "ending-look", "disarm", "dj-adapters",
   "analysis", "flush-db", "workers", "exit",
 ] as const;

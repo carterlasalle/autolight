@@ -3,32 +3,32 @@
 // Matrices are the published OKLab transform (Ottosson), not tunables.
 import type { Oklch } from "./types.js";
 
-export function srgbByteToLinear(byte: number): number {
+function srgbByteToLinear(byte: number): number {
   const s = Math.min(1, Math.max(0, byte / 255));
 
   return s <= 0.04045 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
 }
 
-export function linearToSrgbByte(linear: number): number {
+function linearToSrgbByte(linear: number): number {
   const c = Math.min(1, Math.max(0, linear));
   const s = c <= 0.0031308 ? c * 12.92 : 1.055 * Math.pow(c, 1 / 2.4) - 0.055;
 
   return Math.round(s * 255);
 }
 
-export interface Oklab {
+interface Oklab {
   readonly l: number;
   readonly a: number;
   readonly b: number;
 }
 
-export function oklchToOklab(c: Oklch): Oklab {
+function oklchToOklab(c: Oklch): Oklab {
   const rad = (c.h * Math.PI) / 180;
 
   return { l: c.l, a: c.c * Math.cos(rad), b: c.c * Math.sin(rad) };
 }
 
-export function oklabToOklch(lab: Oklab): Oklch {
+function oklabToOklch(lab: Oklab): Oklch {
   const c = Math.sqrt(lab.a * lab.a + lab.b * lab.b);
   let h = (Math.atan2(lab.b, lab.a) * 180) / Math.PI;
 
@@ -52,7 +52,7 @@ export function linearRgbToOklab(r: number, g: number, b: number): Oklab {
   };
 }
 
-export function oklabDistance(x: Oklab, y: Oklab): number {
+function oklabDistance(x: Oklab, y: Oklab): number {
   const dl = x.l - y.l;
   const da = x.a - y.a;
   const db = x.b - y.b;
@@ -65,7 +65,7 @@ export function oklchDistance(x: Oklch, y: Oklch): number {
 }
 
 // Blend in OKLab (the mixer blend space direction), never in sRGB.
-export function blendOklch(a: Oklch, b: Oklch, t: number): Oklch {
+function blendOklch(a: Oklch, b: Oklch, t: number): Oklch {
   const clamped = Math.min(1, Math.max(0, t));
   const la = oklchToOklab(a);
   const lb = oklchToOklab(b);

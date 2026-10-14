@@ -52,7 +52,7 @@ export function listScenes(catalog: SceneCatalog): string[] {
   return Object.keys(catalog.scenes).sort();
 }
 
-export type SceneMoment = "setup" | "idle" | "ending";
+type SceneMoment = "setup" | "idle" | "ending";
 
 export interface SceneRequest {
   scene: string;

@@ -10,7 +10,7 @@ export function cueId(seed: string, section: number, level: string, ordinal: num
   return `cue-${fnv1aHex(`${seed}:${section}:${level}:${ordinal}`).slice(0, 8)}`;
 }
 
-export function inLockedRegion(
+function inLockedRegion(
   startBeat: number,
   endBeat: number,
   locked: PlanEdits["lockedRegions"],

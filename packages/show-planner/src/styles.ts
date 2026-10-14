@@ -3,7 +3,7 @@
 // compile path, none is decorative.
 import type { PlannerStyle } from "./types.js";
 
-export const STYLE_IDS = ["club", "house", "festival", "lounge", "pop", "dark", "minimal"] as const;
+const STYLE_IDS = ["club", "house", "festival", "lounge", "pop", "dark", "minimal"] as const;
 
 export type BuiltInStyleId = (typeof STYLE_IDS)[number];
 
@@ -121,7 +121,7 @@ export const BUILT_IN_STYLES: Record<string, PlannerStyle> = {
   }),
 };
 
-export const DEFAULT_STYLE_ID = "club";
+const DEFAULT_STYLE_ID = "club";
 
 export function resolveStyle(id: string): PlannerStyle {
   return BUILT_IN_STYLES[id] ?? BUILT_IN_STYLES[DEFAULT_STYLE_ID]!;

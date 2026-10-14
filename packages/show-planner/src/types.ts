@@ -4,7 +4,7 @@
 // EnvelopeTime and convert through tempo at render time.
 import type { ShowCue, ShowPlan, TrackModel } from "@autolight/contracts";
 
-export type Beat = number;
+type Beat = number;
 
 export type EnvelopeTime =
   | { readonly kind: "beats"; readonly beats: number }

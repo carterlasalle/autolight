@@ -28,7 +28,7 @@ interface ButtonState {
 
 type LoopAction = "in" | "out" | "halve" | "double" | "exit" | "reloop" | "beat-loop";
 
-export interface LoopState {
+interface LoopState {
   /** Last observed loop state; null until a loop control was touched. */
   active: boolean | null;
   lastAction: LoopAction | null;

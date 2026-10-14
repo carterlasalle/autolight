@@ -10,7 +10,7 @@ import { ConfigStore, type Scope } from "./base.js";
 
 export const CONFIG_CHANGED = "config:changed";
 
-export interface StoredLayers {
+interface StoredLayers {
   version: 1;
   layers: Record<Scope, Record<string, unknown>>;
 }

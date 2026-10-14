@@ -173,7 +173,7 @@ export function validateCompiledPlan(
 // Palette change count: colour identity changes at section/phrase/motif
 // boundaries. A plan that repaints every beat without a marked special
 // section is pathological.
-export function countPaletteChanges(cues: readonly PlanCue[]): number {
+function countPaletteChanges(cues: readonly PlanCue[]): number {
   let n = 0;
   let last: string | null = null;
 
