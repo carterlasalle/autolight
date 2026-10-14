@@ -27,6 +27,7 @@
     }
   },
   "ignoreBinaries": ["osascript", "uv", "tail"],
+  "ignore": [".ocr-audit/**"],
   "ignoreDependencies": [
     "@knip/language-server",
     "@oxlint/plugins",

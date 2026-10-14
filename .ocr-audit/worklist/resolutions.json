@@ -1,0 +1,64 @@
+{
+  "batch-01": [
+    {
+      "path": "packages/govee/src/engines/toolkit.ts",
+      "line": 318,
+      "verdict": "fixed-by-commit",
+      "evidence": "openStream now closes the predecessor ToolkitStream before the map overwrite (commit 7818983); the cited stream-creation lines remain as part of the fixed flow."
+    },
+    {
+      "path": "packages/govee/src/engines/toolkit.ts",
+      "line": 351,
+      "verdict": "fixed-by-commit",
+      "evidence": "metrics no longer echo requested rates (measured effectiveHz) and health() reports a stopped/errored emitter as degraded via bindingStream.error (commits 65b5ea6/7818983)."
+    },
+    {
+      "path": "packages/show-host/src/index.ts",
+      "line": 447,
+      "verdict": "fixed-earlier",
+      "evidence": "Publish path resets metricsWindowStartNs and missedTicks per rolling window (comment on the reset, index.ts ~710); getMetrics stays side-effect free. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/show-host/src/index.ts",
+      "line": 549,
+      "verdict": "fixed-earlier",
+      "evidence": "composeFrames resets lastWeights to {a:0,b:0} when nothing audible and {a:1,b:0} in the single-deck branch. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/show-host/src/index.ts",
+      "line": 790,
+      "verdict": "fixed-earlier",
+      "evidence": "handlePortGone sets crashFired, calls onCrash, then stop() (clears interval, closes bus) with a comment. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/contracts/src/index.ts",
+      "line": 40,
+      "verdict": "by-design-with-fix",
+      "evidence": "Received-at bigint is the in-process form with an explicit comment; wireDeckStateSchema below carries the JSON-safe decimal string for IPC/worker boundaries. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/contracts/src/index.ts",
+      "line": 319,
+      "verdict": "fixed-earlier",
+      "evidence": "trackModelSchema superRefine enforces section/phrase startBeat<=endBeat, musical event span vs grid, and readinessLevel === analysisCoverage2.level. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/analysis-client/src/index.ts",
+      "line": 110,
+      "verdict": "fixed-earlier",
+      "evidence": "start() calls this.drain() after spawning workers (HEAD index.ts:122). Verified 2026-10-14."
+    },
+    {
+      "path": "packages/analysis-client/src/index.ts",
+      "line": 195,
+      "verdict": "fixed-earlier",
+      "evidence": "stop() clears the heartbeat timer, rejects in-flight promises (clearing job timers) and nulls lastHeartbeat so armed callbacks cannot resurrect the supervisor (HEAD index.ts:248-262). Verified 2026-10-14."
+    },
+    {
+      "path": "packages/analysis-client/src/index.ts",
+      "line": 343,
+      "verdict": "fixed-earlier",
+      "evidence": "start() and spawnOne() stamp lastHeartbeat as the grace window; checkHeartbeat guards null frames/empty procs (HEAD index.ts:119,163,489). Verified 2026-10-14."
+    }
+  ]
+}
