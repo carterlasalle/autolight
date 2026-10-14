@@ -509,6 +509,12 @@
       "line": 81,
       "verdict": "fixed-earlier",
       "evidence": "json-typed keys are validated with isJsonSerializable, naming the key and unit. Verified 2026-10-14."
+    },
+    {
+      "path": "analysis/pyproject.toml",
+      "line": 28,
+      "verdict": "fixed-earlier",
+      "evidence": "[tool.pytest.ini_options] already carries pythonpath = [\"src\"] alongside testpaths, so fresh-checkout pytest collection works without an editable install. Verified 2026-10-14 (tombi also canonicalized key order)."
     }
   ],
   "batch-18": [
