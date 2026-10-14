@@ -14,6 +14,8 @@ export interface AnalysisWorkerPort {
   analyze(req: AnalyzeRequest): Promise<AnalyzeResult>;
   pendingCount(): number;
   queuedCount(): number;
+  /** Liveness for crash classification; absent means unknown (treated as down). */
+  running?: () => boolean;
 }
 
 export interface AnalysisSupervisorOptions {
@@ -56,6 +58,9 @@ export class AnalysisSupervisor implements Service {
       this.worker?.stop();
     } catch { /* teardown never throws */ }
 
+    // The port is kept: start() is idempotent, submit() is rejected while the
+    // tracker reads "stopped", and a later start() resumes the same client
+    // instead of leaking a second one.
     this.spawned = false;
     this.tracker.set("stopped");
 
@@ -104,10 +109,19 @@ export class AnalysisSupervisor implements Service {
     } catch (err) {
       const message = messageOf(err);
       this.tracker.count("failures");
-      // A worker that died mid-job is restarted on the next submit (spec 109).
-      this.spawned = false;
-      this.tracker.count("restarts");
-      this.tracker.set("degraded", `analysis job failed: ${message}`);
+      // The client owns child supervision (backoff, heartbeat) and its
+      // start() is idempotent, so a rejection from a live worker is a job
+      // failure, not a crash: only a worker that is actually down counts a
+      // restart and defers its respawn to the next submit (spec 109).
+      const alive = this.worker?.running?.() ?? false;
+
+      if (alive) {
+        this.tracker.set("degraded", `analysis job failed: ${message}`);
+      } else {
+        this.spawned = false;
+        this.tracker.count("restarts");
+        this.tracker.set("degraded", `analysis worker down, restarts on the next job: ${message}`);
+      }
 
       return { ok: false, error: { code: "E_ANALYSIS_FAILED", message } };
     }
@@ -117,6 +131,13 @@ export class AnalysisSupervisor implements Service {
 let instance: AnalysisSupervisor | null = null;
 
 export function getAnalysisSupervisor(opts: AnalysisSupervisorOptions = {}): AnalysisSupervisor {
+  // Options only take effect on the first call: a second caller passing a
+  // different command/projectDir/createWorker would silently drive a
+  // mis-configured worker, so fail loudly instead of ignoring them.
+  if (instance !== null && Object.values(opts).some((value) => value !== undefined)) {
+    throw new Error("analysis-supervisor already created; later options are ignored");
+  }
+
   instance ??= new AnalysisSupervisor(opts);
 
   return instance;

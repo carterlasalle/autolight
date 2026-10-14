@@ -2288,5 +2288,193 @@
       "verdict": "fixed-earlier",
       "evidence": "The drain test asserts the exact drained sequence (deck, control, value for both entries) plus exact droppedCount and depth. Verified 2026-10-14."
     }
+  ],
+  "batch-33": [
+    {
+      "path": "analysis/src/autolight_analysis/features.py",
+      "line": 233,
+      "verdict": "fixed-earlier",
+      "evidence": "Empty series degrade to zero arrays via the early return; probed live."
+    },
+    {
+      "path": "analysis/src/autolight_analysis/features.py",
+      "line": 248,
+      "verdict": "fixed-earlier",
+      "evidence": "Docstring now states phrases come from structure.py."
+    },
+    {
+      "path": "analysis/src/autolight_analysis/features.py",
+      "line": 238,
+      "verdict": "fixed-earlier",
+      "evidence": "edges/sub_masks are per-beat, outside the feature loop; hoisting impossible."
+    },
+    {
+      "path": "analysis/tests/test_schema.py",
+      "line": 42,
+      "verdict": "fixed-earlier",
+      "evidence": "Specific invalid values asserted via any()."
+    },
+    {
+      "path": "apps/desktop/electron-builder.cjs",
+      "line": 64,
+      "verdict": "fixed-earlier",
+      "evidence": "NSAppleEventsUsageDescription present in extendInfo."
+    },
+    {
+      "path": "apps/desktop/electron-builder.cjs",
+      "line": 45,
+      "verdict": "by-design",
+      "evidence": "@julusian/midi glob kept for the optional addon; backend.ts probes and falls back to Web MIDI."
+    },
+    {
+      "path": "apps/desktop/src/components/issue-7.test.ts",
+      "line": 59,
+      "verdict": "fixed-earlier",
+      "evidence": "A second test exercises fallbackBpm and the deck-B leak."
+    },
+    {
+      "path": "packages/controller-flx4/src/integration.test.ts",
+      "line": 146,
+      "verdict": "by-design",
+      "evidence": "confirmAudible's doc states the null fail-over to DJ weight; the test comment names it."
+    },
+    {
+      "path": "packages/controller-flx4/src/integration.test.ts",
+      "line": 79,
+      "verdict": "fixed-earlier",
+      "evidence": "Drain asserts the exact sequence plus droppedCount and depth."
+    },
+    {
+      "path": "packages/reactive-audio/src/capture.test.ts",
+      "line": 80,
+      "verdict": "fixed",
+      "evidence": "Added a concurrent-start test (Promise.all of three starts) pinning the in-flight join to one context."
+    },
+    {
+      "path": "packages/reactive-audio/src/capture.test.ts",
+      "line": 155,
+      "verdict": "fixed",
+      "evidence": "latest() renamed takeLatest() with take-once semantics documented; the test asserts take==0.3 then null."
+    },
+    {
+      "path": "packages/reactive-audio/src/capture.test.ts",
+      "line": 112,
+      "verdict": "fixed",
+      "evidence": "The fresh host asserts permission 'not-requested' before denial/granted."
+    },
+    {
+      "path": "packages/reactive-audio/src/capture.test.ts",
+      "line": 141,
+      "verdict": "fixed",
+      "evidence": "Reload death asserts the full transition: running false, sessionId null, one stop, ui-reload reason."
+    },
+    {
+      "path": "packages/rekordbox-live/src/index.test.ts",
+      "line": 27,
+      "verdict": "fixed",
+      "evidence": "Replaced the vacuous single-event receivedAtNs compare with deep equality plus a comment pointing at the multi-event §128 rate test."
+    },
+    {
+      "path": "packages/rekordbox-live/src/index.test.ts",
+      "line": 47,
+      "verdict": "fixed",
+      "evidence": "Fixture dir hoisted to LIVE_FIXTURE_DIR, shared by both replay tests."
+    },
+    {
+      "path": "packages/rekordbox-live/src/index.test.ts",
+      "line": 67,
+      "verdict": "fixed",
+      "evidence": "Step vs 1x now compares FULL states via deep equality, not just receivedAtNs."
+    },
+    {
+      "path": "packages/rekordbox-live/src/index.test.ts",
+      "line": 80,
+      "verdict": "fixed",
+      "evidence": "Full exact DeckState and raw retention asserted (toEqual), replacing toMatchObject."
+    },
+    {
+      "path": "packages/storage/vitest.config.ts",
+      "line": 11,
+      "verdict": "fixed",
+      "evidence": "Greedy subpath regex alias added before the string aliases so deep specifiers resolve."
+    },
+    {
+      "path": "packages/storage/vitest.config.ts",
+      "line": 12,
+      "verdict": "fixed",
+      "evidence": "readdirSync uses withFileTypes + isDirectory."
+    },
+    {
+      "path": "packages/storage/vitest.config.ts",
+      "line": 10,
+      "verdict": "fixed",
+      "evidence": "Config-load now throws one labeled error when the workspace dir is unreadable."
+    },
+    {
+      "path": "packages/storage/vitest.config.ts",
+      "line": 16,
+      "verdict": "by-design",
+      "evidence": "Resolving @autolight/storage to this package's src is the point (tests exercise the bundled sources); the build entry is covered by yarn build and the truth gates."
+    },
+    {
+      "path": "analysis/src/autolight_analysis/stems.py",
+      "line": 72,
+      "verdict": "fixed",
+      "evidence": "Empty band mask returns zeros instead of NaN; test added. While there, band_envelope/stem_proxies took FrameWindow to clear PLR0913/0917."
+    },
+    {
+      "path": "analysis/src/autolight_analysis/stems.py",
+      "line": 98,
+      "verdict": "fixed",
+      "evidence": "spectral_novelty guards on the real frame count (hop > frame with 2x samples had a single frame); test added."
+    },
+    {
+      "path": "analysis/src/autolight_analysis/stems.py",
+      "line": 49,
+      "verdict": "fixed",
+      "evidence": "The pad path is kept as the helper's short-input safety net and is now directly tested; its docstring says so."
+    },
+    {
+      "path": "apps/desktop/electron/services/analysis-supervisor.ts",
+      "line": 97,
+      "verdict": "fixed",
+      "evidence": "Failures classify by worker liveness (port.running): a job failure on a live worker no longer counts a restart or flips the spawn flag; tests cover both paths."
+    },
+    {
+      "path": "apps/desktop/electron/services/analysis-supervisor.ts",
+      "line": 54,
+      "verdict": "fixed",
+      "evidence": "stop() documents why the port is kept (idempotent start, submits rejected while stopped); a test pins the same-port resume."
+    },
+    {
+      "path": "apps/desktop/electron/services/analysis-supervisor.ts",
+      "line": 109,
+      "verdict": "fixed",
+      "evidence": "getAnalysisSupervisor throws when a later caller passes options; test via module reload."
+    },
+    {
+      "path": "packages/rekordbox-library/src/test-fixtures.ts",
+      "line": 126,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file is under concurrent edit by another session (uncommitted TrackNo fix citing batch-33); verified findings (gone.mp3 path dup, leading-slash anlzFiles values, no DROP on re-run) remain to land once their commit does."
+    },
+    {
+      "path": "packages/rekordbox-library/src/test-fixtures.ts",
+      "line": 98,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: same concurrent edit, see above."
+    },
+    {
+      "path": "packages/rekordbox-library/src/test-fixtures.ts",
+      "line": 68,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: same concurrent edit, see above."
+    },
+    {
+      "path": "test-fixtures/analysis/live-deck2.trackmodel.json",
+      "line": 0,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: three sibling fixture files are currently modified (live-deck1, planner-golden, trackmodel-v2) in the same directory; regeneration of live-deck2 with real bar structure/phrases/integral ms is deferred to avoid colliding with that in-flight work."
+    }
   ]
 }

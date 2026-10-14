@@ -96,7 +96,7 @@ def frame_series(
     stem_envelopes: dict[str, np.ndarray] | None = None,
 ) -> dict[str, np.ndarray]:
     """All 22 spec 18 features as frame series (T-ANA-09)."""
-    from autolight_analysis.stems import spectral_novelty, stem_proxies
+    from autolight_analysis.stems import FrameWindow, spectral_novelty, stem_proxies
 
     if mono.size < frame:
         mono = np.pad(mono.astype(np.float64), (0, frame - mono.size)).astype(
@@ -141,7 +141,11 @@ def frame_series(
     stems = stem_envelopes
     if stems is None:
         try:
-            stems = stem_proxies(mono.astype(np.float32), rate, frame=frame, hop=hop)
+            stems = stem_proxies(
+                mono.astype(np.float32),
+                rate,
+                window=FrameWindow(frame=frame, hop=hop),
+            )
         except (ValueError, RuntimeError):
             stems = {}
     stem_bass = _align(np.asarray(stems.get("bass", np.zeros(1))), n_frames)

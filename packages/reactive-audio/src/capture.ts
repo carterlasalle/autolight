@@ -223,7 +223,9 @@ export class AudioCaptureHost {
     this.pending = frame;
   }
 
-  latest(): LiveFeatures | null {
+  /** Take the newest unread frame, clearing it: a frame is delivered once,
+   *  and a newer publish supersedes an unread older one (latest wins). */
+  takeLatest(): LiveFeatures | null {
     const frame = this.pending;
     this.pending = null;
 

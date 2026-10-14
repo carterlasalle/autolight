@@ -101,10 +101,24 @@ describe("audio capture host (T-AUD-01)", () => {
     expect(host.status.running).toBe(false);
   });
 
+  it("joins concurrent starts into one context instead of racing", async () => {
+    const platform = new FakePlatform();
+    const host = new AudioCaptureHost(platform, { mode: "audio-window" });
+    const [a, b, c] = await Promise.all([host.start(), host.start(), host.start()]);
+
+    expect(a.ok && b.ok && c.ok).toBe(true);
+    // One context for the burst: the in-flight promise is joined, never a
+    // second platform start.
+    expect(platform.starts).toHaveLength(1);
+    expect(host.status.sessionId).toBe("ctx-1");
+  });
+
   it("reports real permission states and never leaks a session on denial", async () => {
     const platform = new FakePlatform();
-    platform.permission = "denied";
     const host = new AudioCaptureHost(platform);
+    // A fresh host is explicitly "not-requested", not granted or denied.
+    expect(host.status.permission).toBe("not-requested");
+    platform.permission = "denied";
     const denied = await host.start();
     expect(denied.ok).toBe(false);
     expect(denied.reason).toBe("permission denied");
@@ -141,6 +155,8 @@ describe("audio capture host (T-AUD-01)", () => {
     await rendererHost.start();
     rendererHost.onUiReload();
     expect(rendererHost.status.running).toBe(false);
+    // The full death transition: session gone, one stop, reason recorded.
+    expect(rendererHost.status.sessionId).toBeNull();
     expect(rendererPlatform.stops).toBe(1);
     expect(rendererHost.status.reason).toContain("ui-reload");
   });
@@ -154,8 +170,9 @@ describe("audio capture host (T-AUD-01)", () => {
     host.publish(features(0.3));
     expect(host.status.received).toBe(3);
     expect(host.status.superseded).toBe(2);
-    expect(host.latest()?.level).toBe(0.3);
-    expect(host.latest()).toBeNull();
+    // takeLatest delivers the newest frame once; the next take is empty.
+    expect(host.takeLatest()?.level).toBe(0.3);
+    expect(host.takeLatest()).toBeNull();
   });
 
   it("recommends a loopback device for capturing the DJ output", () => {

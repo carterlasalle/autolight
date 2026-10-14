@@ -56,9 +56,9 @@ def test_stems_separate_better_than_proxies():
     mix = (bass_src + kick * 0.5).astype(np.float32)
     proxies, source = select_stems(mix, sr, "fusion")
     assert source == "dsp.stemProxies"
-    known_bass = band_envelope(bass_src, sr, 20, 150)
-    known_kick = band_envelope(kick, sr, 150, 500) + band_envelope(
-        kick, sr, 2000, 20000
+    known_bass = band_envelope(bass_src, rate=sr, low_hz=20, high_hz=150)
+    known_kick = band_envelope(kick, rate=sr, low_hz=150, high_hz=500) + band_envelope(
+        kick, rate=sr, low_hz=2000, high_hz=20000
     )
     bass_corr = float(np.corrcoef(proxies["bass"], known_bass)[0, 1])
     drum_corr = float(np.corrcoef(proxies["drum"], known_kick)[0, 1])
