@@ -239,7 +239,7 @@ export function LightConsoleCard(): JSX.Element {
             White (hold)
           </Button>
         </div>
-        <p className="text-xs text-muted-foreground">Blinder and Blackout act on {targetId === null ? "both lights" : "the picked light"}; White (hold) is master-level (all lights).</p>
+        <p className="text-xs text-muted-foreground">Blinder and Blackout act on {targetId === null ? "both lights" : "the picked light"}; White (hold) is master-level (all lights). A fixture without a saved segment count cross-fades (count it in Segments to snap).</p>
       </div>
     </div>
   );
