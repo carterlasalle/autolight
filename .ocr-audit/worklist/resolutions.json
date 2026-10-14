@@ -1,4 +1,42 @@
 {
+  "batch-11": [
+    {
+      "path": "analysis/src/autolight_analysis/decode.py",
+      "line": 55,
+      "verdict": "fixed-earlier",
+      "evidence": "resampler_args raises on unknown names and pins resampler=swr explicitly; soxr keeps the default-engine chain, so the two settings decode differently. Present in the worktree (uncommitted region), verified 2026-10-14."
+    },
+    {
+      "path": "apps/desktop/electron/services/provider-manager.ts",
+      "line": 152,
+      "verdict": "fixed-earlier",
+      "evidence": "A successful ProLink bind ('listening') clears prolinkBindError, so a transient failure cannot report deaf forever. Verified 2026-10-14."
+    },
+    {
+      "path": "apps/desktop/electron/services/provider-manager.ts",
+      "line": 225,
+      "verdict": "fixed-earlier",
+      "evidence": "The AX tick is guarded by axPolling: a slow helper poll never overlaps the next interval tick. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/ble/src/backends.ts",
+      "line": 133,
+      "verdict": "fixed-earlier",
+      "evidence": "A successful primary scan clears deps.primaryReason (overrides keep their own reasons). Verified 2026-10-14."
+    },
+    {
+      "path": "packages/rekordbox-live/src/ax-provider.ts",
+      "line": 105,
+      "verdict": "fixed-earlier",
+      "evidence": "Decks absent from the current tree are evicted from readings and grids with a comment. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/rekordbox-live/src/ax-provider.ts",
+      "line": 76,
+      "verdict": "fixed-earlier",
+      "evidence": "Re-granting permission clears lastPollAtNs and moves the status to starting, so polling resumes immediately. Verified 2026-10-14."
+    }
+  ],
   "batch-10": [
     {
       "path": "apps/desktop/electron/services/config-service.ts",
