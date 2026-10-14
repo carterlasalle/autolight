@@ -291,7 +291,7 @@ export function mixReferences(
   weights: readonly number[],
 ): number[] {
   const length = envelopes.reduce((max, env) => Math.max(max, env.length), 0);
-  const out = new Array<number>(length).fill(0);
+  const out = Array.from({ length }, () => 0);
 
   for (let e = 0; e < envelopes.length; e++) {
     const weight = weights[e] ?? 0;
@@ -838,9 +838,13 @@ export class CompositeProvider extends ProviderBase {
     const scaled = confidence * Math.min(1, weight > 0 ? weight : 1);
     state.confidence = scaled;
     const offsetMs = (-lagSamples / this.envelopeRateHz) * 1000;
+    // The correlation is quantized to one sample (1000/envelopeRateHz ms);
+    // a millisecond threshold below that quantum means exact alignment, so
+    // the lock test lives in sample space (batch-10).
+    const lockSamples = Math.floor((this.lockThresholdMs / 1000) * this.envelopeRateHz);
 
     if (scaled < this.minLockConfidence || Math.abs(offsetMs) < 0.5) {
-      state.locked = scaled >= this.minLockConfidence && Math.abs(offsetMs) <= this.lockThresholdMs;
+      state.locked = scaled >= this.minLockConfidence && Math.abs(lagSamples) <= lockSamples;
 
       return;
     }
@@ -853,7 +857,7 @@ export class CompositeProvider extends ProviderBase {
     const corrected = this.positionAt(state, at) + cappedMs / 1000;
     state.anchorPosSeconds = Math.max(0, corrected);
     state.anchorAtNs = at;
-    state.locked = Math.abs(offsetMs) <= this.lockThresholdMs;
+    state.locked = Math.abs(lagSamples) <= lockSamples;
   }
 
   private referenceWindow(

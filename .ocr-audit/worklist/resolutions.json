@@ -1,4 +1,60 @@
 {
+  "batch-10": [
+    {
+      "path": "apps/desktop/electron/services/config-service.ts",
+      "line": 61,
+      "verdict": "fixed-earlier",
+      "evidence": "The change history trims to 500 entries before every push, with a comment naming the shared-store growth reason. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/config/scripts/export.mjs",
+      "line": 20,
+      "verdict": "by-design",
+      "evidence": "The catalog has exactly two documented row shapes (6-cell and 5-cell-without-range); every other cell count throws with the row excerpt. A future shape must update the parser on purpose."
+    },
+    {
+      "path": "packages/rekordbox-live/src/composite.ts",
+      "line": 612,
+      "verdict": "fixed-earlier",
+      "evidence": "Pending loads are sorted by press time and attributed in LOAD-press order with a comment; attribution cannot depend on deck iteration order. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/rekordbox-live/src/composite.ts",
+      "line": 342,
+      "verdict": "by-design",
+      "evidence": "compositeFuseAxPlayhead is a pure fuse: null/non-finite and backwards-while-playing inputs do not fuse, and freshness/ordering are the caller's gate (documented at the function). Verified 2026-10-14."
+    },
+    {
+      "path": "packages/rekordbox-live/src/composite.ts",
+      "line": 721,
+      "verdict": "fixed-by-commit",
+      "evidence": "The lock decision now compares lag samples against a sample-space budget derived from lockThresholdMs and envelopeRateHz, making the 20ms quantization explicit (batch-10)."
+    },
+    {
+      "path": "packages/simulator/src/index.test.ts",
+      "line": 18,
+      "verdict": "fixed-earlier",
+      "evidence": "The soak test asserts r.dropped === 8898 and sent exactly (bucket sums alone were tautological). Verified 2026-10-14."
+    },
+    {
+      "path": "packages/simulator/src/index.test.ts",
+      "line": 11,
+      "verdict": "fixed-earlier",
+      "evidence": "Disconnect boundaries are pinned: frames 4/5/6/10/11 assert the inclusive-open window [disconnectAt, reconnectAt). Verified 2026-10-14."
+    },
+    {
+      "path": "packages/venue/src/groups.ts",
+      "line": 31,
+      "verdict": "fixed-earlier",
+      "evidence": "splitWeights reads split.angleRad as an angle offset (offset + angleRad). Verified 2026-10-14."
+    },
+    {
+      "path": "packages/venue/src/probes.test.ts",
+      "line": 90,
+      "verdict": "fixed-by-commit",
+      "evidence": "The test-local splitLevel helper and its assertions are deleted; the side-dominance assertions on production weights remain (batch-10)."
+    }
+  ],
   "batch-09": [
     {
       "path": "packages/rekordbox-live/src/os2l.ts",

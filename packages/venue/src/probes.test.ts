@@ -33,13 +33,6 @@ function orbitLevel(s: number, beat: number, beatsPerRevolution: number, tailCel
   return Math.exp(-((dist / Math.max(1e-3, tail)) ** 2) * 2);
 }
 
-function splitLevel(signedSplit: number, beat: number, rateBeats: number): number {
-  const half = Math.floor(beat / rateBeats) % 2;
-  const side = signedSplit >= 0 ? 0 : 1;
-
-  return half === side ? 1 : 0;
-}
-
 function rippleLevel(g: number, beat: number, roomFractionPerBeat: number, width: number): number {
   const travelled = beat * roomFractionPerBeat * 2;
 
@@ -110,18 +103,11 @@ describe("P-ROOM probes on SIM", () => {
 
     expect(leftIdx.length).toBeGreaterThan(0);
     expect(rightIdx.length).toBeGreaterThan(0);
+    // The production claims under test: each side's weight dominates on its
+    // own cells (the removed splitLevel helper only re-implemented the
+    // formula inside the test, proving nothing — batch-10).
     expect(leftIdx.every((i) => w[0]![i]! > w[1]![i]!)).toBe(true);
     expect(rightIdx.every((i) => w[1]![i]! > w[0]![i]!)).toBe(true);
-
-    for (const i of leftIdx) {
-      expect(splitLevel(fields.signedSplit[i]!, 0, 0.5)).toBe(1);
-      expect(splitLevel(fields.signedSplit[i]!, 0.5, 0.5)).toBe(0);
-    }
-
-    for (const i of rightIdx) {
-      expect(splitLevel(fields.signedSplit[i]!, 0, 0.5)).toBe(0);
-      expect(splitLevel(fields.signedSplit[i]!, 0.5, 0.5)).toBe(1);
-    }
   });
 
   it("P-ROOM-04 two-way pulse meets at the antipode on beat 4", () => {
