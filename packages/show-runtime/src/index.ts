@@ -263,6 +263,9 @@ export function quantizeResume(beat: number, at: ResumeAt, grid?: ResumeGrid | n
     if (next !== null) return next;
   }
 
+  // Degraded path: with no boundary data (null grid, or an empty/exhausted
+  // list) the fallback quantizes arithmetically to the classic 4/16-beat
+  // grid — the ResumeGrid fields themselves stay native-only (batch-15).
   if (at === "beat") return Math.ceil(beat);
 
   if (at === "bar") return Math.ceil(beat / 4) * 4;

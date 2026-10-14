@@ -1,4 +1,120 @@
 {
+  "batch-15": [
+    {
+      "path": "apps/desktop/src/routes/venue/room.test.ts",
+      "line": 27,
+      "verdict": "fixed-by-commit",
+      "evidence": "The wizard test is retitled to what static markup proves (shell on step 1) with a comment on the interaction limit (batch-15)."
+    },
+    {
+      "path": "apps/desktop/src/routes/venue/room.test.ts",
+      "line": 34,
+      "verdict": "fixed-by-commit",
+      "evidence": "The preview test is retitled ('renders the preview shell with its beat control') and asserts the input element itself (batch-15)."
+    },
+    {
+      "path": "apps/desktop/src/routes/venue/room.test.ts",
+      "line": 10,
+      "verdict": "fixed-by-commit",
+      "evidence": "The editor test now extracts the width input tag and asserts type=number and step=0.1 (batch-15)."
+    },
+    {
+      "path": "apps/desktop/src/routes/venue/room.test.ts",
+      "line": 17,
+      "verdict": "fixed-by-commit",
+      "evidence": "rescaleOutline is probed with 0, negative and NaN targets, asserting the current dimensions and facing are kept (batch-15)."
+    },
+    {
+      "path": "packages/reactive-audio/src/overlay.test.ts",
+      "line": 36,
+      "verdict": "fixed-by-commit",
+      "evidence": "The dark-red case pins the literal 0.48; DEFAULT_OVERLAY_CAP is separately pinned to 0.2 (batch-15)."
+    },
+    {
+      "path": "packages/reactive-audio/src/overlay.test.ts",
+      "line": 31,
+      "verdict": "fixed-by-commit",
+      "evidence": "The hue test asserts gain > 1 before the ratio checks, so a no-op overlay fails (batch-15)."
+    },
+    {
+      "path": "packages/reactive-audio/src/overlay.test.ts",
+      "line": 24,
+      "verdict": "fixed-by-commit",
+      "evidence": "The clamp is asserted exactly: 0.99 at half amount and 1 at full amount (batch-15)."
+    },
+    {
+      "path": "packages/reactive-audio/src/overlay.test.ts",
+      "line": 46,
+      "verdict": "fixed-by-commit",
+      "evidence": "The wild-input case clamps one input per assertion so a failure is attributable (batch-15)."
+    },
+    {
+      "path": "packages/show-planner/src/recurrence.ts",
+      "line": 35,
+      "verdict": "fixed-by-commit",
+      "evidence": "summarizeSections no longer takes core (unused); callers updated. Kind-derived hues remain the documented similarity basis (batch-15)."
+    },
+    {
+      "path": "packages/show-planner/src/recurrence.ts",
+      "line": 73,
+      "verdict": "fixed-by-commit",
+      "evidence": "Grouping requires sim > 0, so a zero/negative threshold cannot merge differing kinds (similarity 0) into one motif (batch-15)."
+    },
+    {
+      "path": "packages/show-planner/src/recurrence.ts",
+      "line": 71,
+      "verdict": "by-design",
+      "evidence": "Greedy one-pass clustering against each group's first member over the track's own stable section order; transitivity is not claimed."
+    },
+    {
+      "path": "packages/show-planner/src/recurrence.ts",
+      "line": 109,
+      "verdict": "by-design",
+      "evidence": "The recurrence constants are cue-type vocabulary (static-look, direction and fixture names), not tunable numbers."
+    },
+    {
+      "path": "packages/show-planner/src/restraint.ts",
+      "line": 118,
+      "verdict": "fixed-earlier",
+      "evidence": "Direction, family and impact probes run against copies; state commits only on the accept path (comment: 'commit every probe above'). Verified 2026-10-14."
+    },
+    {
+      "path": "packages/show-runtime/src/index.ts",
+      "line": 305,
+      "verdict": "by-design",
+      "evidence": "The resume window is deliberately inert for overrideEffect (kind released at resume); advanceOverride reports the boundary via `resumed`, with the contract documented in a comment. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/show-runtime/src/index.ts",
+      "line": 231,
+      "verdict": "fixed-by-commit",
+      "evidence": "The arithmetic fallback in quantizeResume is commented as the degraded no-grid path; ResumeGrid fields stay native-only (batch-15)."
+    },
+    {
+      "path": "packages/show-runtime/src/index.ts",
+      "line": 653,
+      "verdict": "by-design",
+      "evidence": "seekThresholdMs (estimator path) and HEALTH_EXTRAPOLATE_MS (clock health) are deliberately independent windows, with clockSource comments covering the override case. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/storage/src/index.ts",
+      "line": 159,
+      "verdict": "fixed-by-commit",
+      "evidence": "saveArtifact deletes by the full five-column key before inserting (batch-15)."
+    },
+    {
+      "path": "packages/storage/src/index.ts",
+      "line": 205,
+      "verdict": "fixed-by-commit",
+      "evidence": "saveShowPlan deletes by the full six-column primary key with a comment (batch-15)."
+    },
+    {
+      "path": "packages/storage/src/index.ts",
+      "line": 241,
+      "verdict": "fixed-by-commit",
+      "evidence": "planRow's WHERE now includes source_fingerprint, matching the plan cache key exactly (batch-15)."
+    }
+  ],
   "batch-14": [
     {
       "path": "packages/storage/src/migrate.ts",

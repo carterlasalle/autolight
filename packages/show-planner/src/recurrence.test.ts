@@ -88,7 +88,6 @@ describe("T-PLAN-08 recurrence (P-2.6, P-37)", () => {
     const summaries = summarizeSections(
       track.sections,
       DEFAULT_CONFIG.sectionEnergy,
-      [{ l: 0.6, c: 0.12, h: 200 }],
     );
 
     const { motifOf } = planRecurrence(

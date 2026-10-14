@@ -2,7 +2,6 @@
 // above the similarity threshold share a motif ID; each occurrence records
 // its variation (direction, secondary colour, density, fixtures, accent
 // timing). Dissimilar sections never share a motif.
-import { oklchDistance } from "./color.js";
 import {
   mulberry32,
   type MotifMap,
@@ -22,7 +21,6 @@ export interface SectionSummary {
 export function summarizeSections(
   sections: ReadonlyArray<{ kind: string; startBeat: number; endBeat: number }>,
   energy: Readonly<Record<string, number>>,
-  _core: readonly Oklch[],
 ): SectionSummary[] {
   // Hue follows the section kind, not the section index, so repeats of the
   // same kind compare similar while different kinds compare distant.
@@ -65,7 +63,7 @@ export function planRecurrence(
   seedHex: string,
 ): RecurrenceResult {
   const rand = mulberry32(`motif-${seedHex}`);
-  const motifOf: string[] = new Array(summaries.length).fill("");
+  const motifOf: string[] = Array.from({ length: summaries.length }, () => "");
   const groups: { id: string; members: number[] }[] = [];
   const threshold = config.similarityThreshold;
 
@@ -74,8 +72,11 @@ export function planRecurrence(
 
     for (const g of groups) {
       const first = summaries[g.members[0]!]!;
+      const sim = sectionSimilarity(s, first);
 
-      if (sectionSimilarity(s, first) >= threshold) {
+      // A zero/negative configured threshold must not merge differing kinds
+      // (their similarity is exactly 0) into one motif (batch-15).
+      if (sim > 0 && sim >= threshold) {
         placed = g.id;
         g.members.push(s.index);
         break;

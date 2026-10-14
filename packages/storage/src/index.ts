@@ -176,8 +176,8 @@ export class Store implements SqlExec {
     const schemaVersionValue = extra.schemaVersion ?? CACHE_SCHEMA_VERSION;
     const configHash = extra.configHash ?? "";
     this.driver.run(
-      "DELETE FROM analysis_artifacts WHERE track_id = ? AND analyzer_version = ? AND fingerprint = ?",
-      [trackId, analyzerVersion, fingerprint],
+      "DELETE FROM analysis_artifacts WHERE track_id = ? AND schema_version = ? AND analyzer_version = ? AND config_hash = ? AND fingerprint = ?",
+      [trackId, schemaVersionValue, analyzerVersion, configHash, fingerprint],
     );
     this.driver.run(
       `INSERT INTO analysis_artifacts
@@ -223,11 +223,20 @@ export class Store implements SqlExec {
     planJson: string,
     extra: PlanExtra = {},
   ): void {
-    this.driver.run("DELETE FROM show_plans WHERE track_id = ? AND style_id = ? AND planner_version = ?", [
-      trackId,
-      styleId,
-      plannerVersion,
-    ]);
+    // Delete exactly the row the insert replaces (the table's primary key):
+    // a subset delete would evict sibling variants under other style hashes,
+    // venue classes or config hashes (batch-15).
+    this.driver.run(
+      "DELETE FROM show_plans WHERE track_id = ? AND style_id = ? AND planner_version = ? AND style_hash = ? AND venue_class = ? AND config_hash = ?",
+      [
+        trackId,
+        styleId,
+        plannerVersion,
+        extra.styleHash ?? "",
+        extra.venueClass ?? "",
+        extra.configHash ?? "",
+      ],
+    );
     this.driver.run(
       `INSERT INTO show_plans
          (track_id, style_id, planner_version, schema_version, source_fingerprint, style_hash, venue_class, config_hash, seed, plan_json, created_at)
@@ -261,7 +270,7 @@ export class Store implements SqlExec {
   planRow(parts: PlanKeyParts): PlanRow | undefined {
     return this.driver.get<PlanRow>(
       `SELECT * FROM show_plans
-       WHERE track_id = ? AND style_id = ? AND planner_version = ? AND style_hash = ? AND venue_class = ? AND config_hash = ?
+       WHERE track_id = ? AND style_id = ? AND planner_version = ? AND style_hash = ? AND venue_class = ? AND config_hash = ? AND source_fingerprint = ?
        ORDER BY rowid DESC LIMIT 1`,
       [
         parts.trackId,
@@ -270,6 +279,7 @@ export class Store implements SqlExec {
         parts.styleHash,
         parts.venueClass,
         parts.configHash,
+        parts.sourceFingerprint,
       ],
     );
   }

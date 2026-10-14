@@ -112,7 +112,7 @@ export function compileShow(input: CompileInput): CompileResult {
   };
 
   const { design, core } = planIdentity(input.track, style, config, seed);
-  const summaries = summarizeSections(input.track.sections, config.sectionEnergy, core);
+  const summaries = summarizeSections(input.track.sections, config.sectionEnergy);
   const recurrence = planRecurrence(summaries, core, design.densityBaseline, config, seed);
   const drops = findDropPlans(input.track, config.dropMinConfidence);
   const dropOccurrence = new Map<number, number>();
