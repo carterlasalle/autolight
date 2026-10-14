@@ -42,17 +42,6 @@ export type DeviceTransportMode =
   | "matter-basic"
   | "cloud-basic";
 
-const DEVICE_MODES: readonly DeviceTransportMode[] = [
-  "auto",
-  "hybrid",
-  "lan-segmented",
-  "lan-basic",
-  "ble-segmented",
-  "ble-basic",
-  "matter-basic",
-  "cloud-basic",
-];
-
 /** Spec 148 order: LAN segmented, then BLE segmented if verified, then
  *  whole-fixture LAN. Mirrors govee.device.<fixtureId>.transportOrder. */
 export const DEFAULT_TRANSPORT_ORDER: readonly TransportId[] = [
@@ -125,13 +114,15 @@ export function modeAvailability(
   status: Partial<Record<TransportId, TransportStatus>>,
 ): { enabled: boolean; reason: string } {
   if (mode === "auto" || mode === "hybrid") {
+    // Qualified but unreachable is not an available mode: the tile must not
+    // advertise a transport that currently cannot carry frames (batch-20).
     const anyFrame = TRANSPORTS.some(
-      (t) => FRAME_CLASS[t] !== "never" && (status[t]?.verified ?? false),
+      (t) => FRAME_CLASS[t] !== "never" && (status[t]?.verified ?? false) && (status[t]?.reachable ?? false),
     );
 
     return anyFrame
       ? { enabled: true, reason: "Qualified frame transport present." }
-      : { enabled: false, reason: "No frame transport qualified on this unit." };
+      : { enabled: false, reason: "No frame transport qualified and reachable on this unit." };
   }
 
   const pinned = MODE_PINNED[mode];
@@ -207,9 +198,12 @@ function selectPinned(cfg: FixtureTransportConfig, pinned: TransportId): Selecti
   if (!s.verified) {
     const avail = modeAvailability(cfg.mode, cfg.status);
 
+    // Unqualified means nothing is routed: reporting the transport while the
+    // reason says "holds" let routeFrame push frames through an unverified
+    // path (batch-20).
     return {
-      transport: pinned,
-      frameClass: FRAME_CLASS[pinned],
+      transport: null,
+      frameClass: null,
       pinned: true,
       degraded: true,
       banner: avail.reason,
@@ -219,8 +213,8 @@ function selectPinned(cfg: FixtureTransportConfig, pinned: TransportId): Selecti
 
   if (!s.reachable) {
     return {
-      transport: pinned,
-      frameClass: FRAME_CLASS[pinned],
+      transport: null,
+      frameClass: null,
       pinned: true,
       degraded: true,
       banner: `${pinned} unreachable; explicit mode never switches.`,
@@ -267,8 +261,10 @@ function selectStrict(cfg: FixtureTransportConfig): Selection {
     transport: first,
     frameClass: FRAME_CLASS[first],
     pinned: true,
-    degraded: false,
-    banner: null,
+    // A whole-fixture carrier is degraded under every policy, strict
+    // included (it loses per-segment control) (batch-20).
+    degraded: FRAME_CLASS[first] === "whole",
+    banner: FRAME_CLASS[first] === "whole" ? `Whole-fixture on ${first} (degraded)` : null,
     reason: `Strict policy holds the first enabled transport ${first}.`,
   };
 }
@@ -359,6 +355,13 @@ export interface FrameSink {
 
 export function routeFrame(sel: Selection, frame: Uint8Array, sinks: FrameSink[]): TransportId {
   if (sel.transport === null) throw new Error(`No transport selected: ${sel.reason}`);
+
+  // A never-class transport (cloud metadata) must not silently carry bytes:
+  // the selection alone decides what may be sent (batch-20).
+  if (sel.frameClass === "never") {
+    throw new Error(`Transport ${sel.transport} never carries frames: ${sel.reason}`);
+  }
+
   const sink = sinks.find((s) => s.transport === sel.transport);
 
   if (sink === undefined) throw new Error(`No sink recorded transport ${sel.transport}`);

@@ -219,7 +219,10 @@ describe("strict policy and explicit modes never switch silently", () => {
       }),
     );
 
-    expect(sel.transport).toBe("lan-razer");
+    // Nothing is selected while the pin is down: routing must not send into
+    // an unreachable transport (the next case shows routeFrame's throw)
+    // (batch-20).
+    expect(sel.transport).toBeNull();
     expect(sel.pinned).toBe(true);
     expect(sel.banner).toContain("never switches");
   });
@@ -238,7 +241,7 @@ describe("strict policy and explicit modes never switch silently", () => {
     );
 
     expect(sel.transport).toBeNull();
-    expect(() => routeFrame(sel, FRAME, sinks().list)).toThrowError(/No transport selected/);
+    expect(() => routeFrame(sel, FRAME, sinks().list)).toThrow(/No transport selected/);
   });
 });
 
