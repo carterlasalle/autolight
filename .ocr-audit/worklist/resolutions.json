@@ -2980,5 +2980,73 @@
       "verdict": "fixed",
       "evidence": "Absolute ~1.0 s duration asserted alongside the mutual agreement."
     }
+  ],
+  "batch-37": [
+    {
+      "path": "analysis/tests/test_features.py",
+      "line": 39,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file is under concurrent edit by another session (uncommitted changes present); reviewed but not touched to avoid clobbering in-flight work. The finding remains valid against the working tree and must be addressed once that work commits."
+    },
+    {
+      "path": "analysis/tests/test_features.py",
+      "line": 49,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file is under concurrent edit by another session (uncommitted changes present); reviewed but not touched to avoid clobbering in-flight work. The finding remains valid against the working tree and must be addressed once that work commits."
+    },
+    {
+      "path": "packages/ble/src/backends.test.ts",
+      "line": 69,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file is under concurrent edit by another session (uncommitted changes present); reviewed but not touched to avoid clobbering in-flight work. The finding remains valid against the working tree and must be addressed once that work commits."
+    },
+    {
+      "path": "packages/ble/src/backends.test.ts",
+      "line": 85,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file is under concurrent edit by another session (uncommitted changes present); reviewed but not touched to avoid clobbering in-flight work. The finding remains valid against the working tree and must be addressed once that work commits."
+    },
+    {
+      "path": "packages/ble/src/backends.test.ts",
+      "line": 109,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file is under concurrent edit by another session (uncommitted changes present); reviewed but not touched to avoid clobbering in-flight work. The finding remains valid against the working tree and must be addressed once that work commits."
+    },
+    {
+      "path": "packages/ble/src/scan.test.ts",
+      "line": 74,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file is under concurrent edit by another session (uncommitted changes present); reviewed but not touched to avoid clobbering in-flight work. The finding remains valid against the working tree and must be addressed once that work commits."
+    },
+    {
+      "path": "packages/ble/src/scan.test.ts",
+      "line": 40,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file is under concurrent edit by another session (uncommitted changes present); reviewed but not touched to avoid clobbering in-flight work. The finding remains valid against the working tree and must be addressed once that work commits."
+    },
+    {
+      "path": "packages/ble/src/scan.test.ts",
+      "line": 31,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file is under concurrent edit by another session (uncommitted changes present); reviewed but not touched to avoid clobbering in-flight work. The finding remains valid against the working tree and must be addressed once that work commits."
+    },
+    {
+      "path": "packages/controller-flx4/src/index.test.ts",
+      "line": 7,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file is under concurrent edit by another session (uncommitted changes present); reviewed but not touched to avoid clobbering in-flight work. The finding remains valid against the working tree and must be addressed once that work commits."
+    },
+    {
+      "path": "packages/controller-flx4/src/index.test.ts",
+      "line": 18,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file is under concurrent edit by another session (uncommitted changes present); reviewed but not touched to avoid clobbering in-flight work. The finding remains valid against the working tree and must be addressed once that work commits."
+    },
+    {
+      "path": "packages/controller-flx4/src/index.test.ts",
+      "line": 12,
+      "verdict": "documented-precondition",
+      "evidence": "DEFERRED: file is under concurrent edit by another session (uncommitted changes present); reviewed but not touched to avoid clobbering in-flight work. The finding remains valid against the working tree and must be addressed once that work commits."
+    }
   ]
 }
