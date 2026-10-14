@@ -1,4 +1,48 @@
 {
+  "batch-13": [
+    {
+      "path": "packages/ble/src/provisioning.ts",
+      "line": 109,
+      "verdict": "fixed-earlier",
+      "evidence": "runProvision wraps the frame sequence in try/catch: a failure after the start frame best-effort sends the stop frame and rethrows the original error; the finally zeroes credential buffers. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/ble/src/provisioning.ts",
+      "line": 80,
+      "verdict": "fixed-earlier",
+      "evidence": "bleProvisionPayload rejects non-string ssid/password before encoding, so null/undefined cannot reach the wire as \"null\". Verified 2026-10-14."
+    },
+    {
+      "path": "packages/ble/src/provisioning.ts",
+      "line": 97,
+      "verdict": "fixed-earlier",
+      "evidence": "A process-wide provisionFlight guard serializes concurrent provisionBleWifi calls and says so in the error. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/config/src/index.test.ts",
+      "line": 33,
+      "verdict": "fixed-earlier",
+      "evidence": "The suite contains a mixed valid+invalid import whose rejection asserts the valid key kept its prior value (partial-apply regression observable). Verified 2026-10-14."
+    },
+    {
+      "path": "packages/diagnostics/src/index.ts",
+      "line": 3,
+      "verdict": "fixed-earlier",
+      "evidence": "The nowNs seam documents the per-context origin, coarsening and float64 limits and scopes monoNs to within-context deltas. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/rekordbox-live/src/soundswitch-absent.test.ts",
+      "line": 36,
+      "verdict": "fixed-earlier",
+      "evidence": "The test starts/stops the Lighting provider (MISSING), runs ScriptedProviders for the non-Lighting sources through fusion, and asserts first-writer hysteresis plus stale-takeover. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/rekordbox-live/src/soundswitch-absent.test.ts",
+      "line": 6,
+      "verdict": "fixed-earlier",
+      "evidence": "beforeEach resets the shared clock, removing order dependence between the tests. Verified 2026-10-14."
+    }
+  ],
   "batch-12": [
     {
       "path": "scripts/golden-update.mjs",
