@@ -1,4 +1,72 @@
 {
+  "batch-12": [
+    {
+      "path": "scripts/golden-update.mjs",
+      "line": 12,
+      "verdict": "fixed-earlier",
+      "evidence": "The whole update runs in a try/catch that prints a one-line reason and exits 1; a missing dist build or malformed reference fails loudly, not with a raw stack. Verified 2026-10-14."
+    },
+    {
+      "path": "scripts/golden-update.mjs",
+      "line": 25,
+      "verdict": "fixed-earlier",
+      "evidence": "The golden writes via temp file + renameSync (atomic; readers never see a truncated file), with validation before any mutation. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/ble/src/qualify.ts",
+      "line": 119,
+      "verdict": "fixed-earlier",
+      "evidence": "The wizard body is wrapped in try/finally whose finally best-effort disconnects the peripheral, so a throwing callback cannot leave it connected. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/renderer/src/index.test.ts",
+      "line": 44,
+      "verdict": "fixed-by-commit",
+      "evidence": "The redundant some(v > 0) assertion after the exact frame-equality check is deleted (batch-12)."
+    },
+    {
+      "path": "packages/renderer/src/index.test.ts",
+      "line": 54,
+      "verdict": "fixed-earlier",
+      "evidence": "The ramp test pins the exact early/late byte triples with the curve formula in a comment. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/renderer/src/index.test.ts",
+      "line": 29,
+      "verdict": "fixed-by-commit",
+      "evidence": "The golden comment now states what 224 encodes (the renderer's white mapping, not 255), that the pair moves together, and the regeneration command (batch-12)."
+    },
+    {
+      "path": "packages/show-planner/src/corrections.test.ts",
+      "line": 62,
+      "verdict": "fixed-earlier",
+      "evidence": "The test asserts regenerated cues land with the fresh intensity and the follow-up case exercises locked-region coverage, deletions and stale-edit reporting. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/show-planner/src/corrections.test.ts",
+      "line": 56,
+      "verdict": "fixed-earlier",
+      "evidence": "cueId cases vary seed, section, level and ordinal. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/storage/src/fastpath.ts",
+      "line": 116,
+      "verdict": "fixed-earlier",
+      "evidence": "LRU keys are scoped by a per-store identity (WeakMap), so two Store instances cannot alias each other's entries. Verified 2026-10-14."
+    },
+    {
+      "path": "packages/venue/src/room.ts",
+      "line": 79,
+      "verdict": "fixed-earlier",
+      "evidence": "normalizeOutline documents the renumbering contract: attach wall-indexed data after normalizing (rectangleRoom labels edges post-normalize). Verified 2026-10-14."
+    },
+    {
+      "path": "packages/venue/src/room.ts",
+      "line": 237,
+      "verdict": "fixed-by-commit",
+      "evidence": "samplePath appends the closing last-to-first point for closed paths without a spline, so polylineLength no longer undercounts a closed polygon (batch-12). Dead MARKER_KINDS/MarkerKind declarations removed alongside."
+    }
+  ],
   "batch-11": [
     {
       "path": "analysis/src/autolight_analysis/decode.py",

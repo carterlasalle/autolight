@@ -278,7 +278,9 @@ function catmullPoint(p0: Point3, p1: Point3, p2: Point3, p3: Point3, t: number)
 export function samplePath(points: Point3[], geom: SplineGeom | undefined, toleranceM: number, closed = false): Point3[] {
   if (points.length < 3) return closed ? [...points.map((p) => ({ ...p })), { ...points[0]! }] : points.map((p) => ({ ...p }));
 
-  if (!geom) return points.map((p) => ({ ...p }));
+  // A closed polyline without a spline still needs its last-to-first
+  // segment; dropping it undercounted perimeter lengths (batch-12).
+  if (!geom) return closed ? [...points.map((p) => ({ ...p })), { ...points[0]! }] : points.map((p) => ({ ...p }));
   const n = points.length;
   const out: Point3[] = [];
   const segs = closed ? n : n - 1;
@@ -316,6 +318,3 @@ export function polylineLength(points: Point3[], geom?: SplineGeom, toleranceM =
   return len;
 }
 
-const MARKER_KINDS = ["seam", "logical-zero", "dj", "center", "audience", "custom"] as const;
-
-type MarkerKind = (typeof MARKER_KINDS)[number];
