@@ -1,4 +1,18 @@
 {
+  "batch-24": [
+    {
+      "path": "packages/venue/src/fields.test.ts",
+      "line": 103,
+      "verdict": "fixed-earlier",
+      "evidence": "The test asserts the exact s rotation b.s[i] == ((a.s[i] - 0.25) mod 1) alongside position invariance, so a wrong rotation amount fails. Verified 2026-10-14."
+    },
+    {
+      "path": "apps/desktop/src/app/shell.tsx",
+      "line": 44,
+      "verdict": "fixed-earlier",
+      "evidence": "The keydown handler returns early on meta/ctrl/alt after the deliberate Cmd/Ctrl+K palette branch. Verified 2026-10-14."
+    }
+  ],
   "batch-23": [
     {
       "path": "packages/ble/src/scan.ts",
