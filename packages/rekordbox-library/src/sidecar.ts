@@ -390,6 +390,20 @@ export class SidecarReader implements LibrarySource {
     return this.payload.history ?? [];
   }
 
+  historyTrackCounts(): Record<string, number> {
+    // Grouped in memory from the dump's song_history rows: the dump is the
+    // only row set this reader can yield.
+    const counts: Record<string, number> = {};
+
+    for (const row of this.payload.songHistory ?? []) {
+      const id = String(row["HistoryID"] ?? "");
+
+      counts[id] = (counts[id] ?? 0) + 1;
+    }
+
+    return counts;
+  }
+
   songHistoryRows(historyId: string): PlaylistEntry[] {
     return (this.payload.songHistory ?? [])
       .filter((row) => String(row["HistoryID"] ?? "") === historyId)

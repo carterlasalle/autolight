@@ -89,6 +89,8 @@ export interface LibrarySource {
   songPlaylistRows(playlistId: string): PlaylistEntry[];
   historyRows(): SqlRow[];
   songHistoryRows(historyId: string): PlaylistEntry[];
+  /** Track count per history session (one GROUP BY, no per-session query). */
+  historyTrackCounts(): Record<string, number>;
   close(): void;
 }
 

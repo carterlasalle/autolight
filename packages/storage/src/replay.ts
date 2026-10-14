@@ -14,7 +14,10 @@ export class VirtualClock {
   }
 
   nowNs(): bigint {
-    return BigInt(Math.round(this.currentMs * 1e6));
+    // Truncating the ms product keeps ns stamps monotone with the virtual
+    // clock and matches the BigInt(ms) * 1e6 convention used at the edges
+    // (batch-16).
+    return BigInt(Math.trunc(this.currentMs * 1e6));
   }
 
   ticks(): number {
@@ -67,7 +70,6 @@ export type Decoder<T> = (event: CaptureEvent, clock: VirtualClock) => T | null;
 export interface ReplayOptions {
   speed: ReplaySpeed;
   tickHz?: number;
-  toleranceMs?: number;
 }
 
 export interface ReplayResult<T> {
@@ -129,7 +131,13 @@ export function runReplay<T>(
     };
   }
 
-  const tickMs = 1000 / (options.tickHz ?? 60);
+  const tickHz = options.tickHz ?? 60;
+
+  if (!Number.isFinite(tickHz) || tickHz <= 0) {
+    throw new RangeError(`replay tickHz must be positive, got ${options.tickHz}`);
+  }
+
+  const tickMs = 1000 / tickHz;
   let index = 0;
   let tick = 0;
 
@@ -161,7 +169,7 @@ export function runReplay<T>(
 export function runReplayAllSpeeds<T>(
   events: readonly CaptureEvent[],
   decode: Decoder<T>,
-  options: { tickHz?: number; toleranceMs?: number } = {},
+  options: { tickHz?: number } = {},
 ): Record<ReplaySpeed, ReplayResult<T>> {
   const out = {} as Record<ReplaySpeed, ReplayResult<T>>;
 
@@ -169,7 +177,6 @@ export function runReplayAllSpeeds<T>(
     out[speed] = runReplay(events, decode, {
       speed,
       ...(options.tickHz !== undefined ? { tickHz: options.tickHz } : {}),
-      ...(options.toleranceMs !== undefined ? { toleranceMs: options.toleranceMs } : {}),
     });
   }
 
@@ -206,10 +213,14 @@ function compareValue(
 ): void {
   if (expected === null || typeof expected !== "object") {
     if (typeof expected === "number" && typeof actual === "number") {
-      const key = path.split(".").pop() ?? "";
+      // Array-element paths like stampsMs[0] must still classify as timing
+      // fields, and a NaN difference must be a problem rather than slipping
+      // past `NaN > tolerance === false` (batch-16).
+      const key = (path.split(".").pop() ?? "").replace(/\[\d+\]$/, "");
       const tolerance = isTimingField(key) ? toleranceFor(key, options.toleranceMs ?? 0) : 0;
+      const diff = Math.abs(expected - actual);
 
-      if (Math.abs(expected - actual) > tolerance) problems.push({ index, path, expected, actual });
+      if (Number.isNaN(diff) || diff > tolerance) problems.push({ index, path, expected, actual });
 
       return;
     }
@@ -338,9 +349,3 @@ export function lintFixture(raw: unknown, options: FixtureLintOptions): LintProb
 
   return problems;
 }
-
-interface FixtureLintSummary {
-  fixtures: number;
-  problems: LintProblem[];
-}
-

@@ -29,12 +29,14 @@ interface Connection {
   downstream: Socket;
   upstream: Socket;
   pending: Buffer;
+  /** Outbound carry: the server→us direction rejoins split delimiters too. */
+  pendingOut: Buffer;
 }
 
 export class SeratoCaptureProxy {
   private readonly options: SeratoCaptureProxyOptions;
   private server: Server | null = null;
-  private port: number | null = null;
+  private lastError: string | null = null;
   private readonly connections = new Set<Connection>();
   private readonly capturedInbound: SeratoFrame[] = [];
   private readonly capturedOutbound: SeratoFrame[] = [];
@@ -50,19 +52,31 @@ export class SeratoCaptureProxy {
     const { promise, resolve, reject } = Promise.withResolvers<{ port: number }>();
     server.once("error", reject);
     server.listen(this.options.listenPort ?? 0, this.options.listenHost ?? "127.0.0.1", () => {
+      // The startup rejection must not stay armed: a later socket error would
+      // settle an already-settled promise and disappear silently (batch-16).
+      server.off("error", reject);
+      server.on("error", (err: Error) => {
+        this.lastError = err.message;
+      });
       const address = server.address();
 
       if (address === null || typeof address === "string") {
+        // Release the bound socket before failing loudly (batch-16).
+        server.close();
         reject(new Error("capture proxy bound to an unexpected address"));
 
         return;
       }
 
-      this.port = address.port;
       resolve({ port: address.port });
     });
 
     return promise;
+  }
+
+  /** Last server-level socket error, for diagnostics (null before any). */
+  errorText(): string | null {
+    return this.lastError;
   }
 
   /** Frames the peer sent (the direction a fixture replays). */
@@ -76,7 +90,9 @@ export class SeratoCaptureProxy {
   }
 
   async stop(): Promise<void> {
-    for (const connection of [...this.connections]) {
+    // Set iteration tolerates the drop handlers deleting their own entries
+    // while we destroy them; no copy needed.
+    for (const connection of this.connections) {
       connection.downstream.destroy();
       connection.upstream.destroy();
     }
@@ -84,7 +100,6 @@ export class SeratoCaptureProxy {
     this.connections.clear();
     const server = this.server;
     this.server = null;
-    this.port = null;
 
     if (!server) return;
     const { promise, resolve } = Promise.withResolvers<void>();
@@ -98,14 +113,14 @@ export class SeratoCaptureProxy {
     // connect callback loses whatever the peer sent in the meantime.
     downstream.pipe(upstream);
     upstream.pipe(downstream);
-    const connection: Connection = { downstream, upstream, pending: Buffer.alloc(0) };
+    const connection: Connection = { downstream, upstream, pending: Buffer.alloc(0), pendingOut: Buffer.alloc(0) };
     this.connections.add(connection);
     const now = this.options.now ?? (() => Date.now());
     downstream.on("data", (chunk: Buffer) => {
       this.recordFrames(connection, chunk, now());
     });
     upstream.on("data", (chunk: Buffer) => {
-      this.splitInto(this.capturedOutbound, chunk, null, now());
+      connection.pendingOut = this.splitInto(this.capturedOutbound, chunk, connection.pendingOut, now());
     });
 
     const drop = (): void => {

@@ -1,4 +1,234 @@
 {
+  "batch-16": [
+    {
+      "path": "packages/storage/src/metrics.ts",
+      "line": 78,
+      "verdict": "fixed-by-commit",
+      "evidence": "Distinct label keys are capped (LABEL_CAP 256, oldest-first eviction) in observe() and count(); window per label unchanged (metrics commit)."
+    },
+    {
+      "path": "packages/storage/src/metrics.ts",
+      "line": 96,
+      "verdict": "fixed-by-commit",
+      "evidence": "count() reads its single-element total directly instead of reducing foreign samples that share the key."
+    },
+    {
+      "path": "packages/storage/src/metrics.ts",
+      "line": 110,
+      "verdict": "fixed-by-commit",
+      "evidence": "snapshot() and observedNames() merge <name>:<label> samples into the metric histogram, so labeled-only metrics appear in diagnostics."
+    },
+    {
+      "path": "packages/storage/src/metrics.ts",
+      "line": 111,
+      "verdict": "fixed-by-commit",
+      "evidence": "Counter reads stay singleton totals in the same registry; histogram(name, label) still reads the exact key, and snapshot merges per metric."
+    },
+    {
+      "path": "packages/storage/src/replay.ts",
+      "line": 63,
+      "verdict": "fixed-by-commit",
+      "evidence": "ReplayOptions no longer carries toleranceMs (it was silently ignored); the option lives on CompareOptions where it is enforced."
+    },
+    {
+      "path": "packages/storage/src/replay.ts",
+      "line": 124,
+      "verdict": "fixed-by-commit",
+      "evidence": "tickHz is validated positive-finite with a RangeError before any division."
+    },
+    {
+      "path": "packages/storage/src/replay.ts",
+      "line": 132,
+      "verdict": "by-design",
+      "evidence": "The timed loop stamps clock.tickTo(captureNow / factor) exactly as the docstring states; captureDurationMs stays unscaled, replayDurationMs is the scaled clock."
+    },
+    {
+      "path": "packages/storage/src/replay.ts",
+      "line": 99,
+      "verdict": "by-design",
+      "evidence": "Null decodes mean no state by contract and are dropped identically at every speed, so cross-speed comparisons stay aligned."
+    },
+    {
+      "path": "packages/storage/src/replay.ts",
+      "line": 15,
+      "verdict": "fixed-by-commit",
+      "evidence": "nowNs truncates the ms product, matching the BigInt(ms) * 1e6 edge convention."
+    },
+    {
+      "path": "packages/storage/src/replay.ts",
+      "line": 197,
+      "verdict": "fixed-by-commit",
+      "evidence": "Array-element timing paths (stampsMs[0]) strip the index before field classification, so tolerance applies."
+    },
+    {
+      "path": "packages/storage/src/replay.ts",
+      "line": 199,
+      "verdict": "fixed-by-commit",
+      "evidence": "A NaN difference is a problem; NaN > tolerance could never flag it before."
+    },
+    {
+      "path": "packages/rekordbox-library/src/service.ts",
+      "line": 212,
+      "verdict": "fixed-by-commit",
+      "evidence": "startWatching stops an existing watcher before replacing it."
+    },
+    {
+      "path": "packages/rekordbox-library/src/service.ts",
+      "line": 337,
+      "verdict": "fixed-by-commit",
+      "evidence": "snapshotRows pages through trackRows(limit, offset) until a short page, so diffs see the whole table."
+    },
+    {
+      "path": "packages/rekordbox-library/src/service.ts",
+      "line": 360,
+      "verdict": "by-design",
+      "evidence": "The sidecar result is documented as a sample of ANLZ paths (DS-15), so reverse iteration would flag unsampled rows; counts carry the totals when present."
+    },
+    {
+      "path": "packages/rekordbox-library/src/service.ts",
+      "line": 352,
+      "verdict": "fixed-by-commit",
+      "evidence": "compareWithSidecar reports whether anything was compared; runCrossCheck now returns unavailable ('no comparable rows') instead of agree when nothing ran."
+    },
+    {
+      "path": "packages/rekordbox-library/src/service.ts",
+      "line": 139,
+      "verdict": "fixed-by-commit",
+      "evidence": "driver-failed joins the auto-fallback recoverable set."
+    },
+    {
+      "path": "packages/rekordbox-library/src/service.ts",
+      "line": 112,
+      "verdict": "fixed-by-commit",
+      "evidence": "The cross-check init is an if/else chain."
+    },
+    {
+      "path": "packages/rekordbox-library/src/service.ts",
+      "line": 177,
+      "verdict": "fixed-by-commit",
+      "evidence": "history() uses the interface's historyTrackCounts() (one grouped pass); SidecarReader implements it from its dump."
+    },
+    {
+      "path": "packages/rekordbox-library/src/service.ts",
+      "line": 329,
+      "verdict": "by-design",
+      "evidence": "tracksForEntries resolves via trackRow per entry; the source interface has no bulk row API, and entry lists are UI-bounded."
+    },
+    {
+      "path": "packages/rekordbox-live/src/rkbx-osc.test.ts",
+      "line": 158,
+      "verdict": "fixed-by-commit",
+      "evidence": "The 500 ms checkpoint is the first datagram at/past 500 ms (fractional period accumulation made the equality unreachable) and asserts it fired."
+    },
+    {
+      "path": "packages/rekordbox-live/src/rkbx-osc.test.ts",
+      "line": 226,
+      "verdict": "fixed-by-commit",
+      "evidence": "The wait is bounded by a 3s timeout race plus a rejected===0 assertion, so dropped loopback datagrams fail instead of hanging."
+    },
+    {
+      "path": "packages/rekordbox-live/src/rkbx-osc.test.ts",
+      "line": 227,
+      "verdict": "fixed-by-commit",
+      "evidence": "See :226 — the promise race fails loudly on drops."
+    },
+    {
+      "path": "packages/rekordbox-live/src/rkbx-osc.test.ts",
+      "line": 132,
+      "verdict": "fixed-by-commit",
+      "evidence": "The malformed-datagram test asserts the exact starting status instead of a negation."
+    },
+    {
+      "path": "packages/rekordbox-live/src/rkbx-osc.test.ts",
+      "line": 211,
+      "verdict": "fixed-by-commit",
+      "evidence": "The bind reuses EXPECTED_DESTINATION."
+    },
+    {
+      "path": "packages/serato/src/capture.ts",
+      "line": 101,
+      "verdict": "fixed-by-commit",
+      "evidence": "The outbound direction rejoins split delimiters through its own carry (pendingOut)."
+    },
+    {
+      "path": "packages/serato/src/capture.ts",
+      "line": 51,
+      "verdict": "fixed-by-commit",
+      "evidence": "The startup once-listener is withdrawn on listen and a permanent handler records the last server error (errorText())."
+    },
+    {
+      "path": "packages/serato/src/capture.ts",
+      "line": 54,
+      "verdict": "fixed-by-commit",
+      "evidence": "The unexpected-address branch closes the server before rejecting."
+    },
+    {
+      "path": "packages/serato/src/capture.ts",
+      "line": 120,
+      "verdict": "by-design",
+      "evidence": "Frame stamps carry the completing chunk's arrival; sub-chunk byte timestamping is out of scope for a TCP proxy and every capture consumer compares peers within one run."
+    },
+    {
+      "path": "packages/serato/src/capture.ts",
+      "line": 37,
+      "verdict": "fixed-by-commit",
+      "evidence": "The dead port field is deleted (writes removed)."
+    },
+    {
+      "path": "packages/show-host/src/snapshot.test.ts",
+      "line": 270,
+      "verdict": "fixed-by-commit",
+      "evidence": "The snapshot-vs-snapshot byte loop is replaced by tick alignment (both directions); byte equality stays verified below against an independent renderer re-render."
+    },
+    {
+      "path": "packages/show-host/src/snapshot.test.ts",
+      "line": 361,
+      "verdict": "fixed-by-commit",
+      "evidence": "Replayed snapshots are no longer pushed back into seen; the published list below is the wire truth."
+    },
+    {
+      "path": "packages/show-host/src/snapshot.test.ts",
+      "line": 335,
+      "verdict": "fixed-by-commit",
+      "evidence": "The gap loop is renamed hostTicks with a comment scoping what it measures; transport coverage is the seen-snapshot assertions."
+    },
+    {
+      "path": "packages/show-host/src/snapshot.test.ts",
+      "line": 357,
+      "verdict": "fixed-by-commit",
+      "evidence": "The dead fallback (re-reading the same seen array) is deleted; the replay expects the latest published snapshot."
+    },
+    {
+      "path": "packages/show-host/src/snapshot.test.ts",
+      "line": 213,
+      "verdict": "fixed-by-commit",
+      "evidence": "cellsToFrames guards out-of-range cellIndex writes with a RangeError naming the cell and buffer."
+    },
+    {
+      "path": "apps/desktop/src/features/live/live.ts",
+      "line": 41,
+      "verdict": "fixed-by-commit",
+      "evidence": "The preview renders exactly the mixDown result (mixed.cues) like the show host; the raw per-deck frame blend was removed."
+    },
+    {
+      "path": "apps/desktop/src/features/live/live.ts",
+      "line": 34,
+      "verdict": "by-design",
+      "evidence": "Cue times from both decks are compared against the louder deck's beat as a documented preview approximation; a master-beat input is the show host's own cursor and lands with the live wiring."
+    },
+    {
+      "path": "apps/desktop/src/features/live/live.ts",
+      "line": 49,
+      "verdict": "fixed-by-commit",
+      "evidence": "Cell bytes are read at c.index (the index renderFrame writes), not the array position."
+    },
+    {
+      "path": "apps/desktop/src/features/live/live.ts",
+      "line": 51,
+      "verdict": "fixed-by-commit",
+      "evidence": "Byte-space sRGB blending is gone with the mixed-cue render; the renderer owns linear-light math."
+    }
+  ],
   "batch-15": [
     {
       "path": "apps/desktop/src/routes/venue/room.test.ts",

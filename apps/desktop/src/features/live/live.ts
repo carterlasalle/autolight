@@ -38,23 +38,29 @@ export function liveViewModel(opts: {
     .sort((x: { startBeat: number }, y: { startBeat: number }) => x.startBeat - y.startBeat)
     .slice(0, 5);
 
-  // Per-deck frames blended by audible weight, then reactive overlay
-  // (§64, §68: subtle gain only, never structural).
-  const fa = renderFrame({ schemaVersion: 1, plannerVersion: "live", trackId: "a", styleId: "live", seed: "live", cues: mixA.cues }, beatA, fixtures);
-  const fb = renderFrame({ schemaVersion: 1, plannerVersion: "live", trackId: "b", styleId: "live", seed: "live", cues: mixB.cues }, beatB, fixtures);
-  const total = wa + wb || 1;
+  // The preview renders exactly what the show composes: mixDown owns cue
+  // composition (audible weights, band ownership, overrides), so the frame
+  // is rendered from its cues — blending raw per-deck frames bypassed it
+  // and blended sRGB bytes (batch-16, F-MIX-04).
+  const frame = renderFrame(
+    { schemaVersion: 1, plannerVersion: "live", trackId: "live", styleId: "live", seed: "live", cues: mixed.cues },
+    beat,
+    fixtures,
+  );
   const cells: { x: number; color: string }[] = [];
 
   for (const f of fixtures) {
-    const ba = fa.get(f.id);
-    const bb = fb.get(f.id);
+    const bytes = frame.get(f.id);
 
-    if (!ba || !bb) continue;
-    f.cells.forEach((c, i) => {
+    if (!bytes) continue;
+
+    for (const c of f.cells) {
+      // Frames are written at the cell's own index, not its array position.
+      const base = c.index * 3;
       const chan = (k: number): number => {
-        const blended = ((ba[i * 3 + k] ?? 0) * wa + (bb[i * 3 + k] ?? 0) * wb) / total / 255;
+        const linear = (bytes[base + k] ?? 0) / 255;
 
-        return applyOverlay(blended, opts.reactiveEnergy, opts.reactiveAmount);
+        return applyOverlay(linear, opts.reactiveEnergy, opts.reactiveAmount);
       };
 
       const r = chan(0);
@@ -64,7 +70,7 @@ export function liveViewModel(opts: {
         x: c.position.x,
         color: `rgb(${Math.round(r * 255)},${Math.round(g * 255)},${Math.round(b * 255)})`,
       });
-    });
+    }
   }
 
   return {

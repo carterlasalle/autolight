@@ -109,11 +109,13 @@ export class LibraryService {
     this.settings = config;
     this.source = source;
     this.activeReader = activeReader;
-    this.crossCheckResult = !config.crossCheck
-      ? { status: "disabled", mismatches: [] }
-      : activeReader === "pyrekordbox"
-        ? { status: "disabled", mismatches: [], note: "pyrekordbox is the active reader" }
-        : { status: "unavailable", mismatches: [], note: "not run" };
+
+    if (!config.crossCheck) this.crossCheckResult = { status: "disabled", mismatches: [] };
+    else if (activeReader === "pyrekordbox") {
+      this.crossCheckResult = { status: "disabled", mismatches: [], note: "pyrekordbox is the active reader" };
+    } else {
+      this.crossCheckResult = { status: "unavailable", mismatches: [], note: "not run" };
+    }
   }
 
   static async open(config: LibraryServiceConfig): Promise<LibraryService> {
@@ -134,7 +136,8 @@ export class LibraryService {
       return new LibraryService(resolved, reader, "rekordbox-connect");
     } catch (error) {
       const recoverable =
-        error instanceof LibraryDbError && (error.code === "cipher-module-missing" || error.code === "not-a-database");
+        error instanceof LibraryDbError &&
+        (error.code === "cipher-module-missing" || error.code === "not-a-database" || error.code === "driver-failed");
 
       if (resolved.mode !== "auto" || !recoverable) throw error;
 
@@ -173,8 +176,10 @@ export class LibraryService {
 
   history(): LibraryHistorySession[] {
     const rows = this.source.historyRows();
+    // One grouped counts pass instead of a query per session (batch-16).
+    const counts = this.source.historyTrackCounts();
 
-    return rows.map((row) => mapHistoryRow(row, this.source.songHistoryRows(String(row["ID"] ?? "")).length));
+    return rows.map((row) => mapHistoryRow(row, counts[String(row["ID"] ?? "")] ?? 0));
   }
 
   historyTracks(historyId: string): LibraryTrack[] {
@@ -211,6 +216,13 @@ export class LibraryService {
 
   async startWatching(): Promise<void> {
     if (this.watcherFiles.length === 0) return;
+    // A second start must not orphan the running watcher's timers and
+    // subscriptions: stop it before replacing (batch-16).
+    if (this.watcher !== undefined) {
+      const previous = this.watcher;
+      this.watcher = undefined;
+      await previous.stop();
+    }
     this.watcher = new LibraryWatcher({
       files: this.watcherFiles,
       engine: this.settings.watch?.engine ?? DEFAULT_ENGINE,
@@ -279,7 +291,21 @@ export class LibraryService {
       return this.crossCheckResult;
     }
 
-    const mismatches = this.compareWithSidecar(result);
+    const { mismatches, compared } = this.compareWithSidecar(result);
+
+    if (mismatches.length === 0 && !compared) {
+      // Nothing was compared: "agree" would claim verification the run did
+      // not perform (batch-16).
+      this.crossCheckResult = {
+        status: "unavailable",
+        mismatches: [],
+        durationMs: result.durationMs,
+        note: "sidecar returned no comparable rows",
+      };
+
+      return this.crossCheckResult;
+    }
+
     this.crossCheckResult = {
       status: mismatches.length === 0 ? "agree" : "disagree",
       ts: this.source.counts(),
@@ -335,7 +361,19 @@ export class LibraryService {
   }
 
   private snapshotRows(): LibraryRowSnapshot[] {
-    return this.source.trackRows({ limit: SNAPSHOT_LIMIT }).map((row) => {
+    // Page through the whole table: a single capped page would let diffs go
+    // blind past the first SNAPSHOT_LIMIT rows (batch-16).
+    const raw: SqlRow[] = [];
+
+    for (let offset = 0; ; offset += SNAPSHOT_LIMIT) {
+      const page = this.source.trackRows({ limit: SNAPSHOT_LIMIT, offset });
+
+      raw.push(...page);
+
+      if (page.length < SNAPSHOT_LIMIT) break;
+    }
+
+    return raw.map((row) => {
       const columns: Record<string, unknown> = {};
 
       for (const [key, value] of Object.entries(row)) columns[key] = value;
@@ -345,11 +383,17 @@ export class LibraryService {
   }
 
   // Counts, playlist membership and a sample of ANLZ paths, per DS-15.
-  private compareWithSidecar(result: SidecarResult): string[] {
+  private compareWithSidecar(result: SidecarResult): { mismatches: string[]; compared: boolean } {
     const mismatches: string[] = [];
+    // `compared` records whether any pair of values was actually checked: a
+    // sidecar result with no counts and no rows must not read as "agree"
+    // (batch-16).
+    let compared = false;
     const ts = this.source.counts();
 
     if (result.counts !== undefined) {
+      compared = true;
+
       for (const key of ["tracks", "playlists", "historySessions", "historyEntries"] as const) {
         if (ts[key] !== result.counts[key]) mismatches.push(`${key}: ts=${ts[key]} py=${result.counts[key]}`);
       }
@@ -358,6 +402,7 @@ export class LibraryService {
     const tsPlaylists = new Map(this.playlists().map((playlist) => [playlist.id, playlist]));
 
     for (const row of result.playlists ?? []) {
+      compared = true;
       const id = String(row["ID"] ?? "");
       const mine = tsPlaylists.get(id);
 
@@ -373,6 +418,7 @@ export class LibraryService {
     }
 
     for (const row of result.tracks ?? []) {
+      compared = true;
       const id = String(row["ID"] ?? "");
       const mine = this.source.trackRow(id);
 
@@ -386,7 +432,7 @@ export class LibraryService {
       }
     }
 
-    return mismatches;
+    return { mismatches, compared };
   }
 }
 

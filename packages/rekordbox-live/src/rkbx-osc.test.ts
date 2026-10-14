@@ -135,7 +135,9 @@ describe("rkbx_link address mapping (T-LIVE-03)", () => {
     const provider = new RkbxOscProvider({ now: () => 0n });
     provider.ingestDatagram(new Uint8Array([0x2f, 0x31]));
     expect(provider.getStats().rejected).toBe(1);
-    expect(provider.getStatus().state).not.toBe("live");
+    // Exact state: a rejected datagram must not advance the provider past
+    // its starting status (batch-16).
+    expect(provider.getStatus().state).toBe("starting");
   });
 });
 
@@ -161,11 +163,16 @@ describe("rkbx_link timeline replay (T-LIVE-03)", () => {
     });
 
     expect(datagrams.length).toBeGreaterThan(200);
+    // Datagram stamps accumulate fractional periods (1000/120 ms), so the
+    // 500 ms checkpoint is the first datagram at or past it, not an exact
+    // equality that can never fire (batch-16).
+    let checkedAt500 = false;
 
     for (const datagram of datagrams) {
       provider.ingestDatagram(datagram.bytes, now);
 
-      if (datagram.atMs === 500) {
+      if (!checkedAt500 && datagram.atMs >= 500) {
+        checkedAt500 = true;
         const state = provider.getDecks()[0];
         expect(state?.playing).toBe(true);
         expect(Math.abs((state?.playheadSeconds ?? 0) * 1000 - 500)).toBeLessThan(20);
@@ -173,6 +180,8 @@ describe("rkbx_link timeline replay (T-LIVE-03)", () => {
 
       now += 8_333_333n;
     }
+
+    expect(checkedAt500).toBe(true);
 
     expect(provider.getDecks()[0]?.playRate).toBeCloseTo(1.05, 5);
     expect(provider.drainSeekEvents().some((s) => s.toSeconds === 100)).toBe(true);
@@ -222,7 +231,7 @@ describe("rkbx_link setup verification (T-LIVE-04 logic, T-LIVE-03 DoD)", () => 
   });
 
   it("binds the real 127.0.0.1:4460 listener and receives synthetic packets (no sidecar)", async () => {
-    const provider = new RkbxOscProvider({ bind: "127.0.0.1:4460" });
+    const provider = new RkbxOscProvider({ bind: EXPECTED_DESTINATION });
     await provider.start();
 
     try {
@@ -241,7 +250,17 @@ describe("rkbx_link setup verification (T-LIVE-04 logic, T-LIVE-03 DoD)", () => 
       );
 
       expect(sent).toBe(2);
-      await seen.promise;
+      // Bounded wait: dropped loopback datagrams must fail the test, not
+      // hang it (batch-16).
+      await Promise.race([
+        seen.promise,
+        new Promise<never>((_, reject) => {
+          const t = setTimeout(() => reject(new Error("no deck state within 3s: loopback datagrams were dropped")), 3000);
+
+          t.unref?.();
+        }),
+      ]);
+      expect(provider.getStats().rejected).toBe(0);
       expect(provider.getDecks()[0]?.playheadSeconds).toBe(12.5);
       expect(provider.getStatus().state).toBe("live");
     } finally {
