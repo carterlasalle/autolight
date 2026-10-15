@@ -6,43 +6,69 @@
       "name": "spec example: /oscillator/4/frequency with float 440.0",
       "hex": "2f6f7363696c6c61746f722f342f6672657175656e6379002c66000043dc0000",
       "address": "/oscillator/4/frequency",
-      "args": [440],
-      "argKinds": ["f"]
+      "args": [
+        440
+      ],
+      "argKinds": [
+        "f"
+      ],
+      "valueEncodesAs": "int32"
     },
     {
       "name": "fractional float round trip: /oscillator/4/frequency with 440.5",
       "hex": "2f6f7363696c6c61746f722f342f6672657175656e6379002c66000043dc4000",
       "address": "/oscillator/4/frequency",
-      "args": [440.5],
-      "argKinds": ["f"],
+      "args": [
+        440.5
+      ],
+      "argKinds": [
+        "f"
+      ],
       "roundTrip": true
     },
     {
       "name": "/vol with int 1 (address padded to 8 bytes)",
       "hex": "2f766f6c000000002c69000000000001",
       "address": "/vol",
-      "args": [1],
-      "argKinds": ["i"],
+      "args": [
+        1
+      ],
+      "argKinds": [
+        "i"
+      ],
       "roundTrip": true
     },
     {
       "name": "bundle with timetag 1 carrying /a with int 1",
       "hex": "2362756e646c650000000000000000010000000c2f6100002c69000000000001",
       "timetag": 1,
-      "addresses": ["/a"],
-      "args": [1]
+      "addresses": [
+        "/a"
+      ],
+      "args": [
+        1
+      ],
+      "argKinds": [
+        "i"
+      ]
     },
     {
       "name": "rkbx_link style: /1/bpm/current with float 128.0",
       "hex": "2f312f62706d2f63757272656e7400002c66000043000000",
       "address": "/1/bpm/current",
-      "args": [128],
-      "argKinds": ["f"]
+      "args": [
+        128
+      ],
+      "argKinds": [
+        "f"
+      ],
+      "valueEncodesAs": "int32"
     },
     {
       "name": "malformed: truncated string",
       "hex": "2f766f6c002c6900",
-      "malformed": true
+      "malformed": true,
+      "why": "unterminated OSC string"
     }
   ]
 }

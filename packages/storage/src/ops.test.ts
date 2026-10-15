@@ -56,13 +56,31 @@ describe("session recorder and exact replay (T-DATA-06, F-DATA-06, spec 103)", (
       rec.record("frame-hash", { tick, hash: frameHashFor(tick, { deck: tick % 4 }, snapshot) }, tick);
     }
 
-    const result = replaySession(rec.entries(), snapshot, (tick, inputs, snap) =>
-      frameHashFor(tick, inputs, snap),
-    );
+    // The render is always frameHashFor (the production path), so the test
+    // additionally proves replay DRIVES it from the recorded state: every
+    // call carries the delivered tick inputs, and the recomputed hash is
+    // sensitive to the snapshot (batch-52).
+    const seen: { tick: number; inputs: unknown; snap: Record<string, unknown> }[] = [];
+    const result = replaySession(rec.entries(), snapshot, (tick, inputs, snap) => {
+      seen.push({ tick, inputs, snap });
+
+      return frameHashFor(tick, inputs, snap);
+    });
 
     expect(result.ticks).toBe(60);
     expect(result.mismatched).toBe(0);
     expect(result.matched).toBe(60);
+    expect(seen).toHaveLength(60);
+    expect(seen.map((call) => call.tick)).toEqual([...Array(60).keys()]);
+    expect(seen[0]?.inputs).toEqual({ deck: 0 });
+    expect(seen.every((call) => call.snap === snapshot)).toBe(true);
+    // The recomputed hash depends on the snapshot: a constant-returning
+    // frameHashFor cannot pass the mutated-snapshot replay.
+    const mutated = replaySession(rec.entries(), { ...snapshot, style: "other" }, (tick, inputs, snap) =>
+      frameHashFor(tick, inputs, snap),
+    );
+
+    expect(mutated.mismatched).toBe(60);
   });
 
   it("fails replay when the render is deliberately nondeterministic", () => {
@@ -83,6 +101,12 @@ describe("session recorder and exact replay (T-DATA-06, F-DATA-06, spec 103)", (
   it("rejects malformed session lines with line numbers", () => {
     expect(() => parseSessionNdjson("not json")).toThrow("session line 1");
     expect(() => parseSessionNdjson(JSON.stringify({ nope: 1 }))).toThrow("session line 1");
+    // A valid first line before the malformed one: an off-by-one reporter
+    // that always names line 1 fails here (batch-52).
+    const valid = JSON.stringify({ seq: 0, tMs: 0, kind: "tick-input", payload: {} });
+
+    expect(() => parseSessionNdjson(`${valid}\nnot json`)).toThrow("session line 2");
+    expect(() => parseSessionNdjson(`${valid}\n${JSON.stringify({ seq: 1, tMs: 1, kind: "nope", payload: {} })}`)).toThrow("session line 2");
     expect(parseSessionNdjson("")).toEqual([]);
   });
 
@@ -292,7 +316,7 @@ describe("consent and audit for privileged helpers (T-SEC-05, F-SEC-03)", () => 
     expect(text.undo.length).toBeGreaterThan(0);
     const record = store.grant("memory-reader", consentHashOf("memory-reader"), "2026-10-01T00:00:00.000Z");
     expect(record.consentedAt).toBe("2026-10-01T00:00:00.000Z");
-    expect(store.startHelper("memory-reader")).toEqual({ ok: true });
+    expect(store.startHelper("memory-reader").ok).toBe(true);
     // A duplicate start while running is refused and not audited twice.
     expect(store.startHelper("memory-reader").ok).toBe(false);
     store.stopHelper("memory-reader");

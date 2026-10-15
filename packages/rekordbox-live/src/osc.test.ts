@@ -14,6 +14,26 @@ interface OscVector {
   timetag?: number;
   addresses?: string[];
   malformed?: boolean;
+  // Decode-only vectors whose value would re-encode with a different tag
+  // (integral numbers become int32) and the pinned reason for a malformed
+  // vector (batch-52).
+  valueEncodesAs?: "int32";
+  why?: string;
+}
+
+// OSC type-tag string at `offset`: a datagram start (0) or a bundle element
+// start scans the address string, then the comma-prefixed tag string.
+function typeTagsAt(hex: string, offset = 0): string {
+  const raw = Uint8Array.from(Buffer.from(hex, "hex"));
+  let end = offset;
+
+  while (raw[end] !== 0) end += 1;
+  const at = Math.ceil((end + 1 - offset) / 4) * 4 + offset;
+  let tagEnd = at;
+
+  while (raw[tagEnd] !== 0) tagEnd += 1;
+
+  return new TextDecoder().decode(raw.subarray(at + 1, tagEnd));
 }
 
 // Resolve upward instead of assuming one relative depth: a layout change
@@ -47,6 +67,9 @@ describe("OSC 1.0 codec (T-LIVE-03)", () => {
       if (vector.malformed) {
         expect(decoded.malformed.length, vector.name).toBeGreaterThan(0);
         expect(decoded.messages, vector.name).toHaveLength(0);
+        // The vector pins WHY it is invalid: a decoder that rejects it for an
+        // unrelated reason fails here (batch-52).
+        if (vector.why !== undefined) expect(decoded.malformed.join("\n"), vector.name).toContain(vector.why);
         continue;
       }
 
@@ -66,16 +89,7 @@ describe("OSC 1.0 codec (T-LIVE-03)", () => {
         // re-encodes different bytes, so this fails rather than passing on
         // value alone.
         if (vector.argKinds !== undefined) {
-          const raw = Uint8Array.from(Buffer.from(vector.hex, "hex"));
-          let end = 0;
-
-          while (raw[end] !== 0) end++;
-          let at = Math.ceil((end + 1) / 4) * 4;
-          let tagEnd = at;
-
-          while (raw[tagEnd] !== 0) tagEnd++;
-          const tags = new TextDecoder().decode(raw.subarray(at + 1, tagEnd));
-          expect(tags, vector.name).toBe(vector.argKinds.join(""));
+          expect(typeTagsAt(vector.hex), vector.name).toBe(vector.argKinds.join(""));
 
           for (const [index, kind] of vector.argKinds.entries()) {
             if (kind === "i" || kind === "f") expect(typeof message?.args[index], vector.name).toBe("number");
@@ -89,12 +103,33 @@ describe("OSC 1.0 codec (T-LIVE-03)", () => {
         expect(decoded.timetag, vector.name).toBe(BigInt(vector.timetag));
         expect(decoded.messages.map((m) => m.address)).toEqual(vector.addresses);
         // The bundle vector carries args too: a decoder that drops a bundle
-        // element's arguments must fail here, not just on addresses.
+        // element's arguments must fail here, not just on addresses. The
+        // element starts after #bundle (8) + timetag (8) + size (4) = 20.
         for (const [index, expected] of (vector.args ?? []).entries()) {
           const elementArgs = decoded.messages.flatMap((m) => [...m.args]);
           expect(elementArgs[index], vector.name).toBeCloseTo(Number(expected), 5);
         }
+
+        if (vector.argKinds !== undefined) {
+          expect(typeTagsAt(vector.hex, 20), vector.name).toBe(vector.argKinds.join(""));
+        }
       }
+    }
+  });
+
+  it("marks integral-as-float vectors decode-only and proves the divergence", () => {
+    const integrals = vectors.filter((v) => v.valueEncodesAs === "int32");
+
+    expect(integrals.length).toBeGreaterThan(0);
+    for (const vector of integrals) {
+      // The encoder writes int32 for integral values (file note), so these
+      // vectors are decode-only and re-encoding must differ — asserting the
+      // exclusion instead of silently skipping them (batch-52).
+      expect(vector.roundTrip ?? false, vector.name).toBe(false);
+      const reencoded = Buffer.from(encodeOscMessage({ address: vector.address ?? "", args: vector.args ?? [] })).toString("hex");
+
+      expect(reencoded, vector.name).not.toBe(vector.hex);
+      expect(reencoded, vector.name).toContain("2c69");
     }
   });
 

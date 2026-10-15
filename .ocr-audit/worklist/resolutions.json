@@ -4601,6 +4601,90 @@
       "line": 14,
       "verdict": "documented-precondition",
       "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "packages/show-mixer/src/weight.test.ts",
+      "line": 87,
+      "verdict": "fixed",
+      "evidence": "Already satisfied at HEAD (fixed in 864f74c, no entry recorded): the fader sweep pins hard-left = fader and hard-right = 0 per level, so a constant weight fails; suite green."
+    },
+    {
+      "path": "packages/show-mixer/src/weight.test.ts",
+      "line": 56,
+      "verdict": "fixed",
+      "evidence": "Already satisfied at HEAD: the master-bonus case asserts fader 1 * master = 1 (the [0,1] clamp), next to the 0.55 product case."
+    },
+    {
+      "path": "packages/show-mixer/src/weight.test.ts",
+      "line": 44,
+      "verdict": "fixed",
+      "evidence": "Already satisfied at HEAD: THRU asserts channel fader and master factor still apply (0.5 -> 0.5, 0.5 * master -> 0.55, fader 1 * master -> clamped 1)."
+    },
+    {
+      "path": "packages/show-mixer/src/weight.test.ts",
+      "line": 13,
+      "verdict": "fixed",
+      "evidence": "Already satisfied at HEAD: a dedicated test weighs stopped, track-less and both-invalid decks at 0."
+    },
+    {
+      "path": "packages/show-planner/src/scoring.test.ts",
+      "line": 8,
+      "verdict": "fixed",
+      "evidence": "Already satisfied at HEAD: the rules-mode test registers an anti-rules evaluator whose maximum sits at index 2 and still asserts rules win 0 (determinism alone no longer proves the claim)."
+    },
+    {
+      "path": "packages/show-planner/src/scoring.test.ts",
+      "line": 32,
+      "verdict": "fixed",
+      "evidence": "Already satisfied at HEAD: registration alone must not flip the default winner, and the filter argument is exercised (learned-x alone prefers cs[1], so ignoring the filter would fail)."
+    },
+    {
+      "path": "packages/show-runtime/src/estimator.test.ts",
+      "line": 87,
+      "verdict": "fixed",
+      "evidence": "Already satisfied at HEAD: the jitter/loss test asserts monotonicity directly on result.beats (greater-than-or-equal within 1e-9), so the field is live assertion data."
+    },
+    {
+      "path": "packages/storage/src/ops.test.ts",
+      "line": 34,
+      "verdict": "fixed",
+      "evidence": "Already satisfied at HEAD (sibling 864f74c): the ring test asserts the retained seqs are the newest contiguous run (first = 400 - count, each +1), which newest-eviction regressions fail."
+    },
+    {
+      "path": "packages/storage/src/ops.test.ts",
+      "line": 49,
+      "verdict": "fixed",
+      "evidence": "Replay now records every render call: 60 calls with the delivered tick inputs and the given snapshot, plus a mutated-snapshot replay that must mismatch all 60 — a constant-returning frameHashFor cannot pass."
+    },
+    {
+      "path": "packages/storage/src/ops.test.ts",
+      "line": 71,
+      "verdict": "fixed",
+      "evidence": "A valid first line precedes the malformed one; both line-2 cases (invalid JSON and unknown kind) pin the reported line number."
+    },
+    {
+      "path": "packages/storage/src/ops.test.ts",
+      "line": 214,
+      "verdict": "fixed",
+      "evidence": "The success case asserts the discriminant (.ok), consistent with the failure branches."
+    },
+    {
+      "path": "protocol-fixtures/rekordbox/golden/osc-vectors.json",
+      "line": 31,
+      "verdict": "fixed",
+      "evidence": "The bundle vector now declares its element argKinds; the harness asserts the element's type tags at its offset (20) alongside addresses and values, so the bundle path has the same arg contract as singular vectors."
+    },
+    {
+      "path": "protocol-fixtures/rekordbox/golden/osc-vectors.json",
+      "line": 6,
+      "verdict": "fixed",
+      "evidence": "The two integral-as-float vectors carry valueEncodesAs: int32; the harness asserts they are decode-only AND that re-encoding diverges with the ,i tag, so the exclusion is tested instead of noted."
+    },
+    {
+      "path": "protocol-fixtures/rekordbox/golden/osc-vectors.json",
+      "line": 43,
+      "verdict": "fixed",
+      "evidence": "The malformed vector pins why: 'unterminated OSC string'; the harness asserts the decoder's reason contains it, so an unrelated rejection fails."
     }
   ]
 }
