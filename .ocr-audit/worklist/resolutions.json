@@ -4103,6 +4103,30 @@
       "line": 44,
       "verdict": "fixed",
       "evidence": "Enforcement made observable: decidePermissionFor is exported as the pure rule the session handlers call, pinned by a truth table (media only to the registered audio window, midi/midiSysex by main-window identity or audio window, everything else denied); allowNewWindow now drives setWindowOpenHandler instead of a hardcoded deny. While gating, dead duplicates in main.ts (local StartupStage/STARTUP_ORDER/nextStage/SHUTDOWN_ORDER) were deleted; the lifecycle service owns those orders."
+    },
+    {
+      "path": "apps/desktop/package.json",
+      "line": 8,
+      "verdict": "fixed",
+      "evidence": "build's Unix-only rm -rf replaced with a cross-platform node fs.rmSync one-liner (segment verified standalone: creates and removes dist/electron-tmp, exit 0)."
+    },
+    {
+      "path": "apps/desktop/package.json",
+      "line": 18,
+      "verdict": "fixed",
+      "evidence": "dist:package:dir now runs node scripts/fetch-vendor.mjs before electron-builder, matching dist:package, so extraResources vendor/ exists on a clean checkout."
+    },
+    {
+      "path": "apps/desktop/package.json",
+      "line": 17,
+      "verdict": "deferred",
+      "evidence": "Blocked on the shared tree: adding the devDependency requires a lockfile update, and yarn install --immutable is ALREADY red at baseline (sibling package.json edits in root/analysis-client/contracts/controller-flx4/show-planner are uncommitted; restoring HEAD's apps/desktop/package.json still reports YN0028). Reconcile with the siblings' install, then add electron-builder ^26."
+    },
+    {
+      "path": "apps/desktop/package.json",
+      "line": 26,
+      "verdict": "deferred",
+      "evidence": "Same shared-tree lockfile blocker as :17: the workspace: protocol rewrites 16 dependency descriptors and their resolutions across the lockfile, which cannot be reconciled while sibling package.json edits remain uncommitted and --immutable is baseline-red."
     }
   ],
   "batch-47": [

@@ -5,7 +5,7 @@
   "type": "module",
   "main": "dist/electron/main.cjs",
   "scripts": {
-    "build": "tsc -p tsconfig.json && vite build && node scripts/build-main.mjs && node scripts/build-preload.mjs && rm -rf dist/electron-tmp",
+    "build": "tsc -p tsconfig.json && vite build && node scripts/build-main.mjs && node scripts/build-preload.mjs && node -e \"require('node:fs').rmSync('dist/electron-tmp',{recursive:true,force:true})\"",
     "build:renderer": "vite build",
     "build:main": "node scripts/build-main.mjs",
     "build:preload": "node scripts/build-preload.mjs",
@@ -15,7 +15,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
     "fetch-vendor": "node scripts/fetch-vendor.mjs",
     "dist:package": "yarn build && node scripts/fetch-vendor.mjs && electron-builder --config electron-builder.cjs",
-    "dist:package:dir": "yarn build && electron-builder --config electron-builder.cjs --dir"
+    "dist:package:dir": "yarn build && node scripts/fetch-vendor.mjs && electron-builder --config electron-builder.cjs --dir"
   },
   "dependencies": {
     "@autolight/analysis-client": "^0.1.0",
