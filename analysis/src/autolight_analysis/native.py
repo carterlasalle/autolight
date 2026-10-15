@@ -12,6 +12,7 @@ one bad tag never loses the rest. Nothing is reduced to a boolean.
 from __future__ import annotations
 
 import struct
+from dataclasses import dataclass, field
 from pathlib import Path
 
 # Phrase IDs per mood (deepsymmetry ANLZ reference, §5.2).
@@ -54,30 +55,44 @@ _NORMALIZE = {
 }
 
 
+_INTRO_KIND, _UP_KIND, _CHORUS_KIND, _OUTRO_KIND = 1, 2, 5, 6
+
+
+def _up_variant(k2: int, k3: int) -> str:
+    if k2 == 0 and k3 == 0:
+        return "Up 1"
+    if k2 == 0 and k3 == 1:
+        return "Up 2"
+
+    return "Up 3"
+
+
 def high_label(kind: int, k1: int = 0, k2: int = 0, k3: int = 0) -> str:
-    base = HIGH_LABELS.get(kind, f"Unknown{kind}")
-    if kind == 1:
+    # One return, named kinds: the branch ladder read the raw integers and
+    # tripped the complexity and magic-value gates (batch-46).
+    if kind == _INTRO_KIND:
         return f"Intro {1 if k1 else 2}"
-    if kind == 2:
-        if k2 == 0 and k3 == 0:
-            return "Up 1"
-        if k2 == 0 and k3 == 1:
-            return "Up 2"
-        return "Up 3"
-    if kind == 5:
+    if kind == _UP_KIND:
+        return _up_variant(k2, k3)
+    if kind == _CHORUS_KIND:
         return f"Chorus {1 if k1 else 2}"
-    if kind == 6:
+    if kind == _OUTRO_KIND:
         return f"Outro {1 if k1 else 2}"
-    return base
+
+    return HIGH_LABELS.get(kind, f"Unknown{kind}")
+
+
+_MOOD_HIGH, _MOOD_MID, _MOOD_LOW = 1, 2, 3
 
 
 def phrase_label(mood: int, kind: int, k1: int = 0, k2: int = 0, k3: int = 0) -> str:
-    if mood == 1:
+    if mood == _MOOD_HIGH:
         return high_label(kind, k1, k2, k3)
-    if mood == 2:
+    if mood == _MOOD_MID:
         return MID_LABELS.get(kind, f"Unknown{kind}")
-    if mood == 3:
+    if mood == _MOOD_LOW:
         return LOW_LABELS.get(kind, f"Unknown{kind}")
+
     return f"Unknown{kind}"
 
 
@@ -90,6 +105,15 @@ def beat_grid_from_pqtz(beats_in_bar, bpms, times_seconds):
 
     pyrekordbox already scales: tempo→BPM, time→seconds.
     """
+    lengths = (len(beats_in_bar), len(bpms), len(times_seconds))
+    if len(set(lengths)) != 1:
+        # zip silently truncates to the shortest array: a mismatch would drop
+        # trailing beats and corrupt the grid with no outcome recorded.
+        raise ValueError(
+            "PQTZ arrays disagree: "
+            f"beats_in_bar={lengths[0]}, bpms={lengths[1]}, times_seconds={lengths[2]}"
+        )
+
     return [
         {
             "index": i,
@@ -203,14 +227,20 @@ def _waveform_columns(tag: str, value) -> tuple[list, dict]:
             import numpy as _np
 
             arr = _np.asarray(value)
-            meta.update({"shape": list(arr.shape), "dtype": str(arr.dtype)})
-            flat = arr.ravel().tolist()
+            # A plain section object becomes a 0-d object array: only a real
+            # numeric array counts, everything else falls through to the
+            # plain list conversion below (batch-46).
+            if arr.ndim > 0 and arr.size > 0 and arr.dtype.kind in "iuf":
+                meta.update({"shape": list(arr.shape), "dtype": str(arr.dtype)})
+                flat = arr.ravel().tolist()
         except (TypeError, ValueError):
-            try:
-                flat = [int(v) for v in list(value)]
-                meta.update({"shape": [len(flat)], "dtype": "int"})
-            except (TypeError, ValueError):
-                meta.update({"shape": [], "dtype": "unknown"})
+            flat = []
+    if not flat:
+        try:
+            flat = [int(v) for v in list(value)]
+            meta.update({"shape": [len(flat)], "dtype": "int"})
+        except (TypeError, ValueError):
+            meta.update({"shape": [], "dtype": "unknown"})
     encoding = {
         "PWAV": "int8-column",
         "PWV2": "int8-column",
@@ -226,20 +256,18 @@ def _waveform_columns(tag: str, value) -> tuple[list, dict]:
     return flat[:cap], meta
 
 
-def extract_anlz(anlz_dir: str | Path) -> dict:
-    """Parse DAT+EXT+2EX sibling set into grid/phrases/cues/waveforms.
+@dataclass
+class _AnlzExtraction:
+    """Outcome rows and per-file load errors for one extraction run."""
 
-    Every tag extracts in its own guarded step recording
-    ``{tag, file, status: ok | absent | failed, error?}`` so one bad tag
-    never loses the rest (T-RBL-04, F-RBL-05). DAT (grid) is mandatory;
-    EXT (PSSI phrases, cues) and 2EX (3-band, vocal) degrade gracefully.
-    Nothing is reduced to a boolean: waveforms carry shape metadata plus
-    column arrays, PWVC carries the vocal lane with raw retained.
-    """
+    outcomes: list[dict] = field(default_factory=list)
+    load_errors: dict[str, str] = field(default_factory=dict)
+
+
+def _load_anlz_siblings(root: Path, state: _AnlzExtraction) -> dict:
+    """Parse the three sibling files, recording per-file outcomes."""
     from pyrekordbox.anlz.file import AnlzFile  # optional dep
 
-    root = Path(anlz_dir)
-    outcomes: list[dict] = []
     files: dict = {}
     for name in ("ANLZ0000.DAT", "ANLZ0000.EXT", "ANLZ0000.2EX"):
         try:
@@ -249,62 +277,74 @@ def extract_anlz(anlz_dir: str | Path) -> dict:
             exists = (root / name).exists()
             status = "failed" if exists else "absent"
             error = f"{type(e).__name__}: {e}" if exists else None
-            outcomes.append(_outcome(name, name, status, error))
-    dat, ext, ex2 = files["ANLZ0000.DAT"], files["ANLZ0000.EXT"], files["ANLZ0000.2EX"]
-    if dat is None:
-        raise FileNotFoundError(f"no readable ANLZ0000.DAT in {root}")
+            if error is not None:
+                state.load_errors[name] = error
+            state.outcomes.append(_outcome(name, name, status, error))
 
-    def guarded(tag: str, file: str, src, fn):
-        if src is None:
-            outcomes.append(_outcome(tag, file, "absent"))
-            return None
-        try:
-            sections = src.getall(tag)
-        except Exception as e:  # noqa: BLE001 - one unknown tag variant must not lose the rest
-            outcomes.append(_outcome(tag, file, "failed", f"{type(e).__name__}: {e}"))
-            return None
-        if not sections:
-            outcomes.append(_outcome(tag, file, "absent"))
-            return None
-        try:
-            value = fn(sections)
-        except Exception as e:  # noqa: BLE001 - partial decode keeps raw, records the error
-            outcomes.append(_outcome(tag, file, "failed", f"{type(e).__name__}: {e}"))
-            return None
-        outcomes.append(_outcome(tag, file, "ok"))
-        return value
+    return files
 
-    grid = (
-        guarded(
-            "PQTZ",
-            "ANLZ0000.DAT",
-            dat,
-            lambda secs: beat_grid_from_pqtz(secs[0][0], secs[0][1], secs[0][2]),
+
+def _guarded(state: _AnlzExtraction, tag, file, src, fn):
+    if src is None:
+        load_error = state.load_errors.get(file)
+        if load_error is not None:
+            # The file exists but failed to parse: reporting "absent"
+            # would mislabel a corruption as a missing tag (batch-46).
+            state.outcomes.append(_outcome(tag, file, "failed", load_error))
+        else:
+            state.outcomes.append(_outcome(tag, file, "absent"))
+
+        return None
+    try:
+        sections = src.getall(tag)
+    except Exception as e:  # noqa: BLE001 - one unknown tag variant must not lose the rest
+        state.outcomes.append(_outcome(tag, file, "failed", f"{type(e).__name__}: {e}"))
+
+        return None
+    if not sections:
+        state.outcomes.append(_outcome(tag, file, "absent"))
+
+        return None
+    try:
+        value = fn(sections)
+    except Exception as e:  # noqa: BLE001 - partial decode keeps raw, records the error
+        state.outcomes.append(_outcome(tag, file, "failed", f"{type(e).__name__}: {e}"))
+
+        return None
+    state.outcomes.append(_outcome(tag, file, "ok"))
+
+    return value
+
+
+def _pssi_phrases(pssi_raw, state: _AnlzExtraction) -> list[dict]:
+    if pssi_raw is None:
+        return []
+    try:
+        entries = list(pssi_raw.entries)
+        phrases = phrases_from_pssi(
+            int(pssi_raw.mood),
+            int(pssi_raw.bank),
+            int(pssi_raw.end_beat),
+            entries,
         )
-        or []
-    )
-    pssi_raw = guarded("PSSI", "ANLZ0000.EXT", ext, lambda secs: secs[0])
-    phrases: list[dict] = []
-    if pssi_raw is not None:
-        try:
-            entries = list(pssi_raw.entries)
-            phrases = phrases_from_pssi(
-                int(pssi_raw.mood),
-                int(pssi_raw.bank),
-                int(pssi_raw.end_beat),
-                entries,
-            )
-            for phrase, entry in zip(phrases, entries):
-                phrase["endBeatNative"] = int(pssi_raw.end_beat)
-                try:
-                    phrase["rawHex"] = _pssi_raw_hex(entry)
-                except Exception as e:  # noqa: BLE001 - hex is diagnostics, never load-bearing
-                    phrase["rawHexError"] = f"{type(e).__name__}: {e}"
-        except Exception as e:  # noqa: BLE001 - keep raw header fields even when entries fail
-            detail = f"{type(e).__name__}: {e}"
-            outcomes.append(_outcome("PSSI-entries", "ANLZ0000.EXT", "failed", detail))
-            phrases = []
+        for phrase, entry in zip(phrases, entries):
+            phrase["endBeatNative"] = int(pssi_raw.end_beat)
+            try:
+                phrase["rawHex"] = _pssi_raw_hex(entry)
+            except Exception as e:  # noqa: BLE001 - hex is diagnostics, never load-bearing
+                phrase["rawHexError"] = f"{type(e).__name__}: {e}"
 
+        return phrases
+    except Exception as e:  # noqa: BLE001 - keep raw header fields even when entries fail
+        detail = f"{type(e).__name__}: {e}"
+        state.outcomes.append(
+            _outcome("PSSI-entries", "ANLZ0000.EXT", "failed", detail)
+        )
+
+        return []
+
+
+def _cues(ext, guarded, state: _AnlzExtraction) -> list[dict]:
     cues: list[dict] = []
     for tag in ("PCO2", "PCOB"):
         sections = guarded(tag, "ANLZ0000.EXT", ext, lambda s: s)
@@ -316,10 +356,14 @@ def extract_anlz(anlz_dir: str | Path) -> dict:
                     cues.append(_cue_from_entry(tag, entry))
                 except Exception as e:  # noqa: BLE001 - one bad cue never loses the list
                     detail = f"{type(e).__name__}: {e}"
-                    outcomes.append(
+                    state.outcomes.append(
                         _outcome(f"{tag}-entry", "ANLZ0000.EXT", "failed", detail)
                     )
 
+    return cues
+
+
+def _waveforms(dat, ext, ex2, guarded) -> dict:
     waveforms: dict = {}
     for tag, file, src in (
         ("PWAV", "ANLZ0000.DAT", dat),
@@ -337,37 +381,79 @@ def extract_anlz(anlz_dir: str | Path) -> dict:
         meta["columns"] = columns
         waveforms[tag] = meta
 
-    vocal: dict | None = None
-    vocal_raw = guarded("PWVC", "ANLZ0000.2EX", ex2, lambda secs: secs[0])
-    if vocal_raw is not None:
-        try:
-            data = [int(v) for v in list(vocal_raw.data)]
-            unknown = int(getattr(vocal_raw, "unknown", 0))
-            vocal = {
-                "lane": data,
-                "raw": {"unknown": unknown, "data": data},
-                "encoding": (
-                    "three int16 vocal flags; per-beat mapping "
-                    "unresolved, raw retained (§5.5)"
-                ),
-            }
-        except Exception as e:  # noqa: BLE001 - vocal decode is best-effort, raw retained
-            detail = f"{type(e).__name__}: {e}"
-            outcomes.append(_outcome("PWVC-data", "ANLZ0000.2EX", "failed", detail))
-            vocal = {
-                "lane": [],
-                "raw": {"unknown": None, "data": []},
-                "encoding": "undecoded, raw retained (§5.5)",
-            }
+    return waveforms
 
+
+def _vocal(ex2, guarded, state: _AnlzExtraction) -> dict | None:
+    vocal_raw = guarded("PWVC", "ANLZ0000.2EX", ex2, lambda secs: secs[0])
+    if vocal_raw is None:
+        return None
+    try:
+        data = [int(v) for v in list(vocal_raw.data)]
+        unknown = int(getattr(vocal_raw, "unknown", 0))
+
+        return {
+            "lane": data,
+            "raw": {"unknown": unknown, "data": data},
+            "encoding": (
+                "three int16 vocal flags; per-beat mapping "
+                "unresolved, raw retained (§5.5)"
+            ),
+        }
+    except Exception as e:  # noqa: BLE001 - vocal decode is best-effort, raw retained
+        detail = f"{type(e).__name__}: {e}"
+        state.outcomes.append(_outcome("PWVC-data", "ANLZ0000.2EX", "failed", detail))
+
+        # A failed decode is not a vocal lane: a stub dict here made
+        # hasVocals (and the worker's coverage key) report success despite
+        # the error (batch-46).
+        return None
+
+
+def extract_anlz(anlz_dir: str | Path) -> dict:
+    """Parse DAT+EXT+2EX sibling set into grid/phrases/cues/waveforms.
+
+    Every tag extracts in its own guarded step recording
+    ``{tag, file, status: ok | absent | failed, error?}`` so one bad tag
+    never loses the rest (T-RBL-04, F-RBL-05). DAT (grid) is mandatory;
+    EXT (PSSI phrases, cues) and 2EX (3-band, vocal) degrade gracefully.
+    Nothing is reduced to a boolean: waveforms carry shape metadata plus
+    column arrays, PWVC carries the vocal lane with raw retained.
+    """
+    root = Path(anlz_dir)
+    state = _AnlzExtraction()
+    files = _load_anlz_siblings(root, state)
+    dat, ext, ex2 = files["ANLZ0000.DAT"], files["ANLZ0000.EXT"], files["ANLZ0000.2EX"]
+    if dat is None:
+        raise FileNotFoundError(f"no readable ANLZ0000.DAT in {root}")
+
+    def guarded(tag: str, file: str, src, fn):
+        return _guarded(state, tag, file, src, fn)
+
+    grid = (
+        guarded(
+            "PQTZ",
+            "ANLZ0000.DAT",
+            dat,
+            lambda secs: beat_grid_from_pqtz(secs[0][0], secs[0][1], secs[0][2]),
+        )
+        or []
+    )
+    phrases = _pssi_phrases(
+        guarded("PSSI", "ANLZ0000.EXT", ext, lambda secs: secs[0]), state
+    )
+    cues = _cues(ext, guarded, state)
+    waveforms = _waveforms(dat, ext, ex2, guarded)
+    vocal = _vocal(ex2, guarded, state)
     path = guarded("PPTH", "ANLZ0000.DAT", dat, lambda secs: str(secs[0]))
+
     return {
         "beatGrid": grid,
         "phrases": phrases,
         "cues": cues,
         "waveforms": waveforms,
         "vocal": vocal,
-        "outcomes": outcomes,
+        "outcomes": state.outcomes,
         "path": path,
         "hasWaveform": "PWAV" in waveforms,
         "hasColorWaveform": "PWV4" in waveforms or "PWV5" in waveforms,

@@ -129,6 +129,15 @@ export function runWizardOnSim(
   };
 }
 
+// Circular distance on the normalised ring: values outside [0,1) (a shift can
+// push the difference past one lap) must wrap before folding, or the fold
+// returns negative errors and a garbage shift looks optimal (batch-46).
+function circularDistance(value: number): number {
+  const wrapped = Math.abs(value) % 1;
+
+  return Math.min(wrapped, 1 - wrapped);
+}
+
 export function verifyOffset(headS: number[], expectedS: number[], toleranceCells: number): { ok: boolean; suggestShift: number } {
   if (headS.length === 0 || headS.length !== expectedS.length) {
     return { ok: false, suggestShift: 0 };
@@ -137,9 +146,7 @@ export function verifyOffset(headS: number[], expectedS: number[], toleranceCell
   let err = 0;
 
   for (let i = 0; i < headS.length; i++) {
-    let d = Math.abs(headS[i]! - expectedS[i]!);
-    d = Math.min(d, 1 - d);
-    err += d;
+    err += circularDistance(headS[i]! - expectedS[i]!);
   }
 
   const mean = err / Math.max(1, headS.length);
@@ -153,9 +160,7 @@ export function verifyOffset(headS: number[], expectedS: number[], toleranceCell
     let e = 0;
 
     for (let i = 0; i < headS.length; i++) {
-      let d = Math.abs(headS[i]! - expectedS[i]! + s / Math.max(1, headS.length));
-      d = Math.min(d, 1 - d);
-      e += d;
+      e += circularDistance(headS[i]! - expectedS[i]! + s / Math.max(1, headS.length));
     }
 
     if (e / headS.length < best) { best = e / headS.length; shift = s; }

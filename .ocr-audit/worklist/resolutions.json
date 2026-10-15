@@ -3959,7 +3959,68 @@
       "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
     }
   ],
-  "batch-46": [],
+  "batch-46": [
+    {
+      "path": "analysis/src/autolight_analysis/native.py",
+      "line": 100,
+      "verdict": "fixed",
+      "evidence": "beat_grid_from_pqtz validates that the three PQTZ arrays agree before zipping; a mismatch raises a named ValueError the guarded step records as a failed PQTZ outcome instead of silently truncating the grid."
+    },
+    {
+      "path": "analysis/src/autolight_analysis/native.py",
+      "line": 205,
+      "verdict": "fixed",
+      "evidence": "The numpy fallback requires ndim > 0, size > 0 and a numeric dtype (iuf); a plain section object (0-d object array) now falls through to the int list conversion instead of injecting a single object as column data."
+    },
+    {
+      "path": "analysis/src/autolight_analysis/native.py",
+      "line": 258,
+      "verdict": "fixed",
+      "evidence": "Per-file load errors are tracked and propagated into guarded(): a tag whose source file exists but failed to parse records failed with the parse error (test now asserts PSSI=failed with ConstError detail), while a truly missing file still records absent."
+    },
+    {
+      "path": "analysis/src/autolight_analysis/native.py",
+      "line": 375,
+      "verdict": "fixed",
+      "evidence": "A failed PWVC decode leaves vocal None, so hasVocals and the worker's coverage key cannot report a lane that never decoded."
+    },
+    {
+      "path": "analysis/src/autolight_analysis/native.py",
+      "line": 57,
+      "verdict": "fixed",
+      "evidence": "Surfaced while gating: high_label/phrase_label magic kinds and the 7-return ladder now use named constants and one helper; extract_anlz split into _load_anlz_siblings/_guarded/_pssi_phrases/_cues/_waveforms/_vocal with an _AnlzExtraction state carrier. native.py is now fully clean under ruff check . + format + pyright (the tree-wide ruff backlog in sibling-modified files remains surfaced, untouched)."
+    },
+    {
+      "path": "packages/venue/src/wizard.test.ts",
+      "line": 9,
+      "verdict": "fixed",
+      "evidence": "Outline runs are fetched through singleRun() with an explicit error, and closedLength() guards the empty polyline: no non-null assertions, no NaN arithmetic on fixture drift."
+    },
+    {
+      "path": "packages/venue/src/wizard.test.ts",
+      "line": 17,
+      "verdict": "fixed",
+      "evidence": "simStrip forwards gaps into the strip fixture (void gaps deleted)."
+    },
+    {
+      "path": "packages/venue/src/wizard.test.ts",
+      "line": 28,
+      "verdict": "fixed",
+      "evidence": "New test builds the strip from an analytic ground truth (20 m perimeter) and asserts every fitted cell midpoint within one pitch of its declared arc, with the bound's rationale documented."
+    },
+    {
+      "path": "packages/venue/src/wizard.test.ts",
+      "line": 49,
+      "verdict": "fixed",
+      "evidence": "The shift search is pinned: a unique -1 alignment case asserts the sign; probing the branch exposed a real wrap bug (min(d, 1-d) goes negative for d > 1), fixed with circularDistance() in wizard.ts and covered by exact dyadic cases."
+    },
+    {
+      "path": "packages/venue/src/wizard.test.ts",
+      "line": 22,
+      "verdict": "fixed",
+      "evidence": "Coverage added for classifyDirection(both) -> split-independent, verifyOffset empty/mismatched refusals and >1 wrap, and a gapped run (gap between cell midpoints) mapping with full cell count."
+    }
+  ],
   "batch-47": [
     {
       "path": "apps/desktop/src/routes/inspector/inspector-helpers.ts",

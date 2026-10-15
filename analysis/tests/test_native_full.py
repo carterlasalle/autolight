@@ -150,7 +150,11 @@ def test_ext_variant_fallback_keeps_other_tags(monkeypatch):
     assert "PWAV" in got["waveforms"]
     statuses = {o["tag"]: o["status"] for o in got["outcomes"]}
     assert statuses["ANLZ0000.EXT"] == "failed"
-    assert statuses["PSSI"] == "absent"
+    # The tag inherits the file's parse failure: reporting 'absent' would
+    # mislabel a corruption as a missing tag (batch-46).
+    assert statuses["PSSI"] == "failed"
+    pssi = next(o for o in got["outcomes"] if o["tag"] == "PSSI")
+    assert "ConstError" in (pssi.get("error") or "")
     assert got["phrases"] == []
 
 
