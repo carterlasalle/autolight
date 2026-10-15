@@ -30,9 +30,11 @@ export function axBeatToPlayhead(sample: AxBeatSample, grid: { sourceTimeMs: num
 
 export type FollowSource = "preview" | "ax-beat" | "prolink";
 
-// Combined transport: prolink beats win when a peer emits, AX elapsed wins
-// when readable, otherwise the estimator coasts the last known beat at grid
-// tempo. Never fabricates: `beat: null` means unknown, UI holds preview.
+// Combined transport: prolink beats win when a peer emits live beats, AX
+// elapsed wins when readable, otherwise the estimator coasts the last known
+// beat at grid tempo. A peer that still reports a beat while stopped is a
+// stale remote: when its beat is not live, the honest AX reading wins.
+// Never fabricates: `beat: null` means unknown, UI holds preview.
 export interface CombinedTransport {
   source: FollowSource;
   beat: number | null;
@@ -46,12 +48,22 @@ export function combineTransport(opts: {
   estimatedBeat: number | null;
   estimatedBpm: number | null;
 }): CombinedTransport {
-  if (opts.prolink.peerPresent && opts.prolink.beat !== null) {
+  const prolinkBeat = opts.prolink.peerPresent && opts.prolink.beat !== null;
+  // Explicitly stopped remote with a readable AX beat: the AX elapsed time is
+  // the live source; the peer's beat is a leftover from before the pause.
+  const prolinkStale = opts.prolink.playing === false && opts.ax.beat !== null;
+
+  if (prolinkBeat && !prolinkStale) {
     return { source: "prolink", beat: opts.prolink.beat, playing: opts.prolink.playing, bpm: opts.prolink.bpm ?? opts.estimatedBpm };
   }
 
   if (opts.ax.beat !== null) {
     return { source: "ax-beat", beat: opts.ax.beat, playing: opts.ax.playing, bpm: opts.estimatedBpm };
+  }
+
+  if (prolinkBeat) {
+    // Paused peer and no AX reading: report its beat, playing:false is honest.
+    return { source: "prolink", beat: opts.prolink.beat, playing: opts.prolink.playing, bpm: opts.prolink.bpm ?? opts.estimatedBpm };
   }
 
   return { source: "preview", beat: opts.estimatedBeat, playing: null, bpm: opts.estimatedBpm };
@@ -76,7 +88,9 @@ export function parseRkbxAddress(address: string): RkbxAddress | null {
 
   if (deck === null) return null;
   const rest = parts.slice(1).join("/");
-  const subdiv = /^beat\/subdiv\/(\d+)$/.exec(rest);
+  // Case-insensitive: a config or remote emitting /Beat/Subdiv/4 must not
+  // silently fall through to the unknown-address path.
+  const subdiv = /^beat\/subdiv\/(\d+)$/i.exec(rest);
 
   return { deck, path: rest, subdiv: subdiv ? Number(subdiv[1]) : null };
 }
@@ -102,7 +116,10 @@ export function parseRkbxOscConfig(text: string): RkbxConfigProbe {
     const enabled = /osc[a-z_-]*\s*[:=]\s*(true|false|1|0|yes|no|on|off)\b/i.exec(line);
 
     if (enabled) oscEnabled = /true|1|yes|on/i.test(enabled[1] ?? "");
-    const dest = /((?:\d{1,3}\.){3}\d{1,3}:\d{2,5})/.exec(line);
+    // Only a key that names a destination may set it: an osc_input or listen
+    // address on a later line must not win by being last (batch-44).
+    const key = /^([a-z0-9_-]+)\s*[:=]/i.exec(line.toLowerCase())?.[1] ?? "";
+    const dest = key.includes("dest") ? /((?:\d{1,3}\.){3}\d{1,3}:\d{2,5})/.exec(line) : null;
 
     if (dest) destination = dest[1] ?? null;
   }
@@ -120,8 +137,10 @@ export interface RkbxSetupInput {
   lastAddress: string | null;
 }
 
+type RkbxSetupStepId = "installed" | "osc-enabled" | "destination" | "version" | "receiving";
+
 interface RkbxSetupStep {
-  id: string;
+  id: RkbxSetupStepId;
   ok: boolean;
   detail: string;
 }
@@ -166,10 +185,11 @@ export function checkRkbxSetup(input: RkbxSetupInput): RkbxSetupReport {
     ok: versionOk,
     detail: versionOk
       ? `Rekordbox ${input.installedRekordboxVersion} has community offsets for rkbx_link on this OS`
-      : `Rekordbox ${input.installedRekordboxVersion} is not a version rkbx_link supports here` +
-        (input.installedRekordboxVersion.startsWith("7.2.19")
-          ? " (no 7.2.19 offsets upstream as of 2026-10-12; re-sign and sudo consequences apply to a version change)"
-          : " (re-sign and sudo consequences apply to a version change)"),
+      : // Derived from the maintained list, never an inlined version or date:
+        // those drift away from supportedVersions (batch-44).
+        `Rekordbox ${input.installedRekordboxVersion} is not a version rkbx_link supports here:` +
+        ` supported versions are ${input.supportedVersions.join(", ")}` +
+        " (re-sign and sudo consequences apply to a version change)",
   });
   const receiving = input.packetsReceived > 0;
   steps.push({
@@ -183,12 +203,17 @@ export function checkRkbxSetup(input: RkbxSetupInput): RkbxSetupReport {
 
   if (!failed) return { state: "receiving", steps, remedy: "" };
 
-  const state: RkbxSetupReport["state"] =
-    failed.id === "installed" ? "not-installed"
-    : failed.id === "osc-enabled" ? "osc-disabled"
-    : failed.id === "destination" ? "wrong-destination"
-    : failed.id === "version" ? "unsupported-version"
-    : "no-packets";
+  // Exhaustive by type: a new or renamed step without a mapping fails to
+  // compile instead of silently reporting "no-packets" for a foreign step.
+  const state = STATE_BY_STEP[failed.id];
 
   return { state, steps, remedy: failed.detail };
 }
+
+const STATE_BY_STEP: Record<RkbxSetupStepId, RkbxSetupReport["state"]> = {
+  installed: "not-installed",
+  "osc-enabled": "osc-disabled",
+  destination: "wrong-destination",
+  version: "unsupported-version",
+  receiving: "no-packets",
+};

@@ -33,6 +33,9 @@ describe("rkbx_link address mapping (T-LIVE-03)", () => {
     expect(parseRkbxAddress("/1/time")).toEqual({ deck: 1, path: "time", subdiv: null });
     expect(parseRkbxAddress("/master/bpm/current")).toEqual({ deck: "master", path: "bpm/current", subdiv: null });
     expect(parseRkbxAddress("/3/beat/subdiv/2")).toEqual({ deck: 3, path: "beat/subdiv/2", subdiv: 2 });
+    // Casing variants still register as subdiv; the path keeps its spelling,
+    // and the consumer branches on subdiv before touching path.
+    expect(parseRkbxAddress("/3/Beat/Subdiv/2")?.subdiv).toBe(2);
     expect(parseRkbxAddress("/deck1/time")).toBeNull();
     expect(parseRkbxAddress("/9/time")).toBeNull();
   });
@@ -211,6 +214,16 @@ describe("rkbx_link setup verification (T-LIVE-04 logic, T-LIVE-03 DoD)", () => 
     expect(probe.oscEnabled).toBe(true);
     expect(probe.destination).toBe(EXPECTED_DESTINATION);
     expect(probe.lines).toHaveLength(2);
+  });
+
+  it("scopes the destination to dest-keyed lines, not the last address seen", () => {
+    // A listen/input address after the destination must not win by being last:
+    // it would fake a wrong-destination state against the real destination.
+    const probe = parseRkbxOscConfig("osc = true\nosc_dest = 127.0.0.1:4460\nosc_input = 127.0.0.1:4461\n");
+    expect(probe.destination).toBe(EXPECTED_DESTINATION);
+    // No dest-keyed line: report no destination rather than guessing.
+    const none = parseRkbxOscConfig("osc = true\nosc_input = 127.0.0.1:4461\n");
+    expect(none.destination).toBeNull();
   });
 
   it("reports each missing step with its state", () => {

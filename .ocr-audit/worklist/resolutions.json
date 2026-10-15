@@ -3763,6 +3763,66 @@
       "line": 84,
       "verdict": "fixed",
       "evidence": "Re-assert test now drives an actual track change with fresh loop values (12.5/14.5/8), independent of the first test."
+    },
+    {
+      "path": "packages/rekordbox-live/src/agent-api.test.ts",
+      "line": 23,
+      "verdict": "fixed",
+      "evidence": "requests buffer now read: the resolve test asserts the wire hit the documented endpoint path and no request URL ever contains the token."
+    },
+    {
+      "path": "packages/rekordbox-live/src/agent-api.test.ts",
+      "line": 62,
+      "verdict": "fixed",
+      "evidence": "closeAgent calls closeAllConnections() so keep-alive sockets and hung requests cannot stall teardown; the hang test's finally does the same."
+    },
+    {
+      "path": "packages/rekordbox-live/src/agent-api.test.ts",
+      "line": 70,
+      "verdict": "fixed",
+      "evidence": "Timeout path exercised with a never-answering server: resolveContent maps it to not-present (no answer), never not-found; the probe earlier proved it is distinguishable from a refusal."
+    },
+    {
+      "path": "packages/rekordbox-live/src/agent-api.test.ts",
+      "line": 91,
+      "verdict": "fixed",
+      "evidence": "deadFirst fixture added: candidate[0] 404s, candidate[1] serves, resolved.endpoint pinned to AGENT_RESOLVE_ENDPOINTS[1]; the 404-continue branch is now covered."
+    },
+    {
+      "path": "packages/rekordbox-live/src/agent-api.test.ts",
+      "line": 113,
+      "verdict": "fixed",
+      "evidence": "Ephemeral bind-then-close port replaces port 1; probe asserts present:false with the no-answer reason and resolve asserts not-present."
+    },
+    {
+      "path": "packages/rekordbox-live/src/follow.ts",
+      "line": 48,
+      "verdict": "fixed",
+      "evidence": "combineTransport excludes an explicitly stopped peer when an AX beat is readable (AX wins as the live source); a stopped peer with no AX still reports its beat with playing:false. index.test covers both."
+    },
+    {
+      "path": "packages/rekordbox-live/src/follow.ts",
+      "line": 74,
+      "verdict": "fixed",
+      "evidence": "Subdiv match is case-insensitive; the consumer branches on subdiv before path, so casing variants now register instead of dropping to unknownAddresses (test added)."
+    },
+    {
+      "path": "packages/rekordbox-live/src/follow.ts",
+      "line": 96,
+      "verdict": "fixed",
+      "evidence": "Destination is scoped to dest-keyed lines (key before [:=] must contain 'dest'); an osc_input address after the destination no longer wins by being last, and no dest key reports null (tests added)."
+    },
+    {
+      "path": "packages/rekordbox-live/src/follow.ts",
+      "line": 159,
+      "verdict": "fixed",
+      "evidence": "Version remedy derives from supportedVersions (joined list); the inlined 7.2.19 and 2026-10-12 literals are gone, and the setup-assistant test now pins the derived message."
+    },
+    {
+      "path": "packages/rekordbox-live/src/follow.ts",
+      "line": 177,
+      "verdict": "fixed",
+      "evidence": "Step ids are a union type and STATE_BY_STEP is an exhaustive Record: a new or renamed step fails to compile instead of silently reporting no-packets via a catch-all chain."
     }
   ],
   "batch-45": [

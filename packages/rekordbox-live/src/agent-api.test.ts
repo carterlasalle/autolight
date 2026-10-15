@@ -22,7 +22,7 @@ interface FakeAgent {
 // With malformedFirst the first candidate answers 200 without a path key so
 // failover must reach the second; errorId answers 500 to prove server errors
 // are distinct from not-found.
-async function fakeAgent(opts: { malformedFirst?: boolean; errorId?: string } = {}): Promise<FakeAgent> {
+async function fakeAgent(opts: { malformedFirst?: boolean; deadFirst?: boolean; errorId?: string } = {}): Promise<FakeAgent> {
   const requests: string[] = [];
 
   const server = createServer((req, res) => {
@@ -60,6 +60,13 @@ async function fakeAgent(opts: { malformedFirst?: boolean; errorId?: string } = 
     }
 
     if (url === "/api/data/1234") {
+      if (opts.deadFirst) {
+        res.statusCode = 404;
+        res.end("gone");
+
+        return;
+      }
+
       if (opts.malformedFirst) {
         res.statusCode = 200;
         res.setHeader("content-type", "application/json");
@@ -74,7 +81,7 @@ async function fakeAgent(opts: { malformedFirst?: boolean; errorId?: string } = 
       return;
     }
 
-    if (opts.malformedFirst && (url === "/api/data/1234/path" || url === "/api/data/track/1234")) {
+    if ((opts.malformedFirst || opts.deadFirst) && (url === "/api/data/1234/path" || url === "/api/data/track/1234")) {
       res.statusCode = 200;
       res.setHeader("content-type", "application/json");
       res.end(JSON.stringify({ path: "/music/track.mp3" }));
@@ -98,6 +105,9 @@ async function fakeAgent(opts: { malformedFirst?: boolean; errorId?: string } = 
 async function closeAgent(agent: FakeAgent): Promise<void> {
   const { promise, resolve } = Promise.withResolvers<void>();
   agent.server.close(() => resolve());
+  // The client uses keep-alive sockets: close() alone waits for them to end,
+  // and a hung request would leave the callback pending forever.
+  agent.server.closeAllConnections();
   await promise;
 }
 
@@ -129,6 +139,10 @@ describe("Rekordbox agent API client (T-LIVE-08)", () => {
       expect(resolved.ok).toBe(true);
       expect(resolved.path).toBe("/music/track.mp3");
       expect(resolved.endpoint).toBe(AGENT_RESOLVE_ENDPOINTS[0]?.replace("{id}", "1234"));
+      // Wire-level: the resolve endpoint path was hit and the token travels in
+      // the Authorization header only, never in a query string.
+      expect(agent.requests).toContain(AGENT_RESOLVE_ENDPOINTS[0]?.replace("{id}", "1234"));
+      expect(agent.requests.every((request) => !request.includes(TOKEN))).toBe(true);
       expect(await client.resolveContent("9999")).toMatchObject({ ok: false, reason: "not-found" });
       client.forgetToken();
       expect(client.hasToken()).toBe(false);
@@ -181,9 +195,67 @@ describe("Rekordbox agent API client (T-LIVE-08)", () => {
     }
   });
 
+  it("fails over from a dead first endpoint to a later candidate", async () => {
+    const agent = await fakeAgent({ deadFirst: true });
+
+    try {
+      const client = new RekordboxAgentClient({ port: agent.port, timeoutMs: 500 });
+      client.adoptToken(TOKEN, "manual");
+      // The first candidate 404s: the loop must continue, not report not-found.
+      const resolved = await client.resolveContent("1234");
+      expect(resolved.ok).toBe(true);
+      expect(resolved.path).toBe("/music/track.mp3");
+      expect(resolved.endpoint).toBe(AGENT_RESOLVE_ENDPOINTS[1]?.replace("{id}", "1234"));
+      expect(agent.requests).toContain("/api/data/1234");
+    } finally {
+      await closeAgent(agent);
+    }
+  });
+
+  it("times out as not-present, never as not-found", async () => {
+    // A server that accepts and never answers: the client's inactivity
+    // timeout must map to not-present (no answer), not to a content verdict.
+    const server = createServer(() => {
+      // Deliberately no response.
+    });
+    const { promise, resolve } = Promise.withResolvers<void>();
+    server.listen(0, "127.0.0.1", () => resolve());
+    await promise;
+    const address = server.address();
+    const port = address !== null && typeof address === "object" ? address.port : 0;
+
+    try {
+      const client = new RekordboxAgentClient({ port, timeoutMs: 120 });
+      client.adoptToken(TOKEN, "manual");
+      const resolved = await client.resolveContent("1234");
+      expect(resolved).toMatchObject({ ok: false, reason: "not-present" });
+    } finally {
+      const closed = Promise.withResolvers<void>();
+      server.close(() => closed.resolve());
+      server.closeAllConnections();
+      await closed.promise;
+    }
+  });
+
   it("reports not-present when nothing listens on the port", async () => {
-    const client = new RekordboxAgentClient({ port: 1, timeoutMs: 300 });
-    expect(await client.probe()).toMatchObject({ present: false });
+    // Bind and close an ephemeral port: guaranteed free, unlike a privileged
+    // port guess that a stray service or a loaded host could subvert.
+    const throwaway = createServer();
+    const { promise, resolve } = Promise.withResolvers<void>();
+    throwaway.listen(0, "127.0.0.1", () => resolve());
+    await promise;
+    const address = throwaway.address();
+    const port = address !== null && typeof address === "object" ? address.port : 0;
+
+    await new Promise<void>((done) => {
+      throwaway.close(() => done());
+      throwaway.closeAllConnections();
+    });
+
+    const client = new RekordboxAgentClient({ port, timeoutMs: 300 });
+    const probe = await client.probe();
+    expect(probe).toMatchObject({ present: false, status: null });
+    expect(probe.reason).toContain("no answer");
     client.adoptToken(TOKEN, "manual");
     expect(await client.resolveContent("1234")).toMatchObject({ ok: false, reason: "not-present" });
   });

@@ -129,4 +129,17 @@ describe("rekordbox-live", () => {
     expect(held.source).toBe("preview");
     expect(held.beat).toBe(9);
   });
+  it("prefers the live AX reading over a stopped peer's stale beat", () => {
+    const est = { estimatedBeat: 9, estimatedBpm: 174 };
+    // Peer reports a beat but is explicitly stopped: AX elapsed is the
+    // honest live source, not the leftover peer beat.
+    const live = combineTransport({ prolink: { beat: 42, playing: false, bpm: 174, peerPresent: true }, ax: { beat: 7, playing: true }, ...est });
+    expect(live.source).toBe("ax-beat");
+    expect(live.beat).toBe(7);
+    // Same stopped peer with no AX reading: report the peer beat as-is so
+    // playing:false reaches consumers instead of a fabricated live state.
+    const only = combineTransport({ prolink: { beat: 42, playing: false, bpm: 174, peerPresent: true }, ax: { beat: null, playing: null }, ...est });
+    expect(only.source).toBe("prolink");
+    expect(only.playing).toBe(false);
+  });
 });
