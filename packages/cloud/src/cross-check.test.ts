@@ -34,8 +34,36 @@ describe("cloud cross-check in qualification", () => {
     expect(out.mismatchRecorded).toBe(true);
     expect(out.measuredSegmentCount).toBe(14);
     expect(out.declaredSegmentCount).toBe(20);
-    expect(out.evidenceNote).toContain("14");
-    expect(out.evidenceNote).toContain("20");
+    // The full note, labeled: bare digit substrings would pass with the
+    // values narrated backwards (batch-54).
+    expect(out.evidenceNote).toBe(
+      "Cloud declares 20 segments for H6076 but the wizard measured 14. Measured count kept; mismatch recorded.",
+    );
+  });
+
+  it("drives a real parsed declared count through the cross-check (parse precedence)", () => {
+    const parsed = parseDeviceEntry({
+      device: "AA:BB:CC:DD:EE:01",
+      model: "H6076",
+      deviceName: "Desk Strip",
+      controllable: true,
+      retrievable: true,
+      supportCmds: [],
+      properties: { segmentCount: "12", zoneCount: 20, segments: 12.9 },
+    });
+
+    // segments wins, floors to 12; a string key never counts.
+    expect(parsed.capabilities.declaredSegmentCount).toBe(12);
+    const out = crossCheckQualification({
+      hardwareId: "AA:BB:CC:DD:EE:01",
+      model: "H6076",
+      measuredSegmentCount: 14,
+      cloud: parsed,
+    });
+
+    expect(out.comparison).toBe("disagree");
+    expect(out.declaredSegmentCount).toBe(12);
+    expect(out.mismatchRecorded).toBe(true);
   });
 
   it("records nothing on agreement", () => {
@@ -90,5 +118,29 @@ describe("cloud cross-check in qualification", () => {
     expect(compareDeclaredSegments(14, 14)).toBe("agree");
     expect(compareDeclaredSegments(14, 20)).toBe("disagree");
     expect(compareDeclaredSegments(14, null)).toBe("cloud-silent");
+  });
+
+  it("handles degenerate declared values explicitly", () => {
+    // NaN never agrees: the comparison is strict equality.
+    expect(compareDeclaredSegments(Number.NaN, Number.NaN)).toBe("disagree");
+    // A fractional declaration is its own value, not a silent agreement.
+    expect(compareDeclaredSegments(14.5, 14)).toBe("disagree");
+    // A cloud declaring 0 flows through the parser as silent (0 is not a
+    // usable count), never as a false agreement with a zero measurement...
+    const zero = parseDeviceEntry({
+      device: "d",
+      model: "H6076",
+      deviceName: "x",
+      controllable: true,
+      retrievable: true,
+      supportCmds: [],
+      properties: { segments: 0 },
+    });
+
+    expect(zero.capabilities.declaredSegmentCount).toBeNull();
+    expect(compareDeclaredSegments(0, zero.capabilities.declaredSegmentCount)).toBe("cloud-silent");
+    // ...while a direct zero-to-zero comparison is a real agreement.
+    expect(compareDeclaredSegments(0, 0)).toBe("agree");
+    expect(compareDeclaredSegments(14, 0)).toBe("disagree");
   });
 });

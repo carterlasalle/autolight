@@ -65,13 +65,36 @@ describe("ble simulator (T-BLE-09)", () => {
   });
 
   it("stalls past the budget and enforces one connection at a time", async () => {
-    const adapter = new SimBleAdapter({ kind: "noble", clock: () => 1000 });
+    // A movable clock: the stall must come from budget exhaustion inside the
+    // 1000 ms window and recover once the stall window elapses, not from two
+    // writes sharing one frozen timestamp (batch-54).
+    let now = 1000;
+    const adapter = new SimBleAdapter({ kind: "noble", clock: () => now });
     const peripheral = new SimPeripheral({ address: "AA:BB:CC:DD:EE:92", zones: 4, budgetHz: 10 });
     adapter.add(peripheral);
     const connection = await adapter.connect("AA:BB:CC:DD:EE:92");
+
     await connection.write(blePower(true));
+    expect(peripheral.power).toBe(true);
+    // 50 ms later: inside the 100 ms budget spacing -> stalled, not applied.
+    now += 50;
     await connection.write(blePower(false));
-    expect(peripheral.metrics.stalled).toBeGreaterThan(0);
+    expect(peripheral.metrics.stalled).toBe(1);
+    expect(peripheral.power).toBe(true);
+
+    // Inside the 2 s stall window every write counts stalled and is dropped.
+    now += 100;
+    await connection.write(blePower(false));
+    expect(peripheral.metrics.stalled).toBe(2);
+    expect(peripheral.power).toBe(true);
+
+    // Past stalledUntil (1050 + 2000) writes land again, and the 1000 ms
+    // window has evicted the old timestamps so no spacing stall recurs.
+    now += 2000;
+    await connection.write(blePower(false));
+    expect(peripheral.power).toBe(false);
+    expect(peripheral.metrics.stalled).toBe(2);
+
     await expect(adapter.connect("AA:BB:CC:DD:EE:92")).rejects.toThrow(/one connection/);
     await connection.disconnect();
     const retry = await adapter.connect("AA:BB:CC:DD:EE:92");
@@ -93,11 +116,19 @@ describe("ble simulator (T-BLE-09)", () => {
     const peripheral = new SimPeripheral({ address: "AA:BB:CC:DD:EE:95", zones: 2, budgetHz: null, renderHoldMs: 2000 });
     const frame = bleHostColorOne({ r: 9, g: 9, b: 9 });
     expect(decodeHostColor(frame)).not.toBeNull();
+    // Channel order end to end: equal components cannot prove rgb order, so
+    // a distinct-valued frame is decoded through the peripheral (batch-54).
+    const varied = new SimPeripheral({ address: "AA:BB:CC:DD:EE:97", zones: 2, budgetHz: null });
+    varied.handleWrite(bleHostColorOne({ r: 1, g: 2, b: 3 }), 7000);
+    expect(varied.painted[0]).toEqual([1, 2, 3]);
     peripheral.handleWrite(frame, 7000);
     expect(peripheral.painted[0]).toEqual([9, 9, 9]);
     expect(peripheral.hostColorHeld(7000)).toBe(true);
+    // Exact boundary: 7000 + renderHoldMs is already expired (strict <).
+    expect(peripheral.hostColorHeld(8999)).toBe(true);
+    expect(peripheral.hostColorHeld(9000)).toBe(false);
     expect(peripheral.hostColorHeld(9001)).toBe(false);
-    expect(simHostColorExpired(peripheral, 9001)).toBe(true);
+    expect(simHostColorExpired(peripheral, 9000)).toBe(true);
   });
 
   it("records the provisioning transfer bytes in arrival order", () => {
@@ -110,8 +141,16 @@ describe("ble simulator (T-BLE-09)", () => {
     peripheral.handleWrite(new Uint8Array(Buffer.from(simGoldenFrame(0xa1, 0x11, [...second]), "hex")), 3000);
     peripheral.handleWrite(new Uint8Array(Buffer.from(simGoldenFrame(0x33, 0x17, [0x00]), "hex")), 4000);
     const received = [...simProvisionBytes(peripheral)];
-    expect(received.slice(0, 3)).toEqual([1, 2, 3]);
-    expect(received.slice(17, 19)).toEqual([4, 5]);
+    // Full padded structure, not magic offsets: each 17-byte chunk keeps the
+    // payload then its trailing zeros, so padding corruption and reordering
+    // both fail here (batch-54).
+    const chunkBytes = peripheral.provisioned[0]?.length ?? 0;
+
+    expect(chunkBytes).toBe(17);
+    expect(received).toEqual([
+      1, 2, 3, ...Array.from({ length: chunkBytes - 3 }, () => 0),
+      4, 5, ...Array.from({ length: chunkBytes - 2 }, () => 0),
+    ]);
     expect(peripheral.provisioned).toHaveLength(2);
     expect(peripheral.provisionComplete).toBe(true);
   });

@@ -4832,5 +4832,73 @@
       "verdict": "deferred",
       "evidence": "Same dirty-file deferral."
     }
+  ],
+  "batch-54": [
+    {
+      "path": "packages/ble/src/sim.test.ts",
+      "line": 127,
+      "verdict": "fixed",
+      "evidence": "Already satisfied at HEAD (fixed in e960f7e, batch-35): simContractChecks now asserts fresh-sweep invariants — families present, zero connects on unconnected peripherals, a readable version byte, and unarmed holds expired — not a typeof boolean."
+    },
+    {
+      "path": "packages/ble/src/sim.test.ts",
+      "line": 67,
+      "verdict": "fixed",
+      "evidence": "The stall test drives a movable clock: a 50 ms gap exhausts the 100 ms budget (stalled=1, write dropped), a write inside the 2 s stall window counts stalled=2, and past stalledUntil (with the 1000 ms window evicting old timestamps) writes land again — recovery and window filter both exercised."
+    },
+    {
+      "path": "packages/ble/src/sim.test.ts",
+      "line": 113,
+      "verdict": "fixed",
+      "evidence": "The transfer asserts the full padded structure derived from the chunk length (17): payload bytes then trailing zeros per chunk, so padding corruption or reordering fails; no magic offsets."
+    },
+    {
+      "path": "packages/ble/src/sim.test.ts",
+      "line": 94,
+      "verdict": "fixed",
+      "evidence": "Channel order proven with distinct rgb through the peripheral (painted [1,2,3]), and the hold boundary pinned exactly: 8999 held, 9000 expired (strict <), 9001 expired."
+    },
+    {
+      "path": "packages/cloud/src/cross-check.test.ts",
+      "line": 36,
+      "verdict": "fixed",
+      "evidence": "The mismatch note is asserted in full with labeled values; bare digit substrings could pass with the numbers narrated backwards."
+    },
+    {
+      "path": "packages/cloud/src/cross-check.test.ts",
+      "line": 30,
+      "verdict": "fixed",
+      "evidence": "A real parseDeviceEntry output (segments 12.9 floors to 12, string keys ignored, zoneCount fallback) drives the cross-check, so parser precedence is covered end to end."
+    },
+    {
+      "path": "packages/cloud/src/cross-check.test.ts",
+      "line": 33,
+      "verdict": "deferred",
+      "evidence": "crossCheckQualification has no production consumer yet (re-exported only) and the venue flow that should emit the record is under sibling edit (device-screens.test.ts dirty). The test keeps the pure-outcome contract; wiring belongs with the venue integration once the tree is clean."
+    },
+    {
+      "path": "packages/cloud/src/cross-check.test.ts",
+      "line": 85,
+      "verdict": "fixed",
+      "evidence": "Degenerate values pinned: NaN never agrees, fractional declarations disagree, a cloud declaring 0 parses silent, and direct 0/0 agrees while 14/0 disagrees."
+    },
+    {
+      "path": "apps/desktop/src/routes/venue/device-screens.test.ts",
+      "line": 4,
+      "verdict": "deferred",
+      "evidence": "File under sibling edit (dirty): deferred to avoid clobbering."
+    },
+    {
+      "path": "packages/analysis-client/package.json",
+      "line": 5,
+      "verdict": "deferred",
+      "evidence": "File under sibling edit (dirty): deferred to avoid clobbering."
+    },
+    {
+      "path": "packages/ble/src/provisioning.test.ts",
+      "line": 47,
+      "verdict": "deferred",
+      "evidence": "File under sibling edit (dirty): deferred to avoid clobbering."
+    }
   ]
 }
