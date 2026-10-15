@@ -200,6 +200,20 @@ describe("dsp (T-AUD-02)", () => {
 
     for (let i = 0; i < 4000; i += 1) state = agc.process(quiet);
     expect(state.gain).toBe(4);
+    // Full-scale frames converge to the target, not a clamp (input <= 1 can
+    // never drag the gain below target).
+    const saturated = new Float64Array(2048).fill(1);
+    let sat = { gain: 4, envelope: 0 };
+
+    for (let i = 0; i < 4000; i += 1) sat = agc.process(saturated);
+    expect(sat.gain).toBeCloseTo(AGC_DEFAULTS.target, 3);
+    // The lower clamp engages only for out-of-range frames so loud that even
+    // gain 0.25 overshoots the target.
+    const overshoot = new Float64Array(2048).fill(4);
+    let low = { gain: 4, envelope: 0 };
+
+    for (let i = 0; i < 4000; i += 1) low = agc.process(overshoot);
+    expect(low.gain).toBe(0.25);
   });
 
   it("holds the AGC gain through silence instead of walking to the clamp", () => {
@@ -250,6 +264,9 @@ describe("dsp (T-AUD-02)", () => {
     const slowEstimate = tempoFromOnsets(slow, hopSeconds)!;
     expect(slowEstimate.bpm).toBeGreaterThan(57);
     expect(slowEstimate.bpm).toBeLessThan(63);
+    // Both estimates carry real confidence, not just plausible BPMs.
+    expect(slowEstimate.confidence).toBeGreaterThan(0.5);
+    expect(slowEstimate.lagFrames).toBe(93);
     expect(tempoFromOnsets([1, 0, 1], hopSeconds)).toBeNull();
     // A constant envelope has no periodicity: every correlation is zero, so
     // there is no estimate to report (confidence-0 temps are not a tempo).

@@ -3511,6 +3511,18 @@
       "line": 24,
       "verdict": "fixed",
       "evidence": "Cross-kind selection exercised: one decision carries native (below target), grouped (ladder) and logical candidates together."
+    },
+    {
+      "path": "packages/reactive-audio/src/dsp.test.ts",
+      "line": 170,
+      "verdict": "fixed",
+      "evidence": "Both clamp edges now honest: quiet drives 4 (upper), full-scale converges to the 0.5 target (not a clamp), and only out-of-range input (4.0) reaches the 0.25 lower clamp — the probe proved full-scale converges to target, so the test states that reality."
+    },
+    {
+      "path": "packages/reactive-audio/src/dsp.test.ts",
+      "line": 185,
+      "verdict": "fixed",
+      "evidence": "The slow click-train now asserts confidence > 0.5 and its exact lagFrames (93), symmetric with the fast estimate."
     }
   ],
   "batch-42": [
