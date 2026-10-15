@@ -24,6 +24,19 @@ function recorder(): { port: FramePort; deliveries: Delivery[] } {
   };
 }
 
+// The port-observable invariant behind staleFrames: per device, delivered
+// frame indices only ever climb.
+function expectMonotonicPerDevice(deliveries: Delivery[]): void {
+  const last = new Map<string, number>();
+
+  for (const d of deliveries) {
+    const prev = last.get(d.device);
+
+    if (prev !== undefined) expect(d.frame).toBeGreaterThan(prev);
+    last.set(d.device, d.frame);
+  }
+}
+
 describe("fault injection suite", () => {
   it("holds the current look through DJ silence, never all-off", () => {
     const rec = recorder();
@@ -98,6 +111,13 @@ describe("fault injection suite", () => {
     expect(result.superseded).toBe(20);
     expect(rec.deliveries.filter((d) => d.frame >= 10 && d.frame < 20)).toHaveLength(0);
     expect(rec.deliveries.filter((d) => d.frame >= 30 && d.frame < 50)).toHaveLength(20);
+    // Duplication and reorder must resolve to one delivery per frame, not
+    // merely a matching window count: identity, not arithmetic.
+    const resolved = rec.deliveries.filter((d) => d.frame >= 30 && d.frame < 50).map((d) => `${d.device}:${d.frame}`);
+
+    expect(new Set(resolved).size).toBe(resolved.length);
+    expect(new Set(resolved.map((key) => key.split(":")[1])).size).toBe(20);
+    expectMonotonicPerDevice(rec.deliveries);
   });
 
   it("keeps frames flowing through port conflicts and multicast blocks", () => {
@@ -115,6 +135,15 @@ describe("fault injection suite", () => {
     expect(rec.deliveries).toHaveLength(120);
     expect(result.discoveryDegradedFrames).toBe(40);
     expect(result.staleFrames).toBe(0);
+    // Continuity, not just counts: every device delivered on every frame in
+    // the window, so a failover that stalled delivery would fail here.
+    for (const device of ["a", "b"]) {
+      const frames = rec.deliveries.filter((d) => d.device === device && d.frame >= 10 && d.frame < 50).map((d) => d.frame);
+
+      expect(frames).toHaveLength(40);
+      expect(new Set(frames).size).toBe(40);
+    }
+    expectMonotonicPerDevice(rec.deliveries);
   });
 
   it("has zero gap on renderer reload and one-frame recovery on host kill", () => {
@@ -130,12 +159,28 @@ describe("fault injection suite", () => {
       ],
     });
 
-    expect(rec.deliveries.filter((d) => d.frame === 30)).toHaveLength(2);
+    const reloadDeliveries = rec.deliveries.filter((d) => d.frame === 30);
+
+    expect(reloadDeliveries).toHaveLength(2);
+    // The reload emits the live frame, never a held/all-off payload.
+    expect(reloadDeliveries.every((d) => d.payload === "current")).toBe(true);
     const reload = result.measurements.find((x) => x.scenarioId === "reload")!;
+
     expect(reload.recoveryFrames).toBe(0);
     const host = result.measurements.find((x) => x.scenarioId === "hostkill")!;
+
     expect(host.othersContinued).toBe(true);
     expect(host.recoveryFrames).toBe(1);
+    const worker = result.measurements.find((x) => x.scenarioId === "workerkill")!;
+
+    expect(worker.framesDuringFault).toBe(0);
+    expect(worker.othersContinued).toBe(true);
+    expect(worker.recoveryFrames).toBe(1);
+    expect(worker.staleFrames).toBe(0);
+    // The killed worker's device stops during its window and resumes after.
+    expect(rec.deliveries.some((d) => d.device === "b" && d.frame >= 70 && d.frame < 80)).toBe(false);
+    expect(rec.deliveries.some((d) => d.device === "b" && d.frame === 81)).toBe(true);
+    expectMonotonicPerDevice(rec.deliveries);
   });
 
   it("runs behind the service entry point with counters in status", () => {

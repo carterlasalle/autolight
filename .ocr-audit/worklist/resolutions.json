@@ -4019,6 +4019,54 @@
       "line": 22,
       "verdict": "fixed",
       "evidence": "Coverage added for classifyDirection(both) -> split-independent, verifyOffset empty/mismatched refusals and >1 wrap, and a gapped run (gap between cell midpoints) mapping with full cell count."
+    },
+    {
+      "path": "apps/desktop/electron/services/fault-injection.test.ts",
+      "line": 57,
+      "verdict": "fixed",
+      "evidence": "staleFrames is now computed in runFaultSuite from real delivery indices (a frame at or below a device's last index increments total and per-scenario counters), so every assertion on it can fail; the recorder also asserts per-device monotonic frame indices."
+    },
+    {
+      "path": "apps/desktop/electron/services/fault-injection.test.ts",
+      "line": 120,
+      "verdict": "fixed",
+      "evidence": "workerkill is asserted (framesDuringFault 0, othersContinued, recovery 1, stale 0) plus device-b silence in its window and delivery at frame 81; the reload assertion checks payload 'current' so a held/all-off reload fails."
+    },
+    {
+      "path": "apps/desktop/electron/services/fault-injection.test.ts",
+      "line": 91,
+      "verdict": "fixed",
+      "evidence": "The duplication/reorder window asserts per-(device, frame) uniqueness plus 20 distinct frames, not just a window count."
+    },
+    {
+      "path": "apps/desktop/electron/services/fault-injection.test.ts",
+      "line": 104,
+      "verdict": "fixed",
+      "evidence": "The discovery-plane test asserts per-device continuity: each device delivered all 40 frames in the window with no repeats."
+    },
+    {
+      "path": "apps/desktop/electron/updater/index.test.ts",
+      "line": 20,
+      "verdict": "fixed",
+      "evidence": "checkOnLaunch=false is combined with liveActive/showLoaded: skip-disabled wins the report, pinning the precedence that was never constrained."
+    },
+    {
+      "path": "apps/desktop/electron/updater/index.test.ts",
+      "line": 23,
+      "verdict": "fixed",
+      "evidence": "canInstallUpdate(true, true) is asserted false, completing the truth table."
+    },
+    {
+      "path": "apps/desktop/electron/updater/index.test.ts",
+      "line": 28,
+      "verdict": "fixed",
+      "evidence": "The deferred and idle states are pinned with toEqual exact shapes (notice via stringContaining), so stale or unexpected fields fail."
+    },
+    {
+      "path": "apps/desktop/electron/updater/index.test.ts",
+      "line": 30,
+      "verdict": "fixed",
+      "evidence": "The misleading not.toContain('dialog') is replaced by the structural no-modal contract: the state shape carries exactly available/deferred/notice, so no modal flag can ride along."
     }
   ],
   "batch-47": [

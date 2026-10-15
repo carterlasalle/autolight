@@ -81,16 +81,22 @@ export function runFaultSuite(port: FramePort, opts: FaultSuiteOptions): FaultSu
   const throttleEvery = opts.throttleEvery ?? 4;
   const othersSeen = new Map<string, boolean>();
   const duringDelivered = new Map<string, number>();
+  const staleDuring = new Map<string, number>();
+  const lastDelivered = new Map<string, number>();
   const measurements: FaultMeasurement[] = [];
   let delivered = 0;
   let superseded = 0;
   let malformedDropped = 0;
   let discoveryDegradedFrames = 0;
+  let staleFrames = 0;
   // This runner resolves every tick synchronously (newest-wins: no queue),
   // so no frame is ever pending at once. The honest depth is the constant.
   const maxPending = 0;
 
-  for (const s of opts.scenarios) duringDelivered.set(s.id, 0);
+  for (const s of opts.scenarios) {
+    duringDelivered.set(s.id, 0);
+    staleDuring.set(s.id, 0);
+  }
 
   for (let frame = 0; frame < opts.frames; frame++) {
     const active = activeAt(opts.scenarios, frame);
@@ -129,6 +135,16 @@ export function runFaultSuite(port: FramePort, opts: FaultSuiteOptions): FaultSu
       // renderer reload keeps the show running through the same path.
       // Neither sends all-off.
       const deviceSilent = deviceFaults.some((s) => s.kind === "dj-silence");
+      // A delivery at or below the device's last frame index would be a
+      // stale/queued frame: counted from real deliveries, never assumed.
+      const last = lastDelivered.get(device);
+
+      if (last !== undefined && frame <= last) {
+        staleFrames += 1;
+        for (const s of deviceFaults) staleDuring.set(s.id, (staleDuring.get(s.id) ?? 0) + 1);
+      }
+
+      lastDelivered.set(device, frame);
       port.deliver(device, frame, deviceSilent ? "held" : "current");
       delivered += 1;
       for (const s of deviceFaults) duringDelivered.set(s.id, (duringDelivered.get(s.id) ?? 0) + 1);
@@ -155,14 +171,14 @@ export function runFaultSuite(port: FramePort, opts: FaultSuiteOptions): FaultSu
       // Reconnect re-arms and sends the current frame on the next tick; a
       // renderer reload has no gap at all (spec 106, 108).
       recoveryFrames: s.kind === "renderer-reload" ? 0 : 1,
-      staleFrames: 0,
+      staleFrames: staleDuring.get(s.id) ?? 0,
       // True only when another device actually delivered during the window;
       // an untargeted kill affects every peer, so nobody continued.
       othersContinued: untargetedKill ? false : !hasOthers ? affectedDevices.length > 0 && (duringDelivered.get(s.id) ?? 0) > 0 : othersSeen.get(s.id) === true,
     });
   }
 
-  return { measurements, delivered, superseded, malformedDropped, staleFrames: 0, maxPending, discoveryDegradedFrames };
+  return { measurements, delivered, superseded, malformedDropped, staleFrames, maxPending, discoveryDegradedFrames };
 }
 
 export class FaultInjectionService implements Service {
