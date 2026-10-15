@@ -4085,6 +4085,24 @@
       "line": 54,
       "verdict": "fixed",
       "evidence": "Named cursor helper documents the a/b contract; new cases cover deck B's independent beat, the empty-deck null path, the half-open section boundary (64 -> chorus) and a beat past the last section."
+    },
+    {
+      "path": "apps/desktop/src/app/security.test.ts",
+      "line": 53,
+      "verdict": "fixed",
+      "evidence": "register()/afterEach(unregisterAudioWindow) reset the module-level audio-window set per test; unregisterAudioWindow is a new production export, so no assertion depends on execution order and nothing leaks."
+    },
+    {
+      "path": "apps/desktop/src/app/security.test.ts",
+      "line": 29,
+      "verdict": "fixed",
+      "evidence": "The CSP test iterates every script-src* directive (script-src-elem cannot hide behind find()) and every directive's sources against a local-only allowlist naming the offender, for both the shipped and dev CSPs."
+    },
+    {
+      "path": "apps/desktop/src/app/security.test.ts",
+      "line": 44,
+      "verdict": "fixed",
+      "evidence": "Enforcement made observable: decidePermissionFor is exported as the pure rule the session handlers call, pinned by a truth table (media only to the registered audio window, midi/midiSysex by main-window identity or audio window, everything else denied); allowNewWindow now drives setWindowOpenHandler instead of a hardcoded deny. While gating, dead duplicates in main.ts (local StartupStage/STARTUP_ORDER/nextStage/SHUTDOWN_ORDER) were deleted; the lifecycle service owns those orders."
     }
   ],
   "batch-47": [

@@ -26,14 +26,8 @@ declare const __AUTOLIGHT_TEST_BUILD__: boolean;
 
 // Startup sequence (§132): DB → show worker → Govee → DJ adapter →
 // library watcher → analysis worker → venue → tracks → plans → arm → READY.
-type StartupStage =
-  | "db" | "show-worker" | "govee" | "dj-adapter" | "library"
-  | "analysis" | "venue" | "tracks" | "plans" | "arm" | "ready";
-
-const STARTUP_ORDER: StartupStage[] = [
-  "db", "show-worker", "govee", "dj-adapter", "library",
-  "analysis", "venue", "tracks", "plans", "arm", "ready",
-];
+// The order itself lives in services/lifecycle.ts (STARTUP_ORDER); the test
+// harness records stage timings by name through __testMarkStage.
 
 // TEST-BUILD ONLY (T-QA-02 harness contract): methods the journeys call
 // through `__autolightTestApi` on globalThis. Boot records real stage
@@ -57,7 +51,8 @@ async function __testShowLoop(): Promise<import("./services/simulator-show.js").
     const { SimulatorShow } = await import("./services/simulator-show.js");
     // Seed literal: no fixture paths, no repo-root math in the bundle.
     __testShow = new SimulatorShow();
-    // Mark in STARTUP_ORDER: the journey asserts non-decreasing atMs.
+    // Mark in the startup order (services/lifecycle.ts): the journey asserts
+    // non-decreasing atMs.
     __testMarkStage("show-worker");
     __testShow.loadTrack();
 
@@ -107,17 +102,6 @@ function registerTestApi(): void {
   (globalThis as { __autolightTestApi?: TestApi }).__autolightTestApi = api;
   __testMarkStage("db");
 }
-
-function nextStage(done: StartupStage[]): StartupStage | null {
-  return STARTUP_ORDER.find((s) => !done.includes(s)) ?? null;
-}
-
-// Graceful shutdown (§133): freeze UI → ending look → disarm → adapters →
-// analysis → flush → workers → exit.
-const SHUTDOWN_ORDER = [
-  "freeze-ui", "ending-look", "disarm", "dj-adapters",
-  "analysis", "flush-db", "workers", "exit",
-] as const;
 
 // T-SEC-03 hardening surface. Returned as data so the checklist test
 // (`electron/security.test.ts`) can assert every setting without Electron
@@ -245,30 +229,12 @@ function applySessionHardening(): void {
 
   // setPermissionRequestHandler + setPermissionCheckHandler: media device
   // enumeration consults the check handler, not only the request handler,
-  // so both are installed. Grant media ("media" + "audio-capture") only to
-  // the audio window and midi/midiSysex only to audio + main windows;
-  // everything else denied.
+  // so both are installed. The decision rule lives in decidePermissionFor;
+  // this wrapper supplies the live main-window identity.
   const decidePermission = (
     webContents: WebContents | null,
     permission: string,
-  ): boolean => {
-    const url = webContents?.getURL() ?? "";
-
-    if (!isTrustedLocalUrl(url)) return false;
-
-    if (permission === "media") {
-      return isAudioWindow(url);
-    }
-
-    if (permission === "midi" || permission === "midiSysex") {
-      // Full hardware access: the app's own main window (FLX4 WebMIDI
-      // fallback) or the registered hidden DSP window — never any page that
-      // merely happens to load from a local URL.
-      return webContents === mainWindowContents || isAudioWindow(url);
-    }
-
-    return false;
-  };
+  ): boolean => decidePermissionFor(webContents?.getURL() ?? "", permission, webContents === mainWindowContents);
 
   ses.setPermissionRequestHandler(
     (webContents, permission, callback) => {
@@ -294,8 +260,31 @@ export function registerAudioWindow(url: string): void {
   audioWindowUrls.add(url);
 }
 
+export function unregisterAudioWindow(url: string): void {
+  audioWindowUrls.delete(url);
+}
+
 export function isAudioWindow(url: string): boolean {
   return audioWindowUrls.has(url);
+}
+
+// Grant media ("media" + "audio-capture") only to the registered audio
+// window and midi/midiSysex only to the main window or that audio window;
+// everything else denied. Full hardware access is by identity, never by a
+// local URL check alone. Pure over the main-window identity so the rule is
+// testable without live webContents (batch-46).
+export function decidePermissionFor(url: string, permission: string, isMainWindow: boolean): boolean {
+  if (!isTrustedLocalUrl(url)) return false;
+
+  if (permission === "media") {
+    return isAudioWindow(url);
+  }
+
+  if (permission === "midi" || permission === "midiSysex") {
+    return isMainWindow || isAudioWindow(url);
+  }
+
+  return false;
 }
 
 async function boot(): Promise<void> {
@@ -339,9 +328,9 @@ async function boot(): Promise<void> {
 
   const win = new BrowserWindow(windowOptions);
 
-  // New-window guard: deny every popup; external links must go through an
-  // explicit shell.openExternal intent (none exists yet, so deny all).
-  win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  // New-window guard: popups follow the settings flag (deny today); external
+  // links must go through an explicit shell.openExternal intent.
+  win.webContents.setWindowOpenHandler(() => ({ action: settings.allowNewWindow ? "allow" : "deny" }));
   // Navigation guard: belt over the session-level suspenders. Read the URL
   // off the event object; positional args after details are deprecated.
   win.webContents.on("will-navigate", (nav) => {
@@ -382,7 +371,8 @@ async function boot(): Promise<void> {
   startCompositeFlx4();
 
   // Graceful shutdown (§133): before-quit and window close both run the
-  // SHUTDOWN_ORDER steps with per-step timeouts, then quitApp exits.
+  // lifecycle service's shutdown steps with per-step timeouts, then quitApp
+  // exits.
   const runGracefulShutdown = (): Promise<void> => {
     markShuttingDown();
 
