@@ -170,17 +170,22 @@ describe("dsp (T-AUD-02)", () => {
   it("stays quiet on a steady tone once the history is warm", () => {
     const hop = FFT_SIZE;
     const extractor = new LiveFeatureExtractor({ sampleRate: SAMPLE_RATE, fftSize: FFT_SIZE, hopSize: hop });
-    // 1000 Hz at 8192 Hz is frame-aligned, so consecutive frames are identical.
-    const tone = sine(1000, 2);
-    let onsets = 0;
+    // 1000 Hz at 8192 Hz is frame-aligned (250 cycles per 2048-sample
+    // frame), so consecutive frames are identical. 16 s = 64 frames: long
+    // enough that the 60-frame warm-up guard leaves steady frames to judge
+    // (a 2 s tone never reached the guard at all).
+    const tone = sine(1000, 16);
+    const fired: [number, number][] = [];
 
     for (let offset = 0; offset + hop <= tone.length; offset += hop) {
       const features = extractor.push(tone.subarray(offset, offset + hop));
 
-      if (offset >= 60 * hop && features.onset) onsets += 1;
+      if (offset >= 60 * hop && features.onset) fired.push([offset / hop, features.flux]);
     }
 
-    expect(onsets).toBe(0);
+    // The guard is non-vacuous: steady frames were actually evaluated, and
+    // none of them fired.
+    expect(fired).toEqual([]);
   });
 
   it("converges the AGC gain and clamps at the range edges", () => {

@@ -3427,6 +3427,12 @@
       "line": 65,
       "verdict": "documented-precondition",
       "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "packages/reactive-audio/src/dsp.test.ts",
+      "line": 156,
+      "verdict": "fixed",
+      "evidence": "Warm-up guard made non-vacuous: a 16 s frame-aligned tone (64 frames) reaches the 60-frame guard, fired[] is asserted empty, so the guard now judges real frames. Chasing it also found and fixed a REAL detector bug: the onset noise floor (1e-9) sat below the steady-tone flux noise (~2e-9), firing a spurious onset at frame 60; the floor is now 1e-6 (receipt in comment). Whole reactive-audio suite green."
     }
   ],
   "batch-42": [
@@ -3706,6 +3712,12 @@
       "line": 95,
       "verdict": "documented-precondition",
       "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "packages/storage/package.json",
+      "line": 14,
+      "verdict": "fixed",
+      "evidence": "@autolight/contracts moved to dependencies: fastpath.ts/validation.ts import its Zod schemas as runtime values. Other devDeps confirmed test-only (no non-test src imports). Storage suite green."
     }
   ],
   "batch-50": [

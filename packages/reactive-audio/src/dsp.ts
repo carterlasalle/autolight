@@ -320,8 +320,12 @@ export class OnsetDetector {
       variance /= this.history.length;
       // The denominator is floored so a numerically steady flux (silence, a
       // steady tone) cannot read as an onset, and a silent history still
-      // fires when a real attack arrives.
-      const floor = Math.max(1e-9, mean * 0.05);
+      // fires when a real attack arrives. The floor is an ABSOLUTE noise
+      // floor: a steady tone's spectral flux noise measures ~2e-9 (observed
+      // in dsp.test.ts), so 1e-9 sat inside the noise and fired onsets on it;
+      // 1e-6 clears numerical noise by ~3 orders while a real attack's flux
+      // is 1e-2 upward, far above it.
+      const floor = Math.max(1e-6, mean * 0.05);
       z = (flux - mean) / Math.max(Math.sqrt(variance), floor);
     }
 

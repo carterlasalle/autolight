@@ -10,8 +10,10 @@
     "lint": "tsc --noEmit -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
+  "dependencies": {
+    "@autolight/contracts": "^0.1.0"
+  },
   "devDependencies": {
-    "@autolight/contracts": "^0.1.0",
     "@autolight/dj-core": "^0.1.0",
     "@autolight/govee": "^0.1.0",
     "@autolight/ipc": "^0.1.0",
