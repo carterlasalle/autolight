@@ -1,13 +1,13 @@
 // T-RBL-01 / T-RBL-02 / T-RBL-06 through the service: DS-15 reader modes, the
 // typed queries the IPC layer exposes, the cross-check Diagnostics reports, and
 // the change events the watcher feeds (spec 4.1, §5, §141).
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LibraryService, type LibraryChangeEvent } from "./service.js";
-import type { SidecarRun, SidecarRunner } from "./sidecar.js";
+import type { SidecarCommand, SidecarRun, SidecarRunner } from "./sidecar.js";
 import { readFixturePayload, writeFixtureDb, type FixtureSummary } from "./test-fixtures.js";
 import type { NativeWatch, WatchedFile } from "./watch.js";
 
@@ -32,6 +32,20 @@ function fixture(): Fixture {
 
 function runnerReturning(payload: unknown, code = 0): SidecarRunner {
   return () => Promise.resolve({ code, stdout: JSON.stringify(payload), stderr: "" } satisfies SidecarRun);
+}
+
+function recordingRunner(payload: unknown): {
+  run: SidecarRunner;
+  invocations: { command: SidecarCommand; request: Record<string, unknown> }[];
+} {
+  const invocations: { command: SidecarCommand; request: Record<string, unknown> }[] = [];
+  const run: SidecarRunner = (command, stdin) => {
+    invocations.push({ command, request: JSON.parse(stdin) as Record<string, unknown> });
+
+    return runnerReturning(payload)(command, stdin);
+  };
+
+  return { run, invocations };
 }
 
 class StubNativeWatch implements NativeWatch {
@@ -112,12 +126,13 @@ describe("library service", () => {
   it("cross-checks counts, playlist membership and paths against the sidecar", async () => {
     const { dbPath, sharePath } = fixture();
     const payload = readFixturePayload(dbPath);
+    const sidecar = recordingRunner(payload);
 
     const service = await LibraryService.open({
       dbPath,
       sharePath,
       encrypted: false,
-      sidecar: { run: runnerReturning(payload) },
+      sidecar: { run: sidecar.run },
     });
 
     try {
@@ -127,6 +142,11 @@ describe("library service", () => {
       expect(agreement.ts).toEqual(payload.counts);
       expect(agreement.py).toEqual(payload.counts);
       expect(service.diagnostics().crossCheck.status).toBe("agree");
+      // The invocation contract: the sidecar is handed the configured
+      // database, the encrypted flag, and a bounded request.
+      expect(sidecar.invocations).toHaveLength(1);
+      expect(sidecar.invocations[0]?.command.command).toBeTruthy();
+      expect(sidecar.invocations[0]?.request).toMatchObject({ dbPath, encrypted: false, limit: expect.any(Number) });
 
       const disagreeing = await LibraryService.open({
         dbPath,
@@ -181,11 +201,12 @@ describe("library service", () => {
     const payload = readFixturePayload(join(root, "master.db"));
     const junk = join(root, "encrypted-master.db");
     writeFileSync(junk, "not a plain sqlite file");
+    const sidecar = recordingRunner(payload);
 
     const service = await LibraryService.open({
       dbPath: junk,
       sharePath,
-      sidecar: { run: runnerReturning(payload) },
+      sidecar: { run: sidecar.run },
     });
 
     try {
@@ -197,6 +218,11 @@ describe("library service", () => {
       expect(service.history()[0]?.trackCount).toBe(3);
       expect(service.diagnostics().crossCheck.status).toBe("disabled");
       expect(service.track("101")?.artist).toBe("Nova");
+      // The fallback asked the sidecar to read the very database the
+      // TypeScript reader could not open; the payload stands in for what a
+      // real pyrekordbox read of that file returns.
+      expect(sidecar.invocations).toHaveLength(1);
+      expect(sidecar.invocations[0]?.request).toMatchObject({ dbPath: junk });
     } finally {
       await service.close();
     }
@@ -213,47 +239,81 @@ describe("library service", () => {
 
   it("watches the database, the WAL and each track's files, and reports what changed", async () => {
     vi.useFakeTimers();
-    const { dbPath, sharePath } = fixture();
-    const native = new StubNativeWatch();
-
-    const service = await LibraryService.open({
-      dbPath,
-      sharePath,
-      mode: "rekordbox-connect",
-      watch: { engine: "auto", native, debounceMs: 0, pollMs: 60_000 },
-    });
 
     try {
-      const files = service.watchTracks(service.tracks().rows);
-      expect(files.filter((file) => file.kind === "db")).toHaveLength(1);
-      expect(files.filter((file) => file.kind === "wal")).toHaveLength(1);
-      expect(files.filter((file) => file.kind === "anlz").length).toBeGreaterThanOrEqual(3);
-      expect(files.filter((file) => file.kind === "audio")).toHaveLength(4);
-
-      const events: LibraryChangeEvent[] = [];
-      service.onChanged((event) => events.push(event));
-      await service.startWatching();
-      expect(native.started).toHaveLength(files.length);
-
-      const db = new DatabaseSync(dbPath);
+      const { dbPath, sharePath } = fixture();
+      const native = new StubNativeWatch();
+      const service = await LibraryService.open({
+        dbPath,
+        sharePath,
+        mode: "rekordbox-connect",
+        watch: { engine: "auto", native, debounceMs: 0, pollMs: 60_000 },
+      });
 
       try {
-        db.prepare(
-          `INSERT INTO djmdContent (ID, FolderPath, Title, ArtistID, BPM, Length) VALUES ('105', '/audio/105.mp3', 'Ember', 'a1', 140, 240)`,
-        ).run();
-      } finally {
-        db.close();
-      }
+        const files = service.watchTracks(service.tracks().rows);
 
-      native.fire(dbPath);
-      // The debounce edge is a timer, so the fake clock drives it.
-      vi.advanceTimersByTime(1);
-      expect(events).toHaveLength(1);
-      expect(events[0]?.diff?.added).toEqual(["105"]);
-      expect(events[0]?.invalidated).toEqual(["identity", "row"]);
-      expect(service.diagnostics().watcher).toEqual({ engine: "auto", missedChanges: 0, watchedFiles: files.length });
+        expect(files.filter((file) => file.kind === "db")).toHaveLength(1);
+        expect(files.filter((file) => file.kind === "wal")).toHaveLength(1);
+        expect(files.filter((file) => file.kind === "anlz")).toHaveLength(9);
+        expect(files.filter((file) => file.kind === "audio")).toHaveLength(4);
+
+        const events: LibraryChangeEvent[] = [];
+        service.onChanged((event) => events.push(event));
+        await service.startWatching();
+        // The native engine receives the exact watch set, paths included.
+        expect(native.started.map((file) => `${file.kind}:${file.path}`)).toEqual(
+          files.map((file) => `${file.kind}:${file.path}`),
+        );
+
+        const db = new DatabaseSync(dbPath);
+
+        try {
+          db.prepare(
+            `INSERT INTO djmdContent (ID, FolderPath, Title, ArtistID, BPM, Length) VALUES ('105', '/audio/105.mp3', 'Ember', 'a1', 140, 240)`,
+          ).run();
+        } finally {
+          db.close();
+        }
+
+        native.fire(dbPath);
+        // The debounce edge is a timer, so the fake clock drives it.
+        vi.advanceTimersByTime(1);
+        expect(events).toHaveLength(1);
+        expect(events[0]?.diff?.added).toEqual(["105"]);
+        expect(events[0]?.invalidated).toEqual(["identity", "row"]);
+
+        // A change only the slow sweep finds counts as missed: no native
+        // event ever fires for it.
+        const db2 = new DatabaseSync(dbPath);
+
+        try {
+          db2.prepare(
+            `INSERT INTO djmdContent (ID, FolderPath, Title, ArtistID, BPM, Length) VALUES ('106', '/audio/106.mp3', 'Halo', 'a1', 132, 200)`,
+          ).run();
+        } finally {
+          db2.close();
+        }
+
+        await vi.advanceTimersByTimeAsync(60_000);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(events).toHaveLength(2);
+        expect(events[1]?.diff?.added).toEqual(["106"]);
+
+        // A file only the sweep notices — the WAL moved with no native event
+        // for it since the last sweep — counts as a missed change.
+        const wal = files.find((file) => file.kind === "wal");
+
+        expect(wal).toBeDefined();
+        appendFileSync(wal!.path, Buffer.alloc(4));
+        await vi.advanceTimersByTimeAsync(60_001);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(events).toHaveLength(3);
+        expect(service.diagnostics().watcher).toEqual({ engine: "auto", missedChanges: 1, watchedFiles: files.length });
+      } finally {
+        await service.close();
+      }
     } finally {
-      await service.close();
       vi.useRealTimers();
     }
   });

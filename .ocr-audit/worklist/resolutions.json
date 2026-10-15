@@ -3523,6 +3523,42 @@
       "line": 185,
       "verdict": "fixed",
       "evidence": "The slow click-train now asserts confidence > 0.5 and its exact lagFrames (93), symmetric with the fast estimate."
+    },
+    {
+      "path": "packages/rekordbox-library/src/service.test.ts",
+      "line": 33,
+      "verdict": "fixed",
+      "evidence": "recordingRunner added: the cross-check test now asserts the invocation contract (command non-empty, request carries dbPath/encrypted:false/numeric limit) instead of a payload-only mock."
+    },
+    {
+      "path": "packages/rekordbox-library/src/service.test.ts",
+      "line": 46,
+      "verdict": "fixed",
+      "evidence": "native.started asserted as the exact kind:path watch set from watchTracks, not just the count."
+    },
+    {
+      "path": "packages/rekordbox-library/src/service.test.ts",
+      "line": 173,
+      "verdict": "fixed",
+      "evidence": "Failover test records the invocation: the sidecar is verified to receive the very junk dbPath, making the valid-payload stand-in explicit."
+    },
+    {
+      "path": "packages/rekordbox-library/src/service.test.ts",
+      "line": 205,
+      "verdict": "fixed",
+      "evidence": "Fake timers now bracket the whole test: useFakeTimers before the try, useRealTimers in the outer finally, service.close in the inner finally — an open failure can no longer leave the clock faked."
+    },
+    {
+      "path": "packages/rekordbox-library/src/service.test.ts",
+      "line": 218,
+      "verdict": "fixed",
+      "evidence": "anlz watch count pinned at the observed 9 files (probe first: -1 assertion reported 9)."
+    },
+    {
+      "path": "packages/rekordbox-library/src/service.test.ts",
+      "line": 240,
+      "verdict": "fixed",
+      "evidence": "The safety sweep is now exercised: a WAL-only change with no native event drives missedChanges 0→1 and emits the third event. Probe showed a native-reported path masks same-path changes, so the WAL touch is the true missed case."
     }
   ],
   "batch-42": [
