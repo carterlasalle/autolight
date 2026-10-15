@@ -283,7 +283,7 @@ export class PersistentConfigStore extends ConfigStore {
 
     for (const scope of PERSISTED) {
       for (const [k, v] of Object.entries(found[scope])) {
-        let liveSafe = false;
+        let liveSafe: boolean;
 
         try {
           liveSafe = defineKey(k).liveSafe;

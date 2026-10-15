@@ -131,7 +131,7 @@ export function detectSeratoRoots(opts: {
   if (configured !== null) push(configured, false);
   push(defaultSeratoRoot(opts.home), false);
   const volumesDir = opts.volumesDir ?? "/Volumes";
-  let volumes: string[] = [];
+  let volumes: string[];
 
   try {
     volumes = readdirSync(volumesDir);
@@ -280,7 +280,7 @@ export function readSeratoDatabase(root: string): { rows: SeratoTrackRow[]; reta
 /** Subcrates in name order; each keeps its own track order (spec: crates order). */
 export function readSeratoCrates(root: string): SeratoCrate[] {
   const dir = join(root, "Subcrates");
-  let entries: string[] = [];
+  let entries: string[];
 
   try {
     entries = readdirSync(dir).filter((name) => name.endsWith(".crate"));
@@ -316,7 +316,7 @@ export function readSeratoCrates(root: string): SeratoCrate[] {
  */
 export function readSeratoSmartCrates(root: string): SeratoSmartCrate[] {
   const dir = join(root, "SmartCrates");
-  let entries: string[] = [];
+  let entries: string[];
 
   try {
     entries = readdirSync(dir).filter((name) => name.endsWith(".scrate"));
@@ -463,7 +463,7 @@ export function seratoWatchFiles(root: string, rows: readonly SeratoTrackRow[]):
 
   for (const folder of ["Subcrates", "SmartCrates"]) {
     const dir = join(root, folder);
-    let entries: string[] = [];
+    let entries: string[];
 
     try {
       entries = readdirSync(dir);

@@ -137,7 +137,6 @@ export async function identify(
         b: capture.status.color.b,
       };
 
-  let path: IdentifyResult["path"];
   let restored: IdentifyResult["restored"];
 
   // The restore must run on every exit path: a mid-flash failure must not
@@ -174,7 +173,7 @@ export async function identify(
     return "observed-state";
   };
 
-  path = armed ? "stream" : "colorwc";
+  const path: IdentifyResult["path"] = armed ? "stream" : "colorwc";
 
   try {
     if (armed) {
@@ -187,7 +186,8 @@ export async function identify(
     await wait(options.flashMs);
     restored = await restore();
   } catch (error) {
-    restored = await restore();
+    // Restore for its side effect; the rejection propagates immediately.
+    await restore();
     throw error;
   }
 

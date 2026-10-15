@@ -1,4 +1,4 @@
-import { CC, NOTE, classifyCC, type Flx4Hint } from "@autolight/controller-flx4";
+import { NOTE, classifyCC, type Flx4Hint } from "@autolight/controller-flx4";
 import { ServiceTracker, messageOf, type Service, type ServiceStatus } from "./base.js";
 
 // midi-service (04-target-architecture section 1, DS-13): owns the FLX4 MIDI
@@ -147,11 +147,4 @@ export class MidiService implements Service {
   }
 }
 
-
-
-let instance: MidiService | null = null;
-
-function resetMidiService(): void {
-  instance = null;
-}
 

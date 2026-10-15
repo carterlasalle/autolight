@@ -9,7 +9,7 @@ const yaml = readFileSync("capabilities.yaml", "utf8");
 
 const ids = [...yaml.matchAll(/^- id: (\S+)/gm)].map((m) => m[1]);
 
-const statuses = [...yaml.matchAll(/^  status: (\S+)/gm)].map((m) => m[1]);
+const statuses = [...yaml.matchAll(/^ {2}status: (\S+)/gm)].map((m) => m[1]);
 
 let bad = 0;
 

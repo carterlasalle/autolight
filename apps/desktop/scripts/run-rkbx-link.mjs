@@ -61,7 +61,6 @@ if (!existsSync(BINARY)) fail(`sidecar binary not found at ${BINARY}`);
 if (!existsSync(OFFSETS)) fail(`offsets file not found at ${OFFSETS}`);
 
 let offsetsText = "";
-let known = [];
 
 if (!dryRun) {
   try {
@@ -70,7 +69,7 @@ if (!dryRun) {
     fail(`cannot read offsets file at ${OFFSETS}: ${err.message}`);
   }
 
-  known = versionsInOffsets(offsetsText);
+  const known = versionsInOffsets(offsetsText);
 
   console.log(`offsets at ${OFFSETS}: ${known.join(", ") || "(none)"}`);
 

@@ -935,7 +935,7 @@ export class GoveeLanManager implements StreamTransport {
       const text = await this.reply(entry.mac, retryMs, "devStatus");
 
       if (text !== null) {
-        let parsed: LanDeviceStatus | null = null;
+        let parsed: LanDeviceStatus | null;
 
         try {
           parsed = parseDevStatus(JSON.parse(text));
@@ -2328,7 +2328,7 @@ export class GoveeLanManager implements StreamTransport {
   }
 
   private deliverToWaiters(senderIp: string, text: string): void {
-    let cmd: unknown = null;
+    let cmd: unknown;
 
     try {
       cmd = (JSON.parse(text) as { msg?: { cmd?: unknown } }).msg?.cmd ?? null;
@@ -2374,7 +2374,7 @@ export class GoveeLanManager implements StreamTransport {
     const text = msg.toString("utf8");
     const atMs = this.clock();
     this.deliverToWaiters(rinfo.address, text);
-    let raw: LanInbound = null;
+    let raw: LanInbound;
 
     try {
       raw = JSON.parse(text);

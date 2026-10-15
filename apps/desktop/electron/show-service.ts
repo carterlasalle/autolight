@@ -85,7 +85,7 @@ export function getShowService(): ShowServiceState {
 // live re-apply on every command; interface and port changes need restart.
 export function govee() {
   const svc = getShowService();
-  let userData = "";
+  let userData: string;
 
   try {
     userData = app.getPath("userData");

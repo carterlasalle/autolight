@@ -100,7 +100,7 @@ export function parseNdjson(ndjson: string): { kind: string; payload: Record<str
       ) throw new Error("bad shape");
       out.push(row);
     } catch (e) {
-      throw new Error(`session line ${i + 1}: ${(e as Error).message}`);
+      throw new Error(`session line ${i + 1}: ${(e as Error).message}`, { cause: e });
     }
   });
 

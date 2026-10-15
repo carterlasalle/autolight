@@ -17,6 +17,12 @@ describe("diagnostics model and change safety (T-UI-10/11, T-CFG-07)", () => {
     expect(isFresh(1000, 3001)).toBe(false);
     expect(isFresh(1000, 1500, 500)).toBe(true);
     expect(isFresh(1000, 1501, 500)).toBe(false);
+    // A future or invalid timestamp is never fresh: clock skew surfaces as
+    // stale instead of an eternal badge (batch-50).
+    expect(isFresh(6000, 5000)).toBe(false);
+    expect(isFresh(Number.NaN, 5000)).toBe(false);
+    expect(isFresh(1000, Number.NaN)).toBe(false);
+    expect(isFresh(Number.POSITIVE_INFINITY, 5000)).toBe(false);
   });
   it("records DJ events to ndjson by default", () => {
     // Full row shape, so the argument mapping cannot silently transpose.

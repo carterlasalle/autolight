@@ -113,5 +113,4 @@ export class IdentityService implements Service {
   }
 }
 
-let instance: IdentityService | null = null;
 

@@ -258,7 +258,7 @@ export async function readB2Status(
     if (text !== null) {
       answers += 1;
       rttMs = clock() - sentAt;
-      let decoded: LanInbound = null;
+      let decoded: LanInbound;
 
       try {
         decoded = JSON.parse(text);
@@ -302,7 +302,7 @@ export async function readDevStatus(
     if (text !== null) {
       answers += 1;
       rttMs = clock() - sentAt;
-      let decoded: LanInbound = null;
+      let decoded: LanInbound;
 
       try {
         decoded = JSON.parse(text);
@@ -535,9 +535,9 @@ export async function probeSegmentedCapability(
   // must not leave the unit armed on a live razer channel. The disarm frame
   // stays in the receipt on both paths, so a failed probe still shows what the
   // unit was sent.
-  let armedReadBack: CapabilityProbe["armedReadBack"] = "silent";
-  let b0 = false;
-  let b4 = false;
+  let armedReadBack: CapabilityProbe["armedReadBack"];
+  let b0: boolean;
+  let b4: boolean;
 
   try {
     await wait(armSettleMs);

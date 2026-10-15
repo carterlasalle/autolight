@@ -450,7 +450,7 @@ export function migrate(db: SqlExec, options: { target?: number } = {}): Migrate
 
       // SAFETY: the thrown value is always an Error here (db.exec/run and the
       // migration SQL throw Errors); reading its message is the contract.
-      throw new Error(`migration ${migration.version} (${migration.name}) failed: ${(error as Error).message}`);
+      throw new Error(`migration ${migration.version} (${migration.name}) failed: ${(error as Error).message}`, { cause: error });
     }
 
     applied.push(migration.version);

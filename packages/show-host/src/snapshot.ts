@@ -232,7 +232,7 @@ export function parseSnapshot(json: string): UiSnapshot {
   try {
     raw = JSON.parse(json) as unknown;
   } catch (err) {
-    throw new Error(`snapshot parse: invalid JSON (${err instanceof Error ? err.message : String(err)})`);
+    throw new Error(`snapshot parse: invalid JSON (${err instanceof Error ? err.message : String(err)})`, { cause: err });
   }
 
   const parsed = uiSnapshotSchema.safeParse(raw);

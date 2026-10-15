@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 function walk(dir, out = []) {
-  let names = [];
+  let names;
 
   try { names = readdirSync(dir); } catch { return out; }
 
@@ -49,7 +49,7 @@ for (const f of files) {
 // The update command itself must record reasons in the changelog.
 const changelog = join(root, "test-fixtures", "goldens", "CHANGELOG.md");
 
-let hasChangelog = false;
+let hasChangelog;
 
 try { hasChangelog = readFileSync(changelog, "utf8").length > 0; } catch { hasChangelog = false; }
 

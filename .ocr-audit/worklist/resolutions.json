@@ -4339,6 +4339,78 @@
       "line": 37,
       "verdict": "documented-precondition",
       "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "apps/desktop/src/routes/diagnostics/diagnostics-model.ts",
+      "line": 14,
+      "verdict": "fixed",
+      "evidence": "The guard is present at HEAD (future, NaN and non-finite timestamps all return false — landed with 9f0b7a7 without tests); the test now pins all four cases so the skew guard cannot silently regress."
+    },
+    {
+      "path": "eslint.config.mjs",
+      "line": 22,
+      "verdict": "fixed",
+      "evidence": "Dead 'analysis/.venv/**' ignore removed (**/.venv/** already matches)."
+    },
+    {
+      "path": "eslint.config.mjs",
+      "line": 26,
+      "verdict": "fixed",
+      "evidence": "Generated-output ignores added: .tmp, .ocr-audit, coverage, build, out, .turbo, *.tsbuildinfo."
+    },
+    {
+      "path": "eslint.config.mjs",
+      "line": 31,
+      "verdict": "fixed",
+      "evidence": "Globals block documented: no-undef stays off, the declarations exist for no-global-assign."
+    },
+    {
+      "path": "eslint.config.mjs",
+      "line": 53,
+      "verdict": "fixed",
+      "evidence": "preserve-caught-error is now 'error'. All six repo-wide violations attach { cause }: diagnostics session lines, show-host snapshot parse, migrate, and both storage driver throws (including the new chained fallback)."
+    },
+    {
+      "path": "eslint.config.mjs",
+      "line": 54,
+      "verdict": "fixed",
+      "evidence": "prefer-const / no-useless-assignment / no-regex-spaces no longer disabled repo-wide; they are scoped off only for test globs. 28 production/tool hits fixed across 19 files (dead singleton stubs deleted in four services, dead initializers removed, regex spaces {2}), plus tseslint.config() replaced by a plain flat array (deprecation). Whole-repo eslint is now clean."
+    },
+    {
+      "path": "packages/cloud/vitest.config.ts",
+      "line": 8,
+      "verdict": "fixed",
+      "evidence": "readdirSync uses withFileTypes and filters directories (skipping dot-directories), mirroring the root config, so only real packages become aliases."
+    },
+    {
+      "path": "packages/cloud/vitest.config.ts",
+      "line": 16,
+      "verdict": "fixed",
+      "evidence": "A regex subpath alias (@autolight/pkg/rest -> src/rest.ts) precedes the bare-id map, so subpath imports resolve to files instead of index.ts/<rest>."
+    },
+    {
+      "path": "packages/cloud/vitest.config.ts",
+      "line": 18,
+      "verdict": "fixed",
+      "evidence": "Excludes extend configDefaults.exclude and add **/dist/** instead of replacing the defaults; 16 tests pass under the package's own config."
+    },
+    {
+      "path": "packages/config/package.json",
+      "line": 5,
+      "verdict": "fixed",
+      "evidence": "files: ['dist'] (sibling convention), so src/, tests and tsconfig never reach npm pack."
+    },
+    {
+      "path": "packages/config/package.json",
+      "line": 18,
+      "verdict": "fixed",
+      "evidence": "prepare: tsc -p tsconfig.json builds dist before any pack/publish or git-ref install (exports point at dist)."
+    },
+    {
+      "path": "packages/config/package.json",
+      "line": 19,
+      "verdict": "fixed",
+      "evidence": "--passWithNoTests dropped: a missing suite now fails instead of silently reporting success."
     }
   ],
   "batch-51": [],

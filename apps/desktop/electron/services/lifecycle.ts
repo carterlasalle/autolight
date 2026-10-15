@@ -92,8 +92,14 @@ async function runShutdown(opts: ShutdownOptions): Promise<ShutdownStepLog[]> {
       const timer = Promise.withResolvers<true>();
       const handle = setTimeout(() => { timer.resolve(true); }, opts.timeoutMs);
 
+      // The port promise cannot be cancelled: observe it so a wedged step
+      // that rejects after the timeout never becomes an unhandled rejection,
+      // while a fast rejection still records its error below.
+      const guarded = Promise.resolve().then(() => port());
+      guarded.catch(() => {});
+
       try {
-        const result = await Promise.race([Promise.resolve(port()), timer.promise]);
+        const result = await Promise.race([guarded, timer.promise]);
         entry = result === true
           ? { step, ms: Date.now() - started, timedOut: true, error: `step timed out after ${opts.timeoutMs} ms` }
           : { step, ms: Date.now() - started, timedOut: false };
@@ -138,12 +144,12 @@ export function applyCrashPolicy(ports: CrashPolicyPorts): CrashPolicyResult {
   ports.safeLook("hold");
   const dim = Promise.withResolvers<void>();
 
-  const handle = setTimeout(() => {
+  // Do NOT unref: the safe-look dim must run even when nothing else keeps
+  // the loop alive, otherwise `dimmed` never resolves.
+  setTimeout(() => {
     ports.safeLook("dim");
     dim.resolve();
   }, ports.holdMs);
-
-  handle.unref?.();
   ports.restartShowHost();
 
   return {
@@ -170,7 +176,7 @@ export class LifecycleService implements Service {
   private readonly tracker = new ServiceTracker("lifecycle");
   private stages: StageRecord[] = STARTUP_ORDER.map((stage) => ({ stage, state: "pending" as StageState }));
   private accepting = true;
-  private readonly userDataDir: string | undefined;
+  private userDataDir: string | undefined;
 
   constructor(opts: LifecycleServiceOptions = {}) {
     this.userDataDir = opts.userDataDir;
@@ -211,13 +217,20 @@ export class LifecycleService implements Service {
     const found = this.stages.find((s) => s.stage === stage);
 
     if (!found) throw new Error(`unknown startup stage: ${stage}`);
+
+    // Terminal states never regress: ok/degraded/failed stay final.
+    if ((found.state === "ok" || found.state === "degraded" || found.state === "failed") && state !== found.state) {
+      return found;
+    }
+
     found.state = state;
 
     if (detail !== undefined) found.detail = detail;
 
-    if (state === "running") found.startedAtMs = Date.now();
+    if (state === "running") found.startedAtMs ??= Date.now();
 
-    if (state !== "running" && state !== "pending" && found.startedAtMs !== undefined) {
+    if (state !== "running" && state !== "pending") {
+      found.startedAtMs ??= Date.now();
       found.ms = Date.now() - found.startedAtMs;
     }
 
@@ -225,7 +238,7 @@ export class LifecycleService implements Service {
   }
 
   nextStage(): StageName | null {
-    const next = this.stages.find((s) => s.state !== "ok" && s.state !== "degraded");
+    const next = this.stages.find((s) => s.state === "pending" || s.state === "running");
 
     return next?.stage ?? null;
   }
@@ -258,10 +271,13 @@ export class LifecycleService implements Service {
     return runShutdown(opts);
   }
 
+  setUserDataDir(dir: string): void {
+    this.userDataDir = dir;
+  }
+
   crashPath(): string | null {
     return this.userDataDir === undefined ? null : crashRecordPath(this.userDataDir);
   }
 }
 
-let instance: LifecycleService | null = null;
 

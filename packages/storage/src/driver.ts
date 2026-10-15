@@ -251,6 +251,7 @@ export function openDatabase(options: OpenOptions): OpenResult {
       if (requested === "better-sqlite3") {
         throw new Error(
           `storage driver better-sqlite3 was requested but failed to open "${path}": ${(error as Error).message}`,
+          { cause: error },
         );
       }
 
@@ -263,6 +264,7 @@ export function openDatabase(options: OpenOptions): OpenResult {
         // or the caller never learns the real story (batch-49).
         throw new Error(
           `${fallbackReason}; node:sqlite fallback also failed to open "${path}": ${(fallbackError as Error).message}`,
+          { cause: fallbackError },
         );
       }
     }

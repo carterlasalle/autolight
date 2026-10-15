@@ -12,7 +12,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 // (root resolved above: tools/qa -> tools -> repo root)
 
 function walk(dir, out = []) {
-  let names = [];
+  let names;
 
   try { names = readdirSync(dir); } catch { return out; }
 

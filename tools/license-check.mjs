@@ -250,7 +250,7 @@ function tripwireScan(dir0 = root) {
       if (/skip[_-]?bart|seq[_-]?light/i.test(n)) { hits.push(rel); continue; }
 
       if (/\.(pt|pth|bin|safetensors|onnx|ckpt|weights)$/i.test(n)) {
-        let head = "";
+        let head: string;
 
         try { head = readFileSync(p, "utf8").slice(0, 400); } catch { head = ""; }
 

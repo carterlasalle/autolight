@@ -4,11 +4,13 @@
 // statement-shape pattern; the generic no-void fires on idiomatic floating
 // promises, so it stays off here. no-unused-vars stays off: Knip owns dead
 // code with entry-point awareness; ESLint flags test fixtures, dual
-// test/type imports, and intentional interface args. Run: yarn eslint .
+// test/type imports, and intentional interface args. Rules whose only
+// offenders are test fixtures are scoped to test globs instead of being
+// switched off repo-wide. Run: yarn eslint .
 import js from "@eslint/js";
 import tseslint from "typescript-eslint";
 
-export default tseslint.config(
+export default [
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
@@ -19,7 +21,13 @@ export default tseslint.config(
       "**/.venv/**",
       ".bughunt/**",
       ".omp/**",
-      "analysis/.venv/**",
+      ".tmp/**",
+      ".ocr-audit/**",
+      "coverage/**",
+      "**/build/**",
+      "**/out/**",
+      ".turbo/**",
+      "**/*.tsbuildinfo",
       "apps/desktop/e2e/**",
       "apps/desktop/journeys/**",
       "test-results/**",
@@ -28,6 +36,10 @@ export default tseslint.config(
   },
   {
     languageOptions: {
+      // The runtime globals the app's Node main/preload and renderer halves
+      // run on. no-undef stays off (typescript-eslint owns identifiers), so
+      // these declarations exist for no-global-assign: overwriting
+      // console/process/timers is an error even when nothing declares them.
       globals: {
         console: "readonly",
         process: "readonly",
@@ -44,20 +56,29 @@ export default tseslint.config(
       },
     },
     rules: {
-      // S5: no swallowed errors, no empty catches.
+      // S5: no swallowed errors, no empty catches, and every rethrow keeps
+      // its cause instead of dropping the original failure (batch-50).
       "no-empty": ["error", { allowEmptyCatch: false }],
+      "preserve-caught-error": "error",
       "@typescript-eslint/no-namespace": "off",
       "@typescript-eslint/no-this-alias": "off",
       "@typescript-eslint/no-explicit-any": "off",
       "@typescript-eslint/no-require-imports": "off",
-      "preserve-caught-error": "off",
-      "prefer-const": "off",
-      "no-useless-escape": "off",
-      "no-regex-spaces": "off",
-      "no-useless-assignment": "off",
       "no-unused-vars": "off",
       "@typescript-eslint/no-unused-vars": "off",
       "no-undef": "off",
     },
   },
-);
+  {
+    // Test fixtures deliberately reassign locals and spell escaped strings;
+    // production code keeps prefer-const, no-useless-assignment and
+    // no-regex-spaces (batch-50).
+    files: ["**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/*.test-support.ts"],
+    rules: {
+      "prefer-const": "off",
+      "no-useless-assignment": "off",
+      "no-regex-spaces": "off",
+      "no-useless-escape": "off",
+    },
+  },
+];

@@ -299,7 +299,7 @@ export function computeFields(
     f.uv[i * 2 + 1] = (ly - minY) / spanY;
     f.h[i] = Math.min(1, Math.max(0, c.pos.z / Math.max(1e-6, room.ceilingHeight)));
     let sRaw: number;
-    let tangent: Point2 = { x: 1, y: 0 };
+    let tangent: Point2;
 
     if (c.runId !== null && runById[c.runId] !== undefined) {
       const at = runPointAt(runById[c.runId]!, c.arcM);

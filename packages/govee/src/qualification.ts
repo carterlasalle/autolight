@@ -849,7 +849,7 @@ export class QualificationSession {
 
       const frames = chaseFrames(zones, "forward");
       const interval = 1000 / Math.max(1, rate);
-      let stuttered = false;
+      let stuttered: boolean;
 
       try {
         for (let tick = 0; tick < ticks; tick++) {

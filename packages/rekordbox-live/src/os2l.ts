@@ -151,7 +151,7 @@ export function splitOs2lMessages(chunk: string): { texts: string[]; tail: strin
 
 /** Parse one complete JSON frame text into an inbound message or a malformed report. */
 function parseOs2lText(item: string): Os2lDecodeResult {
-  let parsed: unknown = null;
+  let parsed: unknown;
 
   try {
     parsed = JSON.parse(item);

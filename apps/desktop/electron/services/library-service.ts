@@ -196,6 +196,5 @@ function defaultWatchRoot(root: string, onEvent: (file: string) => void): Librar
   };
 }
 
-let instance: LibraryService | null = null;
 
 
