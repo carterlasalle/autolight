@@ -133,6 +133,46 @@ describe("storage driver (T-DATA-01, DS-06)", () => {
     expect(() => openDatabase({ path: "/", driver: "better-sqlite3" })).toThrow(/better-sqlite3 was requested/);
   });
 
+  it("memoizes load probes but auto-mode opens re-test the native module", () => {
+    const first = moduleStatus("better-sqlite3");
+
+    // Same object while cached...
+    expect(moduleStatus("better-sqlite3")).toBe(first);
+
+    // ...and an auto-mode open re-probes, so a native module installed or
+    // rebuilt since the first probe is not pinned to the fallback for the
+    // process lifetime (batch-49).
+    const opened = openDatabase({ path: ":memory:", driver: "auto" });
+
+    try {
+      const reprobed = moduleStatus("better-sqlite3");
+
+      expect(reprobed).not.toBe(first);
+      expect(reprobed.available).toBe(first.available);
+      // The detail is a single line even when the underlying error carried a
+      // require stack.
+      expect(reprobed.detail).not.toContain("\n");
+    } finally {
+      opened.driver.close();
+    }
+  });
+
+  it("chains both causes when auto mode's native open and the fallback fail", () => {
+    const better = moduleStatus("better-sqlite3");
+
+    if (!better.available) {
+      console.info("fallback chain test needs better-sqlite3 to load; exercising node-sqlite only");
+
+      return;
+    }
+
+    // Both drivers fail on a directory path: the error must name the
+    // better-sqlite3 cause AND the fallback failure (batch-49).
+    expect(() => openDatabase({ path: "/", driver: "auto" })).toThrow(
+      /better-sqlite3 open failed.*node:sqlite fallback also failed/,
+    );
+  });
+
   it("keeps :memory: usable for tests without pretending it is WAL", () => {
     const opened = openDatabase({ path: ":memory:" });
 

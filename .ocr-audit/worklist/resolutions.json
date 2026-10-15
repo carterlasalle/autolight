@@ -4223,6 +4223,90 @@
       "line": 14,
       "verdict": "fixed",
       "evidence": "@autolight/contracts moved to dependencies: fastpath.ts/validation.ts import its Zod schemas as runtime values. Other devDeps confirmed test-only (no non-test src imports). Storage suite green."
+    },
+    {
+      "path": "packages/show-planner/src/cache.test.ts",
+      "line": 60,
+      "verdict": "fixed",
+      "evidence": "Already satisfied at HEAD (committed in d376528, no matching entry recorded): the key test perturbs fingerprint, plannerVersion, styleHash, venueHash and configHash pairwise, with stable equality for equal keys; 3 tests pass."
+    },
+    {
+      "path": "packages/show-planner/src/cache.test.ts",
+      "line": 64,
+      "verdict": "fixed",
+      "evidence": "Already satisfied at HEAD: the splice test covers a cue exactly at start (replaced), exactly at end (kept), multiple fresh cues in order, and an empty fresh array deleting the range."
+    },
+    {
+      "path": "packages/storage/src/driver.ts",
+      "line": 82,
+      "verdict": "fixed",
+      "evidence": "Load failures keep the whole collapsed message (require stack included, one line, 400-char cap) instead of dropping everything after line one; auto-mode openDatabase re-probes better-sqlite3 on every open, so a rebuilt/installed native module cannot pin the process to the fallback. Test: memoized identity + re-probe after an auto open."
+    },
+    {
+      "path": "packages/storage/src/driver.ts",
+      "line": 118,
+      "verdict": "fixed",
+      "evidence": "Both adapters cache compiled statements per SQL string (cleared on close), so per-row saveArtifact/lookup paths stop recompiling. run's row-count is left void (no consumer needs it yet)."
+    },
+    {
+      "path": "packages/storage/src/driver.ts",
+      "line": 204,
+      "verdict": "fixed",
+      "evidence": "Auto-mode fallback chains both causes: a node:sqlite open failure reports why better-sqlite3 was abandoned plus the fallback error, instead of dropping fallbackReason. Test asserts the chained message on a directory path."
+    },
+    {
+      "path": "packages/storage/src/driver.ts",
+      "line": 233,
+      "verdict": "fixed",
+      "evidence": "Empty pragma read-backs for synchronous and busy_timeout throw naming the pragma and path instead of silently substituting the requested value; syncName('') can no longer report OFF."
+    },
+    {
+      "path": "packages/storage/src/keys.test.ts",
+      "line": 7,
+      "verdict": "fixed",
+      "evidence": "normalizeTrackId names the offending input (JSON.stringify(id)), so '' and '   ' are distinct pinned failures via regex, not bare toThrow."
+    },
+    {
+      "path": "packages/storage/src/keys.test.ts",
+      "line": 30,
+      "verdict": "fixed",
+      "evidence": "Same-title labels asserted exactly ('Same Title - A (track-aa)' / '- B (track-bb)'), proving the artist plus minimal id prefix are the disambiguators."
+    },
+    {
+      "path": "packages/storage/src/keys.test.ts",
+      "line": 41,
+      "verdict": "fixed",
+      "evidence": "The Store closes in a finally."
+    },
+    {
+      "path": "packages/storage/src/keys.test.ts",
+      "line": 50,
+      "verdict": "fixed",
+      "evidence": "Plan loads assert exact JSON; planRow verifies the stored columns (track_id, seed, plan_json) and that sibling key parts do not resolve the other track's row."
+    },
+    {
+      "path": "packages/show-planner/src/hierarchy.test.ts",
+      "line": 56,
+      "verdict": "fixed",
+      "evidence": "One makeTrackModel factory carries the shared body; both fixtures override only id/duration/sections/events."
+    },
+    {
+      "path": "packages/show-planner/src/hierarchy.test.ts",
+      "line": 120,
+      "verdict": "fixed",
+      "evidence": "Ramps assert strict non-decreasing intensity (no 0.05 slack; the planner passes) and the build/impact beats derive from the fixture's section bounds."
+    },
+    {
+      "path": "packages/show-planner/src/hierarchy.test.ts",
+      "line": 138,
+      "verdict": "fixed",
+      "evidence": "Test renamed to the five emitted levels with a comment that CUE_LEVELS declares six and no style emits track-level cues yet; asserting 'track' would pin a level no code path produces."
+    },
+    {
+      "path": "packages/show-planner/src/hierarchy.test.ts",
+      "line": 167,
+      "verdict": "fixed",
+      "evidence": "Fixtures go through trackModelSchema.parse (which surfaced real drift: the old single-beat grids were schema-invalid), and the bad-plan cue is a typed PlanCue/CompiledShowPlan literal with no casts."
     }
   ],
   "batch-50": [

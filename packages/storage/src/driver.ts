@@ -85,9 +85,11 @@ export function moduleStatus(module: string): ModuleStatus {
     loadModule(module);
     status = { module, available: true, detail: "loads in this runtime" };
   } catch (error) {
-    // Module load errors carry a multi-line require stack; a status line wants
-    // the first line only.
-    const detail = ((error as Error).message.split("\n")[0] ?? "").trim() || "module did not load";
+    // Module load errors carry a require stack whose lines name the root
+    // cause (ABI mismatch, missing .node, wrong architecture): collapse the
+    // whole message onto one line instead of dropping everything but the
+    // first (batch-49).
+    const detail = ((error as Error).message ?? "").replace(/\s+/g, " ").trim().slice(0, 400) || "module did not load";
     status = { module, available: false, detail };
   }
 
@@ -120,18 +122,32 @@ function openBetterSqlite3(path: string): DbDriver {
   // Shape of better-sqlite3's public constructor (spec 80 driver).
   const Ctor = loadModule("better-sqlite3") as BetterCtor;
   const db = new Ctor(path);
+  // One compiled statement per SQL string: hot paths (saveArtifact runs per
+  // row) would otherwise recompile on every call (batch-49).
+  const statements = new Map<string, BetterStatement>();
+  const prepare = (sql: string): BetterStatement => {
+    const cached = statements.get(sql);
+
+    if (cached !== undefined) return cached;
+    const statement = db.prepare(sql);
+
+    statements.set(sql, statement);
+
+    return statement;
+  };
 
   return {
     name: "better-sqlite3",
     exec: (sql) => {
       db.exec(sql);
     },
-    get: <T,>(sql: string, params: readonly SqlParam[] = []) => db.prepare(sql).get(...params) as T | undefined,
-    all: <T,>(sql: string, params: readonly SqlParam[] = []) => db.prepare(sql).all(...params) as T[],
+    get: <T,>(sql: string, params: readonly SqlParam[] = []) => prepare(sql).get(...params) as T | undefined,
+    all: <T,>(sql: string, params: readonly SqlParam[] = []) => prepare(sql).all(...params) as T[],
     run: (sql, params = []) => {
-      db.prepare(sql).run(...params);
+      prepare(sql).run(...params);
     },
     close: () => {
+      statements.clear();
       db.close();
     },
   };
@@ -141,18 +157,31 @@ function openNodeSqlite(path: string): DbDriver {
   // Shape of node:sqlite's DatabaseSync (built-in fallback driver).
   const mod = loadModule("node:sqlite") as NodeSqliteModule;
   const db = new mod.DatabaseSync(path);
+  // Same statement cache as the better-sqlite3 adapter (batch-49).
+  const statements = new Map<string, ReturnType<NodeSqliteDatabase["prepare"]>>();
+  const prepare = (sql: string): ReturnType<NodeSqliteDatabase["prepare"]> => {
+    const cached = statements.get(sql);
+
+    if (cached !== undefined) return cached;
+    const statement = db.prepare(sql);
+
+    statements.set(sql, statement);
+
+    return statement;
+  };
 
   return {
     name: "node-sqlite",
     exec: (sql) => {
       db.exec(sql);
     },
-    get: <T,>(sql: string, params: readonly SqlParam[] = []) => db.prepare(sql).get(...params) as T | undefined,
-    all: <T,>(sql: string, params: readonly SqlParam[] = []) => db.prepare(sql).all(...params) as T[],
+    get: <T,>(sql: string, params: readonly SqlParam[] = []) => prepare(sql).get(...params) as T | undefined,
+    all: <T,>(sql: string, params: readonly SqlParam[] = []) => prepare(sql).all(...params) as T[],
     run: (sql, params = []) => {
-      db.prepare(sql).run(...params);
+      prepare(sql).run(...params);
     },
     close: () => {
+      statements.clear();
       db.close();
     },
   };
@@ -206,6 +235,11 @@ export function openDatabase(options: OpenOptions): OpenResult {
   const path = options.path;
   const memory = path === ":memory:" || path.startsWith("file::memory:");
   const requireWal = options.requireWal ?? !memory;
+
+  // Auto mode re-probes on every open: a native module installed or rebuilt
+  // after an earlier failed probe must not stay pinned to the node:sqlite
+  // fallback for the whole process lifetime (batch-49).
+  if (requested === "auto") probeCache.delete("better-sqlite3");
   const better = moduleStatus("better-sqlite3");
   let fallbackReason: string | null = null;
   let driver: DbDriver;
@@ -221,7 +255,16 @@ export function openDatabase(options: OpenOptions): OpenResult {
       }
 
       fallbackReason = `better-sqlite3 open failed: ${(error as Error).message}`;
-      driver = openNodeSqlite(path);
+
+      try {
+        driver = openNodeSqlite(path);
+      } catch (fallbackError) {
+        // The fallback failure must carry why better-sqlite3 was abandoned,
+        // or the caller never learns the real story (batch-49).
+        throw new Error(
+          `${fallbackReason}; node:sqlite fallback also failed to open "${path}": ${(fallbackError as Error).message}`,
+        );
+      }
     }
   } else {
     if (requested === "auto") fallbackReason = better.detail;
@@ -255,9 +298,25 @@ export function openDatabase(options: OpenOptions): OpenResult {
     }
 
     driver.exec(`PRAGMA synchronous = ${syncRaw}`);
-    const synchronous = syncName(pragmaValue(driver, "synchronous") || syncRaw);
+    const syncReadBack = pragmaValue(driver, "synchronous");
+
+    // An empty read-back means the pragma did not apply or could not be read:
+    // substituting the request would report a setting the module never
+    // verified (batch-49).
+    if (syncReadBack === "") {
+      throw new Error(`PRAGMA synchronous read-back was empty for "${path}"; the pragma may not have applied`);
+    }
+
+    const synchronous = syncName(syncReadBack);
+
     driver.exec(`PRAGMA busy_timeout = ${busyRaw}`);
-    const busyTimeoutMs = Number(pragmaValue(driver, "busy_timeout") || busyRaw);
+    const busyReadBack = pragmaValue(driver, "busy_timeout");
+
+    if (busyReadBack === "") {
+      throw new Error(`PRAGMA busy_timeout read-back was empty for "${path}"; the pragma may not have applied`);
+    }
+
+    const busyTimeoutMs = Number(busyReadBack);
 
     if (wantForeignKeys) {
       driver.exec("PRAGMA foreign_keys = ON");

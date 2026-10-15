@@ -9,7 +9,7 @@
 export function normalizeTrackId(id: string): string {
   const trimmed = id.trim();
 
-  if (!trimmed) throw new Error("track-key: empty TrackId (never fall back to title)");
+  if (!trimmed) throw new Error(`track-key: empty TrackId ${JSON.stringify(id)} (never fall back to title)`);
 
   return trimmed;
 }
