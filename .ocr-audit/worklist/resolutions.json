@@ -3433,6 +3433,60 @@
       "line": 156,
       "verdict": "fixed",
       "evidence": "Warm-up guard made non-vacuous: a 16 s frame-aligned tone (64 frames) reaches the 60-frame guard, fired[] is asserted empty, so the guard now judges real frames. Chasing it also found and fixed a REAL detector bug: the onset noise floor (1e-9) sat below the steady-tone flux noise (~2e-9), firing a spurious onset at frame 60; the floor is now 1e-6 (receipt in comment). Whole reactive-audio suite green."
+    },
+    {
+      "path": "packages/govee/src/razer.ts",
+      "line": 340,
+      "verdict": "fixed",
+      "evidence": "startStream reseeds lastAt when the stream actually starts: the arm-settle wait no longer counts as elapsed intervals, so missedTicks reflects real misses only."
+    },
+    {
+      "path": "packages/govee/src/razer.ts",
+      "line": 94,
+      "verdict": "fixed",
+      "evidence": "Dead try/catch replaced by a padding-insensitive base64 round-trip check: malformed pt decodes to null instead of silent garbage (Buffer.from never throws)."
+    },
+    {
+      "path": "packages/govee/src/razer.ts",
+      "line": 30,
+      "verdict": "fixed-earlier",
+      "evidence": "encodeRaw already throws on payload.length > 0xffff with the length in the message."
+    },
+    {
+      "path": "packages/govee/src/razer.ts",
+      "line": 77,
+      "verdict": "fixed",
+      "evidence": "paintZoned entries (r/g/b/zone) run through byteChecked: out-of-range values throw instead of silently wrapping."
+    },
+    {
+      "path": "packages/govee/src/razer.ts",
+      "line": 65,
+      "verdict": "fixed",
+      "evidence": "paint's gradient runs through byteChecked like the entry bytes."
+    },
+    {
+      "path": "packages/rekordbox-library/src/beat.ts",
+      "line": 65,
+      "verdict": "fixed",
+      "evidence": "toNativeBeat rejects non-finite or non-positive bpm loudly."
+    },
+    {
+      "path": "packages/rekordbox-library/src/beat.ts",
+      "line": 120,
+      "verdict": "fixed",
+      "evidence": "Both conversions reject non-finite scalars (beat/seconds) with the value named."
+    },
+    {
+      "path": "packages/rekordbox-library/src/beat.ts",
+      "line": 111,
+      "verdict": "fixed",
+      "evidence": "Single-anchor grids keep the constant; a multi-anchor degenerate segment (span<=0 or beatSpan<=0) throws instead of returning a constant."
+    },
+    {
+      "path": "packages/rekordbox-library/src/beat.ts",
+      "line": 73,
+      "verdict": "fixed",
+      "evidence": "assertMonotonic validates ascending index-unique grids once per array (WeakSet cache keeps the million-point budget test under its bound)."
     }
   ],
   "batch-42": [

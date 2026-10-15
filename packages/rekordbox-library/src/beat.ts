@@ -23,13 +23,7 @@ export type BeatIndex0 = number & { readonly __beatIndex: unique symbol };
 
 export type Seconds = number & { readonly __seconds: unique symbol };
 
-type Milliseconds = number & { readonly __milliseconds: unique symbol };
-
-type Ns = bigint & { readonly __ns: unique symbol };
-
 const MS_PER_SECOND = 1000;
-
-const NS_PER_MS = 1_000_000n;
 
 /** Grid anchor as stored in the native analysis (`index` is 0-based). */
 export interface BeatAnchor {
@@ -67,12 +61,38 @@ export function toNativeBeat(raw: PqtzBeat): BeatAnchor {
     throw new RangeError(`sourceTimeSeconds=${raw.sourceTimeSeconds}, expected a finite non-negative number`);
   }
 
+  // A corrupt PQTZ entry must not smuggle bpm 0/NaN/Infinity into consumers.
+  if (!Number.isFinite(raw.bpm) || raw.bpm <= 0) {
+    throw new RangeError(`bpm=${raw.bpm}, expected a finite positive number`);
+  }
+
   return {
     index: raw.index,
     beatInBar: raw.beatInBar as 1 | 2 | 3 | 4,
     sourceTimeMs: raw.sourceTimeSeconds * MS_PER_SECOND,
     bpm: raw.bpm,
   };
+}
+
+/** The binary searches below assume an ascending, index-unique grid:
+ *  validate loudly instead of pinning a mystery anchor on a corrupt file.
+ *  Validation runs once per grid array (WeakSet): the million-point budget
+ *  test forbids an O(n) scan per conversion. */
+const validatedGrids = new WeakSet<BeatGridLike["beats"]>();
+
+function assertMonotonic(beats: BeatGridLike["beats"]): void {
+  if (validatedGrids.has(beats)) return;
+
+  for (let i = 1; i < beats.length; i++) {
+    const prev = beats[i - 1]!;
+    const cur = beats[i]!;
+
+    if (cur.sourceTimeMs < prev.sourceTimeMs || cur.index <= prev.index) {
+      throw new RangeError(`beat grid not sorted at anchor ${i} (index ${cur.index}, ${cur.sourceTimeMs} ms)`);
+    }
+  }
+
+  validatedGrids.add(beats);
 }
 
 // Largest anchor position whose anchor time is <= ms; edges pin to the first or
@@ -122,14 +142,25 @@ export function beatToSourceSeconds(grid: BeatGridLike, beat: Beat): Seconds {
   const beats = grid.beats;
 
   if (beats.length === 0) throw new RangeError("empty beat grid");
+
+  if (!Number.isFinite(beat)) throw new RangeError(`beat=${beat}, expected a finite number`);
+
+  assertMonotonic(beats);
   const p = beatCaret(beats, beat);
   const a = beats[p]!;
   const c = beats[p + 1] ?? a;
+
+  // A single-anchor grid is a legitimate constant; a multi-anchor grid with
+  // a non-advancing segment is corruption and must not return a constant.
+  if (c === a) return (a.sourceTimeMs / MS_PER_SECOND) as Seconds;
   const span = c.sourceTimeMs - a.sourceTimeMs;
   const beatSpan = c.index - a.index;
-  const from = a.index + 1;
 
-  if (span <= 0 || beatSpan <= 0) return (a.sourceTimeMs / MS_PER_SECOND) as Seconds;
+  if (span <= 0 || beatSpan <= 0) {
+    throw new RangeError(`degenerate beat segment at anchor index ${a.index} (span=${span}, beatSpan=${beatSpan})`);
+  }
+
+  const from = a.index + 1;
   const ms = a.sourceTimeMs + (span * (beat - from)) / beatSpan;
 
   return (ms / MS_PER_SECOND) as Seconds;
@@ -140,14 +171,22 @@ export function sourceSecondsToBeat(grid: BeatGridLike, seconds: Seconds): Beat 
   const beats = grid.beats;
 
   if (beats.length === 0) throw new RangeError("empty beat grid");
+
+  if (!Number.isFinite(seconds)) throw new RangeError(`seconds=${seconds}, expected a finite number`);
+
+  assertMonotonic(beats);
   const ms = seconds * MS_PER_SECOND;
   const p = anchorPosition(beats, ms);
   const a = beats[p]!;
   const c = beats[p + 1] ?? a;
+
+  if (c === a) return (a.index + 1) as Beat;
   const span = c.sourceTimeMs - a.sourceTimeMs;
   const beatSpan = c.index - a.index;
 
-  if (span <= 0 || beatSpan <= 0) return (a.index + 1) as Beat;
+  if (span <= 0 || beatSpan <= 0) {
+    throw new RangeError(`degenerate beat segment at anchor index ${a.index} (span=${span}, beatSpan=${beatSpan})`);
+  }
 
   return (a.index + 1 + (beatSpan * (ms - a.sourceTimeMs)) / span) as Beat;
 }

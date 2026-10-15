@@ -76,13 +76,23 @@ export function arm(on: boolean): Uint8Array {
   return encodeRaw(OPCODE.ARM, new Uint8Array([on ? 1 : 0]));
 }
 
+/** One protocol byte with a loud bound: Uint8Array silently wraps an
+ *  out-of-range value into a different request than the caller intended. */
+function byteChecked(name: string, value: number): number {
+  if (!Number.isInteger(value) || value < 0 || value > 255) {
+    throw new RangeError(`${name} needs an integer 0 to 255, got ${value}`);
+  }
+
+  return value;
+}
+
 export function paint(colors: Uint8Array, gradient = 0): Uint8Array {
   if (colors.length % 3 !== 0) throw new RangeError(`paint needs 3 bytes per zone, got ${colors.length}`);
   const n = colors.length / 3;
 
   if (n > 255) throw new RangeError(`B0 nbSeg is one byte, got ${n} zones`);
   const payload = new Uint8Array(2 + colors.length);
-  payload[0] = gradient;
+  payload[0] = byteChecked("gradient", gradient);
   payload[1] = n;
   payload.set(colors, 2);
 
@@ -92,13 +102,13 @@ export function paint(colors: Uint8Array, gradient = 0): Uint8Array {
 export function paintZoned(entries: { r: number; g: number; b: number; zone: number }[], gradient = 0): Uint8Array {
   if (entries.length > 255) throw new RangeError(`B4 nbSeg is one byte, got ${entries.length} entries`);
   const payload = new Uint8Array(2 + entries.length * 4);
-  payload[0] = gradient;
+  payload[0] = byteChecked("gradient", gradient);
   payload[1] = entries.length;
   entries.forEach((e, i) => {
-    payload[2 + i * 4] = e.r;
-    payload[2 + i * 4 + 1] = e.g;
-    payload[2 + i * 4 + 2] = e.b;
-    payload[2 + i * 4 + 3] = e.zone;
+    payload[2 + i * 4] = byteChecked(`entry ${i} r`, e.r);
+    payload[2 + i * 4 + 1] = byteChecked(`entry ${i} g`, e.g);
+    payload[2 + i * 4 + 2] = byteChecked(`entry ${i} b`, e.b);
+    payload[2 + i * 4 + 3] = byteChecked(`entry ${i} zone`, e.zone);
   });
 
   return encodeRaw(OPCODE.ZONED, payload);
@@ -123,13 +133,13 @@ export function parseStatus(raw: LanInbound): { onOff: boolean; brightness: numb
   let armed = false;
 
   if (data.pt !== undefined && data.pt.length > 0) {
-    let bytes: Uint8Array | null = null;
-
-    try {
-      bytes = new Uint8Array(Buffer.from(data.pt, "base64"));
-    } catch {
-      bytes = null;
-    }
+    // Buffer.from(…, "base64") never throws: it silently drops invalid
+    // characters, so malformed pt would decode to garbage bytes. Validate
+    // with a padding-insensitive re-encode round trip instead of the dead
+    // try/catch that never fired.
+    const decodedBytes = Buffer.from(data.pt, "base64");
+    const canonical = decodedBytes.toString("base64").replace(/=+$/, "");
+    const bytes = canonical === data.pt.replace(/=+$/, "") ? new Uint8Array(decodedBytes) : null;
 
     const decoded = bytes ? decodeRaw(bytes) : null;
 
@@ -441,6 +451,9 @@ export class PacingStream implements SegmentStreamLike {
   // paint right after arming is lost (toolkit lan.md, sequence).
   private startStream(): void {
     if (this.closed) return;
+    // The cadence clock starts with the stream, not construction: counting
+    // the arm-settle wait as elapsed intervals inflated missedTicks.
+    this.lastAt = this.clock.now();
     this.interval = this.clock.setInterval(() => { this.emit(); }, this.intervalMs);
 
     if (this.latest !== null) this.emit();
