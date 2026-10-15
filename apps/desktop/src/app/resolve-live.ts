@@ -1,15 +1,14 @@
 import { useEffect, useRef } from "react";
-import type { TrackModel, ShowPlan } from "@autolight/contracts";
+import { sourceSecondsToBeat, type DeckState, type Fixture, type ShowPlan, type TrackModel } from "@autolight/contracts";
 import { coverageOf } from "@autolight/track-model";
 import { planShow, BUILT_IN_STYLES } from "@autolight/show-planner";
 import { liveViewModel } from "../features/live/live.js";
-import type { DeckState, Fixture } from "@autolight/contracts";
 // Browser-safe follow math only (./follow.js has no node: imports). Never
 // import the package barrel here: it re-exports the UDP providers and
 // blank-screens `yarn dev` (node:dgram externalized).
 import { axBeatToPlayhead, combineTransport } from "@autolight/rekordbox-live/follow";
 import { trackPalette } from "../routes/live/manual-intents.js";
-import { useShell, invoke, type LiveState } from "./store.js";
+import { useShell, liveStorePatch, invoke, type LiveState } from "./store.js";
 
 // Live deck resolution (T-TRU-02): production path reads DeckState and
 // installed TrackModel plus ShowPlan from the show host over typed IPC.
@@ -62,6 +61,13 @@ function deckSnapshot(track: TrackModel | null, deck: { effectiveBpm: number | n
   };
 }
 
+// The pre-cursor beat seed for a loaded deck: the snapshot playhead run
+// through its own grid, so the one-shot render path starts on the right beat
+// instead of reading seconds as beats (batch-46).
+function seedBeat(deck: LoadedDeck | undefined): number {
+  return deck === undefined ? 1 : sourceSecondsToBeat(deck.track.beatGrid, deck.state.playheadSeconds);
+}
+
 export function buildLive(decks: LoadedDeck[], fixtures: Fixture[], blinder: boolean, beat?: { a: number; b: number }): LiveState | null {
   const [a, b] = [decks[0], decks[1]];
 
@@ -78,9 +84,10 @@ export function buildLive(decks: LoadedDeck[], fixtures: Fixture[], blinder: boo
 
   // AL-FLOW-003: the live cursor's computed beat (AX-corrected, estimated
   // between polls) is the render beat. The fetch-time snapshot only seeds
-  // the one-shot path; previously the computed beat died in beatRef.
-  const beatA = beat?.a ?? a.state.playheadSeconds;
-  const beatB = beat?.b ?? b?.state.playheadSeconds ?? 1;
+  // the one-shot path, converted through the grid: a playhead in seconds is
+  // never a beat number (batch-46).
+  const beatA = beat?.a ?? sourceSecondsToBeat(a.track.beatGrid, a.state.playheadSeconds);
+  const beatB = beat?.b ?? (b === undefined ? 1 : sourceSecondsToBeat(b.track.beatGrid, b.state.playheadSeconds));
   const deckA = a.state;
 
   const deckB = b?.state ?? {
@@ -178,8 +185,8 @@ export function useLiveCursor(): void {
       plannedStyleRef.current = null;
       fixturesRef.current = snap.fixtures;
       beatRef.current = {
-        a: loaded[0]?.state.playheadSeconds ?? 1,
-        b: loaded[1]?.state.playheadSeconds ?? 1,
+        a: seedBeat(loaded[0]),
+        b: seedBeat(loaded[1]),
       };
     })();
 
@@ -215,8 +222,8 @@ export function useLiveCursor(): void {
           plannedStyleRef.current = null;
           fixturesRef.current = snap.fixtures;
           beatRef.current = {
-            a: loaded[0]?.state.playheadSeconds ?? 1,
-            b: loaded[1]?.state.playheadSeconds ?? 1,
+            a: seedBeat(loaded[0]),
+            b: seedBeat(loaded[1]),
           };
         });
 
@@ -276,7 +283,7 @@ export function useLiveCursor(): void {
       const live = buildLive(renderDecks, fixturesRef.current, st.blinder, beatRef.current);
 
       if (live) {
-        set({ live, bpm: live.bpm, reactiveLevel: Math.min(1, reactive * 0.2), liveBeat: live.beat ?? 0 });
+        set(liveStorePatch(live, reactive));
 
         if (st.pendingStyle !== null && st.pendingStyle !== st.style) {
           const decision = pendingStyleDue(live.beat ?? 0, pendingBoundaryRef.current);

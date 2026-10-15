@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { makeDeck, makeFixture } from "@autolight/simulator";
 import { buildLive, pendingStyleDue, phraseBoundaryAfter } from "./resolve-live.js";
+import { liveStorePatch } from "./store.js";
 
 // AL-FLOW-003: the live cursor's computed beat must reach the render sink.
 // buildLive renders the override beat when given (cursor path) and falls
@@ -43,6 +44,10 @@ const plan = {
   ],
 };
 
+// Named cursor argument: which field is the beat is part of the contract,
+// not an opaque literal (batch-46).
+const cursor = (a: number, b: number): { a: number; b: number } => ({ a, b });
+
 describe("buildLive beat wiring (AL-FLOW-003)", () => {
   it("renders the computed cursor beat, not the stale snapshot", () => {
     const stale = makeDeck({ deckId: 1, playheadSeconds: 10 });
@@ -51,14 +56,14 @@ describe("buildLive beat wiring (AL-FLOW-003)", () => {
       [{ track: track as never, plan: plan as never, state: stale }],
       [makeFixture("f", 2)],
       false,
-      { a: 70, b: 1 },
+      cursor(70, 1),
     );
 
     expect(live?.beat).toBe(70);
     expect(live?.deckA.section).toBe("chorus");
   });
 
-  it("falls back to snapshot beats on the one-shot path", () => {
+  it("converts the snapshot playhead through the grid on the one-shot path", () => {
     const snap = makeDeck({ deckId: 1, playheadSeconds: 10 });
 
     const live = buildLive(
@@ -67,8 +72,62 @@ describe("buildLive beat wiring (AL-FLOW-003)", () => {
       false,
     );
 
-    expect(live?.beat).toBe(10);
+    // 10 s at 468 ms/beat is ~21.37 beats, never 10: the fallback must run
+    // seconds through the grid instead of reading them as beats (batch-46).
+    const expectedBeat = 10_000 / 468;
+
+    expect(live?.beat).toBeCloseTo(expectedBeat, 6);
     expect(live?.deckA.section).toBe("verse");
+  });
+
+  it("keeps deck B on its own cursor beat", () => {
+    const deckOne = makeDeck({ deckId: 1, playheadSeconds: 10 });
+    const deckTwo = makeDeck({ deckId: 2, playheadSeconds: 50 });
+
+    const live = buildLive(
+      [
+        { track: track as never, plan: plan as never, state: deckOne },
+        { track: track as never, plan: plan as never, state: deckTwo },
+      ],
+      [makeFixture("f", 2)],
+      false,
+      cursor(70, 80),
+    );
+
+    expect(live?.beat).toBe(70);
+    // Deck B's cursor beat drives its own section lookup (80 lands in the
+    // chorus while deck A's 70 would not).
+    expect(live?.deckB.section).toBe("chorus");
+  });
+
+  it("returns null with empty decks and reads section bounds half-open", () => {
+    expect(buildLive([], [], false)).toBeNull();
+    const deckOne = makeDeck({ deckId: 1, playheadSeconds: 10 });
+    const entry = { track: track as never, plan: plan as never, state: deckOne };
+
+    // Exactly on the boundary the later section owns the beat...
+    expect(buildLive([entry], [makeFixture("f", 2)], false, cursor(64, 1))?.deckA.section).toBe("chorus");
+    // ...and past the last section no section matches.
+    expect(buildLive([entry], [makeFixture("f", 2)], false, cursor(500, 1))?.deckA.section).toBeUndefined();
+  });
+
+  it("writes the built beat to the store sink", () => {
+    const stale = makeDeck({ deckId: 1, playheadSeconds: 10 });
+    const live = buildLive(
+      [{ track: track as never, plan: plan as never, state: stale }],
+      [makeFixture("f", 2)],
+      false,
+      cursor(70, 1),
+    );
+
+    expect(live).not.toBeNull();
+    const patch = liveStorePatch(live!, 0.5);
+
+    // The exact AL-FLOW-003 regression: the cursor beat must reach the sink.
+    expect(patch.live).toBe(live);
+    expect(patch.liveBeat).toBe(70);
+    expect(patch.bpm).toBe(live!.bpm);
+    expect(patch.reactiveLevel).toBeCloseTo(0.1, 9);
   });
 });
 

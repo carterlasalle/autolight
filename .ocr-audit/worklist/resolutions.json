@@ -4067,6 +4067,24 @@
       "line": 30,
       "verdict": "fixed",
       "evidence": "The misleading not.toContain('dialog') is replaced by the structural no-modal contract: the state shape carries exactly available/deferred/notice, so no modal flag can ride along."
+    },
+    {
+      "path": "apps/desktop/src/app/resolve-live.test.ts",
+      "line": 70,
+      "verdict": "fixed",
+      "evidence": "Root fix: the one-shot fallback and both pre-cursor seeds convert the snapshot playhead through the grid via contracts sourceSecondsToBeat instead of reading seconds as beats; the test now expects the derived ~21.37 beats at 468 ms/beat."
+    },
+    {
+      "path": "apps/desktop/src/app/resolve-live.test.ts",
+      "line": 57,
+      "verdict": "fixed",
+      "evidence": "The sink write is extracted to store.liveStorePatch (production-used), and the test asserts the built beat reaches the store patch (liveBeat 70, bpm and reactiveLevel carried), covering the exact AL-FLOW-003 regression without mounting the hook."
+    },
+    {
+      "path": "apps/desktop/src/app/resolve-live.test.ts",
+      "line": 54,
+      "verdict": "fixed",
+      "evidence": "Named cursor helper documents the a/b contract; new cases cover deck B's independent beat, the empty-deck null path, the half-open section boundary (64 -> chorus) and a beat past the last section."
     }
   ],
   "batch-47": [

@@ -160,6 +160,13 @@ interface ShellState {
   set: (patch: Partial<ShellState>) => void;
 }
 
+// The AL-FLOW-003 sink write: the built live state, its bpm, reactive level
+// and cursor beat land together, so the beat forwarding is one testable unit
+// rather than an inline object literal (batch-46).
+export function liveStorePatch(live: LiveState, reactive: number): Partial<ShellState> {
+  return { live, bpm: live.bpm, reactiveLevel: Math.min(1, reactive * 0.2), liveBeat: live.beat ?? 0 };
+}
+
 export const useShell = create<ShellState>((set) => ({
   route: "live",
   followMode: "preview",
