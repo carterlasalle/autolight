@@ -43,15 +43,15 @@ describe("razer codec properties", () => {
   });
 
   it("rejects any single-bit flip in the frame", () => {
-    const rand = lcg(11);
+    const payload = new Uint8Array([1, 2, 3, 4, 5]);
+    const frame = encodeRaw(OPCODE.RGB_STREAM, payload);
 
-    for (let k = 0; k < 100; k++) {
-      const payload = new Uint8Array([1, 2, 3, 4, 5]);
-      const frame = encodeRaw(OPCODE.RGB_STREAM, payload);
-      const bit = Math.floor(rand() * (frame.length * 8));
+    // Exhaustive over every bit position: a random 100-draw sample leaves
+    // ~29% of this frame's bits untested (batch-51).
+    for (let bit = 0; bit < frame.length * 8; bit++) {
       const evil = frame.slice();
       evil[Math.floor(bit / 8)]! ^= 1 << (bit % 8);
-      expect(decodeRaw(evil)).toBeNull();
+      expect(decodeRaw(evil), `flip of bit ${bit} must be rejected`).toBeNull();
     }
   });
 
@@ -76,9 +76,15 @@ describe("razer codec properties", () => {
     const raw = paint(new Uint8Array([255, 0, 0, 0, 255, 0]));
     const parsed = JSON.parse(envelope(raw)) as { msg: { cmd: string; data: { pt: string } } };
     expect(parsed.msg.cmd).toBe("razer");
-    expect(Buffer.from(parsed.msg.data.pt, "base64").length).toBe(raw.length);
+    // Byte-exact envelope round-trip: a same-length but mangled payload would
+    // fail this (batch-51).
+    expect(Array.from(Buffer.from(parsed.msg.data.pt, "base64"))).toEqual(Array.from(raw));
     const zoned = paintZoned([{ r: 1, g: 2, b: 3, zone: 7 }]);
-    expect(decodeRaw(zoned)!.opcode).toBe(OPCODE.ZONED);
+    const zonedDecoded = decodeRaw(zoned)!;
+    expect(zonedDecoded.opcode).toBe(OPCODE.ZONED);
+    // The zoned payload layout [gradient, count, r, g, b, zone], exactly
+    // (batch-51).
+    expect(Array.from(zonedDecoded.payload)).toEqual([0, 1, 1, 2, 3, 7]);
     expect(() => paint(new Uint8Array([1, 2]))).toThrow(RangeError);
 
     const status = parseDevStatus({

@@ -4479,6 +4479,102 @@
       "line": 16,
       "verdict": "fixed",
       "evidence": "Coverage added for a time strictly between anchors (1+ (600-468.75)/468.75 and beat 1.5 -> 0.703125) plus before-first (0) and past-last (extrapolated) cases — interpolation cannot hide behind the round trip."
+    },
+    {
+      "path": "packages/renderer/src/color.test.ts",
+      "line": 24,
+      "verdict": "fixed",
+      "evidence": "The expected bytes come from an independent standard-sRGB oracle written in the test, not linearToSrgbByte (which fixtureBytes delegates to), so a transfer regression cannot agree with itself."
+    },
+    {
+      "path": "packages/renderer/src/color.test.ts",
+      "line": 35,
+      "verdict": "fixed",
+      "evidence": "Half intensity asserts each linear channel halves exactly (a no-op cannot pass) and >1 still clamps to 1."
+    },
+    {
+      "path": "packages/renderer/src/color.test.ts",
+      "line": 39,
+      "verdict": "fixed",
+      "evidence": "A non-symmetric matrix asserts row-major coupling (matrix[1] contributes to output red only), which a transposed multiplication would fail; the diagonal assertions stay."
+    },
+    {
+      "path": "packages/govee/src/razer-codec.property.test.ts",
+      "line": 46,
+      "verdict": "fixed",
+      "evidence": "The flip test is exhaustive over every bit position of the frame (the 100-draw sample left ~29% untested), each with a naming message."
+    },
+    {
+      "path": "packages/govee/src/razer-codec.property.test.ts",
+      "line": 74,
+      "verdict": "fixed",
+      "evidence": "The envelope round-trip compares decoded bytes against the source frame, not just the length."
+    },
+    {
+      "path": "packages/govee/src/razer-codec.property.test.ts",
+      "line": 75,
+      "verdict": "fixed",
+      "evidence": "paintZoned's payload is asserted byte-exact: [gradient, count, r, g, b, zone] = [0, 1, 1, 2, 3, 7]."
+    },
+    {
+      "path": "packages/matter/src/mapping.test.ts",
+      "line": 8,
+      "verdict": "fixed",
+      "evidence": "Blue (240deg -> 169), the negative-ratio wrap (300deg -> 212) and a mid-wrap value (330deg -> 233) cover the max===b branch and hue scaling, probed against the implementation first."
+    },
+    {
+      "path": "packages/matter/src/mapping.test.ts",
+      "line": 14,
+      "verdict": "fixed",
+      "evidence": "Mid grey asserts the full object including hue 0, so the achromatic branch cannot regress silently."
+    },
+    {
+      "path": "packages/matter/src/mapping.test.ts",
+      "line": 40,
+      "verdict": "fixed",
+      "evidence": "Each frame asserts the full ordered write list (onOff:on, levelControl:moveToLevel, colorControl:moveToHueAndSaturation) alongside the no-temperature check."
+    },
+    {
+      "path": "packages/matter/src/mapping.test.ts",
+      "line": 49,
+      "verdict": "fixed",
+      "evidence": "CCT writes assert length and command order before indexing; the level and mireds elements are pinned after."
+    },
+    {
+      "path": "packages/matter/src/mapping.test.ts",
+      "line": 61,
+      "verdict": "fixed",
+      "evidence": "The rate test documents the registry default (10) and pins boundary inputs: 0, negative and NaN rates all mean no pacing (Infinity), never a zero/negative interval."
+    },
+    {
+      "path": "packages/rekordbox-library/src/pssi.test.ts",
+      "line": 51,
+      "verdict": "fixed",
+      "evidence": "The probe scans stdout backwards for the last line that parses; no `as string` cast can hide an unparseable payload."
+    },
+    {
+      "path": "packages/rekordbox-library/src/pssi.test.ts",
+      "line": 52,
+      "verdict": "fixed",
+      "evidence": "Probe failures carry a reason: stderr is captured and the error text includes the tail of the traceback, so a crash/timeout/missing-uv are distinguishable."
+    },
+    {
+      "path": "packages/rekordbox-library/src/pssi.test.ts",
+      "line": 57,
+      "verdict": "fixed",
+      "evidence": "The Python spawn moved out of module scope into the drift test, and the labels table loads lazily on first use: collection no longer pays a 120s external process or shares one poisoned result."
+    },
+    {
+      "path": "packages/rekordbox-library/src/pssi.test.ts",
+      "line": 64,
+      "verdict": "fixed",
+      "evidence": "The fixture check parses the JSON and asserts schema id, generator, source and an array of cases, replacing the substring plus magic count."
+    },
+    {
+      "path": "packages/rekordbox-library/src/pssi.test.ts",
+      "line": 101,
+      "verdict": "fixed",
+      "evidence": "The drift check asserts probe availability with the probe's own failure text before comparing (no generic throw)."
     }
   ],
   "batch-52": [

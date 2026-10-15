@@ -41,34 +41,74 @@ interface PythonProbe {
   normalized: string[];
 }
 
-function runPythonProbe(): PythonProbe | undefined {
+// Spawned when the drift check runs, never at collection time: a transient
+// failure cannot poison module state for the whole file, and the pure-TS
+// tests do not pay an external process (batch-51).
+function runPythonProbe(): { probe?: PythonProbe; error?: string } {
   try {
     const stdout = execFileSync("uv", ["run", "--project", "analysis", "python", "-c", PYTHON_PROBE], {
       cwd: repoRoot,
       encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
+      // stderr is captured, not discarded: a Python traceback is the actual
+      // failure reason (batch-51).
+      stdio: ["ignore", "pipe", "pipe"],
       timeout: 120_000,
     });
 
-    return JSON.parse(stdout.trim().split("\n").pop() as string) as PythonProbe;
-  } catch {
-    return undefined;
+    // The probe prints exactly one JSON line, but a trailing warning or a
+    // blank line must not become an undefined cast: scan backwards for the
+    // last line that parses (batch-51).
+    const lines = stdout.trim().split("\n");
+
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const line = lines[i]?.trim();
+
+      if (!line) continue;
+      try {
+        return { probe: JSON.parse(line) as PythonProbe };
+      } catch {
+        continue;
+      }
+    }
+
+    return { error: "probe printed no JSON line" };
+  } catch (error) {
+    const stderr = String((error as { stderr?: string | Buffer }).stderr ?? "").trim().split("\n").slice(-3).join(" | ");
+
+    return {
+      error: `${error instanceof Error ? error.message : String(error)}${stderr ? ` :: stderr: ${stderr}` : ""}`,
+    };
   }
 }
 
-const probe = runPythonProbe();
+// Loaded lazily and once: the committed table is cheap, but reading it at
+// import time made every collector pay for it (batch-51).
+let tableCache: PssiLabelTable | undefined;
 
-const table: PssiLabelTable = loadPssiLabels(labelsPath);
+function table(): PssiLabelTable {
+  tableCache ??= loadPssiLabels(labelsPath);
+
+  return tableCache;
+}
 
 describe("pssi label table", () => {
   it("loads the committed table with a schema and generated cases", () => {
-    expect(table.schema).toBe("autolight/pssi-labels@1");
-    expect(table.cases.length).toBeGreaterThan(100);
-    expect(readFileSync(labelsPath, "utf8")).toContain("\"generator\"");
+    // The parsed structure, not a substring a truncated file could still
+    // contain: schema id, generator provenance, source and the case count
+    // (batch-51).
+    const raw = JSON.parse(readFileSync(labelsPath, "utf8")) as Record<string, unknown>;
+
+    expect(raw["schema"]).toBe("autolight/pssi-labels@1");
+    expect(typeof raw["generator"]).toBe("string");
+    expect(String(raw["generator"]).length).toBeGreaterThan(0);
+    expect(typeof raw["source"]).toBe("string");
+    expect(Array.isArray(raw["cases"])).toBe(true);
+    expect(table().schema).toBe("autolight/pssi-labels@1");
+    expect(table().cases.length).toBeGreaterThan(100);
   });
 
   it("evaluates every table case to its expected label and section", () => {
-    for (const testCase of table.cases) {
+    for (const testCase of table().cases) {
       const label = phraseLabel(testCase.mood, testCase.kind, testCase.k1, testCase.k2, testCase.k3);
       expect(label, `mood=${testCase.mood} kind=${testCase.kind} k=${testCase.k1}${testCase.k2}${testCase.k3}`).toBe(testCase.label);
       expect(normalizeSection(label)).toBe(testCase.section);
@@ -101,15 +141,19 @@ describe("pssi label table", () => {
   });
 
   it("matches the Python tables and cases (drift check)", () => {
-    if (probe === undefined) {
-      throw new Error("uv with the analysis project is required for the Python parity check");
-    }
+    const outcome = runPythonProbe();
 
-    expect(probe.high).toEqual(table.high);
-    expect(probe.mid).toEqual(table.mid);
-    expect(probe.low).toEqual(table.low);
-    expect(probe.sections).toEqual(table.sections);
-    expect(probe.labels).toEqual(table.cases.map((testCase) => testCase.label));
-    expect(probe.normalized).toEqual(table.cases.map((testCase) => testCase.section));
+    // Toolchain absence, a timeout, a Python crash and a label mismatch are
+    // distinguishable: the assertion carries the probe failure text, then the
+    // comparisons run (batch-51).
+    expect(outcome.probe, `Python probe unavailable (uv + analysis required): ${outcome.error ?? "no JSON output"}`).toBeDefined();
+    const probe = outcome.probe!;
+
+    expect(probe.high).toEqual(table().high);
+    expect(probe.mid).toEqual(table().mid);
+    expect(probe.low).toEqual(table().low);
+    expect(probe.sections).toEqual(table().sections);
+    expect(probe.labels).toEqual(table().cases.map((testCase) => testCase.label));
+    expect(probe.normalized).toEqual(table().cases.map((testCase) => testCase.section));
   });
 });

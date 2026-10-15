@@ -1,7 +1,7 @@
 // Colour pipeline and per-fixture calibration (T-REND-03, P-49, P-29).
 import { describe, expect, it } from "vitest";
 import {
-  applyIntensityLinear, applyWhiteBalance, fixtureBytes, linearToOklab, linearToSrgbByte,
+  applyIntensityLinear, applyWhiteBalance, fixtureBytes, linearToOklab,
   oklabToLinear, oklabToOklch, oklchToLinear, oklchToOklab, orientCells,
 } from "./color.js";
 
@@ -23,7 +23,17 @@ describe("colour pipeline (T-REND-03)", () => {
     const linear = [srgb(255), srgb(0), srgb(90)] as [number, number, number];
     const scaled: [number, number, number] = [linear[0] * 0.3, linear[1] * 0.3, linear[2] * 0.3];
     const bytes = fixtureBytes(scaled);
-    const expected: [number, number, number] = [linearToSrgbByte(scaled[0]), linearToSrgbByte(scaled[1]), linearToSrgbByte(scaled[2])];
+    // Independent oracle: the standard sRGB OETF computed here, not the
+    // helper fixtureBytes delegates to, so a broken transfer cannot agree
+    // with itself (batch-51).
+    const toByte = (v: number): number => {
+      const s = v <= 0.0031308 ? v * 12.92 : 1.055 * Math.pow(v, 1 / 2.4) - 0.055;
+
+      return Math.round(Math.min(1, Math.max(0, s)) * 255);
+    };
+
+    const expected: [number, number, number] = [toByte(scaled[0]), toByte(scaled[1]), toByte(scaled[2])];
+
     expect(bytes).toEqual(expected);
     expect(bytes[0]).toBeGreaterThan(bytes[2]);
     expect(bytes[1]).toBe(0);
@@ -34,6 +44,12 @@ describe("colour pipeline (T-REND-03)", () => {
     const base = oklchToLinear({ L: 0.55, C: 0.18, h: 150 });
     const dim = applyIntensityLinear(base, 0.3);
     expect(oklabToOklch(linearToOklab(dim)).h).toBeCloseTo(oklabToOklch(linearToOklab(base)).h, 2);
+    // Real scaling, not a no-op: half intensity halves every linear channel,
+    // and above 1 the factor clamps instead of amplifying (batch-51).
+    const half = applyIntensityLinear(base, 0.5);
+    expect(half[0]).toBeCloseTo(base[0] * 0.5, 9);
+    expect(half[1]).toBeCloseTo(base[1] * 0.5, 9);
+    expect(half[2]).toBeCloseTo(base[2] * 0.5, 9);
     expect(applyIntensityLinear(base, 2)).toEqual(applyIntensityLinear(base, 1));
   });
   it("applies calibration: white balance, ceiling, measured gamma and orientation", () => {
@@ -41,6 +57,12 @@ describe("colour pipeline (T-REND-03)", () => {
     const balanced = applyWhiteBalance(linear, [0.9, 0, 0, 0, 1, 0, 0, 0, 1.1]);
     expect(balanced[0]).toBeCloseTo(linear[0] * 0.9, 9);
     expect(balanced[2]).toBeCloseTo(linear[2] * 1.1, 9);
+    // Non-symmetric matrix: row-major coupling puts matrix[1] on output red
+    // only; a transposed multiplication would not (batch-51).
+    const mixed = applyWhiteBalance(linear, [0.9, 0.2, 0, 0, 1, 0, 0, 0, 1.1]);
+    expect(mixed[0]).toBeCloseTo(linear[0] * 0.9 + linear[1] * 0.2, 9);
+    expect(mixed[1]).toBeCloseTo(linear[1], 9);
+    expect(mixed[2]).toBeCloseTo(linear[2] * 1.1, 9);
     const capped = fixtureBytes([1, 1, 1], { brightnessCeiling: 0.5 });
     expect(capped).toEqual(fixtureBytes([0.5, 0.5, 0.5], { brightnessCeiling: 1 }));
     expect(fixtureBytes([0.5, 0.5, 0.5], { gamma: 2.0 })[0]).not.toBe(fixtureBytes([0.5, 0.5, 0.5], { gamma: 2.6 })[0]);
