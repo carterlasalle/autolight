@@ -6,8 +6,15 @@ import { deckStateSchema } from "@autolight/contracts";
 // Inlined here so the live package never imports the file-reading library
 // plane (pssi labels, sidecar, watchers pull node:fs into the renderer
 // bundle). The canonical resolver lives in @autolight/track-identity.
-function rowToIdentity(row: { rekordboxId: string; canonicalPath?: string; title?: string; artist?: string }): { rekordboxId: string; canonicalPath?: string; title?: string; artist?: string } {
-  const out: { rekordboxId: string; canonicalPath?: string; title?: string; artist?: string } = { rekordboxId: row.rekordboxId };
+export interface LibraryRow {
+  rekordboxId: string;
+  canonicalPath?: string;
+  title?: string;
+  artist?: string;
+}
+
+function rowToIdentity(row: LibraryRow): LibraryRow {
+  const out: LibraryRow = { rekordboxId: row.rekordboxId };
 
   if (row.canonicalPath !== undefined && row.canonicalPath !== "") out.canonicalPath = row.canonicalPath;
 
@@ -29,7 +36,9 @@ const fixtureSchema = z.object({
   action: z.string(),
   capture: z.string().min(1, "empty capture: record the raw transport bytes"),
   expectedEvents: z.array(deckStateSchema.omit({ receivedAtNs: true })),
-  expectedBy: z.string().min(1).optional(),
+  // Required, matching the shared fixture lint: an unattributed fixture must
+  // not parse (batch-51; the lint names the human-authoring contract).
+  expectedBy: z.string().min(1, "expectedBy must name the human who wrote these events"),
 });
 
 export type ProtocolFixture = z.infer<typeof fixtureSchema>;
@@ -40,19 +49,21 @@ export function parseFixture(raw: unknown): ProtocolFixture {
 
 // Deterministic replay at 1×/2×/10×/step (§128): stamp events with a virtual
 // clock so CI needs no DJ software. Returns full DeckState incl. receivedAtNs.
-export function replayFixture(fixture: ProtocolFixture, rate = 1, stepMs = 100): DeckState[] {
-  const baseNs = 1_000_000_000n;
+const REPLAY_BASE_NS = 1_000_000_000n;
 
+export function replayFixture(fixture: ProtocolFixture, rate = 1, stepMs = 100): DeckState[] {
   return fixture.expectedEvents.map((e, i) => ({
     ...e,
-    receivedAtNs: baseNs + BigInt(Math.round((i * stepMs * 1_000_000) / rate)),
+    receivedAtNs: REPLAY_BASE_NS + BigInt(Math.round((i * stepMs * 1_000_000) / rate)),
   }));
 }
 
-// Step mode (§128): the same virtual clock, but one event per call so a
-// harness can advance by hand and inspect between events.
-export function* replayFixtureStep(fixture: ProtocolFixture, stepMs = 100): Generator<DeckState> {
-  for (const state of replayFixture(fixture, 1, stepMs)) yield state;
+// Step mode (§128): one event per call, computed lazily so advancing a single
+// step never materializes the whole fixture, at any clock rate (batch-51).
+export function* replayFixtureStep(fixture: ProtocolFixture, stepMs = 100, rate = 1): Generator<DeckState> {
+  for (const [i, event] of fixture.expectedEvents.entries()) {
+    yield { ...event, receivedAtNs: REPLAY_BASE_NS + BigInt(Math.round((i * stepMs * 1_000_000) / rate)) };
+  }
 }
 
 // Unknown-field retention (§9.5): decoder output keeps raw alongside normalized.
@@ -81,7 +92,21 @@ export interface ProtocolDefinition {
 }
 
 export function isSupported(def: ProtocolDefinition, version: string, platform: "macos" | "windows"): boolean {
-  return def.supported && def.platform === platform && version.startsWith(def.versionRange.replace("x", ""));
+  if (!def.supported || def.platform !== platform) return false;
+
+  // A versionRange is dotted ("7" / "7.2.x" / "7.2.18"): digit segments must
+  // match exactly and a trailing "x" (or "*") matches any remainder. The
+  // previous single .replace("x", "") rewrote only the first x, so "7.x.x"
+  // became "7..x" and never matched (batch-51).
+  const range = def.versionRange.split(".");
+  const parts = version.split(".");
+
+  for (const [i, segment] of range.entries()) {
+    if (segment === "x" || segment === "*") return true;
+    if (parts[i] !== segment) return false;
+  }
+
+  return true;
 }
 
 export function unverifiedWarning(version: string): string {
@@ -92,9 +117,12 @@ export function unverifiedWarning(version: string): string {
 // native beatgrid → DeckState. Proven live 2026-09-29 against Rekordbox
 // 7.2.10: resolves both loaded SoundCloud tracks to grids/phrases.
 // MIDI is secondary truth (§11): faders/transport confirm, never override.
+// Known limitation (batch-51): CompositeSnapshot carries no loop/master
+// data, so loop reads inactive and master null instead of inventing values;
+// every other field maps 1:1.
 export interface CompositeSnapshot {
   deckId: number;
-  row: { rekordboxId: string; canonicalPath?: string; title?: string; artist?: string };
+  row: LibraryRow;
   playing: boolean;
   playheadSeconds: number;
   playRate: number;

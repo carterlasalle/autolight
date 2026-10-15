@@ -4413,7 +4413,74 @@
       "evidence": "--passWithNoTests dropped: a missing suite now fails instead of silently reporting success."
     }
   ],
-  "batch-51": [],
+  "batch-51": [
+    {
+      "path": "packages/rekordbox-live/src/index.ts",
+      "line": 10,
+      "verdict": "fixed",
+      "evidence": "LibraryRow extracted and exported; rowToIdentity and CompositeSnapshot.row share it instead of three inline copies."
+    },
+    {
+      "path": "packages/rekordbox-live/src/index.ts",
+      "line": 29,
+      "verdict": "fixed",
+      "evidence": "expectedBy is required by the schema with a named message, matching the shared fixture lint (every committed fixture already carries it; the inline test fixture gained attribution)."
+    },
+    {
+      "path": "packages/rekordbox-live/src/index.ts",
+      "line": 50,
+      "verdict": "fixed",
+      "evidence": "replayFixtureStep computes each event lazily from the fixture (no full materialization) and accepts a rate, sharing REPLAY_BASE_NS with replayFixture; the step/1x deep-equality test still passes."
+    },
+    {
+      "path": "packages/rekordbox-live/src/index.ts",
+      "line": 79,
+      "verdict": "fixed",
+      "evidence": "isSupported compares dotted segments: digits must match exactly, a trailing x/* matches the remainder. The old replace('x','') broke 7.x.x and the string-prefix compare. '7.2.x' vs 7.2.19/7.3.0/windows all pin the intended behavior."
+    },
+    {
+      "path": "packages/rekordbox-live/src/index.ts",
+      "line": 119,
+      "verdict": "fixed",
+      "evidence": "Documented the composite provider's known limitation: CompositeSnapshot carries no loop/master data yet, so loop reads inactive and master null rather than inventing values."
+    },
+    {
+      "path": "packages/config/src/compare.test.ts",
+      "line": 11,
+      "verdict": "fixed",
+      "evidence": "Both live-change plans assert full objects (key, liveSafe, apply, exact note) with toEqual."
+    },
+    {
+      "path": "packages/config/src/compare.test.ts",
+      "line": 21,
+      "verdict": "fixed",
+      "evidence": "Drain asserts the caller's queue is untouched and a new queue object is returned."
+    },
+    {
+      "path": "packages/config/src/compare.test.ts",
+      "line": 27,
+      "verdict": "fixed",
+      "evidence": "compareKeys covers the union: added, removed and changed keys all surface with explicit undefined sides."
+    },
+    {
+      "path": "packages/contracts/src/index.test.ts",
+      "line": 12,
+      "verdict": "fixed",
+      "evidence": "The DeckState fixture is typed; a typo or shape change is now a compile error."
+    },
+    {
+      "path": "packages/contracts/src/index.test.ts",
+      "line": 13,
+      "verdict": "fixed",
+      "evidence": "A valid DeckState parses (positive case) and the negative case asserts the exact issue: code too_big on path channelFader."
+    },
+    {
+      "path": "packages/contracts/src/index.test.ts",
+      "line": 16,
+      "verdict": "fixed",
+      "evidence": "Coverage added for a time strictly between anchors (1+ (600-468.75)/468.75 and beat 1.5 -> 0.703125) plus before-first (0) and past-last (extrapolated) cases — interpolation cannot hide behind the round trip."
+    }
+  ],
   "batch-52": [
     {
       "path": "packages/renderer/src/regions.test.ts",

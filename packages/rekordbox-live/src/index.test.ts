@@ -9,6 +9,7 @@ const base: Record<string, unknown> = {
   platform: "macos",
   action: "play",
   capture: "handwritten-synthetic: lighting decoder pending (T-LIVE-09)",
+  expectedBy: "hand-authored in index.test.ts",
   expectedEvents: [{
     source: "rekordbox", deckId: 1, track: null, playing: true,
     playheadSeconds: 12.5, playRate: 1, effectiveBpm: 128,
