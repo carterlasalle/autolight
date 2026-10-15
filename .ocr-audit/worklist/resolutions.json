@@ -3487,6 +3487,30 @@
       "line": 73,
       "verdict": "fixed",
       "evidence": "assertMonotonic validates ascending index-unique grids once per array (WeakSet cache keeps the million-point budget test under its bound)."
+    },
+    {
+      "path": "packages/govee/src/resolution.test.ts",
+      "line": 50,
+      "verdict": "fixed",
+      "evidence": "Candidates asserted by kind (native:120 false, grouped:60 false, logical:20 true) plus distinctness; pick verified as the largest count meeting the target."
+    },
+    {
+      "path": "packages/govee/src/resolution.test.ts",
+      "line": 47,
+      "verdict": "fixed",
+      "evidence": "Full reason string pinned exactly, including the '(highest count that does)' and below-target context segments."
+    },
+    {
+      "path": "packages/govee/src/resolution.test.ts",
+      "line": 73,
+      "verdict": "fixed",
+      "evidence": "Both error branches distinguished by exact messages; the finite-targetHz guard gets its own case."
+    },
+    {
+      "path": "packages/govee/src/resolution.test.ts",
+      "line": 24,
+      "verdict": "fixed",
+      "evidence": "Cross-kind selection exercised: one decision carries native (below target), grouped (ladder) and logical candidates together."
     }
   ],
   "batch-42": [
