@@ -3709,6 +3709,60 @@
       "line": 147,
       "verdict": "documented-precondition",
       "evidence": "DEFERRED: file under concurrent edit by another session (uncommitted changes); reviewed, not touched, to avoid clobbering in-flight work. Re-verify after that work commits."
+    },
+    {
+      "path": "packages/serato/src/geob.test.ts",
+      "line": 16,
+      "verdict": "fixed",
+      "evidence": "Count decoding fixed at the root per serato-connect/serato-tags: u32 BE at offset 2 instead of byte 5 (coincided only for counts <=255). Fixture comment reconciled; footer made consistent 0x00 with the ScratchBeat vectors."
+    },
+    {
+      "path": "packages/serato/src/geob.test.ts",
+      "line": 17,
+      "verdict": "fixed",
+      "evidence": "Two-marker dynamic grid added: marker 0 non-terminal (position + u32 beats-to-next), marker 1 terminal (position + bpm); parser extended to the upstream layout, both regions pinned with distinct tempos (90/128) validating the i>0 stride."
+    },
+    {
+      "path": "packages/serato/src/geob.test.ts",
+      "line": 31,
+      "verdict": "fixed",
+      "evidence": "Rejection cases now match the exact messages: /version=2/, /too short/, /truncated/."
+    },
+    {
+      "path": "packages/serato/src/geob.test.ts",
+      "line": 55,
+      "verdict": "fixed",
+      "evidence": "Crate encoder iterates UTF-16 code units with high-byte-first pairs; a non-BMP emoji path round-trips through decodePath (probe caught the truncated high byte: '=o' vs the emoji). No real .crate sample exists in-repo; the byte layout still mirrors decodePath."
+    },
+    {
+      "path": "packages/serato/src/mapping.test.ts",
+      "line": 21,
+      "verdict": "fixed",
+      "evidence": "Out-of-range boundaries pinned as pass-through (NaN playhead/fader, -1 rate, Infinity bpm, inverted loop span) with the decoder's stateless transport contract stated."
+    },
+    {
+      "path": "packages/serato/src/mapping.test.ts",
+      "line": 41,
+      "verdict": "fixed",
+      "evidence": "Cross-talk test asserts distinct track/loop/playhead/fader/receivedAtNs values per deck, not just the echoed deckId."
+    },
+    {
+      "path": "packages/serato/src/mapping.test.ts",
+      "line": 68,
+      "verdict": "fixed",
+      "evidence": "Null filepath with trackChanged=false covered: track nulls, loop travels as reported, non-track fields preserved."
+    },
+    {
+      "path": "packages/serato/src/mapping.test.ts",
+      "line": 77,
+      "verdict": "fixed",
+      "evidence": "trackChanged=true && loopActive=true branch covered with fresh bounds (re-asserted loop survives), plus the null-bounds variant documented as pass-through."
+    },
+    {
+      "path": "packages/serato/src/mapping.test.ts",
+      "line": 84,
+      "verdict": "fixed",
+      "evidence": "Re-assert test now drives an actual track change with fresh loop values (12.5/14.5/8), independent of the first test."
     }
   ],
   "batch-45": [

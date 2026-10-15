@@ -114,17 +114,38 @@ export function parseBeatGrid(payload: Uint8Array): SeratoTempoRegion[] {
   if (payload.length < 6) throw new Error(`beatgrid too short: ${payload.length}`);
 
   if (payload[0] !== 0x01) throw new Error(`beatgrid version=${payload[0]}, expected 1`);
-  const count = payload[5]!;
+  // Header per serato-connect/serato-tags: 2 unknown bytes, then the marker
+  // count as a u32 BE at offset 2. Reading one byte at offset 5 only
+  // coincides for counts up to 255 (batch-44).
+  const count = v.getUint32(2, false);
 
   if (payload.length < 6 + count * 8) throw new Error(`beatgrid truncated: need ${6 + count * 8}, got ${payload.length}`);
   const out: SeratoTempoRegion[] = [];
 
   for (let i = 0; i < count; i++) {
     const startSeconds = v.getFloat32(6 + i * 8, false);
+
+    if (i < count - 1) {
+      // Non-terminal marker: u32 BE beats-to-next, then the next marker's
+      // position gives the span; its tempo is the beats over that span.
+      const beatsToNext = v.getUint32(10 + i * 8, false);
+      const nextSeconds = v.getFloat32(14 + i * 8, false);
+      const span = nextSeconds - startSeconds;
+      const bpm = (beatsToNext * 60) / span;
+
+      // A non-positive or non-finite span would divide into Infinity/NaN
+      // downstream (region lengths, beat lists); loud beats silent (batch-03).
+      if (!Number.isFinite(bpm) || bpm <= 0) {
+        throw new Error(`beatgrid marker ${i} spans ${beatsToNext} beats over ${span} s, expected a positive span`);
+      }
+
+      out.push({ startSeconds, bpm, beatInBar: 1 });
+      continue;
+    }
+
+    // Terminal marker (the last): position + BPM.
     const bpm = v.getFloat32(10 + i * 8, false);
 
-    // A zero or non-finite tempo would divide into Infinity/NaN downstream
-    // (region lengths, beat lists); loud beats silent (batch-03).
     if (!Number.isFinite(bpm) || bpm <= 0) {
       throw new Error(`beatgrid marker ${i} has bpm ${bpm}, expected a finite positive tempo`);
     }
