@@ -1,0 +1,51 @@
+{
+  "servers": {
+    "eslint": {
+      "args": [
+        "--stdio"
+      ],
+      "settings": {
+        "": {
+          "validate": "on",
+          "run": "onType",
+          "onIgnoredFiles": "off",
+          "nodePath": null,
+          "options": {},
+          "quiet": false,
+          "format": false,
+          "useESLintClass": false,
+          "experimental": {
+            "useFlatConfig": false
+          },
+          "workingDirectory": {
+            "mode": "location"
+          },
+          "rulesCustomizations": [],
+          "problems": {
+            "shortenToSingleLine": false
+          },
+          "codeAction": {
+            "disableRuleComment": {
+              "enable": true,
+              "location": "separateLine"
+            },
+            "showDocumentation": {
+              "enable": true
+            }
+          },
+          "codeActionOnSave": {
+            "enable": false,
+            "mode": "all",
+            "rules": []
+          },
+          "trace": {
+            "server": "off"
+          }
+        }
+      }
+    },
+    "omnisharp": {
+      "disabled": true
+    }
+  }
+}
