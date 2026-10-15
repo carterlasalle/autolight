@@ -4686,5 +4686,151 @@
       "verdict": "fixed",
       "evidence": "The malformed vector pins why: 'unterminated OSC string'; the harness asserts the decoder's reason contains it, so an unrelated rejection fails."
     }
+  ],
+  "batch-53": [
+    {
+      "path": "vitest.config.ts",
+      "line": 9,
+      "verdict": "fixed",
+      "evidence": "Package aliases are directory-only, dot-dirs skipped, entries filtered by existsSync, and an unreadable packages/ throws naming the path with cause attached (typed Dirent)."
+    },
+    {
+      "path": "vitest.config.ts",
+      "line": 34,
+      "verdict": "fixed",
+      "evidence": "All three include globs now cover .tsx tests, so a *.test.tsx cannot silently collect zero assertions."
+    },
+    {
+      "path": "analysis/src/autolight_analysis/artifacts.py",
+      "line": 33,
+      "verdict": "fixed",
+      "evidence": "The docstring now states the implemented + evidenced contract: the whole file is hashed (a tag edit re-analyzes rather than serving a mismatched artifact); the T-ANA-13 evidence doc confirms whole-file plus decode settings."
+    },
+    {
+      "path": "analysis/src/autolight_analysis/artifacts.py",
+      "line": 54,
+      "verdict": "fixed",
+      "evidence": "config_hash uses default=str so a Path/set/bytes in the config stringifies instead of aborting artifact naming."
+    },
+    {
+      "path": "analysis/src/autolight_analysis/artifacts.py",
+      "line": 72,
+      "verdict": "fixed",
+      "evidence": "atomic_write chmods the temp file to the predecessor's mode (or the umask default) before os.replace, so a shared cache stays readable instead of silently becoming 0600."
+    },
+    {
+      "path": "analysis/src/autolight_analysis/artifacts.py",
+      "line": 74,
+      "verdict": "fixed",
+      "evidence": "os.fdopen failure closes the raw mkstemp descriptor before re-raising."
+    },
+    {
+      "path": "analysis/tests/test_events_full.py",
+      "line": 18,
+      "verdict": "fixed",
+      "evidence": "TOL reads qa.events.toleranceBeats from config, so a tightened gate bites the suite instead of a stale constant."
+    },
+    {
+      "path": "analysis/tests/test_events_full.py",
+      "line": 90,
+      "verdict": "fixed",
+      "evidence": "Every planted type asserts its own precision >= 0.9 (non-NaN), not only the micro average."
+    },
+    {
+      "path": "analysis/tests/test_events_full.py",
+      "line": 46,
+      "verdict": "fixed",
+      "evidence": "Docstring scoped to the detector-owned vocabulary with build-intensification named as worker-derived; a new test pins the exact 18-vs-19 relationship and truth alignment."
+    },
+    {
+      "path": "analysis/tests/test_events_full.py",
+      "line": 108,
+      "verdict": "fixed",
+      "evidence": "The flat negative passes the same vocal/fills/onset argument surface as _run (with fills=[] as beat indexes); probing exposed that [0.0]*n claims a fill at beat 0, so the fixture uses an empty list."
+    },
+    {
+      "path": "analysis/tests/test_worker.py",
+      "line": 2,
+      "verdict": "fixed",
+      "evidence": "The redundant local pathlib import is gone."
+    },
+    {
+      "path": "analysis/tests/test_worker.py",
+      "line": 63,
+      "verdict": "fixed",
+      "evidence": "Coverage is derived from the artifact's own reported inputs: no ML stage present implies structured, any present implies full; a silent downgrade or over-claim fails. Test renamed accordingly."
+    },
+    {
+      "path": "analysis/tests/test_worker.py",
+      "line": 76,
+      "verdict": "fixed",
+      "evidence": "The bad native dir asserts the specific native-unreadable reason with the offending path."
+    },
+    {
+      "path": "analysis/tests/test_worker.py",
+      "line": 64,
+      "verdict": "fixed",
+      "evidence": "analysisCoverage2/inputs walk via .get chains with readable assertions instead of deep indexing."
+    },
+    {
+      "path": "apps/desktop/src/app/layout.test.ts",
+      "line": 38,
+      "verdict": "fixed",
+      "evidence": "Spec 83 dirs are checked with statSync().isDirectory() (a stray file cannot satisfy the probe); a helper keeps a missing path from throwing ENOENT."
+    },
+    {
+      "path": "apps/desktop/src/app/layout.test.ts",
+      "line": 32,
+      "verdict": "fixed",
+      "evidence": "Every spec service file and every non-test service .ts file must be non-empty; behavior remains covered by services.test.ts."
+    },
+    {
+      "path": "apps/desktop/src/app/layout.test.ts",
+      "line": 51,
+      "verdict": "fixed",
+      "evidence": "The legacy-file test is negative-only; the positive service assertions live in the first test."
+    },
+    {
+      "path": "apps/desktop/src/app/layout.test.ts",
+      "line": 12,
+      "verdict": "fixed",
+      "evidence": "SERVICE_FILES documents its spec §1 mirror contract and the later-added services; the directory-wide non-empty sweep keeps drift loud."
+    },
+    {
+      "path": "apps/desktop/src/routes/live/live-fields.test.ts",
+      "line": 10,
+      "verdict": "fixed",
+      "evidence": "Fixtures are typed: makeDeck for the DeckState and trackModelSchema.parse for the TrackModel (no as-unknown casts); cues are ShowCue[]."
+    },
+    {
+      "path": "apps/desktop/src/routes/live/live-fields.test.ts",
+      "line": 50,
+      "verdict": "fixed",
+      "evidence": "The precedence test carries all three cue types with inverted priorities and asserts each branch — exposing a real dead branch: BUILD searched the future-only list, so it could never fire. live-fields.ts now searches all cues for the active build."
+    },
+    {
+      "path": "apps/desktop/src/routes/live/live-fields.test.ts",
+      "line": 51,
+      "verdict": "fixed",
+      "evidence": "Boundaries covered: empty cues, beyond-horizon (135 -> null), exactly at horizon (136 -> DROP IN 64), rounding floor (0.4 -> IN 1), nextPhraseBeat(0)/64."
+    },
+    {
+      "path": "apps/desktop/src/routes/live/live-fields.test.ts",
+      "line": 36,
+      "verdict": "fixed",
+      "evidence": "The missing-data case asserts section null, NEEDS ANALYSIS, and bar/phrase 1 at beat 0."
+    },
+    {
+      "path": "apps/desktop/scripts/build-main.mjs",
+      "line": 1,
+      "verdict": "deferred",
+      "evidence": "File under sibling edit (dirty in the shared tree): both batch-53 items deferred to avoid clobbering; re-check after the sibling commits."
+    },
+    {
+      "path": "apps/desktop/scripts/build-main.mjs",
+      "line": 35,
+      "verdict": "deferred",
+      "evidence": "Same dirty-file deferral."
+    }
   ]
 }

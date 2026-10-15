@@ -1,4 +1,4 @@
-import { readdirSync } from "node:fs";
+import { existsSync, readdirSync, type Dirent } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
@@ -7,11 +7,26 @@ const root = dirname(fileURLToPath(import.meta.url));
 
 const workspaceSrc = join(root, "packages");
 
-const workspaceAlias = Object.fromEntries(
-  readdirSync(workspaceSrc, { withFileTypes: true })
-    .filter((e) => e.isDirectory())
-    .map((e) => [`@autolight/${e.name}`, join(workspaceSrc, e.name, "src", "index.ts")]),
-);
+// Directory-only, existing-entry aliases: a non-package directory or a
+// package whose entry is not src/index.ts must not shadow module resolution
+// with an alias to a missing file, and an unreadable packages/ fails naming
+// its path instead of an opaque ENOENT (batch-53).
+function workspaceAliasEntries(): [string, string][] {
+  let entries: Dirent[];
+
+  try {
+    entries = readdirSync(workspaceSrc, { withFileTypes: true });
+  } catch (error) {
+    throw new Error(`vitest config: cannot read ${workspaceSrc}: ${(error as Error).message}`, { cause: error });
+  }
+
+  return entries
+    .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
+    .map((entry): [string, string] => [`@autolight/${entry.name}`, join(workspaceSrc, entry.name, "src", "index.ts")])
+    .filter(([, entry]) => existsSync(entry));
+}
+
+const workspaceAlias = Object.fromEntries(workspaceAliasEntries());
 
 // Browser-safe subpaths mirror vite.config.ts (T-TRU-04 spine fix): regex
 // first so barrels never swallow `/follow`, `/registry`, `/setup-assistant`.
@@ -35,9 +50,9 @@ export default defineConfig({
   resolve: { alias: [...subpathAlias, ...Object.entries(workspaceAlias).map(([find, replacement]) => ({ find, replacement })), { find: "@", replacement: join(root, "apps/desktop/src") }] },
   test: {
     include: [
-      "packages/*/src/**/*.test.ts",
-      "apps/desktop/src/**/*.test.ts",
-      "apps/desktop/electron/**/*.test.ts",
+      "packages/*/src/**/*.test.{ts,tsx}",
+      "apps/desktop/src/**/*.test.{ts,tsx}",
+      "apps/desktop/electron/**/*.test.{ts,tsx}",
     ],
     exclude: [
       "**/node_modules/**",

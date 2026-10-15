@@ -1,21 +1,26 @@
-"""Full 19-event vocabulary on planted tracks (T-ANA-10, T-ANA-16).
+"""Planted-event detection for the vocabulary the detectors own (T-ANA-10, T-ANA-16).
 
-Each planted event must be detected within qa.events.toleranceBeats.
-Recall and precision per event type are reported; the pass thresholds live
-in T-ANA-16 (test_goldens.py). WEAKEN=1 must turn this suite red.
+Each planted event must be detected within qa.events.toleranceBeats (read
+from config, never re-typed: a tightened gate must bite here too). Recall and
+precision per event type are reported; the pass thresholds live in T-ANA-16
+(test_goldens.py). WEAKEN=1 must turn this suite red.
+build-intensification is a worker-derived event (worker.py long-build
+synthesis) and is exercised in test_worker.py, not by these two detectors
+(batch-53).
 """
 
 import math
 import sys
 from pathlib import Path
 
+from autolight_analysis import config as cfg
 from autolight_analysis.events import EVENT_TYPES_19
 from autolight_analysis.structure import detect_builds, detect_drops
 
 sys.path.insert(0, str(Path(__file__).parent / "fixtures"))
 from make_tracks import suite
 
-TOL = 1
+TOL = float(cfg.get("qa.events.toleranceBeats", 1))
 
 
 def _run():
@@ -69,6 +74,16 @@ def _metrics():
     return per_type
 
 
+def test_detector_vocabulary_is_exactly_the_non_worker_types():
+    by_type, truth = _run()
+
+    # The exact relationship the docstring relies on: every vocabulary type
+    # except the worker-derived build-intensification is emitted and planted
+    # here (batch-53).
+    assert set(EVENT_TYPES_19) - {"build-intensification"} == set(by_type)
+    assert set(by_type) == {t["type"] for t in truth}
+
+
 def test_every_planted_event_detected_in_tolerance():
     by_type, truth = _run()
     missing = [
@@ -85,6 +100,11 @@ def test_recall_and_precision_reported():
     assert planted_types, "the generator planted nothing"
     for etype in planted_types:
         assert per_type[etype]["recall"] == 1.0, (etype, per_type[etype])
+        # Per-type precision, not only the micro average: a detector flooding
+        # one type cannot hide behind the aggregate (batch-53).
+        precision = per_type[etype]["precision"]
+        assert not math.isnan(precision), (etype, per_type[etype])
+        assert precision >= 0.9, (etype, per_type[etype])
     tp = sum(v["recall"] * v["planted"] for v in per_type.values() if v["planted"] > 0)
     found = sum(v["found"] for v in per_type.values())
     micro_precision = tp / found if found else 0.0
@@ -96,6 +116,9 @@ def test_flat_negative_stays_quiet():
     beats = [float(i + 1) for i in range(n)]
     flat = [0.2] * n
     builds = detect_builds(beats, flat, flat, ["verse"] * n)
+    # Same argument surface as _run: the vocal/fill/onset branches must be
+    # exercised on the flat track too, or their spurious firing cannot show
+    # (batch-53).
     events = detect_drops(
         beats,
         flat,
@@ -107,6 +130,11 @@ def test_flat_negative_stays_quiet():
         [0.0] * n,
         set(),
         beat_in_bar=[(i % 4) + 1 for i in range(n)],
+        vocal=[0.0] * n,
+        # fills is a list of beat indexes: an empty list exercises the
+        # provided-but-no-fills branch (zeros would claim a fill at beat 0).
+        fills=[],
+        onset=[0.05] * n,
     )
     assert builds == []
     assert events == []

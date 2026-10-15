@@ -13,6 +13,7 @@ import contextlib
 import hashlib
 import json
 import os
+import stat
 import tempfile
 from importlib import metadata
 from pathlib import Path
@@ -30,8 +31,10 @@ def analyzer_version() -> str:
 def source_fingerprint(path: str | Path, decode_settings: str = "") -> str:
     """Content hash of the source file plus decode settings, not the path.
 
-    Streams the whole file (tags edits do not change audio bytes, so an
-    audio-only hash is tag-insensitive; audio edits change the key).
+    Streams the whole file: the digest covers the exact bytes on disk, so a
+    tag edit also changes the key and re-analyzes instead of serving an
+    artifact for audio the file no longer matches (T-ANA-13 evidence: whole
+    file plus decode settings).
     """
     h = hashlib.sha256()
     h.update(decode_settings.encode())
@@ -51,7 +54,9 @@ def artifact_name(
 
 
 def config_hash(config: dict | None) -> str:
-    blob = json.dumps(config or {}, sort_keys=True).encode()
+    """Stable short hash; non-JSON values stringify instead of aborting the
+    run (batch-53)."""
+    blob = json.dumps(config or {}, sort_keys=True, default=str).encode()
     return hashlib.sha256(blob).hexdigest()[:16]
 
 
@@ -71,13 +76,35 @@ def atomic_write(path: str | Path, payload: bytes | str) -> Path:
     data = payload.encode() if isinstance(payload, str) else payload
     fd, tmp = tempfile.mkstemp(dir=str(target.parent), prefix=target.name + ".tmp.")
     try:
-        with os.fdopen(fd, "wb") as f:
-            f.write(data)
-            f.flush()
-            os.fsync(f.fileno())
+        try:
+            handle = os.fdopen(fd, "wb")
+        except BaseException:
+            # fdopen failed before taking ownership of the descriptor: close
+            # it here or the leak outlives the failed write (batch-53).
+            os.close(fd)
+            raise
+        with handle:
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+        # mkstemp creates 0600; carry the predecessor's mode (or the umask
+        # default) onto the replacement so a shared cache stays readable
+        # (batch-53).
+        os.chmod(tmp, _artifact_mode(target))
         os.replace(tmp, target)
     except BaseException:
         with contextlib.suppress(OSError):
             os.unlink(tmp)
         raise
     return target
+
+
+def _artifact_mode(target: Path) -> int:
+    """The mode the atomically written file should have: an existing target's
+    mode, otherwise 0644 masked by the process umask."""
+    try:
+        return stat.S_IMODE(target.stat().st_mode)
+    except FileNotFoundError:
+        umask = os.umask(0)
+        os.umask(umask)
+        return 0o666 & ~umask

@@ -80,7 +80,10 @@ export function predictiveLabel(cues: ShowCue[], beat: number, horizonBeats = 64
     return `BREAKDOWN IN ${Math.max(1, Math.round(breakdown.startBeat - beat))}`;
   }
 
-  const build = after.find((c) => c.type === "build-ramp");
+  // BUILD is about the ramp in progress, so it searches every cue: the
+  // `after` list only holds future starts, and requiring beat >= startBeat
+  // on that list could never fire (batch-53).
+  const build = cues.find((c) => c.type === "build-ramp");
 
   if (build && beat >= build.startBeat && beat < build.startBeat + build.durationBeats) return "BUILD";
 

@@ -42,9 +42,7 @@ def test_analyze_missing_native_is_typed_failure(tmp_path):
     assert "audio-missing" in got.get("reason", "")
 
 
-def test_analyze_full_with_real_audio(tmp_path):
-    import pathlib
-
+def test_analyze_real_audio_reaches_the_inputs_ceiling(tmp_path):
     fx = pathlib.Path(__file__).parent / "fixtures"
     got = handle(
         {
@@ -60,9 +58,31 @@ def test_analyze_full_with_real_audio(tmp_path):
     from autolight_analysis.schema import validate_track_model
 
     assert validate_track_model(model) == []
-    assert model["analysisCoverage"] in ("full", "structured")
-    assert model["analysisCoverage2"]["inputs"]["source.audio"]["status"] == "present"
     assert model["musicalEvents"], "real audio must yield DSP events"
+    # Defensive traversal: a renamed or missing field fails as a readable
+    # assertion, not a KeyError three levels down (batch-53).
+    coverage2 = model.get("analysisCoverage2") or {}
+    inputs = coverage2.get("inputs") or {}
+    statuses = {
+        key: (value or {}).get("status")
+        for key, value in inputs.items()
+        if isinstance(value, dict)
+    }
+    source_audio = statuses.get("source.audio")
+
+    assert source_audio == "present", f"artifact reports source.audio={source_audio!r}"
+    # The coverage must match the ceiling its own reported inputs imply: with
+    # no ML stage present the ceiling is structured, with one it is full. A
+    # silent downgrade (dropped ML/plan stage) or an over-claim fails
+    # (batch-53).
+    ml_present = any(
+        status == "present" for key, status in statuses.items() if key.startswith("ml.")
+    )
+
+    assert model["analysisCoverage"] == ("full" if ml_present else "structured"), (
+        model["analysisCoverage"],
+        statuses,
+    )
 
 
 def test_analyze_bad_dir_fails_cleanly(tmp_path):
@@ -76,3 +96,8 @@ def test_analyze_bad_dir_fails_cleanly(tmp_path):
         out_dir=tmp_path,
     )
     assert got["type"] == "failed"
+    # The specific reason, not any failure: a bad native directory must route
+    # to native-unreadable with the path named (batch-53).
+    reason = got.get("reason", "")
+    assert reason.startswith("native-unreadable"), reason
+    assert "/does/not/exist" in reason, reason
