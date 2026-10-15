@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { VenueFields } from "@autolight/venue";
 import { isKnownCueType, parsePrimitiveParams } from "@autolight/show-planner";
-import { envelopeFromMs, envelopeLevel, sampleSpatial, UnknownSpatialError } from "./spatial.js";
+import { envelopeFromMs, envelopeLevel, sampleSpatial, UnknownSpatialError, type PrimitiveName } from "./spatial.js";
 
 function ringFields(n: number): VenueFields {
   const keys: string[] = [];
@@ -27,10 +27,6 @@ function ringFields(n: number): VenueFields {
   const maxDist = Math.hypot(5, 5);
   const dj = { x: 0, y: -2 };
   const djS = 0.875;
-
-  const corners = [
-    { x: -2.5, y: -2.5 }, { x: -2.5, y: 2.5 }, { x: 2.5, y: 2.5 }, { x: 2.5, y: -2.5 },
-  ];
 
   const walls = [
     { ax: -2.5, ay: -2.5, bx: -2.5, by: 2.5 },
@@ -68,7 +64,9 @@ function ringFields(n: number): VenueFields {
     wall[i] = w;
     wallPos[i] = t;
     corner[i] = Math.min(t, 1 - t) * 5;
-    side[i] = x < -0.375 ? 0 : x > 0.375 ? 2 : 1;
+    if (x < -0.375) side[i] = 0;
+    else if (x > 0.375) side[i] = 2;
+    else side[i] = 1;
     frontBack[i] = y >= 0 ? 1 : 0;
     chain[i] = i;
     physical[i] = i;
@@ -79,8 +77,6 @@ function ringFields(n: number): VenueFields {
     tangent[i * 2 + 1] = ty;
     signedSplit[i] = x / maxDist;
   }
-
-  void corners;
 
   return {
     version: 1, count: n, keys, pos, extent, uv, h, s, theta, dCenter, dDj, gDj,
@@ -114,6 +110,10 @@ describe("T-REND-02 primitive renderers with envelopes", () => {
     const jump = Math.min(Math.abs(h1 - h0), fields.count - Math.abs(h1 - h0));
     expect(jump).toBeGreaterThan(0);
     expect(jump).toBeLessThanOrEqual(10);
+    // The wrap itself: a full revolution (default beatsPerRevolution 4)
+    // returns the head to where it started, one step lands where beat 1 did.
+    expect(headAt(4)).toBe(h0);
+    expect(headAt(5)).toBe(h1);
   });
 
   it("holds envelopes in beats and converts 90 ms through tempo", () => {
@@ -127,41 +127,69 @@ describe("T-REND-02 primitive renderers with envelopes", () => {
   it("alternates split sides by signedSplit sign", () => {
     const fields = ringFields(30);
     const params = parsePrimitiveParams("SplitAlternate", { rateBeats: 0.5 });
-    let left = 0;
-    let right = 0;
 
-    for (let i = 0; i < fields.count; i++) {
-      if (fields.signedSplit[i]! >= 0) {
-        left++;
-        expect(sampleSpatial("SplitAlternate", params, 0, i, fields).level).toBe(1);
-        expect(sampleSpatial("SplitAlternate", params, 0.5, i, fields).level).toBe(0);
-      } else {
-        right++;
-        expect(sampleSpatial("SplitAlternate", params, 0, i, fields).level).toBe(0);
-        expect(sampleSpatial("SplitAlternate", params, 0.5, i, fields).level).toBe(1);
-      }
-    }
+    // Fixed ring indices with known geometry (independent of the classifier):
+    // i=0 sits on the left wall (signedSplit < 0), i=15 on the right wall
+    // (signedSplit > 0). First half of each rate period one side is up.
+    expect(fields.signedSplit[0]!).toBeLessThan(0);
+    expect(fields.signedSplit[15]!).toBeGreaterThan(0);
+    expect(sampleSpatial("SplitAlternate", params, 0, 0, fields).level).toBe(0);
+    expect(sampleSpatial("SplitAlternate", params, 0.5, 0, fields).level).toBe(1);
+    expect(sampleSpatial("SplitAlternate", params, 0, 15, fields).level).toBe(1);
+    expect(sampleSpatial("SplitAlternate", params, 0.5, 15, fields).level).toBe(0);
 
-    expect(left).toBeGreaterThan(0);
-    expect(right).toBeGreaterThan(0);
+    // Both halves exist, so the alternation actually covers the whole ring.
+    let negative = 0;
+
+    for (let i = 0; i < fields.count; i++) if (fields.signedSplit[i]! < 0) negative++;
+    expect(negative).toBeGreaterThan(0);
+    expect(negative).toBeLessThan(fields.count);
   });
 
   it("renders a geodesic ripple that peaks and decays", () => {
     const fields = ringFields(30);
     const params = parsePrimitiveParams("Ripple", {});
-    let peak = 0;
+    const levelAt = (beat: number, i: number): number => sampleSpatial("Ripple", params, beat, i, fields).level;
+    const headAt = (beat: number): number => {
+      let best = 0;
+      let bestV = -1;
 
-    for (let i = 0; i < fields.count; i++) {
-      peak = Math.max(peak, sampleSpatial("Ripple", params, 0.5, i, fields).level);
-    }
+      for (let i = 0; i < fields.count; i++) {
+        const v = levelAt(beat, i);
 
-    expect(peak).toBeGreaterThan(0.5);
-    expect(sampleSpatial("Ripple", params, 0, 0, fields).level).toBeGreaterThanOrEqual(0);
+        if (v > bestV) { bestV = v; best = i; }
+      }
+
+      return best;
+    };
+    const peakAt = (beat: number): number => {
+      let peak = 0;
+
+      for (let i = 0; i < fields.count; i++) peak = Math.max(peak, levelAt(beat, i));
+
+      return peak;
+    };
+
+    // The front travels: half a beat and two beats put the peak elsewhere.
+    expect(headAt(0.5)).not.toBe(headAt(2));
+    // And it decays by distance-from-DJ once the front has passed: the
+    // point that peaks at beat 0.5 is dark two beats later, and the whole
+    // ring's peak is lower than the early peak.
+    const imax = headAt(0.5);
+
+    expect(levelAt(0.5, imax)).toBeGreaterThan(0.5);
+    expect(levelAt(2.5, imax)).toBeLessThan(levelAt(0.5, imax));
+    expect(peakAt(3)).toBeLessThan(peakAt(0.5));
   });
 
   it("rejects unknown primitive types with a typed error", () => {
     const fields = ringFields(4);
+    // The string-level boundary rejects unknown cue types...
     expect(isKnownCueType("nope")).toBe(false);
-    expect(() => sampleSpatial("nope" as never, {}, 0, 0, fields)).toThrowError(UnknownSpatialError);
+    // ...and the sampler keeps its own guard for planner data that slipped
+    // through: the double cast models the hostile string, not a lie about
+    // the value (never would claim it cannot exist).
+    const unknownName = "nope" as unknown as PrimitiveName;
+    expect(() => sampleSpatial(unknownName, {}, 0, 0, fields)).toThrow(UnknownSpatialError);
   });
 });

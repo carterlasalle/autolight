@@ -3559,6 +3559,42 @@
       "line": 240,
       "verdict": "fixed",
       "evidence": "The safety sweep is now exercised: a WAL-only change with no native event drives missedChanges 0→1 and emits the third event. Probe showed a native-reported path masks same-path changes, so the WAL touch is the true missed case."
+    },
+    {
+      "path": "packages/renderer/src/spatial.test.ts",
+      "line": 79,
+      "verdict": "fixed",
+      "evidence": "Dead corners array and its void deleted from the fixture builder."
+    },
+    {
+      "path": "packages/renderer/src/spatial.test.ts",
+      "line": 68,
+      "verdict": "fixed",
+      "evidence": "Nested ternary replaced with an if/else chain for the side classifier."
+    },
+    {
+      "path": "packages/renderer/src/spatial.test.ts",
+      "line": 144,
+      "verdict": "fixed",
+      "evidence": "Ripple test proves movement (peak index at beat 0.5 differs from 2) and decay (the beat-0.5 peak point is darker at 2.5; whole-ring peak at 3 below the 0.5 peak); the trivial >=0 assertion is gone."
+    },
+    {
+      "path": "packages/renderer/src/spatial.test.ts",
+      "line": 104,
+      "verdict": "fixed",
+      "evidence": "Orbit wrap now exercised at the real period: headAt(4) equals headAt(0) and headAt(5) equals headAt(1) for the default 4-beat revolution."
+    },
+    {
+      "path": "packages/renderer/src/spatial.test.ts",
+      "line": 151,
+      "verdict": "fixed",
+      "evidence": "as-never replaced by a documented unknown-as-PrimitiveName hostile-input cast; toThrowError (deprecated) became toThrow."
+    },
+    {
+      "path": "packages/renderer/src/spatial.test.ts",
+      "line": 123,
+      "verdict": "fixed",
+      "evidence": "SplitAlternate expectations pinned to fixed ring indices (i=0 left wall, i=15 right wall) verified via signedSplit geometry; the expectation no longer re-derives the classifier's branch."
     }
   ],
   "batch-42": [
