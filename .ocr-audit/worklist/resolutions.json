@@ -3823,6 +3823,66 @@
       "line": 177,
       "verdict": "fixed",
       "evidence": "Step ids are a union type and STATE_BY_STEP is an exhaustive Record: a new or renamed step fails to compile instead of silently reporting no-packets via a catch-all chain."
+    },
+    {
+      "path": "packages/rekordbox-live/src/lighting-ipc.test.ts",
+      "line": 28,
+      "verdict": "fixed",
+      "evidence": "fixture() accepts a condition; the loop-roll case passes its matching one-deck cell explicitly."
+    },
+    {
+      "path": "packages/rekordbox-live/src/lighting-ipc.test.ts",
+      "line": 59,
+      "verdict": "fixed",
+      "evidence": "The junk base64 string now asserts malformed non-empty as well as zero frames: the lenient Buffer.from path is verified as a rejection, not a silent no-op."
+    },
+    {
+      "path": "packages/rekordbox-live/src/lighting-ipc.test.ts",
+      "line": 85,
+      "verdict": "fixed",
+      "evidence": "Third frame added: every successive delta is asserted at 1x/2x/10x, so an accumulation bug past the first step would surface."
+    },
+    {
+      "path": "packages/rekordbox-live/src/lighting-ipc.test.ts",
+      "line": 139,
+      "verdict": "fixed",
+      "evidence": "READY provider pins start() -> starting and replayAll() -> live; stop() twice proves the guarded no-op; MISSING start() asserts the owner reason (HW-RB-LIGHT-01) and remedy (another live source)."
+    },
+    {
+      "path": "packages/rekordbox-live/src/lighting-ipc.test.ts",
+      "line": 146,
+      "verdict": "fixed",
+      "evidence": "The shared contract suite now runs against a READY provider with non-empty fixtures, so the real start lifecycle is exercised; the MISSING start path is asserted in the capability test."
+    },
+    {
+      "path": "packages/rekordbox-live/src/memory-reader.test.ts",
+      "line": 31,
+      "verdict": "fixed",
+      "evidence": "slotIndex() derives every slot from the offsets() fixture; both the accessor and the contract-suite writer use it, so layout drift breaks in one place."
+    },
+    {
+      "path": "packages/rekordbox-live/src/memory-reader.test.ts",
+      "line": 42,
+      "verdict": "fixed",
+      "evidence": "Lint assertions pin specific keys: {} reports rekordboxVersion/platform/date/verification/paths, a missing runbook pinpoints 'runbook', a bad platform pinpoints 'platform'."
+    },
+    {
+      "path": "packages/rekordbox-live/src/memory-reader.test.ts",
+      "line": 59,
+      "verdict": "fixed",
+      "evidence": "Every failing gate (disabled, no-consent, wrong-version) is started and polled; getDecks() stays empty. The READY provider proves start() -> starting and poll() -> live with samples."
+    },
+    {
+      "path": "packages/rekordbox-live/src/memory-reader.test.ts",
+      "line": 98,
+      "verdict": "fixed",
+      "evidence": "Scanner asserts exact {field, base, offsets} tuples across two readers and two observations, with a single-observation decoy at index 8 filtered out."
+    },
+    {
+      "path": "packages/rekordbox-live/src/memory-reader.test.ts",
+      "line": 121,
+      "verdict": "fixed",
+      "evidence": "Harness values vary per generation (playhead, bpm, numeric track id) and are asserted from getDecks() right after each loadTrack; cleanup now stops the provider."
     }
   ],
   "batch-45": [

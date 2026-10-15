@@ -20,12 +20,12 @@ import {
 import { DeckGenerationMapper } from "./providers.js";
 import { runProviderContractSuite, virtualClock } from "./contract-suite.js";
 
-function fixture(events: LightingEvent[], action = "play") {
+function fixture(events: LightingEvent[], action = "play", condition = "one-deck") {
   return {
     rekordboxVersion: "7.2.19",
     platform: "macos" as const,
     action,
-    condition: "one-deck",
+    condition,
     capture: encodeLightingCaptureBase64(events),
     decoder: LIGHTING_CONTAINER_DECODER_V1,
     expectedBy: "owner capture HW-RB-LIGHT-01",
@@ -57,7 +57,12 @@ describe("lighting IPC codec (T-LIVE-09)", () => {
     expect(decodeLightingCapture(new Uint8Array([0, 0])).malformed.length).toBeGreaterThan(0);
     expect(decodeLightingCaptureBase64("").malformed.length).toBeGreaterThan(0);
     expect(decodeLightingCaptureBase64("handwritten-synthetic: nothing").malformed.length).toBeGreaterThan(0);
-    expect(decodeLightingCaptureBase64("!!!not-base64!!!").frames).toHaveLength(0);
+    // Buffer.from is lenient: the junk string decodes to garbage bytes and
+    // must be rejected as malformed, not silently produce zero frames.
+    const junk = decodeLightingCaptureBase64("!!!not-base64!!!");
+
+    expect(junk.frames).toHaveLength(0);
+    expect(junk.malformed.length).toBeGreaterThan(0);
   });
 
   it("rejects empty captures in the fixture lint (P-9.4)", () => {
@@ -72,34 +77,39 @@ describe("lighting IPC codec (T-LIVE-09)", () => {
     const f = fixture([
       { deck: 1, playing: true, playheadSeconds: 10, effectiveBpm: 128 },
       { deck: 1, playing: true, playheadSeconds: 11, effectiveBpm: 128 },
+      { deck: 1, playing: true, playheadSeconds: 12, effectiveBpm: 128 },
     ]);
 
     const at1 = replayLightingCapture(f, new DeckGenerationMapper(), { rate: 1, stepMs: 100 });
     const at2 = replayLightingCapture(f, new DeckGenerationMapper(), { rate: 2, stepMs: 100 });
     const at10 = replayLightingCapture(f, new DeckGenerationMapper(), { rate: 10, stepMs: 100 });
     expect(at1.malformed).toEqual([]);
-    expect(at1.states).toHaveLength(2);
-    expect(at2.states).toHaveLength(2);
-    expect(at10.states).toHaveLength(2);
-    const first = at1.states[0];
-    const second = at1.states[1];
+    expect(at1.states).toHaveLength(3);
+    expect(at2.states).toHaveLength(3);
+    expect(at10.states).toHaveLength(3);
+    const [first, second, third] = at1.states;
     expect(first?.playheadSeconds).toBe(10);
-    expect(first && second ? second.receivedAtNs - first.receivedAtNs : 0n).toBe(100_000_000n);
-    const first2 = at2.states[0];
-    const second2 = at2.states[1];
-    expect(first2 && second2 ? second2.receivedAtNs - first2.receivedAtNs : 0n).toBe(50_000_000n);
-    const first10 = at10.states[0];
-    const second10 = at10.states[1];
-    expect(first10 && second10 ? second10.receivedAtNs - first10.receivedAtNs : 0n).toBe(10_000_000n);
+    // Every successive delta, not just the first gap: an accumulation bug
+    // past step one would shift the second gap only.
+    expect(second && first ? second.receivedAtNs - first.receivedAtNs : 0n).toBe(100_000_000n);
+    expect(third && second ? third.receivedAtNs - second.receivedAtNs : 0n).toBe(100_000_000n);
+    const [first2, second2, third2] = at2.states;
+    expect(second2 && first2 ? second2.receivedAtNs - first2.receivedAtNs : 0n).toBe(50_000_000n);
+    expect(third2 && second2 ? third2.receivedAtNs - second2.receivedAtNs : 0n).toBe(50_000_000n);
+    const [first10, second10, third10] = at10.states;
+    expect(second10 && first10 ? second10.receivedAtNs - first10.receivedAtNs : 0n).toBe(10_000_000n);
+    expect(third10 && second10 ? third10.receivedAtNs - second10.receivedAtNs : 0n).toBe(10_000_000n);
     expect(first?.fieldSources.playheadSeconds).toBe("lighting-ipc");
   });
 
   it("maps master, loop, pitch, sync, hotcue and roll from events (T-LIVE-14)", () => {
+    // Single deck, loop rolled: the one-deck condition is the matching matrix
+    // cell for this event set, passed explicitly instead of defaulted.
     const f = fixture([{
       deck: 1, playing: true, playheadSeconds: 20, master: true,
       loopActive: true, loopBeatLength: 4, pitchPercent: 1.5, sync: true,
       hotCue: 2, rollActive: true, rollBeats: 0.5, trackId: "rb:1", title: "Track",
-    }], "loop-roll");
+    }], "loop-roll", "one-deck");
 
     const { states } = replayLightingCapture(f, new DeckGenerationMapper());
     const state = states[0];
@@ -132,20 +142,35 @@ describe("lighting IPC codec (T-LIVE-09)", () => {
     const provider = new LightingIpcProvider({ now: () => clock.nowNs(), fixtures: [] });
     expect(provider.capability()).toBe("MISSING");
     await provider.start();
-    expect(provider.getStatus().state).toBe("unavailable");
+    const status = provider.getStatus();
+    expect(status.state).toBe("unavailable");
+    // The owner-facing reason and remedy must reach consumers with the state.
+    expect(status.state === "unavailable" ? status.reason : "").toContain("HW-RB-LIGHT-01");
+    expect(status.state === "unavailable" ? status.remedy : "").toContain("another live source");
     await provider.stop();
+
     const ready = new LightingIpcProvider({ now: () => clock.nowNs(), fixtures: [fixture([{ deck: 1, playing: true }])] });
     expect(ready.capability()).toBe("READY");
     await ready.start();
+    // The lifecycle is pinned before any replay: start() must not jump to
+    // live, and replayAll() is what moves it there.
+    expect(ready.getStatus().state).toBe("starting");
     const replayed = ready.replayAll();
     expect(replayed.states).toHaveLength(1);
     expect(ready.getStatus().state).toBe("live");
+    await ready.stop();
+    // stop() clears the started flag: a second stop is a guarded no-op.
     await ready.stop();
   });
 
   it("passes the shared contract suite on event ingest", async () => {
     const clock = virtualClock();
-    const provider = new LightingIpcProvider({ now: () => clock.nowNs(), fixtures: [] });
+    // A READY provider (non-empty fixtures) exercises the real start path;
+    // the MISSING start path is covered in the capability test above.
+    const provider = new LightingIpcProvider({
+      now: () => clock.nowNs(),
+      fixtures: [fixture([{ deck: 1, playing: true, playheadSeconds: 1 }])],
+    });
 
     const failures = await runProviderContractSuite({
       provider,
