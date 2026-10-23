@@ -12,13 +12,13 @@ export {
 };
 
 
-export { Room } from "./room.js";;;;;;;;;;;
+export type { Room } from "./room.js";
 
 
-export { VenueFields } from "./fields.js";;
+export type { VenueFields } from "./fields.js";
 
 
-export { RunTopology } from "./wizard.js";;;;
+export type { RunTopology } from "./wizard.js";
 
 
 
